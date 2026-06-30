@@ -22,6 +22,8 @@ import type {
 	RowSelectionGesture,
 	SelectAllRowsOptions,
 	SelectRowsOptions,
+	ScrollToRowOptions,
+	ScrollToCellOptions,
 } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { FilterModel, SortModel, RowModelCapability } from '../rowModel.js';
@@ -262,8 +264,8 @@ export function createGridRuntimeComposition<TRowData>({
 		mergeTheme: (partial: Partial<ThemeTokens>) => runtime.mergeTheme(partial),
 		onThemeChange: (listener: (theme: ThemeTokens) => void) => runtime.onThemeChange(listener),
 		getContainer: () => runtime.getContainerElement(),
-		scrollToRow: (rowId: string) => runtime.scrollToRow(rowId),
-		scrollToCell: (rowId: string, colField: string) => runtime.scrollToCell(rowId, colField),
+		scrollToRow: (rowId: string, options?: ScrollToRowOptions) => runtime.scrollToRow(rowId, options),
+		scrollToCell: (rowId: string, colField: string, options?: ScrollToCellOptions) => runtime.scrollToCell(rowId, colField, options),
 		getInsightDiagnostics: () => runtime.getInsightDiagnostics(),
 		destroy,
 	};

@@ -24,6 +24,8 @@ export type {
 	GridHostRuntime,
 	GridCompositionRuntime,
 	InternalGridApi,
+	ScrollToRowOptions,
+	ScrollToCellOptions,
 } from './GridApiSurfaces.js';
 
 export type { CsvExportOptions } from '../export/csvExport.js';

@@ -263,15 +263,17 @@ export default function App() {
 						setLeftSidebarCollapsed={setLeftSidebarCollapsed}
 					/>
 					<div className='flex min-w-0 flex-1 flex-col gap-5 overflow-hidden pr-1.5'>
-						<ShowroomTitleBanner
-							activePage={activePage}
-							runBulkCalculationTest={runBulkCalculationTest}
-							applySpreadsheetRangeAction={applySpreadsheetRangeAction}
-							compactLayout={compactLayout}
-							setCompactLayout={setCompactLayout}
-							rightSidebarCollapsed={rightSidebarCollapsed}
-							setRightSidebarCollapsed={setRightSidebarCollapsed}
-						/>
+						{!(['crud'] as GridPageType[]).includes(activePage) ? (
+							<ShowroomTitleBanner
+								activePage={activePage}
+								runBulkCalculationTest={runBulkCalculationTest}
+								applySpreadsheetRangeAction={applySpreadsheetRangeAction}
+								compactLayout={compactLayout}
+								setCompactLayout={setCompactLayout}
+								rightSidebarCollapsed={rightSidebarCollapsed}
+								setRightSidebarCollapsed={setRightSidebarCollapsed}
+							/>
+						) : null}
 						{activePage === 'layout' && (
 							<div className='flex shrink-0 flex-wrap items-center gap-3 rounded-xl border border-slate-900 bg-slate-900/10 p-3 text-xs font-semibold'>
 								<span className='flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-500'>

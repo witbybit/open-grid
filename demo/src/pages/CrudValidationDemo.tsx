@@ -389,6 +389,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 	const [rows] = useState<Employee[]>(INITIAL_ROWS);
 	const [jumpRowId, setJumpRowId] = useState('');
 	const [jumpColField, setJumpColField] = useState('');
+	const [jumpEdit, setJumpEdit] = useState(false);
 	const [lastJumped, setLastJumped] = useState<{ rowId: string; colField: string } | null>(null);
 
 	const handleGridReady = useCallback(
@@ -518,16 +519,16 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		if (!api || !jumpRowId.trim()) return;
 		const col = jumpColField.trim();
 		if (col) {
-			api.scrollToCell(jumpRowId.trim(), col);
+			api.scrollToCell(jumpRowId.trim(), col, { select: true, edit: jumpEdit });
 			setLastJumped({ rowId: jumpRowId.trim(), colField: col });
 		} else {
-			api.scrollToRow(jumpRowId.trim());
+			api.scrollToRow(jumpRowId.trim(), { select: true });
 			setLastJumped({ rowId: jumpRowId.trim(), colField: '' });
 		}
-	}, [jumpRowId, jumpColField]);
+	}, [jumpRowId, jumpColField, jumpEdit]);
 
 	const handleScrollToError = useCallback((rowId: string, colField: string) => {
-		apiRef.current?.scrollToCell(rowId, colField);
+		apiRef.current?.scrollToCell(rowId, colField, { select: true });
 		setLastJumped({ rowId, colField });
 	}, []);
 
@@ -617,6 +618,15 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 							placeholder='field (opt)'
 							className='w-20 rounded bg-slate-900/60 px-1.5 py-0.5 text-[10px] text-slate-300 placeholder-slate-600 outline-none ring-1 ring-slate-700 focus:ring-indigo-500/50'
 						/>
+						<label className='flex cursor-pointer items-center gap-1 select-none'>
+							<input
+								type='checkbox'
+								checked={jumpEdit}
+								onChange={(e) => setJumpEdit(e.target.checked)}
+								className='h-3 w-3 accent-indigo-500'
+							/>
+							<span className='text-[10px] text-indigo-300/70'>edit</span>
+						</label>
 						<button
 							onClick={handleJump}
 							disabled={!jumpRowId.trim()}

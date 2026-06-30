@@ -118,6 +118,8 @@ import type {
 	SelectAllRowsOptions,
 	InternalGridApi,
 	GridApi,
+	ScrollToCellOptions,
+	ScrollToRowOptions,
 	GridSnapshotKeyListener,
 	GridSnapshotSelector,
 	GridSnapshotSelectorEquality,
@@ -1087,8 +1089,21 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public setContainerElement = (c: HTMLElement): void => this.hostFacade.setContainerElement(c);
 	public getContainerElement = (): HTMLElement | null => this.hostFacade.getContainerElement();
 	public getContainer = (): HTMLElement | null => this.hostFacade.getContainer();
-	public scrollToCell = (rowId: string, colField: string): void => this.hostFacade.scrollCellIntoView(rowId, colField);
-	public scrollToRow = (rowId: string): void => this.hostFacade.scrollRowIntoView(rowId);
+	public scrollToCell = (rowId: string, colField: string, options?: ScrollToCellOptions): void => {
+		this.hostFacade.scrollCellIntoView(rowId, colField);
+		if (options?.select || options?.edit) {
+			this.selectCell({ rowId, colField });
+		}
+		if (options?.edit) {
+			this.startEditing(rowId, colField);
+		}
+	};
+	public scrollToRow = (rowId: string, options?: ScrollToRowOptions): void => {
+		this.hostFacade.scrollRowIntoView(rowId);
+		if (options?.select) {
+			this.selectRows([rowId]);
+		}
+	};
 	public getInsightDiagnostics = (): Record<string, unknown> => this.hostFacade.getInsightDiagnostics();
 
 	public destroy = (): void => {

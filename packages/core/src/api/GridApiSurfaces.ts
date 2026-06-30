@@ -157,8 +157,20 @@ export interface GridStructureApi<TRowData = unknown> {
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
 	getColumnDef(colField: string): ColumnDef<TRowData> | undefined;
-	scrollToRow(rowId: string): void;
-	scrollToCell(rowId: string, colField: string): void;
+	scrollToRow(rowId: string, options?: ScrollToRowOptions): void;
+	scrollToCell(rowId: string, colField: string, options?: ScrollToCellOptions): void;
+}
+
+export interface ScrollToRowOptions {
+	/** Select the row in the row-selection model after scrolling. No-op if row selection is not configured. */
+	select?: boolean;
+}
+
+export interface ScrollToCellOptions {
+	/** Set the cell as the active selection after scrolling. */
+	select?: boolean;
+	/** Open the cell editor after scrolling. Implies `select`. */
+	edit?: boolean;
 }
 
 export interface GridRuntimeSubscriptionApi<TRowData = unknown> {
