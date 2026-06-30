@@ -78,7 +78,7 @@ function hasAuthoritativePortalHostContent<TRowData>(
 	if (!portalKey || cellSlot.lastContentMode !== 'portal') return false;
 	const portalHost = deps.getCellPortalHost(cellSlot.element);
 	if (!portalHost || portalHost.childElementCount === 0) return false;
-	return deps.portalMountManager.isCellMounted(portalKey);
+	return true;
 }
 
 function getFreshCellSnapshot<TRowData>(
@@ -100,111 +100,6 @@ function getFreshCellSnapshot<TRowData>(
 	if (snapshot.loadingVersion !== ctx.loadingVersion) return undefined;
 	if (snapshot.selectionVersion !== ctx.selectionVersion) return undefined;
 	if (snapshot.rowVersion !== currentRowVersion) return undefined;
-	return snapshot;
-}
-
-function storeCellSnapshot<TRowData>(deps: RowCellBinderDeps<TRowData>, snapshot: CellDisplaySnapshot): void {
-	const snapshotLookup = deps.engine as GridEngine<TRowData> & {
-		cellDisplaySnapshots?: { set?: (snapshot: CellDisplaySnapshot) => void };
-	};
-	snapshotLookup.cellDisplaySnapshots?.set?.(snapshot);
-}
-
-function materializeVisiblePrimitiveCompatibilitySnapshot<TRowData>(
-	deps: RowCellBinderDeps<TRowData>,
-	request: {
-		cellSlot: CellSlot<TRowData>;
-		node: RowNode<TRowData>;
-		col: ColumnDef<TRowData>;
-		lane: 'left' | 'center' | 'right';
-		ctx: ScrollRenderContext<TRowData>;
-		rowVersion: number;
-		canPreserveWarmVisuals: boolean;
-	}
-): CellDisplaySnapshot | undefined {
-	const { cellSlot, node, col, lane, ctx, rowVersion, canPreserveWarmVisuals } = request;
-	if (!ctx.hasInsightDecorations) return undefined;
-	const cellDecorations = deps.engine.insights.getCellDecorations(node.id, col.field);
-	if (cellDecorations.length === 0) return undefined;
-	const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
-	const baseClassName = buildCellPinClass(lane);
-	const stateClassName = canPreserveWarmVisuals ? subtractNormalizedClassName(cellSlot.lastClassName ?? baseClassName, baseClassName) : '';
-	const warmContentMode =
-		canPreserveWarmVisuals && (cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback')
-			? cellSlot.lastContentMode
-			: 'empty';
-	const snapshot = createCellDisplaySnapshot({
-		rowId: node.id,
-		colField: col.field,
-		rowVersion,
-		globalVersion: ctx.globalVersion,
-		insightVersion: cellSlot.lastMountedInsightVersion,
-		styleVersion: cellSlot.lastMountedStyleVersion,
-		loadingVersion: cellSlot.lastMountedLoadingVersion,
-		selectionVersion: cellSlot.lastMountedSelectionVersion,
-		baseClassName,
-		stateClassName,
-		decorationClassName: decorationMetadata.classNameSuffix,
-		contentKind: warmContentMode === 'empty' ? 'empty' : warmContentMode,
-		contentMode: warmContentMode,
-		formattedValue: warmContentMode === 'empty' ? '' : (cellSlot.lastFormattedValue ?? ''),
-		title: mergeCellSnapshotTitle(cellSlot.element.title || null, decorationMetadata.insightTitle),
-		validationError: decorationMetadata.validationError,
-	});
-	storeCellSnapshot(deps, snapshot);
-	return snapshot;
-}
-
-function materializeWarmCompatibilitySnapshot<TRowData>(
-	deps: RowCellBinderDeps<TRowData>,
-	request: {
-		cellSlot: CellSlot<TRowData>;
-		node: RowNode<TRowData>;
-		col: ColumnDef<TRowData>;
-		lane: 'left' | 'center' | 'right';
-		ctx: ScrollRenderContext<TRowData>;
-		rowVersion: number;
-	}
-): CellDisplaySnapshot | undefined {
-	const { cellSlot, node, col, lane, ctx, rowVersion } = request;
-	const lastContentMode = cellSlot.lastContentMode;
-	if (!lastContentMode) return undefined;
-	const baseClassName = buildCellPinClass(lane);
-	const stateClassName = subtractNormalizedClassName(cellSlot.lastClassName ?? baseClassName, baseClassName);
-	let contentKind: CellDisplaySnapshot['contentKind'];
-	let contentMode: CellContentMode;
-	let formattedValue = '';
-
-	if (lastContentMode === 'portal') {
-		if (!hasAuthoritativePortalHostContent(deps, cellSlot, cellSlot.lastPortalKey)) return undefined;
-		contentKind = 'portal-frozen';
-		contentMode = 'portal';
-	} else if (lastContentMode === 'text' || lastContentMode === 'fallback' || lastContentMode === 'empty') {
-		contentKind = lastContentMode;
-		contentMode = lastContentMode;
-		formattedValue = lastContentMode === 'empty' ? '' : (cellSlot.lastFormattedValue ?? '');
-	} else {
-		return undefined;
-	}
-
-	const snapshot = createCellDisplaySnapshot({
-		rowId: node.id,
-		colField: col.field,
-		rowVersion,
-		globalVersion: ctx.globalVersion,
-		insightVersion: cellSlot.lastMountedInsightVersion,
-		styleVersion: cellSlot.lastMountedStyleVersion,
-		loadingVersion: cellSlot.lastMountedLoadingVersion,
-		selectionVersion: cellSlot.lastMountedSelectionVersion,
-		baseClassName,
-		stateClassName,
-		contentKind,
-		contentMode,
-		formattedValue,
-		title: cellSlot.element.title || '',
-		validationError: cellSlot.element.dataset.validationError,
-	});
-	storeCellSnapshot(deps, snapshot);
 	return snapshot;
 }
 
@@ -706,27 +601,6 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 
 	let cellClassName = buildCellPinClass(lane);
 	if (rendererKind === 'loading') cellClassName += ' og-cell-loading';
-	if (!snapshot && isInVisibleContent && rendererKind === 'primitive') {
-		snapshot = materializeVisiblePrimitiveCompatibilitySnapshot(deps, {
-			cellSlot,
-			node,
-			col,
-			lane,
-			ctx,
-			rowVersion,
-			canPreserveWarmVisuals,
-		});
-	}
-	if (!snapshot && isInVisibleContent && rendererKind === 'portal' && isWarmBindingVersionFresh) {
-		snapshot = materializeWarmCompatibilitySnapshot(deps, {
-			cellSlot,
-			node,
-			col,
-			lane,
-			ctx,
-			rowVersion,
-		});
-	}
 	const shouldDeferCellStyleRefresh =
 		isInVisibleContent &&
 		((ctx.hasInsightDecorations && !snapshot) ||
@@ -754,42 +628,20 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	}
 
 	if (!isInVisibleContent) {
-		const canPreserveBufferedContent = canPreserveWarmVisuals && !isRowRebind;
-		const canPreserveBufferedPortal = canPreserveBufferedContent && hasAuthoritativePortalHostContent(deps, cellSlot, cellSlot.lastPortalKey);
-		if (!snapshot && canPreserveBufferedContent) {
-			snapshot = materializeWarmCompatibilitySnapshot(deps, {
-				cellSlot,
-				node,
-				col,
-				lane,
-				ctx,
-				rowVersion,
-			});
-		}
 		const primitiveSnapshot = isPrimitiveSnapshotContent(snapshot) ? snapshot : undefined;
 		const canReuseSnapshotContent = !!primitiveSnapshot;
 		const canReuseSnapshotPortal =
 			snapshot?.contentMode === 'portal' && hasAuthoritativePortalHostContent(deps, cellSlot, cellSlot.lastPortalKey);
-		if (!canPreserveBufferedPortal && !canReuseSnapshotPortal && cellSlot.lastPortalKey) {
+		if (!canReuseSnapshotPortal && cellSlot.lastPortalKey) {
 			deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 		}
 		const preservedContentMode: CellContentMode = canReuseSnapshotPortal
 			? 'portal'
 			: canReuseSnapshotContent
 				? primitiveSnapshot.contentMode
-				: canPreserveBufferedContent
-					? canPreserveBufferedPortal
-						? 'portal'
-						: rendererKind === 'loading'
-							? 'loading'
-							: cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback'
-								? cellSlot.lastContentMode
-								: cellSlot.lastContentMode === 'custom'
-									? 'custom'
-									: 'empty'
-					: rendererKind === 'loading'
-						? 'loading'
-						: 'empty';
+				: rendererKind === 'loading'
+					? 'loading'
+					: 'empty';
 		applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
 		const didWriteBuffered = cellSlot.update(
 			colIndex,
@@ -802,12 +654,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			cellClassName,
 			preservedContentMode,
 			undefined,
-			canReuseSnapshotContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback')
-				? primitiveSnapshot.formattedValue
-				: canPreserveBufferedContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback')
-					? (cellSlot.lastFormattedValue ?? '')
-					: '',
-			preservedContentMode === 'portal' && (canPreserveBufferedPortal || canReuseSnapshotPortal) ? cellSlot.lastPortalKey : undefined
+			canReuseSnapshotContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback') ? primitiveSnapshot.formattedValue : '',
+			preservedContentMode === 'portal' && canReuseSnapshotPortal ? cellSlot.lastPortalKey : undefined
 		);
 		if (snapshot) {
 			cellSlot.lastMountedRowVersion = rowVersion;
@@ -871,10 +719,9 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const canTrustSnapshotPortalHost =
 		isPortalSnapshotContent(snapshot) &&
 		cellSlot.lastPortalKey === portalCellKey &&
-		!hasEmptyPortalHost &&
-		(snapshot.contentKind === 'portal-live' || snapshot.contentKind === 'portal-frozen');
-	const isMounted = canTrustSnapshotPortalHost ? true : deps.portalMountManager.isCellMounted(portalCellKey);
-	const canFreezePortal = cellSlot.lastPortalKey === portalCellKey && isMounted && !hasEmptyPortalHost;
+		(snapshot.contentKind === 'portal-live' || snapshot.contentKind === 'portal-frozen') &&
+		hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
+	const canFreezePortal = canTrustSnapshotPortalHost;
 	const globalChanged = cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalVersion !== cellSlot.lastMountedGlobalVersion;
 	const rowChanged = cellSlot.lastMountedRowVersion !== -1 && rowVersion !== undefined && rowVersion !== cellSlot.lastMountedRowVersion;
 	const isDataStale = !isRowRebind && canFreezePortal && (globalChanged || rowChanged);

@@ -809,7 +809,7 @@ describe('bindCellDuringScroll', () => {
 		expect(cellSlot.element.title).toBe('Portal snapshot');
 	});
 
-	it('materializes a buffered primitive compatibility snapshot before preserving offscreen warm content', () => {
+	it('does not promote buffered primitive DOM state into snapshot truth during scroll', () => {
 		const cellSlot = new CellSlot(document.createElement('div'));
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell warm-class', 'text', undefined, 'Name 1', undefined);
 		cellSlot.element.title = 'Warm title';
@@ -887,22 +887,14 @@ describe('bindCellDuringScroll', () => {
 			isInVisibleContent: false,
 		});
 
-		expect(snapshotSet).toHaveBeenCalledTimes(1);
-		expect(snapshotSet).toHaveBeenCalledWith(
-			expect.objectContaining({
-				rowId: 'r1',
-				colField: 'name',
-				contentMode: 'text',
-				contentKind: 'text',
-				formattedValue: 'Name 1',
-				title: 'Warm title',
-				validationError: 'Needs review',
-			})
-		);
-		expect(cellSlot.lastFormattedValue).toBe('Name 1');
+		expect(snapshotSet).not.toHaveBeenCalled();
+		expect(cellSlot.lastContentMode).toBe('empty');
+		expect(cellSlot.lastFormattedValue).toBe('');
+		expect(cellSlot.element.title).toBe('');
+		expect(cellSlot.element.dataset.validationError).toBeUndefined();
 	});
 
-	it('materializes a buffered portal compatibility snapshot before preserving offscreen warm portal content', () => {
+	it('does not promote buffered portal DOM state into snapshot truth during scroll', () => {
 		const cellSlot = new CellSlot(document.createElement('div'));
 		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
 		const host = document.createElement('div');
@@ -989,18 +981,11 @@ describe('bindCellDuringScroll', () => {
 			isInVisibleContent: false,
 		});
 
-		expect(snapshotSet).toHaveBeenCalledTimes(1);
-		expect(snapshotSet).toHaveBeenCalledWith(
-			expect.objectContaining({
-				rowId: 'r1',
-				colField: 'name',
-				contentMode: 'portal',
-				contentKind: 'portal-frozen',
-				title: 'Portal warm title',
-				validationError: 'Needs review',
-			})
-		);
-		expect(cellSlot.lastPortalKey).toBe(portalKey);
+		expect(snapshotSet).not.toHaveBeenCalled();
+		expect(cellSlot.lastContentMode).toBe('empty');
+		expect(cellSlot.lastPortalKey).toBeUndefined();
+		expect(cellSlot.element.title).toBe('');
+		expect(cellSlot.element.dataset.validationError).toBeUndefined();
 	});
 
 	it('trusts a fresh visible portal snapshot and host presence before consulting the mount registry', () => {
@@ -1108,7 +1093,7 @@ describe('bindCellDuringScroll', () => {
 		expect(mountCellImmediately).not.toHaveBeenCalled();
 	});
 
-	it('materializes a compatibility snapshot for visible primitive cells when insight decorations are missing from the snapshot cache', () => {
+	it('marks visible primitive cells dirty instead of materializing insight snapshots during scroll', () => {
 		const dirty = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
 		const snapshotSet = vi.fn();
@@ -1191,14 +1176,15 @@ describe('bindCellDuringScroll', () => {
 			isInVisibleContent: true,
 		});
 
-		expect(cellSlot.lastClassName).toContain('og-cell-validation-error');
-		expect(cellSlot.element.dataset.validationError).toBe('Needs review');
-		expect(cellSlot.element.title).toContain('Needs review');
-		expect(snapshotSet).toHaveBeenCalledTimes(1);
-		expect(dirty).not.toHaveBeenCalled();
+		expect(cellSlot.lastClassName).toBe('og-cell');
+		expect(cellSlot.element.dataset.validationError).toBeUndefined();
+		expect(cellSlot.element.title).toBe('');
+		expect(snapshotSet).not.toHaveBeenCalled();
+		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
+		expect(cellSlot.lastFormattedValue).toBe('...');
 	});
 
-	it('materializes a compatibility snapshot that preserves warm primitive content when insight decorations are missing', () => {
+	it('keeps warm visible primitive text as a temporary compatibility edge but still marks it dirty when snapshots are missing', () => {
 		const dirty = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell preserved', 'text', undefined, 'Name 1', undefined);
@@ -1286,11 +1272,12 @@ describe('bindCellDuringScroll', () => {
 		});
 
 		expect(cellSlot.lastClassName).toContain('preserved');
-		expect(cellSlot.lastClassName).toContain('og-cell-validation-error');
-		expect(cellSlot.element.dataset.validationError).toBe('Needs review');
-		expect(cellSlot.element.title).toContain('Needs review');
-		expect(snapshotSet).toHaveBeenCalledTimes(1);
-		expect(dirty).not.toHaveBeenCalled();
+		expect(cellSlot.lastClassName).not.toContain('og-cell-validation-error');
+		expect(cellSlot.element.dataset.validationError).toBeUndefined();
+		expect(cellSlot.element.title).toBe('');
+		expect(snapshotSet).not.toHaveBeenCalled();
+		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
+		expect(cellSlot.lastFormattedValue).toBe('Name 1');
 	});
 
 	it('does not mark a stable frozen portal cell dirty during scroll when nothing changed', () => {
@@ -1299,6 +1286,10 @@ describe('bindCellDuringScroll', () => {
 		const mountCellImmediately = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
 		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		const host = document.createElement('div');
+		host.appendChild(document.createElement('span'));
+		cellSlot.element.appendChild(host);
+		cellSlot.portalHostElement = host;
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell custom-class', 'portal', undefined, '', portalKey);
 		cellSlot.lastMountedGlobalVersion = 1;
 		cellSlot.lastMountedRowVersion = 2;
@@ -1313,6 +1304,25 @@ describe('bindCellDuringScroll', () => {
 					getCachedDisplayValue: vi.fn(() => undefined),
 				},
 				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => ({
+					rowId: 'r1',
+					colField: 'name',
+					rowVersion: 2,
+					globalVersion: 1,
+					insightVersion: 0,
+					styleVersion: 0,
+					loadingVersion: 0,
+					selectionVersion: 0,
+					baseClassName: 'og-cell',
+					stateClassName: 'custom-class',
+					decorationClassName: '',
+					classTokens: ['og-cell', 'custom-class'],
+					className: 'og-cell custom-class',
+					contentKind: 'portal-frozen',
+					contentMode: 'portal',
+					formattedValue: '',
+					title: '',
+				})),
 			} as any,
 			cellRenderer: { showPortalContent } as any,
 			portalMountManager: {
@@ -1329,12 +1339,8 @@ describe('bindCellDuringScroll', () => {
 			setDeferredFocusCell: vi.fn(),
 			applyFocus: vi.fn(),
 			isEditorInteractiveElement: () => false,
-			ensureCellPortalHost: (cell) => {
-				const host = document.createElement('div');
-				cell.appendChild(host);
-				return host;
-			},
-			getCellPortalHost: () => null,
+			ensureCellPortalHost: () => host,
+			getCellPortalHost: () => host,
 			markCellDirtyAfterScroll: dirty,
 			releaseCellPortal: vi.fn(),
 			incrementStyleHookCallsDuringScroll: vi.fn(),
@@ -1355,9 +1361,12 @@ describe('bindCellDuringScroll', () => {
 				focusedCell: null,
 				globalVersion: 1,
 				hasDeferredCellStyleRules: false,
+				insightVersion: 0,
 				isScrolling: true,
 				loadingVersion: 0,
 				plan: { columnPlans: [{ isCustom: true, mode: 'custom' }] },
+				selectionVersion: 0,
+				styleVersion: 0,
 				visibleColRange: { startIdx: 0, endIdx: 0 },
 				rowVersions: new Map([['r1', 2]]),
 			} as any,
@@ -1468,20 +1477,10 @@ describe('bindCellDuringScroll', () => {
 			isInVisibleContent: true,
 		});
 
-		expect(showPortalContent).toHaveBeenCalledWith(cellSlot.element);
-		expect(dirty).not.toHaveBeenCalled();
-		expect(mountCellImmediately).not.toHaveBeenCalled();
-		expect(snapshotSet).toHaveBeenCalledTimes(1);
-		expect(snapshotSet).toHaveBeenCalledWith(
-			expect.objectContaining({
-				rowId: 'r1',
-				colField: 'name',
-				contentMode: 'portal',
-				contentKind: 'portal-frozen',
-				title: 'Portal warm title',
-				validationError: 'Needs review',
-			})
-		);
+		expect(showPortalContent).not.toHaveBeenCalled();
+		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
+		expect(mountCellImmediately).toHaveBeenCalledTimes(1);
+		expect(snapshotSet).not.toHaveBeenCalled();
 	});
 
 	it('does not remount a stable frozen custom-live portal during scroll when versions are unchanged', () => {
@@ -1490,6 +1489,10 @@ describe('bindCellDuringScroll', () => {
 		const mountCellImmediately = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
 		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		const host = document.createElement('div');
+		host.appendChild(document.createElement('span'));
+		cellSlot.element.appendChild(host);
+		cellSlot.portalHostElement = host;
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell custom-class', 'portal', undefined, '', portalKey);
 		cellSlot.lastMountedGlobalVersion = 4;
 		cellSlot.lastMountedRowVersion = 7;
@@ -1504,6 +1507,25 @@ describe('bindCellDuringScroll', () => {
 					getCachedDisplayValue: vi.fn(() => undefined),
 				},
 				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => ({
+					rowId: 'r1',
+					colField: 'name',
+					rowVersion: 7,
+					globalVersion: 4,
+					insightVersion: 0,
+					styleVersion: 0,
+					loadingVersion: 0,
+					selectionVersion: 0,
+					baseClassName: 'og-cell',
+					stateClassName: 'custom-class',
+					decorationClassName: '',
+					classTokens: ['og-cell', 'custom-class'],
+					className: 'og-cell custom-class',
+					contentKind: 'portal-frozen',
+					contentMode: 'portal',
+					formattedValue: '',
+					title: '',
+				})),
 			} as any,
 			cellRenderer: { showPortalContent } as any,
 			portalMountManager: {
@@ -1520,12 +1542,8 @@ describe('bindCellDuringScroll', () => {
 			setDeferredFocusCell: vi.fn(),
 			applyFocus: vi.fn(),
 			isEditorInteractiveElement: () => false,
-			ensureCellPortalHost: (cell) => {
-				const host = document.createElement('div');
-				cell.appendChild(host);
-				return host;
-			},
-			getCellPortalHost: () => null,
+			ensureCellPortalHost: () => host,
+			getCellPortalHost: () => host,
 			markCellDirtyAfterScroll: dirty,
 			releaseCellPortal: vi.fn(),
 			incrementStyleHookCallsDuringScroll: vi.fn(),
@@ -1546,9 +1564,12 @@ describe('bindCellDuringScroll', () => {
 				focusedCell: null,
 				globalVersion: 4,
 				hasDeferredCellStyleRules: false,
+				insightVersion: 0,
 				isScrolling: true,
 				loadingVersion: 0,
 				plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+				selectionVersion: 0,
+				styleVersion: 0,
 				visibleColRange: { startIdx: 0, endIdx: 0 },
 				rowVersions: new Map([['r1', 7]]),
 			} as any,
@@ -1573,6 +1594,10 @@ describe('bindCellDuringScroll', () => {
 		const mountCellImmediately = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
 		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		const host = document.createElement('div');
+		host.appendChild(document.createElement('span'));
+		cellSlot.element.appendChild(host);
+		cellSlot.portalHostElement = host;
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell custom-class og-cell-validation-error', 'portal', undefined, '', portalKey);
 		cellSlot.lastMountedGlobalVersion = 4;
 		cellSlot.lastMountedRowVersion = 7;
@@ -1621,12 +1646,8 @@ describe('bindCellDuringScroll', () => {
 			setDeferredFocusCell: vi.fn(),
 			applyFocus: vi.fn(),
 			isEditorInteractiveElement: () => false,
-			ensureCellPortalHost: (cell) => {
-				const host = document.createElement('div');
-				cell.appendChild(host);
-				return host;
-			},
-			getCellPortalHost: () => null,
+			ensureCellPortalHost: () => host,
+			getCellPortalHost: () => host,
 			markCellDirtyAfterScroll: dirty,
 			releaseCellPortal: vi.fn(),
 			incrementStyleHookCallsDuringScroll: vi.fn(),
