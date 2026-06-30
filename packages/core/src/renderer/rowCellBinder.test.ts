@@ -1093,6 +1093,103 @@ describe('bindCellDuringScroll', () => {
 		expect(mountCellImmediately).not.toHaveBeenCalled();
 	});
 
+	it('uses a fresh custom-live impostor snapshot during scroll instead of immediately mounting the portal', () => {
+		const dirty = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: {
+					getCachedDisplayValue: vi.fn(() => undefined),
+				},
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => ({
+					rowId: 'r1',
+					colField: 'name',
+					rowVersion: 3,
+					globalVersion: 7,
+					insightVersion: 0,
+					styleVersion: 0,
+					loadingVersion: 0,
+					selectionVersion: 0,
+					baseClassName: 'og-cell',
+					stateClassName: 'og-cell-readonly',
+					decorationClassName: '',
+					classTokens: ['og-cell', 'og-cell-readonly'],
+					className: 'og-cell og-cell-readonly',
+					contentKind: 'impostor',
+					contentMode: 'fallback',
+					formattedValue: 'Fallback name',
+					title: 'Fallback title',
+				})),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: {
+				isCellMounted: vi.fn(() => false),
+				mountCellImmediately,
+			} as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => {
+				const host = document.createElement('div');
+				cell.appendChild(host);
+				return host;
+			},
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name', cellRenderer: () => null } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 7,
+				insightVersion: 0,
+				styleVersion: 0,
+				selectionVersion: 0,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 3]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(cellSlot.lastContentMode).toBe('fallback');
+		expect(cellSlot.lastFormattedValue).toBe('Fallback name');
+		expect(cellSlot.element.title).toBe('Fallback title');
+		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
+		expect(mountCellImmediately).not.toHaveBeenCalled();
+	});
+
 	it('marks visible primitive cells dirty instead of materializing insight snapshots during scroll', () => {
 		const dirty = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));

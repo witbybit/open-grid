@@ -334,6 +334,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const rowModel = this.deps.engine.getVisualRowModel();
 		if (!rowModel) return;
 		const state = this.deps.engine.stateManager.getState();
+		const compiledPlan = this.deps.engine.columns.getCompiledPlan();
 		const focusedCell = state.selection.focus;
 		const selectionBounds = state.selection.bounds;
 		const compiledStyleRules = compileStyleRules(state.styleRules);
@@ -405,6 +406,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			if (visualRow?.kind !== 'data') return true;
 			const col = columns[colIndex];
 			if (!col) return true;
+			const isCustomLive = compiledPlan.columnPlans[colIndex]?.mode === 'custom-live';
 			const rowId = visualRow.node.id;
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
 			const shouldPrimeFormula = typeof rawValue === 'string' && rawValue.startsWith('=');
@@ -427,6 +429,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 				recordWork();
 				this.deps.renderStats.prewarmedDisplayValues++;
 				if (plainSnapshotEligible) {
+					const snapshotContentKind = isCustomLive && displayValue !== '' ? 'impostor' : displayValue !== '' ? 'text' : 'empty';
+					const snapshotContentMode = isCustomLive && displayValue !== '' ? 'fallback' : displayValue !== '' ? 'text' : 'empty';
 					this.deps.engine.cellDisplaySnapshots.set(
 						createCellDisplaySnapshot({
 							rowId,
@@ -438,8 +442,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 							loadingVersion: this.deps.rowRenderer.loadingVersion,
 							selectionVersion: this.deps.engine.selectionVersion,
 							baseClassName: 'og-cell',
-							contentKind: displayValue !== '' ? 'text' : 'empty',
-							contentMode: displayValue !== '' ? 'text' : 'empty',
+							contentKind: snapshotContentKind,
+							contentMode: snapshotContentMode,
 							formattedValue: displayValue,
 							title: '',
 						})
@@ -493,6 +497,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 										value: rawValue ?? displayValue,
 									})
 							: null;
+					const snapshotContentKind = isCustomLive && displayValue !== '' ? 'impostor' : displayValue !== '' ? 'text' : 'empty';
+					const snapshotContentMode = isCustomLive && displayValue !== '' ? 'fallback' : displayValue !== '' ? 'text' : 'empty';
 					this.deps.engine.cellDisplaySnapshots.set(
 						createCellDisplaySnapshot({
 							rowId,
@@ -506,8 +512,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 							baseClassName: 'og-cell',
 							stateClassName,
 							decorationClassName: decorationMetadata.classNameSuffix,
-							contentKind: displayValue !== '' ? 'text' : 'empty',
-							contentMode: displayValue !== '' ? 'text' : 'empty',
+							contentKind: snapshotContentKind,
+							contentMode: snapshotContentMode,
 							formattedValue: displayValue,
 							title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
 							validationError: decorationMetadata.validationError,
@@ -525,6 +531,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			if (visualRow?.kind !== 'data') return true;
 			const col = columns[colIndex];
 			if (!col) return true;
+			const isCustomLive = compiledPlan.columnPlans[colIndex]?.mode === 'custom-live';
 			const rowId = visualRow.node.id;
 			if (hasFreshSnapshot(rowId, col.field)) return true;
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
@@ -584,6 +591,9 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 							})
 					: null;
 			recordWork();
+			const snapshotContentKind = isCustomLive && (primedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field)) !== '' ? 'impostor' : primedValue && primedValue !== '' ? 'text' : 'empty';
+			const snapshotContentMode = isCustomLive && (primedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field)) !== '' ? 'fallback' : primedValue && primedValue !== '' ? 'text' : 'empty';
+			const snapshotFormattedValue = primedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field);
 			this.deps.engine.cellDisplaySnapshots.set(
 				createCellDisplaySnapshot({
 					rowId,
@@ -597,9 +607,9 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 					baseClassName: 'og-cell',
 					stateClassName,
 					decorationClassName: decorationMetadata.classNameSuffix,
-					contentKind: primedValue && primedValue !== '' ? 'text' : 'empty',
-					contentMode: primedValue && primedValue !== '' ? 'text' : 'empty',
-					formattedValue: primedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field),
+					contentKind: snapshotContentKind,
+					contentMode: snapshotContentMode,
+					formattedValue: snapshotFormattedValue,
 					title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
 					validationError: decorationMetadata.validationError,
 				})

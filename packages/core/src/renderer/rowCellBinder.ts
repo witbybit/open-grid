@@ -54,6 +54,10 @@ function isPortalSnapshotContent(snapshot: CellDisplaySnapshot | undefined): sna
 	return !!snapshot && snapshot.contentMode === 'portal';
 }
 
+function isImpostorSnapshotContent(snapshot: CellDisplaySnapshot | undefined): snapshot is CellDisplaySnapshot {
+	return !!snapshot && snapshot.contentKind === 'impostor';
+}
+
 function applyCellTitlesAndValidation(element: HTMLDivElement, tooltipText: string | null, insightTitle: string, validationError?: string): void {
 	const prevValidationAttr = element.dataset.validationError;
 	if (validationError) {
@@ -423,11 +427,19 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	const stableKey = access.isEditing
 		? createEditRendererKey(node.id, col.field)
 		: createCellInstanceRendererKey(cellSlot.cellInstanceId, col.field);
+	const scrollMode = plan.columnPlans[colIndex]?.mode;
 	let contentMode: CellContentMode = 'empty';
 	let formattedValue = '';
+	let portalImpostorValue = '';
 
 	if (((col as InternalColumnDef<TRowData>).cellRenderer || access.isEditing) && !access.isLoading) {
 		contentMode = 'portal';
+		portalImpostorValue =
+			access.value != null && col.valueFormatter
+				? col.valueFormatter({ value: access.value, rowData: node.data as TRowData, colDef: col, rowId: node.id })
+				: access.value != null
+					? String(access.value)
+					: deps.engine.getCheapDisplayValue(node.id, col.field);
 		if (cellSlot.lastPortalKey !== stableKey || !deps.portalMountManager.isCellMounted(stableKey)) {
 			if (cellSlot.lastPortalKey) {
 				deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
@@ -441,12 +453,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			cellKey: stableKey,
 			container: portalHost,
 			value: access.value,
-			formattedValue:
-				access.value != null && col.valueFormatter
-					? col.valueFormatter({ value: access.value, rowData: node.data as TRowData, colDef: col, rowId: node.id })
-					: access.value != null
-						? String(access.value)
-						: '',
+			formattedValue: portalImpostorValue,
 			node,
 			col,
 			rowIndex,
@@ -506,6 +513,17 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	// WS2: assign the renderer handle based on the resolved content mode.
 	// Destroy the previous handle when the renderer kind or portal key changes.
 	assignRendererHandle(cellSlot, contentMode, formattedValue, stableKey);
+	const snapshotContentKind =
+		contentMode === 'portal'
+			? !access.isEditing && scrollMode === 'custom-live' && portalImpostorValue !== ''
+				? 'impostor'
+				: 'portal-live'
+			: contentMode;
+	const snapshotContentMode =
+		contentMode === 'portal' && snapshotContentKind === 'impostor'
+			? ('fallback' as const)
+			: contentMode;
+	const snapshotFormattedValue = contentMode === 'portal' && snapshotContentKind === 'impostor' ? portalImpostorValue : formattedValue;
 	deps.engine.cellDisplaySnapshots.set(
 		createCellDisplaySnapshot({
 			rowId: node.id,
@@ -519,9 +537,9 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			baseClassName: baseCellClassName,
 			stateClassName: subtractNormalizedClassName(cellClassName, baseCellClassName + decorationMetadata.classNameSuffix),
 			decorationClassName: decorationMetadata.classNameSuffix,
-			contentKind: contentMode === 'portal' ? 'portal-live' : contentMode,
-			contentMode,
-			formattedValue,
+			contentKind: snapshotContentKind,
+			contentMode: snapshotContentMode,
+			formattedValue: snapshotFormattedValue,
 			title: cellSlot.element.title,
 			validationError: validationDecTitle,
 		})
@@ -716,6 +734,33 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const portalCellKey = isEditing ? createEditRendererKey(node.id, col.field) : cellKey;
 	const scrollMode = plan?.mode;
 	const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
+	const portalImpostorSnapshot =
+		scrollMode === 'custom-live' && !isEditing && !isFocused && snapshot && snapshot.contentMode === 'fallback' ? snapshot : undefined;
+	if (portalImpostorSnapshot) {
+		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
+		deps.markCellDirtyAfterScroll(cellSlot.element);
+		applyCellTitlesAndValidation(cellSlot.element, portalImpostorSnapshot.title || null, '', portalImpostorSnapshot.validationError);
+		const didWriteImpostor = cellSlot.update(
+			colIndex,
+			col.field,
+			rowIndex,
+			node.id,
+			left,
+			right,
+			width,
+			cellClassName,
+			portalImpostorSnapshot.contentMode,
+			undefined,
+			portalImpostorSnapshot.formattedValue,
+			undefined
+		);
+		cellSlot.lastMountedRowVersion = rowVersion;
+		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
+		recordCellSlotMountedVisualVersions(cellSlot, portalImpostorSnapshot);
+		if (didWriteImpostor) deps.incrementCurrentScrollCellsWritten();
+		deps.incrementCellsBoundDuringScroll();
+		return;
+	}
 	const canTrustSnapshotPortalHost =
 		isPortalSnapshotContent(snapshot) &&
 		cellSlot.lastPortalKey === portalCellKey &&
