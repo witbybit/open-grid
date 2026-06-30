@@ -86,6 +86,13 @@ describe('bindCellDuringScroll', () => {
 		const wrote = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell og-cell-selected custom-class', 'text', undefined, 'Warm value');
+		// Version stamps must match ctx for isWarmBindingVersionFresh to pass.
+		cellSlot.lastMountedRowVersion = -1; // rowVersions is empty → rowVersion = -1
+		cellSlot.lastMountedGlobalVersion = 1;
+		cellSlot.lastMountedInsightVersion = 0;
+		cellSlot.lastMountedStyleVersion = 0;
+		cellSlot.lastMountedLoadingVersion = 0;
+		cellSlot.lastMountedSelectionVersion = 0;
 
 		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
 			engine: {
@@ -134,6 +141,9 @@ describe('bindCellDuringScroll', () => {
 				activeEdit: null,
 				focusedCell: null,
 				globalVersion: 1,
+				insightVersion: 0,
+				styleVersion: 0,
+				selectionVersion: 0,
 				hasDeferredCellStyleRules: false,
 				isScrolling: true,
 				loadingVersion: 0,
@@ -1213,7 +1223,11 @@ describe('bindCellDuringScroll', () => {
 			setDeferredFocusCell: vi.fn(),
 			applyFocus: vi.fn(),
 			isEditorInteractiveElement: () => false,
-			ensureCellPortalHost: (cell) => { const h = document.createElement('div'); cell.appendChild(h); return h; },
+			ensureCellPortalHost: (cell) => {
+				const h = document.createElement('div');
+				cell.appendChild(h);
+				return h;
+			},
 			getCellPortalHost: () => null,
 			markCellDirtyAfterScroll: dirty,
 			releaseCellPortal: vi.fn(),
@@ -1300,7 +1314,11 @@ describe('bindCellDuringScroll', () => {
 			setDeferredFocusCell: vi.fn(),
 			applyFocus: vi.fn(),
 			isEditorInteractiveElement: () => false,
-			ensureCellPortalHost: (cell) => { const h = document.createElement('div'); cell.appendChild(h); return h; },
+			ensureCellPortalHost: (cell) => {
+				const h = document.createElement('div');
+				cell.appendChild(h);
+				return h;
+			},
 			getCellPortalHost: () => null,
 			markCellDirtyAfterScroll: dirty,
 			releaseCellPortal: vi.fn(),
@@ -1387,7 +1405,11 @@ describe('bindCellDuringScroll', () => {
 			setDeferredFocusCell: vi.fn(),
 			applyFocus: vi.fn(),
 			isEditorInteractiveElement: () => false,
-			ensureCellPortalHost: (cell) => { const h = document.createElement('div'); cell.appendChild(h); return h; },
+			ensureCellPortalHost: (cell) => {
+				const h = document.createElement('div');
+				cell.appendChild(h);
+				return h;
+			},
 			getCellPortalHost: () => null,
 			markCellDirtyAfterScroll: dirty,
 			releaseCellPortal: vi.fn(),
@@ -1457,7 +1479,11 @@ describe('bindCellDuringScroll', () => {
 			setDeferredFocusCell: vi.fn(),
 			applyFocus: vi.fn(),
 			isEditorInteractiveElement: () => false,
-			ensureCellPortalHost: (cell) => { const h = document.createElement('div'); cell.appendChild(h); return h; },
+			ensureCellPortalHost: (cell) => {
+				const h = document.createElement('div');
+				cell.appendChild(h);
+				return h;
+			},
 			getCellPortalHost: () => null,
 			markCellDirtyAfterScroll: dirty,
 			releaseCellPortal: vi.fn(),
@@ -1528,7 +1554,11 @@ describe('bindCellDuringScroll', () => {
 			setDeferredFocusCell: vi.fn(),
 			applyFocus: vi.fn(),
 			isEditorInteractiveElement: () => false,
-			ensureCellPortalHost: (cell) => { const h = document.createElement('div'); cell.appendChild(h); return h; },
+			ensureCellPortalHost: (cell) => {
+				const h = document.createElement('div');
+				cell.appendChild(h);
+				return h;
+			},
 			getCellPortalHost: () => null,
 			markCellDirtyAfterScroll: dirty,
 			releaseCellPortal: vi.fn(),
@@ -1674,8 +1704,13 @@ describe('bindCellDuringScroll', () => {
 		const dirty = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell preserved', 'text', undefined, 'Name 1', undefined);
+		// All version stamps must match the ctx for isWarmBindingVersionFresh to pass.
 		cellSlot.lastMountedGlobalVersion = 7;
 		cellSlot.lastMountedRowVersion = 3;
+		cellSlot.lastMountedInsightVersion = 0;
+		cellSlot.lastMountedStyleVersion = 0;
+		cellSlot.lastMountedLoadingVersion = 0;
+		cellSlot.lastMountedSelectionVersion = 0;
 		const snapshotSet = vi.fn();
 
 		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
@@ -1739,6 +1774,9 @@ describe('bindCellDuringScroll', () => {
 				activeEdit: null,
 				focusedCell: null,
 				globalVersion: 7,
+				insightVersion: 0,
+				styleVersion: 0,
+				selectionVersion: 0,
 				hasDeferredCellStyleRules: false,
 				hasInsightDecorations: true,
 				isScrolling: true,

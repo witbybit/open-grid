@@ -443,7 +443,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		const scrollImpostorFn = col.cellRendererCapabilities?.scrollImpostor;
 		portalImpostorValue =
 			scrollImpostorFn != null
-				? (scrollImpostorFn({ value: access.value, formattedValue: formattedForImpostor }) || formattedForImpostor)
+				? scrollImpostorFn({ value: access.value, formattedValue: formattedForImpostor }) || formattedForImpostor
 				: formattedForImpostor;
 		if (cellSlot.lastPortalKey !== stableKey || !deps.portalMountManager.isCellMounted(stableKey)) {
 			if (cellSlot.lastPortalKey) {
@@ -518,11 +518,13 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	// WS2: assign the renderer handle based on the resolved content mode.
 	// Destroy the previous handle when the renderer kind or portal key changes.
 	assignRendererHandle(cellSlot, contentMode, formattedValue, stableKey);
+	const fullBindHasImpostorCapability =
+		scrollMode === 'custom-live' ||
+		scrollMode === 'custom-imperative' ||
+		(scrollMode === 'custom' && col.cellRendererCapabilities?.scrollImpostor != null);
 	const snapshotContentKind =
 		contentMode === 'portal'
-			? !access.isEditing &&
-			  (scrollMode === 'custom-live' || scrollMode === 'custom-imperative') &&
-			  portalImpostorValue !== ''
+			? !access.isEditing && fullBindHasImpostorCapability && portalImpostorValue !== ''
 				? 'impostor'
 				: 'portal-live'
 			: contentMode;
@@ -628,10 +630,10 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		((ctx.hasInsightDecorations && !snapshot) ||
 			(ctx.hasDeferredCellStyleRules &&
 				!snapshot &&
-				(ctx.selectionChangedDuringScroll || !canPreserveWarmVisuals || ctx.styleChangedDuringScroll || ctx.loadingChangedDuringScroll)));
+				(ctx.selectionChangedDuringScroll || !isWarmBindingVersionFresh || ctx.styleChangedDuringScroll || ctx.loadingChangedDuringScroll)));
 	if (snapshot?.className) {
 		cellClassName = snapshot.className;
-	} else if (canPreserveWarmVisuals && cellSlot.lastClassName) {
+	} else if (isWarmBindingVersionFresh && cellSlot.lastClassName) {
 		cellClassName = cellSlot.lastClassName;
 	}
 
@@ -700,7 +702,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		if (isPrimitiveSnapshotContent(snapshot)) {
 			formattedValue = snapshot.formattedValue;
 			contentMode = snapshot.contentMode;
-		} else if (canPreserveWarmVisuals && (cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback')) {
+		} else if (isWarmBindingVersionFresh && (cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback')) {
 			formattedValue = cellSlot.lastFormattedValue ?? '';
 			contentMode = cellSlot.lastContentMode;
 			deps.markCellDirtyAfterScroll(cellSlot.element);
@@ -740,8 +742,12 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const portalCellKey = isEditing ? createEditRendererKey(node.id, col.field) : cellKey;
 	const scrollMode = plan?.mode;
 	const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
+	const hasScrollImpostorCapability =
+		scrollMode === 'custom-live' ||
+		scrollMode === 'custom-imperative' ||
+		(scrollMode === 'custom' && col.cellRendererCapabilities?.scrollImpostor != null);
 	const portalImpostorSnapshot =
-		(scrollMode === 'custom-live' || scrollMode === 'custom-imperative') &&
+		hasScrollImpostorCapability &&
 		!isEditing &&
 		!isFocused &&
 		snapshot &&
@@ -788,29 +794,44 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	// old row and must not be treated as valid content for the incoming row.
 	const hasExistingLivePortalContent =
 		!isRowRebind && cellSlot.lastPortalKey === portalCellKey && hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
-	if (
-		(scrollMode === 'custom-live' || scrollMode === 'custom-imperative') &&
-		!isEditing &&
-		!isFocused &&
-		!canFreezePortal &&
-		!hasExistingLivePortalContent
-	) {
+	if (hasScrollImpostorCapability && !isEditing && !isFocused && !canFreezePortal && !hasExistingLivePortalContent) {
 		const genericCheap = deps.engine.getCheapDisplayValue?.(node.id, col.field) ?? '';
 		const scrollImpostorFn = col.cellRendererCapabilities?.scrollImpostor;
 		const cheapValue =
-			canPreserveWarmVisuals && cellSlot.lastFormattedValue != null && cellSlot.lastContentMode !== 'portal'
+			isWarmBindingVersionFresh && cellSlot.lastFormattedValue != null && cellSlot.lastContentMode !== 'portal'
 				? cellSlot.lastFormattedValue
 				: scrollImpostorFn != null
-					? (scrollImpostorFn({ value: undefined, formattedValue: genericCheap }) || genericCheap)
+					? scrollImpostorFn({ value: undefined, formattedValue: genericCheap }) || genericCheap
 					: genericCheap;
 		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 		deps.markCellDirtyAfterScroll(cellSlot.element);
 		applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
 		const syntheticMode: CellContentMode = cheapValue !== '' ? 'fallback' : 'empty';
-		const didWriteSynthetic = cellSlot.update(colIndex, col.field, rowIndex, node.id, left, right, width, cellClassName, syntheticMode, undefined, cheapValue, undefined);
+		const didWriteSynthetic = cellSlot.update(
+			colIndex,
+			col.field,
+			rowIndex,
+			node.id,
+			left,
+			right,
+			width,
+			cellClassName,
+			syntheticMode,
+			undefined,
+			cheapValue,
+			undefined
+		);
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-		recordCellSlotMountedVisualVersions(cellSlot, snapshot ?? { insightVersion: ctx.insightVersion, styleVersion: ctx.styleVersion, loadingVersion: ctx.loadingVersion, selectionVersion: ctx.selectionVersion });
+		recordCellSlotMountedVisualVersions(
+			cellSlot,
+			snapshot ?? {
+				insightVersion: ctx.insightVersion,
+				styleVersion: ctx.styleVersion,
+				loadingVersion: ctx.loadingVersion,
+				selectionVersion: ctx.selectionVersion,
+			}
+		);
 		if (didWriteSynthetic) deps.incrementCurrentScrollCellsWritten();
 		deps.incrementCellsBoundDuringScroll();
 		return;
