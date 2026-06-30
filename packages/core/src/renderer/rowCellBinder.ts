@@ -531,10 +531,13 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	// styled HTML clone. frozenHtml is captured in the freeze-in-place path of bindCellDuringScroll
 	// (the only moment we have guaranteed committed React DOM). Without this carry-over, every
 	// fidelity render would silently drop the captured HTML and the impostor would revert to text.
-	const prevFrozenHtml =
+	// Guard on rowVersion: if the row's data changed, the captured HTML is stale — drop it so the
+	// next freeze re-captures the updated badge/chip rather than replaying ghost data.
+	const prevSnapshot =
 		(col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollSnapshot === 'html'
-			? deps.engine.cellDisplaySnapshots.get(node.id, col.field)?.frozenHtml
+			? deps.engine.cellDisplaySnapshots.get(node.id, col.field)
 			: undefined;
+	const prevFrozenHtml = prevSnapshot?.rowVersion === rowVersion ? prevSnapshot.frozenHtml : undefined;
 	deps.engine.cellDisplaySnapshots.set(
 		createCellDisplaySnapshot({
 			rowId: node.id,

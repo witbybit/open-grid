@@ -362,7 +362,12 @@ export function createCustomColumns(): ColumnDef<CustomShowcaseRow>[] {
 		{ field: 'id', header: 'Asset ID', width: 100 },
 		{ field: 'name', header: 'Premium Asset', width: 180 },
 		{ field: 'price', header: 'Acquisition Cost ($)', width: 150, renderer: { kind: 'react', component: PriceBadgeRenderer } },
-		{ field: 'rating', header: 'Client Rating', width: 160, renderer: { kind: 'react', component: StarRatingRenderer } },
+		{
+			field: 'rating',
+			header: 'Client Rating',
+			width: 160,
+			renderer: { kind: 'react', component: StarRatingRenderer, capabilities: { scrollBehavior: 'live', scrollSnapshot: 'html' } },
+		},
 		{
 			field: 'progress',
 			header: 'Deployment Status',

@@ -868,7 +868,7 @@ export const CORE_STYLES = `
     position: absolute;
     top: 0;
     height: 100%;
-    contain: style;
+    contain: layout paint style;
     box-sizing: border-box;
     padding: 0 12px;
     display: flex;
