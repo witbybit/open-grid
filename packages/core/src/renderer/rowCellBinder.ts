@@ -518,10 +518,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	// WS2: assign the renderer handle based on the resolved content mode.
 	// Destroy the previous handle when the renderer kind or portal key changes.
 	assignRendererHandle(cellSlot, contentMode, formattedValue, stableKey);
-	const fullBindHasImpostorCapability =
-		scrollMode === 'custom-live' ||
-		scrollMode === 'custom-imperative' ||
-		scrollMode === 'custom';
+	const fullBindHasImpostorCapability = scrollMode === 'custom-live' || scrollMode === 'custom-imperative' || scrollMode === 'custom';
 	const snapshotContentKind =
 		contentMode === 'portal'
 			? !access.isEditing && fullBindHasImpostorCapability && portalImpostorValue !== ''
@@ -742,18 +739,9 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const portalCellKey = isEditing ? createEditRendererKey(node.id, col.field) : cellKey;
 	const scrollMode = plan?.mode;
 	const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
-	const hasScrollImpostorCapability =
-		scrollMode === 'custom-live' ||
-		scrollMode === 'custom-imperative' ||
-		scrollMode === 'custom';
+	const hasScrollImpostorCapability = scrollMode === 'custom-live' || scrollMode === 'custom-imperative' || scrollMode === 'custom';
 	const portalImpostorSnapshot =
-		hasScrollImpostorCapability &&
-		!isEditing &&
-		!isFocused &&
-		snapshot &&
-		snapshot.contentMode === 'fallback'
-			? snapshot
-			: undefined;
+		hasScrollImpostorCapability && !isEditing && !isFocused && snapshot && snapshot.contentMode === 'fallback' ? snapshot : undefined;
 	if (portalImpostorSnapshot) {
 		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 		deps.markCellDirtyAfterScroll(cellSlot.element);

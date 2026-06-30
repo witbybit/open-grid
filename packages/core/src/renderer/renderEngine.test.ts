@@ -1527,9 +1527,7 @@ describe('RenderEngine', () => {
 		// custom cells show text impostor during scroll — no portal content until fidelity lane fires.
 		const portalCell = container.querySelector<HTMLDivElement>('.og-cell[data-content-mode="portal"]');
 		expect(portalCell).toBeNull();
-		const impostorCell = container.querySelector<HTMLDivElement>(
-			'.og-cell[data-content-mode="empty"], .og-cell[data-content-mode="fallback"]'
-		);
+		const impostorCell = container.querySelector<HTMLDivElement>('.og-cell[data-content-mode="empty"], .og-cell[data-content-mode="fallback"]');
 		expect(impostorCell).not.toBeNull();
 
 		renderer.unmount();

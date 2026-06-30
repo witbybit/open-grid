@@ -355,9 +355,9 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const rowDelta = prev ? request.visibleRowStart - prev.visibleRowStart : 0;
 		const colDelta = prev ? request.visibleColStart - prev.visibleColStart : 0;
 		const rowBefore = rowDelta > 0 ? base : rowDelta < 0 ? base * 2 : base;
-		const rowAfter  = rowDelta > 0 ? base * 2 : rowDelta < 0 ? base : base;
+		const rowAfter = rowDelta > 0 ? base * 2 : rowDelta < 0 ? base : base;
 		const colBefore = colDelta > 0 ? baseCol : colDelta < 0 ? baseCol * 2 : baseCol;
-		const colAfter  = colDelta > 0 ? baseCol * 2 : colDelta < 0 ? baseCol : baseCol;
+		const colAfter = colDelta > 0 ? baseCol * 2 : colDelta < 0 ? baseCol : baseCol;
 		this.state.lastPrewarmRequest = { ...request };
 
 		const leftColStart = Math.max(0, request.visibleColStart - colBefore);
