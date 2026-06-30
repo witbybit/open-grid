@@ -591,9 +591,9 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 							})
 					: null;
 			recordWork();
-			const snapshotContentKind = isCustomLive && (primedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field)) !== '' ? 'impostor' : primedValue && primedValue !== '' ? 'text' : 'empty';
-			const snapshotContentMode = isCustomLive && (primedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field)) !== '' ? 'fallback' : primedValue && primedValue !== '' ? 'text' : 'empty';
 			const snapshotFormattedValue = primedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field);
+			const snapshotContentKind = isCustomLive && snapshotFormattedValue !== '' ? 'impostor' : snapshotFormattedValue !== '' ? 'text' : 'empty';
+			const snapshotContentMode = isCustomLive && snapshotFormattedValue !== '' ? 'fallback' : snapshotFormattedValue !== '' ? 'text' : 'empty';
 			this.deps.engine.cellDisplaySnapshots.set(
 				createCellDisplaySnapshot({
 					rowId,
