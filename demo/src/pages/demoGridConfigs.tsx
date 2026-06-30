@@ -153,7 +153,10 @@ export function createPerformanceColumns(massiveColumns: boolean): ColumnDef<Per
 			header: 'Risk Rating',
 			width: 110,
 			cellEditor: StatusDropdownEditor,
-			renderer: { kind: 'react', component: RiskBadgeRenderer, capabilities: { scrollBehavior: 'defer' } },
+			// scrollSnapshot: 'html' — LOW/MEDIUM/HIGH risk badges keep their glow and color during
+			// fast scroll without any React re-render. The static clone is replaced by the live
+			// portal on the next post-scroll fidelity pass.
+			renderer: { kind: 'react', component: RiskBadgeRenderer, capabilities: { scrollBehavior: 'defer', scrollSnapshot: 'html' } },
 			valueGetter: ({ row }) => (row.status === 'Active' ? 'LOW' : row.status === 'Pending' ? 'MEDIUM' : 'HIGH'),
 		},
 	];
@@ -176,7 +179,15 @@ export function createServerColumns(): ColumnDef<ServerAuditRow>[] {
 	return [
 		{ field: 'id', header: 'Trace ID', width: 130 },
 		{ field: 'timestamp', header: 'Timestamp', width: 220 },
-		{ field: 'service', header: 'Microservice', width: 140, renderer: { kind: 'react', component: ServiceBadgeRenderer } },
+		{
+			field: 'service',
+			header: 'Microservice',
+			width: 140,
+			// scrollSnapshot: 'html' — after the first fidelity render the grid captures the badge's
+			// styled HTML (colored left-border pill) and injects it as a static clone during scroll.
+			// The service chip looks exactly the same while the grid is in motion.
+			renderer: { kind: 'react', component: ServiceBadgeRenderer, capabilities: { scrollSnapshot: 'html' } },
+		},
 		{
 			field: 'rendererLive',
 			header: 'Live Rebind',
@@ -188,11 +199,35 @@ export function createServerColumns(): ColumnDef<ServerAuditRow>[] {
 			field: 'rendererDefer',
 			header: 'Defer Stable',
 			width: 170,
+			// Plain text impostor — shows raw "defer|INFO scroll-idle" text during scroll.
+			// Compare with the Snap column next to it to see the visual difference.
 			renderer: { kind: 'react', component: RendererStrategyProbe, capabilities: { scrollBehavior: 'defer' } },
 			valueGetterDependencies: ['severity'],
 			valueGetter: ({ row }) => `defer|${row.severity}`,
 		},
-		{ field: 'severity', header: 'Severity', width: 120, renderer: { kind: 'react', component: RiskBadgeRenderer } },
+		{
+			field: 'rendererSnap',
+			header: 'Defer + Snap',
+			width: 185,
+			// scrollSnapshot: 'html' opt-in — same renderer and data as "Defer Stable" but the grid
+			// captures the badge HTML after each fidelity render and replays it during scroll.
+			// Scroll fast and compare: this column shows styled chips, the one to its left shows text.
+			renderer: {
+				kind: 'react',
+				component: RendererStrategyProbe,
+				capabilities: { scrollBehavior: 'defer', scrollSnapshot: 'html' },
+			},
+			valueGetterDependencies: ['severity'],
+			valueGetter: ({ row }) => `defer|${row.severity}`,
+		},
+		{
+			field: 'severity',
+			header: 'Severity',
+			width: 120,
+			// scrollSnapshot: 'html' — the CRITICAL/ERROR/WARNING risk badges preserve their
+			// glow colors and typography during scroll without any React re-render.
+			renderer: { kind: 'react', component: RiskBadgeRenderer, capabilities: { scrollSnapshot: 'html' } },
+		},
 		{
 			field: 'rendererFallback',
 			header: 'Defer Freeze',

@@ -157,7 +157,9 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		header: 'Change %',
 		width: 105,
 		sortable: true,
-		renderer: { kind: 'react', component: ChangePctRenderer, capabilities: { scrollBehavior: 'live' } },
+		// scrollSnapshot: 'html' — the ▲/▼ badge with its green/red tinted background and border
+		// is captured after each fidelity render and replayed as a static clone during scroll.
+		renderer: { kind: 'react', component: ChangePctRenderer, capabilities: { scrollBehavior: 'live', scrollSnapshot: 'html' } },
 	},
 	{ field: 'marketCap', header: 'Mkt Cap', width: 100, sortable: true },
 	{ field: 'volume', header: 'Volume', width: 110, sortable: true },
@@ -169,7 +171,9 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		header: 'Status',
 		width: 90,
 		sortable: true,
-		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live' } },
+		// scrollSnapshot: 'html' — Active/Watch/Closed colored status chips are captured as static
+		// HTML after fidelity render, so the portfolio status column looks settled while scrolling.
+		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live', scrollSnapshot: 'html' } },
 	},
 ];
 
