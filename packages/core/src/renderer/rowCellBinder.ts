@@ -766,6 +766,31 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		(snapshot.contentKind === 'portal-live' || snapshot.contentKind === 'portal-frozen') &&
 		hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
 	const canFreezePortal = canTrustSnapshotPortalHost;
+
+	// For custom-live cells with no portal to freeze, no prewarm snapshot, and no existing live
+	// portal content: synthesize a cheap text impostor so the scroll frame stays portal-free.
+	// Cells that already have live content in their portal host fall through to the freeze path.
+	// The full portal mount is deferred to the post-scroll fidelity lane.
+	const hasExistingLivePortalContent =
+		cellSlot.lastPortalKey === portalCellKey && hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
+	if (scrollMode === 'custom-live' && !isEditing && !isFocused && !canFreezePortal && !hasExistingLivePortalContent) {
+		const cheapValue =
+			canPreserveWarmVisuals && cellSlot.lastFormattedValue != null && cellSlot.lastContentMode !== 'portal'
+				? cellSlot.lastFormattedValue
+				: (deps.engine.getCheapDisplayValue?.(node.id, col.field) ?? '');
+		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
+		deps.markCellDirtyAfterScroll(cellSlot.element);
+		applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);
+		const syntheticMode: CellContentMode = cheapValue !== '' ? 'fallback' : 'empty';
+		const didWriteSynthetic = cellSlot.update(colIndex, col.field, rowIndex, node.id, left, right, width, cellClassName, syntheticMode, undefined, cheapValue, undefined);
+		cellSlot.lastMountedRowVersion = rowVersion;
+		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
+		recordCellSlotMountedVisualVersions(cellSlot, snapshot ?? { insightVersion: ctx.insightVersion, styleVersion: ctx.styleVersion, loadingVersion: ctx.loadingVersion, selectionVersion: ctx.selectionVersion });
+		if (didWriteSynthetic) deps.incrementCurrentScrollCellsWritten();
+		deps.incrementCellsBoundDuringScroll();
+		return;
+	}
+
 	const globalChanged = cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalVersion !== cellSlot.lastMountedGlobalVersion;
 	const rowChanged = cellSlot.lastMountedRowVersion !== -1 && rowVersion !== undefined && rowVersion !== cellSlot.lastMountedRowVersion;
 	const isDataStale = !isRowRebind && canFreezePortal && (globalChanged || rowChanged);

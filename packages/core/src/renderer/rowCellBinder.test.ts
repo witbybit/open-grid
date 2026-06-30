@@ -1190,6 +1190,76 @@ describe('bindCellDuringScroll', () => {
 		expect(mountCellImmediately).not.toHaveBeenCalled();
 	});
 
+	it('synthesizes a cheap text impostor for a new custom-live cell with no prewarm snapshot instead of live-mounting during scroll', () => {
+		const dirty = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const deps: RowCellBinderDeps<{ id: string; amount: number }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => undefined),
+				getCheapDisplayValue: vi.fn(() => '$42'),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => { const h = document.createElement('div'); cell.appendChild(h); return h; },
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', amount: 42 } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'amount', cellRenderer: () => null } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 1,
+				insightVersion: 0,
+				styleVersion: 0,
+				selectionVersion: 0,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 1]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(mountCellImmediately).not.toHaveBeenCalled();
+		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
+		expect(cellSlot.lastContentMode).toBe('fallback');
+		expect(cellSlot.lastFormattedValue).toBe('$42');
+	});
+
 	it('uses impostor snapshot for a pinned-left custom-live cell during scroll, same as center lane', () => {
 		const dirty = vi.fn();
 		const mountCellImmediately = vi.fn();
@@ -1965,7 +2035,7 @@ describe('bindCellDuringScroll', () => {
 		expect(cellSlot.element.dataset.validationError).toBe('Needs review');
 	});
 
-	it('remounts a visible portal cell when its host is empty even if the mount registry still says it is mounted', () => {
+	it('defers the portal mount to the fidelity lane when a custom-live host is empty, rather than mounting synchronously during scroll', () => {
 		const dirty = vi.fn();
 		const showPortalContent = vi.fn();
 		const mountCellImmediately = vi.fn();
@@ -2041,8 +2111,12 @@ describe('bindCellDuringScroll', () => {
 			isInVisibleContent: true,
 		});
 
-		expect(showPortalContent).not.toHaveBeenCalled();
+		// The cell had an empty portal host — no live content to freeze.
+		// The scroll frame must not call mountCellImmediately; instead, the cell
+		// is shown as a cheap text impostor and deferred to the post-scroll fidelity lane.
+		expect(mountCellImmediately).not.toHaveBeenCalled();
 		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
-		expect(mountCellImmediately).toHaveBeenCalledWith(expect.objectContaining({ cellKey: portalKey, container: host }));
+		// No getCheapDisplayValue mock → empty fallback; cell shows 'empty' mode.
+		expect(cellSlot.lastContentMode).toBe('empty');
 	});
 });
