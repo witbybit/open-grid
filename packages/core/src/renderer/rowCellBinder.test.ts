@@ -1434,6 +1434,151 @@ describe('bindCellDuringScroll', () => {
 		expect(mountCellImmediately).not.toHaveBeenCalled();
 	});
 
+	it('synthesizes a cheap text impostor for a new custom-imperative cell instead of live-mounting during scroll', () => {
+		const dirty = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const deps: RowCellBinderDeps<{ id: string; price: number }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => undefined),
+				getCheapDisplayValue: vi.fn(() => '$99'),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => { const h = document.createElement('div'); cell.appendChild(h); return h; },
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', price: 99 } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'price', cellRenderer: () => null, cellRendererCapabilities: { imperativeUpdate: true } } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 1,
+				insightVersion: 0,
+				styleVersion: 0,
+				selectionVersion: 0,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-imperative' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 1]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(mountCellImmediately).not.toHaveBeenCalled();
+		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
+		expect(cellSlot.lastContentMode).toBe('fallback');
+		expect(cellSlot.lastFormattedValue).toBe('$99');
+	});
+
+	it('uses scrollImpostor callback when provided, overriding the generic display value', () => {
+		const dirty = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const scrollImpostor = vi.fn(({ formattedValue }: { value: unknown; formattedValue: string }) => `★ ${formattedValue}`);
+		const deps: RowCellBinderDeps<{ id: string; price: number }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => undefined),
+				getCheapDisplayValue: vi.fn(() => '42'),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => { const h = document.createElement('div'); cell.appendChild(h); return h; },
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', price: 42 } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: {
+				field: 'price',
+				cellRenderer: () => null,
+				cellRendererCapabilities: { scrollBehavior: 'live', scrollImpostor },
+			} as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 1,
+				insightVersion: 0,
+				styleVersion: 0,
+				selectionVersion: 0,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 1]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(mountCellImmediately).not.toHaveBeenCalled();
+		expect(scrollImpostor).toHaveBeenCalled();
+		expect(cellSlot.lastContentMode).toBe('fallback');
+		expect(cellSlot.lastFormattedValue).toBe('★ 42');
+	});
+
 	it('marks visible primitive cells dirty instead of materializing insight snapshots during scroll', () => {
 		const dirty = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));

@@ -434,12 +434,17 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 
 	if (((col as InternalColumnDef<TRowData>).cellRenderer || access.isEditing) && !access.isLoading) {
 		contentMode = 'portal';
-		portalImpostorValue =
+		const formattedForImpostor =
 			access.value != null && col.valueFormatter
 				? col.valueFormatter({ value: access.value, rowData: node.data as TRowData, colDef: col, rowId: node.id })
 				: access.value != null
 					? String(access.value)
 					: deps.engine.getCheapDisplayValue(node.id, col.field);
+		const scrollImpostorFn = col.cellRendererCapabilities?.scrollImpostor;
+		portalImpostorValue =
+			scrollImpostorFn != null
+				? (scrollImpostorFn({ value: access.value, formattedValue: formattedForImpostor }) || formattedForImpostor)
+				: formattedForImpostor;
 		if (cellSlot.lastPortalKey !== stableKey || !deps.portalMountManager.isCellMounted(stableKey)) {
 			if (cellSlot.lastPortalKey) {
 				deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
@@ -515,7 +520,9 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	assignRendererHandle(cellSlot, contentMode, formattedValue, stableKey);
 	const snapshotContentKind =
 		contentMode === 'portal'
-			? !access.isEditing && scrollMode === 'custom-live' && portalImpostorValue !== ''
+			? !access.isEditing &&
+			  (scrollMode === 'custom-live' || scrollMode === 'custom-imperative') &&
+			  portalImpostorValue !== ''
 				? 'impostor'
 				: 'portal-live'
 			: contentMode;
@@ -734,7 +741,13 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const scrollMode = plan?.mode;
 	const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
 	const portalImpostorSnapshot =
-		scrollMode === 'custom-live' && !isEditing && !isFocused && snapshot && snapshot.contentMode === 'fallback' ? snapshot : undefined;
+		(scrollMode === 'custom-live' || scrollMode === 'custom-imperative') &&
+		!isEditing &&
+		!isFocused &&
+		snapshot &&
+		snapshot.contentMode === 'fallback'
+			? snapshot
+			: undefined;
 	if (portalImpostorSnapshot) {
 		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 		deps.markCellDirtyAfterScroll(cellSlot.element);
@@ -775,11 +788,21 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	// old row and must not be treated as valid content for the incoming row.
 	const hasExistingLivePortalContent =
 		!isRowRebind && cellSlot.lastPortalKey === portalCellKey && hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
-	if (scrollMode === 'custom-live' && !isEditing && !isFocused && !canFreezePortal && !hasExistingLivePortalContent) {
+	if (
+		(scrollMode === 'custom-live' || scrollMode === 'custom-imperative') &&
+		!isEditing &&
+		!isFocused &&
+		!canFreezePortal &&
+		!hasExistingLivePortalContent
+	) {
+		const genericCheap = deps.engine.getCheapDisplayValue?.(node.id, col.field) ?? '';
+		const scrollImpostorFn = col.cellRendererCapabilities?.scrollImpostor;
 		const cheapValue =
 			canPreserveWarmVisuals && cellSlot.lastFormattedValue != null && cellSlot.lastContentMode !== 'portal'
 				? cellSlot.lastFormattedValue
-				: (deps.engine.getCheapDisplayValue?.(node.id, col.field) ?? '');
+				: scrollImpostorFn != null
+					? (scrollImpostorFn({ value: undefined, formattedValue: genericCheap }) || genericCheap)
+					: genericCheap;
 		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 		deps.markCellDirtyAfterScroll(cellSlot.element);
 		applyCellTitlesAndValidation(cellSlot.element, snapshot?.title || null, '', snapshot?.validationError);

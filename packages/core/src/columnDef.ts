@@ -52,6 +52,18 @@ export interface CellRendererCapabilities {
 	 * Ideal for real-time feeds (tick data, live prices) where even setState latency is too high.
 	 */
 	imperativeUpdate?: boolean;
+	/**
+	 * Returns a cheap plain-text representation of the cell value for use as a scroll impostor.
+	 *
+	 * Called during the pre-scroll prewarm pass and at scroll-frame synthesis time when the grid
+	 * needs a text stand-in for a not-yet-mounted portal (scrollBehavior:'live' or imperativeUpdate
+	 * columns). The string is shown in place of the full renderer while the grid is in motion;
+	 * the real renderer is mounted in the post-scroll fidelity lane.
+	 *
+	 * Return an empty string to fall back to the generic display-value text.
+	 * Leave undefined to skip the impostor contract entirely (renderer is mounted synchronously).
+	 */
+	scrollImpostor?: (params: { value: unknown; formattedValue: string }) => string;
 }
 
 // ─── Imperative handle ────────────────────────────────────────────────────────
