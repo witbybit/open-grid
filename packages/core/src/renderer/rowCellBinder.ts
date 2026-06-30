@@ -771,8 +771,10 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	// portal content: synthesize a cheap text impostor so the scroll frame stays portal-free.
 	// Cells that already have live content in their portal host fall through to the freeze path.
 	// The full portal mount is deferred to the post-scroll fidelity lane.
+	// A rebind resets the slot to a new row identity — any existing portal content belongs to the
+	// old row and must not be treated as valid content for the incoming row.
 	const hasExistingLivePortalContent =
-		cellSlot.lastPortalKey === portalCellKey && hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
+		!isRowRebind && cellSlot.lastPortalKey === portalCellKey && hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
 	if (scrollMode === 'custom-live' && !isEditing && !isFocused && !canFreezePortal && !hasExistingLivePortalContent) {
 		const cheapValue =
 			canPreserveWarmVisuals && cellSlot.lastFormattedValue != null && cellSlot.lastContentMode !== 'portal'
