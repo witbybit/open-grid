@@ -488,18 +488,6 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		}
 	}
 
-	// Capture the portal host's current innerHTML for the scroll visual snapshot (opt-in via
-	// cellRendererCapabilities.scrollSnapshot: 'html'). This captures the PREVIOUS React render —
-	// if mountCell is asynchronous the current render has not committed yet. The captured HTML is
-	// used as a static visual clone on the next scroll so custom-renderer cells look settled
-	// (preserving badge styling, icons, colors) rather than falling back to plain text.
-	let frozenHtml: string | undefined;
-	if (contentMode === 'portal' && (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollSnapshot === 'html') {
-		const portalHost = deps.getCellPortalHost(cellSlot.element);
-		const html = portalHost?.innerHTML;
-		if (html) frozenHtml = html;
-	}
-
 	// Cell tooltip (title attribute) — only for data rows with tooltip defined
 	let tooltipText: string | null = null;
 	if (col.tooltip !== undefined && node.data !== null) {
@@ -557,7 +545,6 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			formattedValue: snapshotFormattedValue,
 			title: cellSlot.element.title,
 			validationError: validationDecTitle,
-			frozenHtml,
 		})
 	);
 
@@ -768,8 +755,15 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	// should be honored even when live portal content still exists in the slot (e.g. after the cell
 	// was visible, went out of view, and is re-entering via horizontal scroll with a fresh prewarm).
 	const snapshotDemandsImpostor = snapshot?.contentMode === 'fallback';
+	// scrollSnapshot: 'html' columns must be allowed into the freeze path even when the snapshot
+	// says 'fallback'. All custom-renderer columns write contentMode:'fallback' into their snapshot
+	// (because they have impostor capability), so snapshotDemandsImpostor is always true for them —
+	// it was designed for prewarm re-entry, not to block freeze on already-live cells. For html-
+	// snapshot columns we need the freeze moment to read committed React DOM; blocking freeze here
+	// means frozenHtml is never captured and the impostor always shows plain text.
+	const hasScrollSnapshotHtml = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollSnapshot === 'html';
 
-	if (hasScrollImpostorCapability && hasExistingLivePortalContent && !isEditing && !isFocused && !snapshotDemandsImpostor) {
+	if (hasScrollImpostorCapability && hasExistingLivePortalContent && !isEditing && !isFocused && (!snapshotDemandsImpostor || hasScrollSnapshotHtml)) {
 		// Freeze: keep existing portal content visible during scroll without remounting the portal.
 		deps.cellRenderer.showPortalContent(cellSlot.element);
 		// Apply fresh title/validation from the snapshot if one is available, so insight decoration
@@ -789,6 +783,19 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			(ctx.hasDeferredCellStyleRules &&
 				(!snapshot || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll));
 		if (shouldDirtyFrozen) deps.markCellDirtyAfterScroll(cellSlot.element);
+
+		// scrollSnapshot: 'html' — the portal host has live committed React content right now.
+		// Capture its innerHTML and patch the snapshot so future impostor renders for this row
+		// can replay the styled HTML instead of falling back to plain text. React commits async,
+		// so this freeze moment is the only reliable place to read committed DOM content.
+		if (hasScrollSnapshotHtml && snapshot) {
+			const portalHost = deps.getCellPortalHost(cellSlot.element);
+			const html = portalHost?.innerHTML;
+			if (html && html !== snapshot.frozenHtml) {
+				deps.engine.cellDisplaySnapshots.set({ ...snapshot, frozenHtml: html });
+			}
+		}
+
 		const didWriteFreeze = cellSlot.update(
 			colIndex,
 			col.field,

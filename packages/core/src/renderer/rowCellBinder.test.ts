@@ -2222,6 +2222,122 @@ describe('bindCellDuringScroll', () => {
 		expect(cellSlot.element.dataset.validationError).toBe('Needs review');
 	});
 
+	it('captures frozenHtml from live portal host during freeze and patches the stored snapshot', () => {
+		// The freeze-in-place path is the only reliable capture point: React commits async, so
+		// reading innerHTML right after mountCell would always return empty HTML. When the cell is
+		// frozen in place we know React has already committed, so we read the live DOM here.
+		const dirty = vi.fn();
+		const showPortalContent = vi.fn();
+		const snapshotSet = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		const host = document.createElement('div');
+		host.innerHTML = '<span class="badge">INFO</span>';
+		cellSlot.element.appendChild(host);
+		cellSlot.portalHostElement = host;
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell', 'portal', undefined, '', portalKey);
+		cellSlot.lastMountedGlobalVersion = 1;
+		cellSlot.lastMountedRowVersion = 2;
+		cellSlot.lastMountedInsightVersion = 0;
+		cellSlot.lastMountedStyleVersion = 0;
+		cellSlot.lastMountedLoadingVersion = 0;
+		cellSlot.lastMountedSelectionVersion = 0;
+
+		const existingSnapshot = {
+			rowId: 'r1',
+			colField: 'name',
+			rowVersion: 2,
+			globalVersion: 1,
+			insightVersion: 0,
+			styleVersion: 0,
+			loadingVersion: 0,
+			selectionVersion: 0,
+			contentKind: 'impostor' as const,
+			contentMode: 'fallback' as const,
+			formattedValue: 'INFO',
+			baseClassName: 'og-cell',
+			stateClassName: '',
+			decorationClassName: '',
+			classTokens: ['og-cell'],
+			className: 'og-cell',
+			title: '',
+			// frozenHtml intentionally absent — fidelity render has not yet captured it
+		};
+
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+				cellDisplaySnapshots: {
+					get: vi.fn(() => existingSnapshot),
+					set: snapshotSet,
+				},
+			} as any,
+			cellRenderer: { showPortalContent } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => true), mountCellImmediately: vi.fn() } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: vi.fn(),
+			getCellPortalHost: () => host,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: {
+				field: 'name',
+				cellRenderer: () => null,
+				cellRendererCapabilities: { scrollSnapshot: 'html' },
+			} as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 1,
+				hasDeferredCellStyleRules: false,
+				insightVersion: 0,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+				selectionVersion: 0,
+				styleVersion: 0,
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 2]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		// Snapshot should be patched with captured innerHTML
+		expect(snapshotSet).toHaveBeenCalledWith(
+			expect.objectContaining({ rowId: 'r1', colField: 'name', frozenHtml: '<span class="badge">INFO</span>' })
+		);
+		// Cell stays frozen — portal content visible, no remount
+		expect(showPortalContent).toHaveBeenCalledWith(cellSlot.element);
+	});
+
 	it('injects frozenHtml into portal host during scroll when scrollSnapshot: html is set on the column', () => {
 		const dirty = vi.fn();
 		const showPortalContent = vi.fn();
