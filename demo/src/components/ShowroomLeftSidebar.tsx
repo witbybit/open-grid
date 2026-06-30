@@ -25,6 +25,7 @@ import {
 	GripVertical,
 	ShieldCheck,
 	Building2,
+	LayoutDashboard,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -174,6 +175,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Projects Compliance',
 			subtitle: 'Tree · Compliance · Watchlist',
 			icon: Building2,
+		},
+		{
+			id: 'kanban',
+			label: 'Kanban Board',
+			subtitle: 'Variable Heights · Rich Cards',
+			icon: LayoutDashboard,
 		},
 	] as const;
 

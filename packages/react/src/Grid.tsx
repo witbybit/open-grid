@@ -64,6 +64,8 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 export interface GridClientProps<TRowData = unknown> extends GridCommonProps<TRowData> {
 	rowModelType?: 'client';
 	rows: TRowData[];
+	/** Per-row height callback. Return a pixel height for each row, or `undefined` to use `defaultRowHeight`. Overridden by `api.setRowHeight()`. Initial-only. */
+	getRowHeight?: (row: TRowData) => number | undefined;
 }
 
 /** Block/range (infinite scroll) row model — datasource receives startRow/endRow. */
@@ -148,6 +150,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		showFilterChipBar,
 		showFloatingFilters,
 		rows,
+		getRowHeight,
 		datasource,
 		blockSize,
 		rowSelection,
@@ -158,6 +161,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		GridShellProps<TRowData> & {
 			rowModelType?: 'client' | 'infinite' | 'server';
 			rows?: TRowData[];
+			getRowHeight?: (row: TRowData) => number | undefined;
 			datasource?: InfiniteDatasource<TRowData> | ServerDatasource<TRowData>;
 			blockSize?: number;
 			rowSelection?: RowSelectionMode | RowSelectionOptions;
@@ -187,6 +191,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		showStatusBar,
 		rowDragMode,
 		blockSize,
+		getRowHeight,
 	});
 
 	const api = useMemo(() => {
@@ -244,6 +249,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			rows: rows as TRowData[],
 			columns: resolveColumnTypes(columns, columnTypes),
 			getRowId,
+			getRowHeight: getRowHeight ? (row) => getRowHeight(row as TRowData) : undefined,
 			persistence: resolvedPersistence,
 			workspace,
 			rowSelection,
@@ -322,6 +328,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			['showStatusBar', initialOnlyProps.showStatusBar, showStatusBar],
 			['rowDragMode', initialOnlyProps.rowDragMode, rowDragMode],
 			['blockSize', initialOnlyProps.blockSize, blockSize],
+			['getRowHeight', initialOnlyProps.getRowHeight, getRowHeight],
 		];
 
 		for (const [propName, initialValue, currentValue] of checks) {

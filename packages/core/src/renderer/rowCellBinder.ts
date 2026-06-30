@@ -810,7 +810,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			const portalHost = deps.getCellPortalHost(cellSlot.element);
 			const html = portalHost?.innerHTML;
 			if (html && html !== snapshot.frozenHtml) {
-				deps.engine.cellDisplaySnapshots.set({ ...snapshot, frozenHtml: html });
+				const capturedRowHeight = deps.engine.geometry?.rowHeights?.[rowIndex];
+				deps.engine.cellDisplaySnapshots.set({ ...snapshot, frozenHtml: html, frozenRowHeight: capturedRowHeight });
 			}
 		}
 
@@ -841,13 +842,19 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		deps.markCellDirtyAfterScroll(cellSlot.element);
 		applyCellTitlesAndValidation(cellSlot.element, portalImpostorSnapshot.title || null, '', portalImpostorSnapshot.validationError);
 
-		if (portalImpostorSnapshot.frozenHtml) {
+		const currentRowHeight = deps.engine.geometry?.rowHeights?.[rowIndex];
+		const frozenHtmlValid =
+			portalImpostorSnapshot.frozenHtml &&
+			(portalImpostorSnapshot.frozenRowHeight === undefined || portalImpostorSnapshot.frozenRowHeight === currentRowHeight);
+		if (frozenHtmlValid) {
 			// HTML snapshot path: inject the static clone of the last fidelity render into the
 			// portal host so the cell looks identical to its settled state during scroll.
 			// The host is inert — no React fiber, no event handlers — and the fidelity lane
 			// will replace it with the live portal on the next post-scroll pass.
+			// Guard: skip if row height changed since capture — the HTML was laid out for a
+			// different container size and would render incorrectly as an impostor.
 			const portalHost = deps.ensureCellPortalHost(cellSlot.element);
-			portalHost.innerHTML = portalImpostorSnapshot.frozenHtml;
+			portalHost.innerHTML = portalImpostorSnapshot.frozenHtml!;
 			deps.cellRenderer.showPortalContent(cellSlot.element);
 			const didWriteImpostor = cellSlot.update(
 				colIndex,

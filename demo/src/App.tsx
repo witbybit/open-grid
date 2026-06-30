@@ -32,6 +32,7 @@ const RowDragDemo = lazy(() => import('./pages/RowDragDemo'));
 const AdvancedFiltersDemo = lazy(() => import('./pages/AdvancedFiltersDemo'));
 const DataIntegrityLab = lazy(() => import('./pages/DataIntegrityLab'));
 const ProjectsComplianceDemo = lazy(() => import('./pages/ProjectsComplianceDemo'));
+const KanbanBoardDemo = lazy(() => import('./pages/KanbanBoardDemo'));
 
 const PAGES: readonly GridPageType[] = [
 	'perf',
@@ -56,6 +57,7 @@ const PAGES: readonly GridPageType[] = [
 	'advancedfilters',
 	'integrity',
 	'projects',
+	'kanban',
 ];
 
 function GridPageFallback() {
@@ -249,14 +251,16 @@ export default function App() {
 		if (activePage === 'advancedfilters') return <AdvancedFiltersDemo />;
 		if (activePage === 'integrity') return <DataIntegrityLab />;
 		if (activePage === 'projects') return <ProjectsComplianceDemo onGridReady={handleGridReady} />;
+		if (activePage === 'kanban')
+			return <KanbanBoardDemo onGridReady={handleGridReady} pinLeftColumns={pinLeftColumns} pinRightColumns={pinRightColumns} />;
 		return <CrudValidationDemo {...commonGridProps} />;
 	})();
 
 	const showRightSidebar = !(
-		['crud', 'projects', 'integrity', 'floatingfilters', 'colgroups', 'multiselect', 'grouping', 'native', 'panels'] as GridPageType[]
+		['crud', 'projects', 'integrity', 'floatingfilters', 'colgroups', 'multiselect', 'grouping', 'native', 'panels', 'kanban'] as GridPageType[]
 	).includes(activePage);
 
-	const showTitleBanner = !(['crud', 'advancedfilters', 'panels'] as GridPageType[]).includes(activePage);
+	const showTitleBanner = !(['crud', 'advancedfilters', 'panels', 'kanban'] as GridPageType[]).includes(activePage);
 
 	return (
 		<DemoGridApiScope value={contextValue}>

@@ -47,6 +47,8 @@ export type SortModel = SortModelItem[];
 export interface ClientRowModelOptions<TData = unknown> {
 	rows: TData[];
 	columns: Array<ColumnDef<TData>>;
+	/** Per-row height callback. Called for every data row when building geometry. Return `undefined` to fall back to `defaultRowHeight`. Overridden by `api.setRowHeight()`. */
+	getRowHeight?: (row: TData, rowId: string) => number | undefined;
 }
 
 type ClientRowModelTransactionSnapshot<TData> = RowModelTransactionSnapshot<TData> & {
@@ -875,6 +877,7 @@ export class ClientRowModelController<TData = unknown>
 {
 	private readonly runtime: ClientRowModelRuntime<TData>;
 	private dataStore: RowDataStore<TData>;
+	private readonly getRowHeight: ClientRowModelOptions<TData>['getRowHeight'];
 	private visualRows: Array<VisualRow<TData>> = [];
 	private visualRowIdToIndex = new Map<string, number>();
 	private rowIdToVisualIndex = new Map<string, number>();
@@ -968,6 +971,7 @@ export class ClientRowModelController<TData = unknown>
 
 	constructor(runtime: ClientRowModelRuntime<TData>, options: ClientRowModelOptions<TData>) {
 		this.runtime = runtime;
+		this.getRowHeight = options.getRowHeight;
 		this.dataStore = new RowDataStore<TData>((row) => this.runtime.getRowId(row));
 
 		this.runtime.initializeModel({
@@ -1406,7 +1410,7 @@ export class ClientRowModelController<TData = unknown>
 			for (const node of added) {
 				if (preparedFilters.length > 0 && !nodeMatchesPreparedFilters(node, preparedFilters)) continue;
 
-				const explicitHeight = (state.rowHeights as Record<string, number>)[node.id];
+				const explicitHeight = (state.rowHeights as Record<string, number>)[node.id] ?? this.getRowHeight?.(node.data, node.id);
 				const vr: VisualRow<TData> = {
 					kind: 'data',
 					id: toDataVisualRowId(node.id),
@@ -1613,6 +1617,7 @@ export class ClientRowModelController<TData = unknown>
 				expandedDetailRowIds: new Set(Object.keys(expansion.details)),
 				defaultRowHeight: state.defaultRowHeight,
 				rowHeightsRecord: state.rowHeights,
+				getRowHeight: this.getRowHeight,
 				groupRowHeight: state.groupRowHeight,
 				detailRowHeight: state.detailRowHeight,
 				masterDetailEnabled: state.masterDetailEnabled,
@@ -1667,6 +1672,7 @@ export class ClientRowModelController<TData = unknown>
 			expandedDetailRowIds: new Set(Object.keys(expansion.details)),
 			defaultRowHeight: state.defaultRowHeight,
 			rowHeightsRecord: state.rowHeights,
+			getRowHeight: this.getRowHeight,
 			groupRowHeight: state.groupRowHeight,
 			detailRowHeight: state.detailRowHeight,
 			masterDetailEnabled: state.masterDetailEnabled,

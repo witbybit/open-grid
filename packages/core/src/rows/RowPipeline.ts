@@ -65,6 +65,7 @@ export interface RowPipelineInput<TData = unknown> {
 	// Heights
 	defaultRowHeight: number;
 	rowHeightsRecord: Record<string, number>;
+	getRowHeight?: (row: TData, rowId: string) => number | undefined;
 	groupRowHeight?: number;
 	detailRowHeight?: number;
 	getDetailHeight?: (params: { row: TData; rowId: string }) => number;
@@ -123,6 +124,7 @@ export class RowPipeline<TData = unknown> {
 			expandedDetailRowIds,
 			defaultRowHeight,
 			rowHeightsRecord,
+			getRowHeight,
 			groupRowHeight,
 			detailRowHeight,
 			getDetailHeight,
@@ -164,7 +166,7 @@ export class RowPipeline<TData = unknown> {
 			);
 			if (!detailConfig?.enabled && !masterDetailEnabled && aggDefs.length === 0) {
 				visualRows = filteredNodes.map((node) => {
-					const explicitHeight = rowHeightsRecord[node.id];
+					const explicitHeight = rowHeightsRecord[node.id] ?? getRowHeight?.(node.data, node.id);
 					return {
 						kind: 'data',
 						id: toDataVisualRowId(node.id),
@@ -203,6 +205,7 @@ export class RowPipeline<TData = unknown> {
 				expandedDetailRowIds: context.expansion.details,
 				defaultRowHeight,
 				rowHeightsRecord,
+				getRowHeight,
 				groupRowHeight,
 				detailRowHeight: detailConfig?.defaultDetailHeight ?? detailRowHeight,
 				getDetailHeight: detailConfig?.getDetailHeight ?? getDetailHeight,

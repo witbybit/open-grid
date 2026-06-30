@@ -24,7 +24,8 @@ export type GridPageType =
 	| 'rowdrag'
 	| 'advancedfilters'
 	| 'integrity'
-	| 'projects';
+	| 'projects'
+	| 'kanban';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================
