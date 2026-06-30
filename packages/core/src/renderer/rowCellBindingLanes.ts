@@ -378,11 +378,9 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 			},
 		});
 		const insightVisualStale =
-			ctx.hasInsightDecorations &&
-			(cellSlot.lastMountedInsightVersion === -1 || cellSlot.lastMountedInsightVersion !== ctx.insightVersion);
+			ctx.hasInsightDecorations && (cellSlot.lastMountedInsightVersion === -1 || cellSlot.lastMountedInsightVersion !== ctx.insightVersion);
 		const styleVisualStale =
-			ctx.hasDeferredCellStyleRules &&
-			(cellSlot.lastMountedStyleVersion === -1 || cellSlot.lastMountedStyleVersion !== ctx.styleVersion);
+			ctx.hasDeferredCellStyleRules && (cellSlot.lastMountedStyleVersion === -1 || cellSlot.lastMountedStyleVersion !== ctx.styleVersion);
 		const loadingVisualStale =
 			cellSlot.lastMountedLoadingVersion === -1 ||
 			!matchesCellSlotMountedVisualVersions(cellSlot, {

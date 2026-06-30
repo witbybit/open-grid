@@ -424,7 +424,9 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			const plainSnapshotEligible =
 				!hasInsightDecorations && !isFocused && !isSelected && !needsReadonlyEvaluation && !needsTooltipSnapshot && !needsStyleSnapshot;
 			const displayValue =
-				(col.valueGetter || hasRegisteredFormula) && cachedValue !== undefined ? cachedValue : this.deps.engine.primeDisplayValue(rowId, col.field);
+				(col.valueGetter || hasRegisteredFormula) && cachedValue !== undefined
+					? cachedValue
+					: this.deps.engine.primeDisplayValue(rowId, col.field);
 			if (displayValue !== undefined) {
 				recordWork();
 				this.deps.renderStats.prewarmedDisplayValues++;

@@ -519,10 +519,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 				? 'impostor'
 				: 'portal-live'
 			: contentMode;
-	const snapshotContentMode =
-		contentMode === 'portal' && snapshotContentKind === 'impostor'
-			? ('fallback' as const)
-			: contentMode;
+	const snapshotContentMode = contentMode === 'portal' && snapshotContentKind === 'impostor' ? ('fallback' as const) : contentMode;
 	const snapshotFormattedValue = contentMode === 'portal' && snapshotContentKind === 'impostor' ? portalImpostorValue : formattedValue;
 	deps.engine.cellDisplaySnapshots.set(
 		createCellDisplaySnapshot({
@@ -672,7 +669,9 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			cellClassName,
 			preservedContentMode,
 			undefined,
-			canReuseSnapshotContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback') ? primitiveSnapshot.formattedValue : '',
+			canReuseSnapshotContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback')
+				? primitiveSnapshot.formattedValue
+				: '',
 			preservedContentMode === 'portal' && canReuseSnapshotPortal ? cellSlot.lastPortalKey : undefined
 		);
 		if (snapshot) {

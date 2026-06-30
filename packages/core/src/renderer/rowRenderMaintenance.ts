@@ -52,10 +52,7 @@ export interface DecorateDirtyCellsAfterScrollResult {
 	remainingFidelity: number;
 }
 
-function classifyDirtyCellLane<TRowData>(
-	cell: HTMLDivElement,
-	columns: readonly ColumnDef<TRowData>[]
-): Exclude<PostScrollRepairLane, 'all'> {
+function classifyDirtyCellLane<TRowData>(cell: HTMLDivElement, columns: readonly ColumnDef<TRowData>[]): Exclude<PostScrollRepairLane, 'all'> {
 	const cs = (
 		cell as unknown as {
 			__cellSlot?: { colIndex: number; lastContentMode?: string };
