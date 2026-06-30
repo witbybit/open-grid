@@ -214,7 +214,12 @@ function buildHeaderBands<TRowData>(
 	return bands;
 }
 
-export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, renderWindow = computeRenderWindow(engine)): GridLayoutPlan {
+export function computeGridLayoutPlan<TRowData>(
+	engine: GridEngine<TRowData>,
+	renderWindow?: RenderWindow,
+	leafHeaderHeightPx?: number
+): GridLayoutPlan {
+	const rw = renderWindow ?? computeRenderWindow(engine);
 	const state = engine.stateManager.getState();
 	const columnPlan = engine.columns.getCompiledPlan();
 	const viewportWidth = engine.viewport.viewportWidth;
@@ -226,13 +231,13 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const groupPanelHeight = state.showGroupPanel ? GROUP_PANEL_HEIGHT : 0;
 	const analysis = summarizeAnalysisState(state.filterModel, state.queryModel);
 	const filterChipBarHeight = state.showFilterChipBar && analysis.totalActiveItems > 0 ? FILTER_CHIP_BAR_HEIGHT : 0;
-	const leafHeaderHeight = LEAF_HEADER_HEIGHT;
-	const pinLeftCount = Math.min(engine.viewport.pinLeftColumns, renderWindow.colCount);
-	const pinRightCount = Math.min(engine.viewport.pinRightColumns, Math.max(0, renderWindow.colCount - pinLeftCount));
-	const firstRightPinColIdx = Math.max(pinLeftCount, renderWindow.colCount - pinRightCount);
+	const leafHeaderHeight = leafHeaderHeightPx !== undefined && leafHeaderHeightPx > 0 ? leafHeaderHeightPx : LEAF_HEADER_HEIGHT;
+	const pinLeftCount = Math.min(engine.viewport.pinLeftColumns, rw.colCount);
+	const pinRightCount = Math.min(engine.viewport.pinRightColumns, Math.max(0, rw.colCount - pinLeftCount));
+	const firstRightPinColIdx = Math.max(pinLeftCount, rw.colCount - pinRightCount);
 	const pinLeftWidth = pinLeftCount > 0 ? engine.geometry.colLefts[pinLeftCount] || 0 : 0;
 	const pinRightWidth =
-		pinRightCount > 0 && firstRightPinColIdx < renderWindow.colCount
+		pinRightCount > 0 && firstRightPinColIdx < rw.colCount
 			? totalColumnsWidth - (engine.geometry.colLefts[firstRightPinColIdx] || totalColumnsWidth)
 			: 0;
 
@@ -264,12 +269,12 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const paginationTop = bottomChromeTop + statusBarHeight;
 
 	let pinnedTopHeight = 0;
-	for (let i = 0; i < renderWindow.pinTopRows && i < renderWindow.rowCount; i++) {
+	for (let i = 0; i < rw.pinTopRows && i < rw.rowCount; i++) {
 		pinnedTopHeight += engine.geometry.getRowHeight(i, state.defaultRowHeight);
 	}
 	let pinnedBottomHeight = 0;
-	for (let i = 0; i < renderWindow.pinBottomRows && i < renderWindow.rowCount; i++) {
-		pinnedBottomHeight += engine.geometry.getRowHeight(renderWindow.rowCount - 1 - i, state.defaultRowHeight);
+	for (let i = 0; i < rw.pinBottomRows && i < rw.rowCount; i++) {
+		pinnedBottomHeight += engine.geometry.getRowHeight(rw.rowCount - 1 - i, state.defaultRowHeight);
 	}
 
 	return {
@@ -299,20 +304,20 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 			bottomChromeHeight,
 		},
 		rows: {
-			rowStart: renderWindow.rowStart,
-			rowEnd: renderWindow.rowEnd,
-			pinnedTopCount: renderWindow.pinTopRows,
-			pinnedBottomCount: renderWindow.pinBottomRows,
+			rowStart: rw.rowStart,
+			rowEnd: rw.rowEnd,
+			pinnedTopCount: rw.pinTopRows,
+			pinnedBottomCount: rw.pinBottomRows,
 			pinnedTopHeight,
 			pinnedBottomHeight,
-			visibleTop: renderWindow.visibleTop ?? engine.viewport.scrollTop + pinnedTopHeight,
-			visibleBottom: renderWindow.visibleBottom ?? engine.viewport.scrollTop + viewportHeight - pinnedBottomHeight,
-			bufferTopPx: renderWindow.bufferTopPx ?? 0,
-			bufferBottomPx: renderWindow.bufferBottomPx ?? totalRowsHeight,
+			visibleTop: rw.visibleTop ?? engine.viewport.scrollTop + pinnedTopHeight,
+			visibleBottom: rw.visibleBottom ?? engine.viewport.scrollTop + viewportHeight - pinnedBottomHeight,
+			bufferTopPx: rw.bufferTopPx ?? 0,
+			bufferBottomPx: rw.bufferBottomPx ?? totalRowsHeight,
 		},
 		columns: {
-			colStart: renderWindow.colStart,
-			colEnd: renderWindow.colEnd,
+			colStart: rw.colStart,
+			colEnd: rw.colEnd,
 			pinLeftCount,
 			pinRightCount,
 			pinLeftWidth,
@@ -337,7 +342,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 					// `colLefts[c] - baseLeft` lane-relative conversion done by header + body.
 					baseLeft: totalColumnsWidth - pinRightWidth,
 					colStart: pinRightCount > 0 ? firstRightPinColIdx : -1,
-					colEnd: pinRightCount > 0 ? renderWindow.colCount - 1 : -1,
+					colEnd: pinRightCount > 0 ? rw.colCount - 1 : -1,
 				},
 			},
 		},
@@ -351,8 +356,8 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 			paginationTop,
 		},
 		headerBands,
-		stickyGroups: renderWindow.stickyGroupStack ?? [],
-		renderWindow,
+		stickyGroups: rw.stickyGroupStack ?? [],
+		renderWindow: rw,
 		columnTopology,
 	};
 }

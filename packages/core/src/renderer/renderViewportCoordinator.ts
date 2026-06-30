@@ -21,7 +21,10 @@ export class RenderViewportCoordinator<TRowData = unknown> {
 	constructor(private readonly deps: RenderViewportCoordinatorDeps<TRowData>) {}
 
 	public syncLayoutPlan(renderWindow?: RenderWindow): GridLayoutPlan {
-		const layoutPlan = computeGridLayoutPlan(this.deps.engine, renderWindow);
+		const theme = this.deps.viewportRenderer.getTheme();
+		const themeLhh = theme?.leafHeaderHeight ? parseFloat(theme.leafHeaderHeight) : undefined;
+		const leafHeaderHeightPx = themeLhh && themeLhh > 0 ? themeLhh : undefined;
+		const layoutPlan = computeGridLayoutPlan(this.deps.engine, renderWindow, leafHeaderHeightPx);
 		this.deps.viewportRenderer.syncLayoutPlan(layoutPlan);
 		return layoutPlan;
 	}

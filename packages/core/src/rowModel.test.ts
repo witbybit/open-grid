@@ -505,6 +505,107 @@ describe('ClientRowModelController', () => {
 		expect(controller.getVisualIndexByRowId('1')).toBe(0);
 		expect(controller.getVisualIndexById('detail:1')).toBe(1);
 	});
+
+	it('assigns heights from getRowHeight callback to data visual rows on init', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', amount: 80 },
+				{ id: '2', name: 'Bob', amount: 120 },
+				{ id: '3', name: 'Charlie', amount: 60 },
+			],
+			columns: store.getState().columns,
+			getRowHeight: (row) => row.amount,
+		});
+
+		const vr0 = controller.getVisualRow(0);
+		const vr1 = controller.getVisualRow(1);
+		const vr2 = controller.getVisualRow(2);
+
+		expect(vr0?.kind === 'data' ? vr0.height : undefined).toBe(80);
+		expect(vr1?.kind === 'data' ? vr1.height : undefined).toBe(120);
+		expect(vr2?.kind === 'data' ? vr2.height : undefined).toBe(60);
+	});
+
+	it('preserves getRowHeight assignments after sort triggers a full refresh', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+			sortModel: [{ colId: 'name', sort: 'asc' }],
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Zara', amount: 60 },
+				{ id: '2', name: 'Ada', amount: 100 },
+			],
+			columns: store.getState().columns,
+			getRowHeight: (row) => row.amount,
+		});
+
+		// After sort asc: Ada (id:2) at index 0, Zara (id:1) at index 1
+		const vr0 = controller.getVisualRow(0);
+		const vr1 = controller.getVisualRow(1);
+
+		expect(vr0?.kind === 'data' ? vr0.rowId : null).toBe('2');
+		expect(vr0?.kind === 'data' ? vr0.height : undefined).toBe(100);
+		expect(vr1?.kind === 'data' ? vr1.rowId : null).toBe('1');
+		expect(vr1?.kind === 'data' ? vr1.height : undefined).toBe(60);
+	});
+
+	it('preserves getRowHeight assignments after filter triggers a full refresh', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+			filterModel: { name: { type: 'text', operator: 'contains', value: 'a' } },
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Ada', amount: 80 },
+				{ id: '2', name: 'Bob', amount: 50 },
+				{ id: '3', name: 'Clara', amount: 110 },
+			],
+			columns: store.getState().columns,
+			getRowHeight: (row) => row.amount,
+		});
+
+		// Filter keeps Ada and Clara (contain 'a')
+		expect(controller.getVisualRowCount()).toBe(2);
+		const vr0 = controller.getVisualRow(0);
+		const vr1 = controller.getVisualRow(1);
+
+		expect(vr0?.kind === 'data' ? vr0.height : undefined).toBe(80);
+		expect(vr1?.kind === 'data' ? vr1.height : undefined).toBe(110);
+	});
+
+	it('falls back to defaultRowHeight when getRowHeight returns undefined for a row', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+			defaultRowHeight: 32,
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', amount: 50 },
+				{ id: '2', name: 'Bob' }, // no amount — getRowHeight returns undefined
+			],
+			columns: store.getState().columns,
+			getRowHeight: (row) => row.amount,
+		});
+
+		const vr0 = controller.getVisualRow(0);
+		const vr1 = controller.getVisualRow(1);
+
+		expect(vr0?.kind === 'data' ? vr0.height : undefined).toBe(50);
+		// When getRowHeight returns undefined, the pipeline falls back to defaultRowHeight
+		expect(vr1?.kind === 'data' ? vr1.height : undefined).toBe(32);
+	});
 });
 
 describe('GroupRowMeta', () => {

@@ -118,7 +118,12 @@ export function mountGridHost<TRowData>(
 			getThemeName: () => renderEngine.viewportRenderer.getThemeName(),
 			getAvailableThemes: () => renderEngine.viewportRenderer.getThemeManager()?.getAvailableThemes() ?? [],
 			switchTheme: (themeName) => renderEngine.viewportRenderer.switchTheme(themeName),
-			mergeTheme: (partial) => renderEngine.viewportRenderer.mergeTheme(partial),
+			mergeTheme: (partial) => {
+				renderEngine.viewportRenderer.mergeTheme(partial);
+				if ('leafHeaderHeight' in partial) {
+					renderEngine.scheduleFullPaint('theme-layout');
+				}
+			},
 			onThemeChange: (listener) => renderEngine.viewportRenderer.onThemeChange(listener),
 		},
 	});

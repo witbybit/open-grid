@@ -257,7 +257,19 @@ export default function App() {
 	})();
 
 	const showRightSidebar = !(
-		['crud', 'projects', 'integrity', 'floatingfilters', 'colgroups', 'multiselect', 'grouping', 'native', 'panels', 'kanban'] as GridPageType[]
+		[
+			'crud',
+			'projects',
+			'integrity',
+			'floatingfilters',
+			'colgroups',
+			'multiselect',
+			'grouping',
+			'native',
+			'panels',
+			'kanban',
+			'skins',
+		] as GridPageType[]
 	).includes(activePage);
 
 	const showTitleBanner = !(['crud', 'advancedfilters', 'panels', 'kanban'] as GridPageType[]).includes(activePage);
