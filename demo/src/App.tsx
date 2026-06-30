@@ -252,6 +252,12 @@ export default function App() {
 		return <CrudValidationDemo {...commonGridProps} />;
 	})();
 
+	const showRightSidebar = !(
+		['crud', 'projects', 'integrity', 'floatingfilters', 'colgroups', 'multiselect', 'grouping', 'native', 'panels'] as GridPageType[]
+	).includes(activePage);
+
+	const showTitleBanner = !(['crud', 'advancedfilters', 'panels'] as GridPageType[]).includes(activePage);
+
 	return (
 		<DemoGridApiScope value={contextValue}>
 			<div className='flex h-full w-full select-none flex-col overflow-hidden bg-slate-950 p-6 font-sans text-slate-100'>
@@ -263,7 +269,7 @@ export default function App() {
 						setLeftSidebarCollapsed={setLeftSidebarCollapsed}
 					/>
 					<div className='flex min-w-0 flex-1 flex-col gap-5 overflow-hidden pr-1.5'>
-						{!(['crud'] as GridPageType[]).includes(activePage) ? (
+						{showTitleBanner && (
 							<ShowroomTitleBanner
 								activePage={activePage}
 								runBulkCalculationTest={runBulkCalculationTest}
@@ -272,8 +278,9 @@ export default function App() {
 								setCompactLayout={setCompactLayout}
 								rightSidebarCollapsed={rightSidebarCollapsed}
 								setRightSidebarCollapsed={setRightSidebarCollapsed}
+								showRightSidebar={showRightSidebar}
 							/>
-						) : null}
+						)}
 						{activePage === 'layout' && (
 							<div className='flex shrink-0 flex-wrap items-center gap-3 rounded-xl border border-slate-900 bg-slate-900/10 p-3 text-xs font-semibold'>
 								<span className='flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-500'>
@@ -300,7 +307,7 @@ export default function App() {
 							<Suspense fallback={<GridPageFallback />}>{activePageContent}</Suspense>
 						</div>
 					</div>
-					{activeApi && (
+					{activeApi && showRightSidebar && (
 						<ShowroomRightSidebar
 							rightSidebarCollapsed={rightSidebarCollapsed}
 							activeApi={activeApi}

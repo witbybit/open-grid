@@ -29,6 +29,7 @@ interface ShowroomTitleBannerProps {
 	setCompactLayout: (layout: 'compact' | 'normal' | 'spacious') => void;
 	rightSidebarCollapsed: boolean;
 	setRightSidebarCollapsed: (collapsed: boolean) => void;
+	showRightSidebar: boolean;
 }
 
 export default function ShowroomTitleBanner({
@@ -39,6 +40,7 @@ export default function ShowroomTitleBanner({
 	setCompactLayout,
 	rightSidebarCollapsed,
 	setRightSidebarCollapsed,
+	showRightSidebar,
 }: ShowroomTitleBannerProps) {
 	return (
 		<div className='flex items-center justify-between bg-slate-900/10 border border-slate-900 rounded-xl p-3.5 relative overflow-hidden shrink-0'>
@@ -182,14 +184,16 @@ export default function ShowroomTitleBanner({
 					</div>
 				)}
 
-				<button
-					onClick={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
-					className='flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-950 hover:bg-slate-900 font-bold text-[10px] text-slate-300 hover:text-white border border-slate-850 hover:border-slate-750 transition-all font-sans'
-					title={rightSidebarCollapsed ? 'Open Controls Sidebar' : 'Hide Controls Sidebar'}
-				>
-					{rightSidebarCollapsed ? <PanelRightOpen className='w-3 h-3' /> : <PanelRightClose className='w-3 h-3' />}
-					{!rightSidebarCollapsed ? 'Hide Controls' : 'Show Controls'}
-				</button>
+				{showRightSidebar && (
+					<button
+						onClick={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
+						className='flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-950 hover:bg-slate-900 font-bold text-[10px] text-slate-300 hover:text-white border border-slate-850 hover:border-slate-750 transition-all font-sans'
+						title={rightSidebarCollapsed ? 'Open Controls Sidebar' : 'Hide Controls Sidebar'}
+					>
+						{rightSidebarCollapsed ? <PanelRightOpen className='w-3 h-3' /> : <PanelRightClose className='w-3 h-3' />}
+						{!rightSidebarCollapsed ? 'Hide Controls' : 'Show Controls'}
+					</button>
+				)}
 			</div>
 		</div>
 	);
