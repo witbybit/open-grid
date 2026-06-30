@@ -45,11 +45,7 @@ const SelectorInspector = () => {
 	);
 };
 
-const NavigationControllerProbe = ({
-	onRender,
-}: {
-	onRender: (handle: ReturnType<typeof useGridNavigationController<TestRow>>) => void;
-}) => {
+const NavigationControllerProbe = ({ onRender }: { onRender: (handle: ReturnType<typeof useGridNavigationController<TestRow>>) => void }) => {
 	const handle = useGridNavigationController<TestRow>({});
 	onRender(handle);
 	return <span data-testid='nav-controller-present'>{handle ? 'yes' : 'no'}</span>;

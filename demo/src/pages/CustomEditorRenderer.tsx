@@ -121,7 +121,7 @@ export default function CustomEditorRenderer({
 						pinRightColumns={pinRightColumns}
 						enableNavigation
 						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
-					onCellValueChanged={onCellValueChanged}
+						onCellValueChanged={onCellValueChanged}
 						onGridReady={(event) => {
 							setApi(event.api);
 							onGridReady?.(event);

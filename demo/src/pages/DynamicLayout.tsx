@@ -74,7 +74,7 @@ export default function DynamicLayout({
 						pinRightColumns={pinRightColumns}
 						enableNavigation
 						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
-					onCellValueChanged={onCellValueChanged}
+						onCellValueChanged={onCellValueChanged}
 						onGridReady={(event) => {
 							setApi(event.api);
 							onGridReady?.(event);

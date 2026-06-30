@@ -159,7 +159,7 @@ export default function GanttSchedulingWorkspace({
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
-					onCellValueChanged={onCellValueChanged}
+						onCellValueChanged={onCellValueChanged}
 						onGridReady={(event) => {
 							setApi(event.api);
 							onGridReady?.(event);

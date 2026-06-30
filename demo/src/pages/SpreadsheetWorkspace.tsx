@@ -240,7 +240,7 @@ export default function SpreadsheetWorkspace({
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
-					onCellValueChanged={onCellValueChanged}
+						onCellValueChanged={onCellValueChanged}
 						enableContextMenu={contextMenuEnabled}
 						contextMenuOptions={customContextMenuOptions}
 						onGridReady={(event) => {

@@ -381,7 +381,7 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 						pinLeftColumns={2}
 						enableNavigation
 						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
-					onCellValueChanged={onCellValueChanged}
+						onCellValueChanged={onCellValueChanged}
 						dataIntegrity={{
 							validation: {
 								enabled: true,

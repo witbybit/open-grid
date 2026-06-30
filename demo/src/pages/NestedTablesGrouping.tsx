@@ -236,7 +236,16 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 	);
 
 	// Trigger latency profiling on cell change
-	const handleChildCellValueChanged = ({ rowId, colField, newValue }: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => {
+	const handleChildCellValueChanged = ({
+		rowId,
+		colField,
+		newValue,
+	}: {
+		rowId: string;
+		colField: string;
+		oldValue: unknown;
+		newValue: unknown;
+	}) => {
 		const start = performance.now();
 		if (colField === 'quantity' && detailApi) {
 			const q = parseInt(String(newValue)) || 0;
