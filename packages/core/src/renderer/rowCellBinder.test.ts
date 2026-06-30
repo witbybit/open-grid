@@ -713,6 +713,10 @@ describe('bindCellDuringScroll', () => {
 	it('reuses a fresh logical portal snapshot for buffered offscreen cells instead of downgrading them to empty', () => {
 		const cellSlot = new CellSlot(document.createElement('div'));
 		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		const host = document.createElement('div');
+		host.appendChild(document.createElement('span'));
+		cellSlot.element.appendChild(host);
+		cellSlot.portalHostElement = host;
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell portal-warm', 'portal', undefined, '', portalKey);
 		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
 			engine: {
@@ -760,7 +764,7 @@ describe('bindCellDuringScroll', () => {
 				cell.appendChild(host);
 				return host;
 			},
-			getCellPortalHost: () => null,
+			getCellPortalHost: () => host,
 			markCellDirtyAfterScroll: vi.fn(),
 			releaseCellPortal: vi.fn(),
 			incrementStyleHookCallsDuringScroll: vi.fn(),
@@ -901,6 +905,10 @@ describe('bindCellDuringScroll', () => {
 	it('materializes a buffered portal compatibility snapshot before preserving offscreen warm portal content', () => {
 		const cellSlot = new CellSlot(document.createElement('div'));
 		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		const host = document.createElement('div');
+		host.appendChild(document.createElement('span'));
+		cellSlot.element.appendChild(host);
+		cellSlot.portalHostElement = host;
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell portal-warm', 'portal', undefined, '', portalKey);
 		cellSlot.element.title = 'Portal warm title';
 		cellSlot.element.dataset.validationError = 'Needs review';
@@ -941,7 +949,7 @@ describe('bindCellDuringScroll', () => {
 				cell.appendChild(host);
 				return host;
 			},
-			getCellPortalHost: () => null,
+			getCellPortalHost: () => host,
 			markCellDirtyAfterScroll: vi.fn(),
 			releaseCellPortal: vi.fn(),
 			incrementStyleHookCallsDuringScroll: vi.fn(),
@@ -1375,6 +1383,10 @@ describe('bindCellDuringScroll', () => {
 		const snapshotSet = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
 		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		const host = document.createElement('div');
+		host.appendChild(document.createElement('span'));
+		cellSlot.element.appendChild(host);
+		cellSlot.portalHostElement = host;
 		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell custom-class', 'portal', undefined, '', portalKey);
 		cellSlot.lastMountedGlobalVersion = 1;
 		cellSlot.lastMountedRowVersion = 2;
@@ -1416,7 +1428,7 @@ describe('bindCellDuringScroll', () => {
 				cell.appendChild(host);
 				return host;
 			},
-			getCellPortalHost: () => null,
+			getCellPortalHost: () => host,
 			markCellDirtyAfterScroll: dirty,
 			releaseCellPortal: vi.fn(),
 			incrementStyleHookCallsDuringScroll: vi.fn(),

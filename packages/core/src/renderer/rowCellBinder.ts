@@ -70,6 +70,17 @@ function applyCellTitlesAndValidation(element: HTMLDivElement, tooltipText: stri
 	}
 }
 
+function hasAuthoritativePortalHostContent<TRowData>(
+	deps: RowCellBinderDeps<TRowData>,
+	cellSlot: CellSlot<TRowData>,
+	portalKey: string | undefined
+): boolean {
+	if (!portalKey || cellSlot.lastContentMode !== 'portal') return false;
+	const portalHost = deps.getCellPortalHost(cellSlot.element);
+	if (!portalHost || portalHost.childElementCount === 0) return false;
+	return deps.portalMountManager.isCellMounted(portalKey);
+}
+
 function getFreshCellSnapshot<TRowData>(
 	deps: RowCellBinderDeps<TRowData>,
 	rowId: string,
@@ -165,7 +176,7 @@ function materializeWarmCompatibilitySnapshot<TRowData>(
 	let formattedValue = '';
 
 	if (lastContentMode === 'portal') {
-		if (!cellSlot.lastPortalKey) return undefined;
+		if (!hasAuthoritativePortalHostContent(deps, cellSlot, cellSlot.lastPortalKey)) return undefined;
 		contentKind = 'portal-frozen';
 		contentMode = 'portal';
 	} else if (lastContentMode === 'text' || lastContentMode === 'fallback' || lastContentMode === 'empty') {
@@ -744,6 +755,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 
 	if (!isInVisibleContent) {
 		const canPreserveBufferedContent = canPreserveWarmVisuals && !isRowRebind;
+		const canPreserveBufferedPortal = canPreserveBufferedContent && hasAuthoritativePortalHostContent(deps, cellSlot, cellSlot.lastPortalKey);
 		if (!snapshot && canPreserveBufferedContent) {
 			snapshot = materializeWarmCompatibilitySnapshot(deps, {
 				cellSlot,
@@ -756,8 +768,9 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		}
 		const primitiveSnapshot = isPrimitiveSnapshotContent(snapshot) ? snapshot : undefined;
 		const canReuseSnapshotContent = !!primitiveSnapshot;
-		const canReuseSnapshotPortal = snapshot?.contentMode === 'portal' && !!cellSlot.lastPortalKey;
-		if (!canPreserveBufferedContent && !canReuseSnapshotPortal && cellSlot.lastPortalKey) {
+		const canReuseSnapshotPortal =
+			snapshot?.contentMode === 'portal' && hasAuthoritativePortalHostContent(deps, cellSlot, cellSlot.lastPortalKey);
+		if (!canPreserveBufferedPortal && !canReuseSnapshotPortal && cellSlot.lastPortalKey) {
 			deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 		}
 		const preservedContentMode: CellContentMode = canReuseSnapshotPortal
@@ -765,7 +778,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			: canReuseSnapshotContent
 				? primitiveSnapshot.contentMode
 				: canPreserveBufferedContent
-					? cellSlot.lastPortalKey
+					? canPreserveBufferedPortal
 						? 'portal'
 						: rendererKind === 'loading'
 							? 'loading'
@@ -794,7 +807,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 				: canPreserveBufferedContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback')
 					? (cellSlot.lastFormattedValue ?? '')
 					: '',
-			preservedContentMode === 'portal' && (canPreserveBufferedContent || canReuseSnapshotPortal) ? cellSlot.lastPortalKey : undefined
+			preservedContentMode === 'portal' && (canPreserveBufferedPortal || canReuseSnapshotPortal) ? cellSlot.lastPortalKey : undefined
 		);
 		if (snapshot) {
 			cellSlot.lastMountedRowVersion = rowVersion;
