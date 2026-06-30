@@ -43,6 +43,33 @@ export interface RowRenderMaintenanceDeps<TRowData = unknown> {
 	bindCellFull: (request: RowCellBindRequest<TRowData>) => void;
 }
 
+export type PostScrollRepairLane = 'motion' | 'fidelity' | 'all';
+
+export interface DecorateDirtyCellsAfterScrollResult {
+	remaining: number;
+	processed: number;
+	remainingMotion: number;
+	remainingFidelity: number;
+}
+
+function classifyDirtyCellLane<TRowData>(
+	cell: HTMLDivElement,
+	columns: readonly ColumnDef<TRowData>[]
+): Exclude<PostScrollRepairLane, 'all'> {
+	const cs = (
+		cell as unknown as {
+			__cellSlot?: { colIndex: number; lastContentMode?: string };
+		}
+	).__cellSlot;
+	const colIndex = cs?.colIndex ?? -1;
+	const col = colIndex >= 0 ? columns[colIndex] : undefined;
+	if (col?.checkboxSelection) return 'fidelity';
+	if ((col as ColumnDef<TRowData> & { cellRenderer?: unknown })?.cellRenderer) return 'fidelity';
+	const lastContentMode = cs?.lastContentMode;
+	if (lastContentMode === 'portal' || lastContentMode === 'custom') return 'fidelity';
+	return 'motion';
+}
+
 export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
 	const rowModel = deps.engine.getVisualRowModel();
 	if (!rowModel) return;
@@ -148,18 +175,19 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 
 export function decorateDirtyCellsAfterScroll<TRowData>(
 	deps: RowRenderMaintenanceDeps<TRowData>,
-	options?: { maxCells?: number }
-): { remaining: number; processed: number } {
+	options?: { maxCells?: number; lane?: PostScrollRepairLane }
+): DecorateDirtyCellsAfterScrollResult {
 	const maxCells = options?.maxCells ?? Infinity;
+	const lane = options?.lane ?? 'all';
 	if (deps.dirtyCellsAfterScroll.size === 0 && deps.dirtyRowsAfterScroll.size === 0) {
-		return { remaining: 0, processed: 0 };
+		return { remaining: 0, processed: 0, remainingMotion: 0, remainingFidelity: 0 };
 	}
 
 	const rowModel = deps.engine.getVisualRowModel();
 	if (!rowModel) {
 		deps.dirtyCellsAfterScroll.clear();
 		deps.dirtyRowsAfterScroll.clear();
-		return { remaining: 0, processed: 0 };
+		return { remaining: 0, processed: 0, remainingMotion: 0, remainingFidelity: 0 };
 	}
 
 	const state = deps.engine.stateManager.getState();
@@ -210,6 +238,7 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 		for (let i = 0; i < bucket.length; i++) {
 			if (processed >= maxCells) break;
 			const cell = bucket[i];
+			if (lane !== 'all' && classifyDirtyCellLane(cell, columns) !== lane) continue;
 			deps.dirtyCellsAfterScroll.delete(cell);
 			const cs = (
 				cell as unknown as {
@@ -265,6 +294,12 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 	}
 
 	const remaining = deps.dirtyCellsAfterScroll.size;
+	let remainingMotion = 0;
+	let remainingFidelity = 0;
+	for (const cell of deps.dirtyCellsAfterScroll) {
+		if (classifyDirtyCellLane(cell, columns) === 'fidelity') remainingFidelity++;
+		else remainingMotion++;
+	}
 	if (remaining === 0) {
 		for (const r of deps.dirtyRowsAfterScroll) {
 			const slot = deps.activeRows.get(r);
@@ -276,5 +311,5 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 		deps.dirtyRowsAfterScroll.clear();
 	}
 
-	return { remaining, processed };
+	return { remaining, processed, remainingMotion, remainingFidelity };
 }

@@ -49,6 +49,12 @@ export interface RenderRuntimeStats {
 	postScrollDecorationChunks: number;
 	maxCellsDecoratedInOneChunk: number;
 	cellsDecoratedAfterScroll: number;
+	postScrollMotionChunks: number;
+	maxMotionCellsDecoratedInOneChunk: number;
+	motionCellsDecoratedAfterScroll: number;
+	postScrollFidelityChunks: number;
+	maxFidelityCellsDecoratedInOneChunk: number;
+	fidelityCellsDecoratedAfterScroll: number;
 	rowsEnteredDuringScroll: number;
 	rowsExitedDuringScroll: number;
 	rowsStayedDuringScroll: number;
@@ -109,6 +115,12 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		postScrollDecorationChunks: 0,
 		maxCellsDecoratedInOneChunk: 0,
 		cellsDecoratedAfterScroll: 0,
+		postScrollMotionChunks: 0,
+		maxMotionCellsDecoratedInOneChunk: 0,
+		motionCellsDecoratedAfterScroll: 0,
+		postScrollFidelityChunks: 0,
+		maxFidelityCellsDecoratedInOneChunk: 0,
+		fidelityCellsDecoratedAfterScroll: 0,
 		rowsEnteredDuringScroll: 0,
 		rowsExitedDuringScroll: 0,
 		rowsStayedDuringScroll: 0,
@@ -171,6 +183,12 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		portalOpsDuringScroll:
 			deps.rowRenderer.currentScrollPortalOps + portalScrollStats.portalMountsDuringScroll + portalScrollStats.portalReleasesDuringScroll,
 		cellsDecoratedAfterScroll: deps.runtimeStats.cellsDecoratedAfterScroll,
+		postScrollMotionChunks: deps.runtimeStats.postScrollMotionChunks,
+		maxMotionCellsDecoratedInOneChunk: deps.runtimeStats.maxMotionCellsDecoratedInOneChunk,
+		motionCellsDecoratedAfterScroll: deps.runtimeStats.motionCellsDecoratedAfterScroll,
+		postScrollFidelityChunks: deps.runtimeStats.postScrollFidelityChunks,
+		maxFidelityCellsDecoratedInOneChunk: deps.runtimeStats.maxFidelityCellsDecoratedInOneChunk,
+		fidelityCellsDecoratedAfterScroll: deps.runtimeStats.fidelityCellsDecoratedAfterScroll,
 		cellAccessReadsDuringScroll: deps.runtimeStats.cellAccessReadsDuringScroll,
 		cellClassComputesDuringScroll: deps.runtimeStats.cellClassComputesDuringScroll,
 		dirtyCellsMarkedDuringScroll: deps.rowRenderer.dirtyCellsMarkedDuringScroll,

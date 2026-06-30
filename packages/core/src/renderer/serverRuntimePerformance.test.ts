@@ -524,6 +524,10 @@ function collectFeatherScenarioEvidence(grid: AuditGrid) {
 			prewarmedDisplayValues: stats.prewarmedDisplayValues,
 			prewarmedCellSnapshots: stats.prewarmedCellSnapshots,
 			cellsDecoratedAfterScroll: stats.cellsDecoratedAfterScroll,
+			motionCellsDecoratedAfterScroll: stats.motionCellsDecoratedAfterScroll,
+			fidelityCellsDecoratedAfterScroll: stats.fidelityCellsDecoratedAfterScroll,
+			postScrollMotionChunks: stats.postScrollMotionChunks,
+			postScrollFidelityChunks: stats.postScrollFidelityChunks,
 			postScrollDirtyCellsDecorated: stats.postScrollDirtyCellsDecorated,
 			customRendererWarmHits: stats.customRendererWarmHits,
 			customRendererWarmMisses: stats.customRendererWarmMisses,
@@ -913,9 +917,13 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		expect(evidence.fidelity.prewarmPasses).toBeGreaterThanOrEqual(0);
 		expect(evidence.fidelity.prewarmedDisplayValues).toBeGreaterThanOrEqual(0);
 		expect(evidence.fidelity.prewarmedCellSnapshots).toBeGreaterThanOrEqual(0);
+		expect(evidence.fidelity.motionCellsDecoratedAfterScroll).toBeGreaterThanOrEqual(0);
+		expect(evidence.fidelity.fidelityCellsDecoratedAfterScroll).toBeGreaterThanOrEqual(0);
+		expect(evidence.fidelity.postScrollMotionChunks).toBeGreaterThanOrEqual(0);
+		expect(evidence.fidelity.postScrollFidelityChunks).toBeGreaterThanOrEqual(0);
 
 		cleanupGrid(grid);
-	});
+	}, 20_000);
 
 	it('does not produce zombie cells under stable-slot virtualization', async () => {
 		const cols = createAuditColumns(20);

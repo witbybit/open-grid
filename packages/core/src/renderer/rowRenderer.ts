@@ -749,7 +749,12 @@ export class RowRenderer<TRowData = unknown> {
 
 	// ── Post-scroll decoration ────────────────────────────────────────────────────────
 
-	public decorateDirtyCellsAfterScroll(options?: { maxCells?: number }): { remaining: number; processed: number } {
+	public decorateDirtyCellsAfterScroll(options?: { maxCells?: number; lane?: 'motion' | 'fidelity' | 'all' }): {
+		remaining: number;
+		processed: number;
+		remainingMotion: number;
+		remainingFidelity: number;
+	} {
 		return this.runtime.decorateDirtyCellsAfterScroll(options);
 	}
 

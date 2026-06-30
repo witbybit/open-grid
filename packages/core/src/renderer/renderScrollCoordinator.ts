@@ -50,6 +50,8 @@ export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	prewarmRequest: { visibleRowStart: number; visibleRowEnd: number; visibleColStart: number; visibleColEnd: number } | null;
 	postScrollDecorationScheduled: boolean;
 	postScrollDecorationTimer: number | null;
+	postScrollFidelityScheduled: boolean;
+	postScrollFidelityTimer: number | null;
 	cachedMaxScrollLeft: number;
 	cachedTotalWidth: number;
 	cachedTotalHeight: number;
@@ -60,6 +62,7 @@ export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	activeRenderWindowBufIdx: number;
 	portalFlushBudget: number;
 	postScrollDecorationBudget: number;
+	postScrollFidelityBudget: number;
 	scrollPrewarmBudget: number;
 	scrollPrewarmRowPadding: number;
 	scrollPrewarmColPadding: number;
@@ -300,6 +303,11 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.state.postScrollDecorationTimer = null;
 		}
 		this.state.postScrollDecorationScheduled = false;
+		if (this.state.postScrollFidelityTimer !== null) {
+			this.deps.gridScheduler.cancelIdle(this.state.postScrollFidelityTimer);
+			this.state.postScrollFidelityTimer = null;
+		}
+		this.state.postScrollFidelityScheduled = false;
 	}
 
 	private scheduleApproachBandPrewarm(nextWindow: RenderWindow): void {
@@ -621,19 +629,60 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 				return;
 			}
 			this.deps.renderStats.postScrollDecorationChunks++;
+			this.deps.renderStats.postScrollMotionChunks++;
 			this.deps.portalMountManager.beginCellReleaseTransaction();
 			let result;
 			try {
-				result = this.deps.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: this.state.postScrollDecorationBudget });
+				result = this.deps.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: this.state.postScrollDecorationBudget, lane: 'motion' });
 			} finally {
 				this.deps.portalMountManager.endCellReleaseTransaction();
 			}
 			if (result.processed > this.deps.renderStats.maxCellsDecoratedInOneChunk) {
 				this.deps.renderStats.maxCellsDecoratedInOneChunk = result.processed;
 			}
+			if (result.processed > this.deps.renderStats.maxMotionCellsDecoratedInOneChunk) {
+				this.deps.renderStats.maxMotionCellsDecoratedInOneChunk = result.processed;
+			}
 			this.deps.renderStats.cellsDecoratedAfterScroll += result.processed;
-			if (result.remaining > 0) {
+			this.deps.renderStats.motionCellsDecoratedAfterScroll += result.processed;
+			if (result.remainingMotion > 0) {
 				this.scheduleBudgetedDecoration();
+				return;
+			}
+			if (result.remainingFidelity > 0) {
+				this.scheduleBudgetedFidelityDecoration();
+			}
+		});
+	}
+
+	public scheduleBudgetedFidelityDecoration(): void {
+		if (this.state.postScrollFidelityScheduled) return;
+		this.state.postScrollFidelityScheduled = true;
+		this.state.postScrollFidelityTimer = this.deps.gridScheduler.idle(() => {
+			this.state.postScrollFidelityTimer = null;
+			this.state.postScrollFidelityScheduled = false;
+			if (this.deps.runtimeState.isScrolling()) {
+				return;
+			}
+			this.deps.renderStats.postScrollDecorationChunks++;
+			this.deps.renderStats.postScrollFidelityChunks++;
+			this.deps.portalMountManager.beginCellReleaseTransaction();
+			let result;
+			try {
+				result = this.deps.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: this.state.postScrollFidelityBudget, lane: 'fidelity' });
+			} finally {
+				this.deps.portalMountManager.endCellReleaseTransaction();
+			}
+			if (result.processed > this.deps.renderStats.maxCellsDecoratedInOneChunk) {
+				this.deps.renderStats.maxCellsDecoratedInOneChunk = result.processed;
+			}
+			if (result.processed > this.deps.renderStats.maxFidelityCellsDecoratedInOneChunk) {
+				this.deps.renderStats.maxFidelityCellsDecoratedInOneChunk = result.processed;
+			}
+			this.deps.renderStats.cellsDecoratedAfterScroll += result.processed;
+			this.deps.renderStats.fidelityCellsDecoratedAfterScroll += result.processed;
+			if (result.remainingFidelity > 0) {
+				this.scheduleBudgetedFidelityDecoration();
 			}
 		});
 	}

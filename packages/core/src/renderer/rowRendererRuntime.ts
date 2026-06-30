@@ -21,6 +21,8 @@ import type { CompiledColumnTopology } from './columnTopology.js';
 import {
 	decorateDirtyCellsAfterScroll as decorateDirtyCellsAfterScrollMaintenance,
 	repaintInvalidatedRowsAndCells as repaintInvalidatedRowsAndCellsMaintenance,
+	type DecorateDirtyCellsAfterScrollResult,
+	type PostScrollRepairLane,
 	type RowCellBindRequest,
 	type RowRenderMaintenanceDeps,
 } from './rowRenderMaintenance.js';
@@ -255,7 +257,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 		repaintInvalidatedRowsAndCellsMaintenance(this.rowRenderMaintenanceDeps, frame);
 	}
 
-	public decorateDirtyCellsAfterScroll(options?: { maxCells?: number }): { remaining: number; processed: number } {
+	public decorateDirtyCellsAfterScroll(options?: { maxCells?: number; lane?: PostScrollRepairLane }): DecorateDirtyCellsAfterScrollResult {
 		this.refreshCachedHotState();
 		return decorateDirtyCellsAfterScrollMaintenance(this.rowRenderMaintenanceDeps, options);
 	}

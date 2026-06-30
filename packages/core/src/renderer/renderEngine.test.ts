@@ -1793,7 +1793,93 @@ describe('RenderEngine', () => {
 		}
 
 		expect(cellClass).toHaveBeenCalled();
-		expect(renderer.getRenderStats().postScrollDirtyCellsDecorated).toBeGreaterThan(0);
+		const statsAfterScroll = renderer.getRenderStats();
+		expect(statsAfterScroll.postScrollDirtyCellsDecorated).toBeGreaterThan(0);
+		expect(statsAfterScroll.postScrollMotionChunks).toBeGreaterThan(0);
+		expect(statsAfterScroll.motionCellsDecoratedAfterScroll).toBeGreaterThan(0);
+		expect(statsAfterScroll.fidelityCellsDecoratedAfterScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('routes dirty custom-renderer cells through the post-scroll fidelity lane', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		const columns = [{ field: 'a', header: 'A', width: 120, cellRenderer: () => null }];
+		const store = new GridStore<{ id: string; a: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowOverscanPx: 80,
+		});
+		store.engine.insights.register({
+			id: 'custom-fidelity',
+			getCellDecorations: (rowId, colField) =>
+				rowId.startsWith('row-') && colField === 'a'
+					? [
+							{
+								layerId: 'custom-fidelity',
+								kind: 'validationError',
+								className: 'og-cell-validation-error',
+								title: 'Needs review',
+							},
+						]
+					: [],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 2400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		callbacks[0](0);
+		const statsDuringScroll = renderer.getRenderStats();
+		expect(statsDuringScroll.dirtyCellsMarkedDuringScroll).toBeGreaterThan(0);
+
+		let i = 1;
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+		await Promise.resolve();
+		await Promise.resolve();
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+
+		const statsAfterScroll = renderer.getRenderStats();
+		expect(statsAfterScroll.postScrollFidelityChunks).toBeGreaterThan(0);
+		expect(statsAfterScroll.fidelityCellsDecoratedAfterScroll).toBeGreaterThan(0);
+		expect(statsAfterScroll.motionCellsDecoratedAfterScroll).toBe(0);
 
 		renderer.unmount();
 		controller.dispose();

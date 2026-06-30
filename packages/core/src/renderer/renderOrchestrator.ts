@@ -48,6 +48,12 @@ export interface RenderStats {
 	cellsWrittenDuringScroll: number;
 	portalOpsDuringScroll: number;
 	cellsDecoratedAfterScroll: number;
+	postScrollMotionChunks?: number;
+	maxMotionCellsDecoratedInOneChunk?: number;
+	motionCellsDecoratedAfterScroll?: number;
+	postScrollFidelityChunks?: number;
+	maxFidelityCellsDecoratedInOneChunk?: number;
+	fidelityCellsDecoratedAfterScroll?: number;
 	rowsEnteredDuringScroll: number;
 	rowsExitedDuringScroll: number;
 	rowsStayedDuringScroll: number;
@@ -132,6 +138,12 @@ export function createEmptyRenderStats(): RenderStats {
 		cellsWrittenDuringScroll: 0,
 		portalOpsDuringScroll: 0,
 		cellsDecoratedAfterScroll: 0,
+		postScrollMotionChunks: 0,
+		maxMotionCellsDecoratedInOneChunk: 0,
+		motionCellsDecoratedAfterScroll: 0,
+		postScrollFidelityChunks: 0,
+		maxFidelityCellsDecoratedInOneChunk: 0,
+		fidelityCellsDecoratedAfterScroll: 0,
 		rowsEnteredDuringScroll: 0,
 		rowsExitedDuringScroll: 0,
 		rowsStayedDuringScroll: 0,
@@ -228,6 +240,12 @@ export class RenderOrchestrator {
 		cellsWrittenDuringScroll: 0,
 		portalOpsDuringScroll: 0,
 		cellsDecoratedAfterScroll: 0,
+		postScrollMotionChunks: 0,
+		maxMotionCellsDecoratedInOneChunk: 0,
+		motionCellsDecoratedAfterScroll: 0,
+		postScrollFidelityChunks: 0,
+		maxFidelityCellsDecoratedInOneChunk: 0,
+		fidelityCellsDecoratedAfterScroll: 0,
 		rowsEnteredDuringScroll: 0,
 		rowsExitedDuringScroll: 0,
 		rowsStayedDuringScroll: 0,
@@ -357,6 +375,12 @@ export class RenderOrchestrator {
 		this.stats.cellsWrittenDuringScroll = 0;
 		this.stats.portalOpsDuringScroll = 0;
 		this.stats.cellsDecoratedAfterScroll = 0;
+		this.stats.postScrollMotionChunks = 0;
+		this.stats.maxMotionCellsDecoratedInOneChunk = 0;
+		this.stats.motionCellsDecoratedAfterScroll = 0;
+		this.stats.postScrollFidelityChunks = 0;
+		this.stats.maxFidelityCellsDecoratedInOneChunk = 0;
+		this.stats.fidelityCellsDecoratedAfterScroll = 0;
 		this.stats.rowsEnteredDuringScroll = 0;
 		this.stats.rowsExitedDuringScroll = 0;
 		this.stats.rowsStayedDuringScroll = 0;
