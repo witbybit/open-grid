@@ -411,7 +411,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
 			const shouldPrimeFormula = typeof rawValue === 'string' && rawValue.startsWith('=');
 			const hasRegisteredFormula = this.deps.engine.hasFormula(rowId, col.field);
-			const shouldPrimeDisplayValue = col.valueGetter || shouldPrimeFormula || hasRegisteredFormula;
+			const shouldPrimeDisplayValue = col.valueGetter || shouldPrimeFormula || hasRegisteredFormula || isCustomLive;
 			if (!shouldPrimeDisplayValue) return true;
 			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
 			const hasInsightDecorations = cellDecorations.length > 0;

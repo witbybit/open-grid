@@ -3177,6 +3177,128 @@ describe('RenderEngine', () => {
 		}
 	});
 
+	it('prewarms custom-live impostor snapshots just outside the visible band so horizontal re-entry avoids blank wake-up', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: Array<(deadline: { timeRemaining(): number; didTimeout: boolean }) => void> = [];
+		const previousRequestIdleCallback = (
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+			}
+		).requestIdleCallback;
+		const previousCancelIdleCallback = (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		(
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+				cancelIdleCallback?: (id: number) => void;
+			}
+		).requestIdleCallback = (cb) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		};
+		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback = (id) => {
+			if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {};
+		};
+
+		const columns = Array.from({ length: 12 }, (_, index) => ({
+			field: `col_${index}`,
+			header: `Col ${index}`,
+			width: 100,
+			...(index === 2
+				? {
+						cellRenderer: ({ value }: { value: string }) => `Portal ${value}`,
+						cellRendererCapabilities: { scrollBehavior: 'live' as const },
+					}
+				: {}),
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			rowOverscanPx: 80,
+			colBuffer: 0,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 40 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		try {
+			renderer.mount(container);
+
+			const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+			scrollViewport.scrollTop = 400;
+			scrollViewport.scrollLeft = 400;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(1);
+			callbacks[0](0);
+			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
+
+			const snapshot = store.engine.getCellDisplaySnapshot('row-10', 'col_2');
+			expect(snapshot).toMatchObject({
+				rowId: 'row-10',
+				colField: 'col_2',
+				formattedValue: '10:2',
+				contentKind: 'impostor',
+				contentMode: 'fallback',
+			});
+
+			scrollViewport.scrollLeft = 200;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(2);
+			callbacks[1](0);
+
+			const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+			expect(row10).not.toBeNull();
+			const customCell = row10.querySelector('[data-col-field="col_2"]') as HTMLDivElement;
+			expect(customCell).not.toBeNull();
+			expect(customCell.dataset.contentMode).toBe('fallback');
+			expect(customCell.textContent).toBe('10:2');
+			expect(renderer.getRenderStats().prewarmedCellSnapshots).toBeGreaterThan(0);
+			expect(renderer.getRenderStats().prewarmedDisplayValues).toBeGreaterThan(0);
+		} finally {
+			if (previousRequestIdleCallback === undefined) {
+				delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+			} else {
+				(window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = previousRequestIdleCallback;
+			}
+			if (previousCancelIdleCallback === undefined) {
+				delete (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+			} else {
+				(window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback = previousCancelIdleCallback;
+			}
+			renderer.unmount();
+			controller.dispose();
+			store.destroy();
+		}
+	});
+
 	it('updates cell widths immediately on column resize', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
