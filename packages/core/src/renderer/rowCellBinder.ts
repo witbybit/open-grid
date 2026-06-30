@@ -527,6 +527,14 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			: contentMode;
 	const snapshotContentMode = contentMode === 'portal' && snapshotContentKind === 'impostor' ? ('fallback' as const) : contentMode;
 	const snapshotFormattedValue = contentMode === 'portal' && snapshotContentKind === 'impostor' ? portalImpostorValue : formattedValue;
+	// Carry frozenHtml forward from the previous snapshot so the scroll impostor can replay the
+	// styled HTML clone. frozenHtml is captured in the freeze-in-place path of bindCellDuringScroll
+	// (the only moment we have guaranteed committed React DOM). Without this carry-over, every
+	// fidelity render would silently drop the captured HTML and the impostor would revert to text.
+	const prevFrozenHtml =
+		(col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollSnapshot === 'html'
+			? deps.engine.cellDisplaySnapshots.get(node.id, col.field)?.frozenHtml
+			: undefined;
 	deps.engine.cellDisplaySnapshots.set(
 		createCellDisplaySnapshot({
 			rowId: node.id,
@@ -545,6 +553,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			formattedValue: snapshotFormattedValue,
 			title: cellSlot.element.title,
 			validationError: validationDecTitle,
+			frozenHtml: prevFrozenHtml,
 		})
 	);
 
@@ -763,7 +772,13 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	// means frozenHtml is never captured and the impostor always shows plain text.
 	const hasScrollSnapshotHtml = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollSnapshot === 'html';
 
-	if (hasScrollImpostorCapability && hasExistingLivePortalContent && !isEditing && !isFocused && (!snapshotDemandsImpostor || hasScrollSnapshotHtml)) {
+	if (
+		hasScrollImpostorCapability &&
+		hasExistingLivePortalContent &&
+		!isEditing &&
+		!isFocused &&
+		(!snapshotDemandsImpostor || hasScrollSnapshotHtml)
+	) {
 		// Freeze: keep existing portal content visible during scroll without remounting the portal.
 		deps.cellRenderer.showPortalContent(cellSlot.element);
 		// Apply fresh title/validation from the snapshot if one is available, so insight decoration
