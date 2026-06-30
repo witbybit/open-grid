@@ -2970,7 +2970,7 @@ describe('RenderEngine', () => {
 			expect(callbacks.length).toBeGreaterThanOrEqual(1);
 			callbacks[0](0);
 			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
-			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 50 });
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
 
 			const snapshot = store.engine.getCellDisplaySnapshot('row-10', 'col_2');
 			expect(snapshot).toMatchObject({

@@ -356,6 +356,18 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const recordWork = (): void => {
 			workDone++;
 		};
+		const hasFreshSnapshot = (rowId: string, colField: string): boolean => {
+			const snapshot = this.deps.engine.getCellDisplaySnapshot(rowId, colField);
+			if (!snapshot) return false;
+			return (
+				snapshot.rowVersion === (this.deps.engine.rowVersions.get(rowId) ?? -1) &&
+				snapshot.globalVersion === state.globalVersion &&
+				snapshot.insightVersion === this.deps.engine.insights.getVersion() &&
+				snapshot.styleVersion === this.deps.rowRenderer.styleVersion &&
+				snapshot.loadingVersion === this.deps.rowRenderer.loadingVersion &&
+				snapshot.selectionVersion === this.deps.engine.selectionVersion
+			);
+		};
 		const visitApproachBand = (visit: (rowIndex: number, colIndex: number) => boolean): void => {
 			for (let row = request.visibleRowStart; row <= request.visibleRowEnd && canContinue(); row++) {
 				for (let col = leftColStart; col <= leftColEnd && canContinue(); col++) {
@@ -506,6 +518,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			const col = columns[colIndex];
 			if (!col) return true;
 			const rowId = visualRow.node.id;
+			if (hasFreshSnapshot(rowId, col.field)) return true;
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
 			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
 			const hasInsightDecorations = cellDecorations.length > 0;
@@ -514,9 +527,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
 			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
 			const needsStyleSnapshot = compiledStyleRules.hasCellRules && visualRow.node.data !== null;
-			if (!hasInsightDecorations && !isFocused && !isSelected && !needsReadonlyEvaluation && !needsTooltipSnapshot && !needsStyleSnapshot) {
-				return true;
-			}
 			const primedValue = this.deps.engine.getCachedDisplayValue(rowId, col.field);
 			const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
 			let stateClassName = '';
@@ -565,8 +575,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 								value: rawValue ?? primedValue,
 							})
 					: null;
-			const shouldWriteSnapshot = hasInsightDecorations || !!stateClassName || !!tooltipText;
-			if (!shouldWriteSnapshot) return true;
 			recordWork();
 			this.deps.engine.cellDisplaySnapshots.set(
 				createCellDisplaySnapshot({
@@ -583,52 +591,9 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 					decorationClassName: decorationMetadata.classNameSuffix,
 					contentKind: primedValue && primedValue !== '' ? 'text' : 'empty',
 					contentMode: primedValue && primedValue !== '' ? 'text' : 'empty',
-					formattedValue: primedValue ?? '',
+					formattedValue: primedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field),
 					title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
 					validationError: decorationMetadata.validationError,
-				})
-			);
-			this.deps.renderStats.prewarmedCellSnapshots++;
-			return canContinue();
-		});
-
-		visitApproachBand((rowIndex, colIndex) => {
-			if (!canContinue()) return false;
-			const visualRow = rowModel.getVisualRow(rowIndex);
-			if (visualRow?.kind !== 'data') return true;
-			const col = columns[colIndex];
-			if (!col) return true;
-			const rowId = visualRow.node.id;
-			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
-			const shouldPrimeFormula = typeof rawValue === 'string' && rawValue.startsWith('=');
-			const hasRegisteredFormula = this.deps.engine.hasFormula(rowId, col.field);
-			const hasInsightDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field).length > 0;
-			const isFocused = isCellFocused(rowId, col.field, focusedCell);
-			const isSelected = isCellSelected(rowIndex, colIndex, selectionBounds);
-			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
-			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
-			const needsStyleSnapshot = compiledStyleRules.hasCellRules && visualRow.node.data !== null;
-			if (hasInsightDecorations || isFocused || isSelected || needsReadonlyEvaluation || needsTooltipSnapshot || needsStyleSnapshot) {
-				return true;
-			}
-			recordWork();
-			const formattedValue =
-				this.deps.engine.getCachedDisplayValue(rowId, col.field) ?? this.deps.engine.getCheapDisplayValue(rowId, col.field);
-			this.deps.engine.cellDisplaySnapshots.set(
-				createCellDisplaySnapshot({
-					rowId,
-					colField: col.field,
-					rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
-					globalVersion: state.globalVersion,
-					insightVersion: this.deps.engine.insights.getVersion(),
-					styleVersion: this.deps.rowRenderer.styleVersion,
-					loadingVersion: this.deps.rowRenderer.loadingVersion,
-					selectionVersion: this.deps.engine.selectionVersion,
-					baseClassName: 'og-cell',
-					contentKind: formattedValue !== '' ? 'text' : 'empty',
-					contentMode: formattedValue !== '' ? 'text' : 'empty',
-					formattedValue,
-					title: '',
 				})
 			);
 			this.deps.renderStats.prewarmedCellSnapshots++;
