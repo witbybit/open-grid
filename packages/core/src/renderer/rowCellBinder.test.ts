@@ -2222,6 +2222,212 @@ describe('bindCellDuringScroll', () => {
 		expect(cellSlot.element.dataset.validationError).toBe('Needs review');
 	});
 
+	it('injects frozenHtml into portal host during scroll when scrollSnapshot: html is set on the column', () => {
+		const dirty = vi.fn();
+		const showPortalContent = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const ensureCellPortalHost = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		const host = document.createElement('div');
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell', 'text', undefined, 'raw text', undefined);
+
+		const frozenHost = document.createElement('div');
+		ensureCellPortalHost.mockReturnValue(frozenHost);
+
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+				cellDisplaySnapshots: {
+					get: vi.fn(() => ({
+						rowId: 'r1',
+						colField: 'name',
+						rowVersion: 5,
+						globalVersion: 2,
+						insightVersion: 0,
+						styleVersion: 0,
+						loadingVersion: 0,
+						selectionVersion: 0,
+						contentKind: 'impostor',
+						contentMode: 'fallback',
+						formattedValue: 'fallback text',
+						baseClassName: 'og-cell',
+						stateClassName: '',
+						decorationClassName: '',
+						classTokens: ['og-cell'],
+						className: 'og-cell',
+						title: '',
+						frozenHtml: '<div class="badge badge-info">INFO</div>',
+					})),
+				},
+			} as any,
+			cellRenderer: { showPortalContent } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost,
+			getCellPortalHost: () => host,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: {
+				field: 'name',
+				cellRenderer: () => null,
+				cellRendererCapabilities: { scrollSnapshot: 'html' },
+			} as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 2,
+				hasDeferredCellStyleRules: false,
+				insightVersion: 0,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+				selectionVersion: 0,
+				styleVersion: 0,
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 5]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		// Portal host should receive the frozen HTML clone, not plain text
+		expect(frozenHost.innerHTML).toBe('<div class="badge badge-info">INFO</div>');
+		// showPortalContent called so CSS shows the portal host
+		expect(showPortalContent).toHaveBeenCalledWith(cellSlot.element);
+		// Cell is in portal mode (host visible) not fallback mode (text visible)
+		expect(cellSlot.element.dataset.contentMode).toBe('portal');
+		// Real portal is NOT mounted during scroll
+		expect(mountCellImmediately).not.toHaveBeenCalled();
+		// Dirty for fidelity upgrade
+		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
+	});
+
+	it('falls back to plain text impostor when scrollSnapshot: html is set but frozenHtml is not yet captured', () => {
+		const dirty = vi.fn();
+		const showPortalContent = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell', 'text', undefined, '', undefined);
+
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+				cellDisplaySnapshots: {
+					get: vi.fn(() => ({
+						rowId: 'r1',
+						colField: 'name',
+						rowVersion: 5,
+						globalVersion: 2,
+						insightVersion: 0,
+						styleVersion: 0,
+						loadingVersion: 0,
+						selectionVersion: 0,
+						contentKind: 'impostor',
+						contentMode: 'fallback',
+						formattedValue: 'fallback text',
+						baseClassName: 'og-cell',
+						stateClassName: '',
+						decorationClassName: '',
+						classTokens: ['og-cell'],
+						className: 'og-cell',
+						title: '',
+						// frozenHtml intentionally absent — cell has never had a fidelity render
+					})),
+				},
+			} as any,
+			cellRenderer: { showPortalContent } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: vi.fn(),
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: {
+				field: 'name',
+				cellRenderer: () => null,
+				cellRendererCapabilities: { scrollSnapshot: 'html' },
+			} as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 2,
+				hasDeferredCellStyleRules: false,
+				insightVersion: 0,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+				selectionVersion: 0,
+				styleVersion: 0,
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 5]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		// Falls back to plain text impostor — cell has never had a fidelity render yet
+		expect(cellSlot.element.dataset.contentMode).toBe('fallback');
+		expect(cellSlot.lastFormattedValue).toBe('fallback text');
+		expect(mountCellImmediately).not.toHaveBeenCalled();
+	});
+
 	it('defers the portal mount to the fidelity lane when a custom-live host is empty, rather than mounting synchronously during scroll', () => {
 		const dirty = vi.fn();
 		const showPortalContent = vi.fn();

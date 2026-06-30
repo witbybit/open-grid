@@ -488,6 +488,18 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		}
 	}
 
+	// Capture the portal host's current innerHTML for the scroll visual snapshot (opt-in via
+	// cellRendererCapabilities.scrollSnapshot: 'html'). This captures the PREVIOUS React render —
+	// if mountCell is asynchronous the current render has not committed yet. The captured HTML is
+	// used as a static visual clone on the next scroll so custom-renderer cells look settled
+	// (preserving badge styling, icons, colors) rather than falling back to plain text.
+	let frozenHtml: string | undefined;
+	if (contentMode === 'portal' && (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollSnapshot === 'html') {
+		const portalHost = deps.getCellPortalHost(cellSlot.element);
+		const html = portalHost?.innerHTML;
+		if (html) frozenHtml = html;
+	}
+
 	// Cell tooltip (title attribute) — only for data rows with tooltip defined
 	let tooltipText: string | null = null;
 	if (col.tooltip !== undefined && node.data !== null) {
@@ -545,6 +557,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			formattedValue: snapshotFormattedValue,
 			title: cellSlot.element.title,
 			validationError: validationDecTitle,
+			frozenHtml,
 		})
 	);
 
@@ -802,6 +815,37 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		if (cellSlot.lastPortalKey) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 		deps.markCellDirtyAfterScroll(cellSlot.element);
 		applyCellTitlesAndValidation(cellSlot.element, portalImpostorSnapshot.title || null, '', portalImpostorSnapshot.validationError);
+
+		if (portalImpostorSnapshot.frozenHtml) {
+			// HTML snapshot path: inject the static clone of the last fidelity render into the
+			// portal host so the cell looks identical to its settled state during scroll.
+			// The host is inert — no React fiber, no event handlers — and the fidelity lane
+			// will replace it with the live portal on the next post-scroll pass.
+			const portalHost = deps.ensureCellPortalHost(cellSlot.element);
+			portalHost.innerHTML = portalImpostorSnapshot.frozenHtml;
+			deps.cellRenderer.showPortalContent(cellSlot.element);
+			const didWriteImpostor = cellSlot.update(
+				colIndex,
+				col.field,
+				rowIndex,
+				node.id,
+				left,
+				right,
+				width,
+				cellClassName,
+				'portal',
+				undefined,
+				'',
+				undefined
+			);
+			cellSlot.lastMountedRowVersion = rowVersion;
+			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
+			recordCellSlotMountedVisualVersions(cellSlot, portalImpostorSnapshot);
+			if (didWriteImpostor) deps.incrementCurrentScrollCellsWritten();
+			deps.incrementCellsBoundDuringScroll();
+			return;
+		}
+
 		const didWriteImpostor = cellSlot.update(
 			colIndex,
 			col.field,

@@ -22,6 +22,10 @@ export interface CellDisplaySnapshot {
 	formattedValue: string;
 	title: string;
 	validationError?: string;
+	/** Captured innerHTML of the portal host after the last fidelity render. Present only when the
+	 *  column opts in via `cellRendererCapabilities.scrollSnapshot: 'html'`. Injected as a static
+	 *  visual clone during scroll so the cell looks settled rather than showing plain text. */
+	frozenHtml?: string;
 }
 
 export interface CellDecorationSnapshotMetadata {
@@ -88,6 +92,7 @@ export interface CreateCellDisplaySnapshotOptions {
 	formattedValue: string;
 	title: string;
 	validationError?: string;
+	frozenHtml?: string;
 }
 
 export function createCellDisplaySnapshot(options: CreateCellDisplaySnapshotOptions): CellDisplaySnapshot {
@@ -114,6 +119,7 @@ export function createCellDisplaySnapshot(options: CreateCellDisplaySnapshotOpti
 		formattedValue: options.formattedValue,
 		title: options.title,
 		validationError: options.validationError,
+		frozenHtml: options.frozenHtml,
 	};
 }
 

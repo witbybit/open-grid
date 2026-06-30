@@ -64,6 +64,22 @@ export interface CellRendererCapabilities {
 	 * Leave undefined to skip the impostor contract entirely (renderer is mounted synchronously).
 	 */
 	scrollImpostor?: (params: { value: unknown; formattedValue: string }) => string;
+	/**
+	 * Controls what the scroll impostor looks like when the cell is not live during scroll.
+	 *
+	 * - `'html'` — After each fidelity render the grid captures the portal host's innerHTML and
+	 *              stores it in the cell display snapshot. During the next scroll, that static HTML
+	 *              is injected as an inert visual clone rather than plain text. The cell looks
+	 *              identical to its settled state while the grid is in motion.
+	 *
+	 * Leave undefined (default) for the standard plain-text impostor — fastest, but shows only
+	 * the raw display value string during scroll (no badge styling, colors, or icons).
+	 *
+	 * Only meaningful for columns that also have scrollImpostor defined (or a scrollBehavior that
+	 * activates the impostor path). Cells that have never completed a fidelity render fall back
+	 * to plain text until their first post-scroll upgrade.
+	 */
+	scrollSnapshot?: 'html';
 }
 
 // ─── Imperative handle ────────────────────────────────────────────────────────
