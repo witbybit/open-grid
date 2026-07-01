@@ -1,5 +1,5 @@
 /**
- * Client pagination page-window model (Plan 041).
+ * Client pagination page-window model.
  *
  * Pure math: given a total visual-row count, a page size, and a requested page, compute
  * the slice bounds. The row pipeline applies this AFTER the final flatten (so the total

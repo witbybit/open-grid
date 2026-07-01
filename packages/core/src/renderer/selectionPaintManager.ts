@@ -1,5 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 import type { GridRowClassParams } from '../columnDef.js';
 import type { RowNode } from '../rowNode.js';
 import { CellSlot } from './cellSlot.js';
@@ -22,6 +22,7 @@ export class SelectionPaintManager<TRowData> {
 	public hoveredRowIndex: number | null = null;
 	public selectedRowIdSet: Set<string> | null = null;
 	public rowCheckboxAnchorId: string | null = null;
+	private lastSelectedRowIdsRef: string[] | null = null;
 
 	private readonly rowSelectionClickCells = new WeakSet<HTMLElement>();
 
@@ -74,7 +75,18 @@ export class SelectionPaintManager<TRowData> {
 	constructor(private readonly engine: GridEngine<TRowData>) {}
 
 	public rebuildSelection(selectedRowIds: string[]): void {
+		if (this.lastSelectedRowIdsRef === selectedRowIds) {
+			return;
+		}
+		this.lastSelectedRowIdsRef = selectedRowIds;
 		this.selectedRowIdSet = selectedRowIds.length > 0 ? new Set(selectedRowIds) : null;
+	}
+
+	public getSelectedRowIdSet(selectedRowIds?: string[]): Set<string> | null {
+		if (selectedRowIds) {
+			this.rebuildSelection(selectedRowIds);
+		}
+		return this.selectedRowIdSet;
 	}
 
 	public attachClickListenerIfNeeded(el: HTMLElement): void {
@@ -162,6 +174,12 @@ export class SelectionPaintManager<TRowData> {
 			} catch (e) {
 				reportRendererFault(this.engine, 'row-style-class', e, { rowId: node.id, rowIndex });
 			}
+		}
+
+		// Insight layer row decorations — read-only overlay; must not mutate row data.
+		const rowDecorations = this.engine.insights.getRowDecorations(node.id);
+		for (const d of rowDecorations) {
+			if (d.className) rowClassName += ' ' + d.className;
 		}
 
 		slot.update(rowIndex, slot.visualRowId, 'data', slot.rowTop, slot.rowHeight, rowClassName);

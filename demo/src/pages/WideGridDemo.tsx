@@ -29,12 +29,6 @@ function generateColumns(colBuffer: number): ColumnDef<WideRow>[] {
 		field: `col_${i}`,
 		header: `Col ${i}`,
 		width: COL_WIDTH,
-		editable: true,
-		valueValidator: ({ value }: { value: unknown }) => {
-			const n = Number(value);
-			if (isNaN(n)) return 'Must be a number';
-			return null;
-		},
 	}));
 }
 
@@ -79,13 +73,11 @@ export default function WideGridDemo({ onGridReady, editTrigger, arrowKeyNavigat
 		[onGridReady]
 	);
 
-	// Subscribe to column range changes to update the badge.
-	// subscribeToKey is level-triggered (fires on future changes only), so we also schedule
-	// a rAF read after mount — by that point ResizeObserver + first render will have fired.
+	// Subscribe to viewport changes to update the badge.
 	useEffect(() => {
 		if (!api) return;
 		let rafId = requestAnimationFrame(() => setVisibleRange(api.getVisibleColumnRange()));
-		const unsub = api.subscribeToKey('visibleColRange', () => setVisibleRange(api.getVisibleColumnRange()));
+		const unsub = api.subscribe(() => setVisibleRange(api.getVisibleColumnRange()));
 		return () => {
 			cancelAnimationFrame(rafId);
 			unsub();
@@ -159,7 +151,7 @@ export default function WideGridDemo({ onGridReady, editTrigger, arrowKeyNavigat
 			{/* Grid */}
 			<div className='min-h-0 flex-1'>
 				<Grid<WideRow>
-					mode='client'
+					rowModelType='client'
 					columns={columns}
 					rows={ROWS}
 					getRowId={(r) => r.id}

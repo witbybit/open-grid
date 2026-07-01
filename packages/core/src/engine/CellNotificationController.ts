@@ -1,4 +1,5 @@
-import { GridEventName, type CellSubscription } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
+import type { CellSubscription } from '../api/GridApi.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import type { EventBus } from '../events/EventBus.js';
@@ -131,16 +132,7 @@ export class CellNotificationController<TRowData = unknown> {
 	}
 
 	public notifyBulkCellChange(changes: Map<string, Set<string>>): void {
-		for (const rowId of changes.keys()) {
-			this.deps.rowVersions.set(rowId, (this.deps.rowVersions.get(rowId) ?? 0) + 1);
-		}
-
-		for (const [rowId, fields] of changes) {
-			for (const colField of fields) {
-				this.deps.data.clearValueGetterCache(rowId, colField);
-				this.notifyCellSubscribers(rowId, colField);
-			}
-		}
+		this.publishCommittedCellChanges(changes);
 
 		const hasRenderConsumer =
 			this.deps.eventBus.hasListeners(GridEventName.cellInvalidated) || this.deps.eventBus.hasListeners(GridEventName.renderInvalidated);
@@ -155,10 +147,24 @@ export class CellNotificationController<TRowData = unknown> {
 		this.deps.requestRender('bulk-cell-change');
 	}
 
-	public notifyCellChange(rowId: string, colField: string): void {
+	public publishCommittedCellChanges(changes: Map<string, Set<string>>): void {
+		for (const rowId of changes.keys()) {
+			this.deps.rowVersions.set(rowId, (this.deps.rowVersions.get(rowId) ?? 0) + 1);
+		}
+
+		for (const [rowId, fields] of changes) {
+			for (const colField of fields) {
+				this.deps.data.clearValueGetterCache(rowId, colField);
+				this.notifyCellSubscribers(rowId, colField);
+			}
+		}
+	}
+
+	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true): void {
 		this.deps.rowVersions.set(rowId, (this.deps.rowVersions.get(rowId) ?? 0) + 1);
 		this.deps.data.clearValueGetterCache(rowId, colField);
 		this.notifyCellSubscribers(rowId, colField);
+		if (!includeRenderInvalidation) return;
 
 		const hasRenderConsumer =
 			this.deps.eventBus.hasListeners(GridEventName.cellInvalidated) || this.deps.eventBus.hasListeners(GridEventName.renderInvalidated);
@@ -167,6 +173,7 @@ export class CellNotificationController<TRowData = unknown> {
 		this.deps.invalidation.invalidateCell(rowId, colField, 'cell');
 		this.deps.invalidation.invalidateRow(rowId, 'cell');
 		this.deps.eventBus.dispatchEvent(GridEventName.cellInvalidated, { rowId, colField });
+		this.deps.requestRender('cell-change');
 	}
 
 	public notifyColumnSubscribers(colField: string): void {

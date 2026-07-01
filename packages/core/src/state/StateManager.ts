@@ -1,8 +1,10 @@
-import type { GridState, GridStateUpdater, Listener } from '../store.js';
+import type { InternalGridState, GridStateUpdater, Listener } from './GridState.js';
 import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
+import { type GridInstrumentation, GridMetric, NOOP_INSTRUMENTATION } from '../diagnostics/GridInstrumentation.js';
 
 export class StateManager<TRowData = unknown> {
-	private state: GridState<TRowData>;
+	private static readonly MAX_SELECTOR_FANOUT = 8;
+	private state: InternalGridState<TRowData>;
 	private listeners = new Set<Listener<TRowData>>();
 	private keyListeners = new Map<string, Set<Listener<TRowData>>>();
 
@@ -10,50 +12,78 @@ export class StateManager<TRowData = unknown> {
 	// Keys touched inside an open transaction — used to drive notifyChanges at commit.
 	// Using a Set avoids the repeated object spread that batchedStateUpdates previously required.
 	private batchedKeys = new Set<string>();
-	private preTransactionState: GridState<TRowData> | null = null;
-	private onChangesCallback?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void;
+	private preTransactionState: InternalGridState<TRowData> | null = null;
+	private onChangesCallback?: (prevState: InternalGridState<TRowData>, affectedKeys: string[]) => void;
 	private readonly faultReporter?: RuntimeFaultReporter<TRowData>;
+	public instrumentation: GridInstrumentation;
 
 	constructor(
-		initialState: GridState<TRowData>,
-		onChanges?: (prevState: GridState<TRowData>, affectedKeys: string[]) => void,
-		faultReporter?: RuntimeFaultReporter<TRowData>
+		initialState: InternalGridState<TRowData>,
+		onChanges?: (prevState: InternalGridState<TRowData>, affectedKeys: string[]) => void,
+		faultReporter?: RuntimeFaultReporter<TRowData>,
+		instrumentation?: GridInstrumentation
 	) {
 		this.state = initialState;
 		this.onChangesCallback = onChanges;
 		this.faultReporter = faultReporter;
+		this.instrumentation = instrumentation ?? NOOP_INSTRUMENTATION;
 	}
 
-	public debugGetStateCount = 0;
-
-	public getState(): GridState<TRowData> {
-		this.debugGetStateCount++;
+	public getState(): InternalGridState<TRowData> {
+		this.instrumentation.increment(GridMetric.STATE_READS);
 		return this.state;
 	}
 
 	public setState = (updater: GridStateUpdater<TRowData>): void => {
+		this.commitState(updater);
+	};
+
+	public commitState<TResult = void>(
+		updater: GridStateUpdater<TRowData>,
+		beforeNotify?: (phase: StateCommitPhase<TRowData>) => TResult
+	): TResult | undefined {
 		const nextState = typeof updater === 'function' ? updater(this.state) : updater;
 
 		if (this.transactionDepth > 0) {
 			for (const key of Object.keys(nextState)) this.batchedKeys.add(key);
 			this.state = { ...this.state, ...nextState };
-			return;
+			return undefined;
 		}
 
 		const prevState = this.state;
 		this.state = { ...prevState, ...nextState };
+		const changedKeys = new Set<string>();
+		for (const key of Object.keys(nextState)) {
+			if (prevState[key as keyof InternalGridState<TRowData>] !== this.state[key as keyof InternalGridState<TRowData>]) {
+				changedKeys.add(key);
+			}
+		}
+		if (changedKeys.size === 0) return undefined;
 
-		const affectedKeys = Object.keys(nextState);
-		this.notifyChanges(prevState, affectedKeys);
-	};
+		const phaseResult = beforeNotify?.({
+			prevState,
+			getState: () => this.state,
+			getChangedKeys: () => Array.from(changedKeys),
+			setDerivedState: (derivedUpdater) => {
+				const affectedKeys = this.setDerivedState(derivedUpdater, prevState);
+				for (const key of affectedKeys) changedKeys.add(key);
+				return affectedKeys;
+			},
+		});
 
-	public setDerivedState(updater: GridStateUpdater<TRowData>, prevStateForListeners: GridState<TRowData>): string[] {
+		this.notifyChanges(prevState, Array.from(changedKeys));
+		return phaseResult;
+	}
+
+	public setDerivedState(updater: GridStateUpdater<TRowData>, prevStateForListeners: InternalGridState<TRowData>): string[] {
 		const nextState = typeof updater === 'function' ? updater(this.state) : updater;
 		const affectedKeys = Object.keys(nextState);
 		if (affectedKeys.length === 0) return [];
 
 		this.state = { ...this.state, ...nextState };
-		return affectedKeys.filter((key) => prevStateForListeners[key as keyof GridState<TRowData>] !== this.state[key as keyof GridState<TRowData>]);
+		return affectedKeys.filter(
+			(key) => prevStateForListeners[key as keyof InternalGridState<TRowData>] !== this.state[key as keyof InternalGridState<TRowData>]
+		);
 	}
 
 	public startTransaction = (): void => {
@@ -92,10 +122,10 @@ export class StateManager<TRowData = unknown> {
 		}
 	};
 
-	private notifyChanges(prevState: GridState<TRowData>, affectedKeys: string[]): void {
+	private notifyChanges(prevState: InternalGridState<TRowData>, affectedKeys: string[]): void {
 		const updatedKeys = new Set<string>();
 		for (const key of affectedKeys) {
-			if (prevState[key as keyof GridState<TRowData>] !== this.state[key as keyof GridState<TRowData>]) {
+			if (prevState[key as keyof InternalGridState<TRowData>] !== this.state[key as keyof InternalGridState<TRowData>]) {
 				updatedKeys.add(key);
 			}
 		}
@@ -170,7 +200,37 @@ export class StateManager<TRowData = unknown> {
 		};
 	};
 
-	public triggerKeyChange(key: string, prevState: GridState<TRowData>): void {
+	public subscribeToSelector<TValue>(
+		keys: readonly string[],
+		selector: (state: InternalGridState<TRowData>) => TValue,
+		listener: (value: TValue) => void,
+		isEqual: (left: TValue, right: TValue) => boolean = Object.is
+	): () => void {
+		const uniqueKeys = Array.from(new Set(keys));
+		if (uniqueKeys.length === 0) {
+			throw new Error('[open-grid] subscribeToSelector requires at least one key');
+		}
+		if (uniqueKeys.length > StateManager.MAX_SELECTOR_FANOUT) {
+			throw new Error(
+				`[open-grid] subscribeToSelector fan-out ${String(uniqueKeys.length)} exceeds limit ${String(StateManager.MAX_SELECTOR_FANOUT)}`
+			);
+		}
+
+		let currentValue = selector(this.state);
+		const notifyIfChanged = (state: InternalGridState<TRowData>) => {
+			const nextValue = selector(state);
+			if (isEqual(currentValue, nextValue)) return;
+			currentValue = nextValue;
+			listener(nextValue);
+		};
+
+		const unsubscribers = uniqueKeys.map((key) => this.subscribeToKey(key, notifyIfChanged));
+		return () => {
+			for (const unsubscribe of unsubscribers) unsubscribe();
+		};
+	}
+
+	public triggerKeyChange(key: string, prevState: InternalGridState<TRowData>): void {
 		const targeted = this.keyListeners.get(key);
 		if (targeted) {
 			targeted.forEach((listener) => {
@@ -188,4 +248,11 @@ export class StateManager<TRowData = unknown> {
 		this.keyListeners.clear();
 		this.onChangesCallback = undefined;
 	}
+}
+
+export interface StateCommitPhase<TRowData = unknown> {
+	readonly prevState: InternalGridState<TRowData>;
+	readonly getState: () => InternalGridState<TRowData>;
+	readonly getChangedKeys: () => string[];
+	readonly setDerivedState: (updater: GridStateUpdater<TRowData>) => string[];
 }

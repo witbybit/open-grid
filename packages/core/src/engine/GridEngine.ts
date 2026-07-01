@@ -1,23 +1,30 @@
+import { canEditCell, isDataCellSelectable } from '../visualRow.js';
+import { GridEventName } from '../api/GridEvents.js';
+import type { GridEventListener, GridEventPayloadMap } from '../api/GridEvents.js';
+import type {
+	CellSubscription,
+	GridCellPointer,
+	GridCellRange,
+	GridSelectionSource,
+	GridWriteRejection,
+	GridWriteResult,
+	RowDataTransaction,
+	RowNodeTransaction,
+	RowSelectionChangeResult,
+	RowSelectionGesture,
+	RowSelectionGestureSource,
+	RowSelectionScope,
+} from '../api/GridApi.js';
+import type { ColumnDef } from '../columnDef.js';
+import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
 import {
-	canEditCell,
-	isDataCellSelectable,
-	GridEventName,
-	type GridState,
+	asAllDataNodesCapableRowModel,
+	asRowOrderCapableModel,
 	type RowModel,
-	type CellSubscription,
-	type ColumnDef,
-	type GridCellRange,
-	type GridCellPointer,
-	type GridEventListener,
-	type GridEventPayloadMap,
-	type GridSelectionSource,
-	type GridStateUpdater,
-	type Listener,
-	type RowSelectionChangeResult,
-	type RowSelectionGesture,
-	type RowSelectionGestureSource,
-	type RowSelectionScope,
-} from '../store.js';
+	type RowModelRefreshResult,
+	type VisualRowModel,
+} from '../rowModel.js';
+import type { RowNode } from '../rowNode.js';
 import { StateManager } from '../state/StateManager.js';
 import { CommandHistory } from '../commands/CommandHistory.js';
 import { EventBus } from '../events/EventBus.js';
@@ -32,23 +39,54 @@ import { DagEngine, type FormulaCellCoordinate } from '../calculations/dagEngine
 import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
-import { InvalidationManager } from '../renderer/invalidationManager.js';
-import { GridChangeApplier } from './GridChangeApplier.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
+import { InvalidationManager, type GridInvalidationReason } from '../renderer/invalidationManager.js';
+import { GridCommitKernel } from './GridChangeApplier.js';
+import type { GridCommitEvent } from './GridChangeApplier.js';
 import { ColumnFeatureController } from '../features/ColumnFeatureController.js';
 import { GroupingFeatureController } from '../features/GroupingFeatureController.js';
 import { EditingFeatureController } from '../features/EditingFeatureController.js';
-import { ValidationManager } from '../features/ValidationManager.js';
 import { RowSelectionFeatureController } from '../features/RowSelectionFeatureController.js';
 import { DataMutationController } from '../features/DataMutationController.js';
 import { GridStateFeatureController } from '../features/GridStateFeatureController.js';
 import { CellNotificationController } from './CellNotificationController.js';
-import { GridStateReactionController } from './GridStateReactionController.js';
+import { createDefaultGridDomainMutationExecutorRegistry } from './GridDomainMutation.js';
+import { GridProjectionPipeline } from './GridProjectionPipeline.js';
 import { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 import { ColumnAutoSizeController } from '../features/ColumnAutoSizeController.js';
 import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from '../features/ColumnAutoSizeController.js';
 import { ClipboardController } from '../features/ClipboardController.js';
-import { computeDistinctValues } from '../filterModel.js';
+import type { GridDistinctValueSummary } from '../distinctValues.js';
+import { computeDistinctValueSummary } from '../distinctValues.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
+import { type GridInstrumentation, NOOP_INSTRUMENTATION } from '../diagnostics/GridInstrumentation.js';
+import { GridCapabilityManager } from '../capabilities/GridCapabilityManager.js';
+import type { GridCapabilityAction, GridCapabilitiesConfig, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
+import { GridInsightRegistry } from '../insights/GridInsightRegistry.js';
+import { GridDataIntegrityManager } from '../features/dataIntegrity/GridDataIntegrityManager.js';
+import { createGridIntegrityRowProvider, type GridIntegrityRowModelKind } from '../features/dataIntegrity/GridIntegrityRowProvider.js';
+import { defaultGridScheduler } from '../renderer/gridScheduler.js';
+import type { GridMutationRejection } from './GridDomainMutation.js';
+import type { GridCommitResult as InternalGridCommitResult } from './GridChangeApplier.js';
+import { GridDomainSubscriptionHub } from './GridDomainSubscriptionHub.js';
+import { GridEngineRenderBridge } from './GridEngineRenderBridge.js';
+import { CellDisplaySnapshotStore, type CellDisplaySnapshot } from '../renderer/cellDisplaySnapshot.js';
+
+export type ManagedRowDragBlockReason =
+	| 'unsupported-row-model'
+	| 'sort-active'
+	| 'filter-active'
+	| 'group-active'
+	| 'tree-active'
+	| 'pagination-active';
+
+export type ManagedRowDragPolicyResult =
+	| { allowed: true }
+	| {
+			allowed: false;
+			reason: ManagedRowDragBlockReason;
+			message: string;
+	  };
 
 export class GridEngine<TRowData = unknown> {
 	public readonly data: DataModel<TRowData>;
@@ -64,27 +102,51 @@ export class GridEngine<TRowData = unknown> {
 	public readonly eventBus: EventBus<TRowData>;
 	public readonly runtimeFaults: RuntimeFaultReporter<TRowData>;
 	public readonly invalidation: InvalidationManager;
-	public readonly changeApplier: GridChangeApplier<TRowData>;
+	public readonly changeApplier: GridCommitKernel<TRowData>;
 	public readonly columnFeature: ColumnFeatureController<TRowData>;
 	public readonly columnAutoSize: ColumnAutoSizeController<TRowData>;
 	public readonly clipboard: ClipboardController<TRowData>;
 	public readonly groupingFeature: GroupingFeatureController<TRowData>;
 	public readonly editingFeature: EditingFeatureController<TRowData>;
-	public readonly validationFeature: ValidationManager<TRowData>;
 	public readonly rowSelectionFeature: RowSelectionFeatureController<TRowData>;
 	public readonly dataMutation: DataMutationController<TRowData>;
 	public readonly stateFeature: GridStateFeatureController<TRowData>;
 	private readonly formulas: DagEngine;
 	private readonly spreadsheetFill: SpreadsheetFillEngine<TRowData>;
-	private readonly stateReactions: GridStateReactionController<TRowData>;
+	private readonly projectionPipeline: GridProjectionPipeline<TRowData>;
+	public readonly capabilityManager: GridCapabilityManager<TRowData>;
+	public readonly insights: GridInsightRegistry;
+	public dataIntegrity: GridDataIntegrityManager<TRowData> | null = null;
+
+	// Lazy api ref — set by store after api object is created
+	private _apiRef: import('../api/GridApi.js').GridApi<TRowData> | null = null;
+	public setApiRef(api: import('../api/GridApi.js').GridApi<TRowData>): void {
+		this._apiRef = api;
+	}
+
+	private getDistinctValueSourceNodes(): RowNode<TRowData>[] {
+		return asAllDataNodesCapableRowModel(this.rowModel)?.getAllDataNodes() ?? [];
+	}
 
 	private rowModel: RowModel<TRowData> | null = null;
 
 	public geometryVersion = 0;
 	public rowModelVersion = 0;
 	public columnVersion = 0;
+	public selectionVersion = 0;
+	public editingVersion = 0;
+	public filteringVersion = 0;
+	public sortingVersion = 0;
 
-	private readonly domainVersionListeners = new Set<(v: GridDomainVersions) => void>();
+	/** Active instrumentation sink. Defaults to noop; call setInstrumentation() to swap in a recording sink. */
+	public instrumentation: GridInstrumentation = NOOP_INSTRUMENTATION;
+
+	public setInstrumentation(inst: GridInstrumentation): void {
+		this.instrumentation = inst;
+		this.stateManager.instrumentation = inst;
+	}
+
+	private readonly domainSubscriptions: GridDomainSubscriptionHub;
 
 	/** Returns a snapshot of all formal domain version counters. */
 	public getDomainVersions(): GridDomainVersions {
@@ -92,27 +154,68 @@ export class GridEngine<TRowData = unknown> {
 			columns: this.columnVersion,
 			rows: this.rowModelVersion,
 			geometry: this.geometryVersion,
-			selection: 0,
-			editing: 0,
+			selection: this.selectionVersion,
+			editing: this.editingVersion,
+			filtering: this.filteringVersion,
+			sorting: this.sortingVersion,
 			styling: 0,
 		};
 	}
 
-	/** Subscribes to domain version changes. The listener is called once per committed
-	 *  logical mutation in any domain. Returns an unsubscribe function. */
+	/** Subscribes to domain version changes. Returns an unsubscribe function. */
 	public subscribeToDomainVersions(listener: (v: GridDomainVersions) => void): () => void {
-		this.domainVersionListeners.add(listener);
-		return () => this.domainVersionListeners.delete(listener);
+		return this.domainSubscriptions.subscribeToDomainVersions(listener);
 	}
 
-	private notifyDomainVersionListeners(): void {
-		const v = this.getDomainVersions();
-		this.domainVersionListeners.forEach((l) => l(v));
+	/** Subscribes to version increments for a single domain. Returns an unsubscribe function. */
+	public subscribeDomain(domain: keyof GridDomainVersions, listener: (version: number) => void): () => void {
+		return this.domainSubscriptions.subscribeDomain(domain, listener);
 	}
 
-	// Per-row version map: rowId → version, bumped on each row data mutation.
-	// Keyed directly on the engine (not in GridState) so updates are zero-allocation.
+	private notifyDomainVersionListeners(domains?: readonly (keyof GridDomainVersions)[]): void {
+		if (domains) this.domainSubscriptions.publish(domains);
+	}
+
+	public incrementDomain(domain: keyof GridDomainVersions): void {
+		this.publishDomains([domain]);
+	}
+
+	public publishDomains(domains: readonly (keyof GridDomainVersions)[]): void {
+		if (domains.length === 0) return;
+		const uniqueDomains = Array.from(new Set(domains));
+		for (const domain of uniqueDomains) {
+			switch (domain) {
+				case 'columns':
+					this.columnVersion++;
+					break;
+				case 'rows':
+					this.rowModelVersion++;
+					break;
+				case 'geometry':
+					this.geometryVersion++;
+					break;
+				case 'selection':
+					this.selectionVersion++;
+					break;
+				case 'editing':
+					this.editingVersion++;
+					break;
+				case 'filtering':
+					this.filteringVersion++;
+					break;
+				case 'sorting':
+					this.sortingVersion++;
+					break;
+				case 'styling':
+					break;
+			}
+		}
+		this.notifyDomainVersionListeners(uniqueDomains);
+	}
+
+	// Per-row version map for zero-allocation mutation tracking.
 	public readonly rowVersions = new Map<string, number>();
+	public readonly cellDisplaySnapshots = new CellDisplaySnapshotStore();
 
 	private _scrollStateProvider: { isScrolling(): boolean; phase: string } | null = null;
 
@@ -138,6 +241,7 @@ export class GridEngine<TRowData = unknown> {
 	public customRendererWarmMisses = 0;
 
 	private readonly cellNotifications: CellNotificationController<TRowData>;
+	private readonly renderBridge: GridEngineRenderBridge<TRowData>;
 	private renderTransactionDepth = 0;
 	private pendingRenderReason: string | null = null;
 
@@ -152,10 +256,11 @@ export class GridEngine<TRowData = unknown> {
 		this.eventBus.setRuntimeFaultReporter(this.runtimeFaults);
 		this.commandHistory = new CommandHistory(this.runtimeFaults);
 		this.invalidation = new InvalidationManager();
+		this.insights = new GridInsightRegistry();
+		this.domainSubscriptions = new GridDomainSubscriptionHub({ getDomainVersions: () => this.getDomainVersions() });
 		this.formulas = new DagEngine();
 		this.spreadsheetFill = new SpreadsheetFillEngine(this);
 
-		// Construct sub-models
 		this.geometry = new GeometryModel();
 		this.data = new DataModel<TRowData>({
 			getState: () => this.stateManager.getState(),
@@ -208,38 +313,22 @@ export class GridEngine<TRowData = unknown> {
 			rowVersions: this.rowVersions,
 			faultReporter: this.runtimeFaults,
 		});
-		this.stateReactions = new GridStateReactionController<TRowData>({
-			getStateManager: () => this.stateManager,
+		this.projectionPipeline = new GridProjectionPipeline<TRowData>({
 			data: this.data,
 			columns: this.columns,
 			geometry: this.geometry,
 			viewport: this.viewport,
 			selection: this.selection,
-			invalidation: this.invalidation,
-			eventBus: this.eventBus,
 			cellNotifications: this.cellNotifications,
 			getRowModel: () => this.rowModel,
 			getRowHeightsList: (rowModel, rowHeightsRecord, defaultRowHeight) => this.getRowHeightsList(rowModel, rowHeightsRecord, defaultRowHeight),
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
-			requestRender: (reason) => this.requestRender(reason),
-			incrementColumnVersion: () => {
-				this.columnVersion++;
-				this.notifyDomainVersionListeners();
-			},
-			incrementGeometryVersion: () => {
-				this.geometryVersion++;
-				this.notifyDomainVersionListeners();
-			},
-			incrementRowModelVersion: () => {
-				this.rowModelVersion++;
-				this.notifyDomainVersionListeners();
-			},
 		});
 
 		const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');
 
 		// Set initial state
-		const initialState: GridState<TRowData> = {
+		const initialState: InternalGridState<TRowData> = {
 			columns: config.columns || [],
 			selection: initialSelection,
 			selectedRowIds: config.selectedRowIds ?? [],
@@ -252,6 +341,7 @@ export class GridEngine<TRowData = unknown> {
 			activeEdit: config.activeEdit || null,
 			sortModel: config.sortModel || null,
 			filterModel: config.filterModel || null,
+			queryModel: config.queryModel || null,
 			themeName: config.themeName ?? 'dark',
 			globalVersion: 0,
 			visibleRowRange: { startIdx: 0, endIdx: 0 },
@@ -281,25 +371,53 @@ export class GridEngine<TRowData = unknown> {
 			colBuffer: config.colBuffer ?? 2,
 			runtimeLimits: config.runtimeLimits,
 			overscanAdaptive: config.overscanAdaptive,
+			integrity: _createEmptyIntegrityState<TRowData>(),
 		};
 
-		// Construct StateManager with coordinate state update bridging
-		this.stateManager = new StateManager<TRowData>(initialState, this.stateReactions.handleStateChanges, this.runtimeFaults);
+		this.stateManager = new StateManager<TRowData>(initialState, undefined, this.runtimeFaults, this.instrumentation);
+		this.renderBridge = new GridEngineRenderBridge<TRowData>({
+			stateManager: this.stateManager,
+			commandHistory: this.commandHistory,
+			cellNotifications: this.cellNotifications,
+			requestRender: (reason) => this.requestRender(reason),
+			beginRenderTransaction: () => this.beginRenderTransaction(),
+			endRenderTransaction: () => this.endRenderTransaction(),
+		});
 
-		// Initialize changeApplier after stateManager is available
-		this.changeApplier = new GridChangeApplier<TRowData>({
+		const capCfg = config.capabilities ?? (config.canPerformAction ? { canPerformAction: config.canPerformAction } : {});
+		this.capabilityManager = new GridCapabilityManager<TRowData>(
+			capCfg,
+			() => this.stateManager.getState().columns,
+			(rowId) => this.rowModel?.getRawRowById(rowId) ?? null
+		);
+
+		this.changeApplier = new GridCommitKernel<TRowData>({
 			stateManager: this.stateManager,
 			invalidation: this.invalidation,
 			eventBus: this.eventBus,
 			commandHistory: this.commandHistory,
 			requestRender: (reason) => this.requestRender(reason),
+			commitContext: {
+				getState: () => this.stateManager.getState(),
+				getRowModel: () => this.rowModel,
+				getCellValue: (rowId, colField) => this.data.getCellValue(rowId, colField),
+				getRawCellValue: (rowId, colField) => this.data.getRawCellValue(rowId, colField),
+				getStoredCellValue: (rowId, colField) => this.data.getStoredCellValue(rowId, colField),
+				getColumnDef: (colField) => this.columns.getColumnDef(colField),
+				applyCellValueChange: (rowId, colField, value, options) => this.dataMutation.applyCellValueChange(rowId, colField, value, options),
+				applyStructuralWriteEffects: (writeResult) => this.dataMutation.applyStructuralWriteEffects(writeResult),
+				publishCommittedCellChanges: (changes) => this.publishCommittedCellChanges(changes),
+			},
+			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TRowData>(),
+			publishDomains: (domains) => this.publishDomains(domains),
+			projectStateChange: (phase) => this.projectionPipeline.run({ phase }),
+			faultReporter: this.runtimeFaults,
 		});
 
-		// Initialize feature controllers (columns model will be linked after sub-models init)
 		const featureContext = {
 			columns: this.columns,
 			getState: () => this.stateManager.getState(),
-			applyChange: (change: import('./GridChangeApplier.js').GridChange<TRowData>) => this.changeApplier.apply(change),
+			applyChange: (change: import('./GridChangeApplier.js').GridCommit<TRowData>) => this.changeApplier.commit(change),
 		};
 		this.columnFeature = new ColumnFeatureController<TRowData>(featureContext);
 		this.columnAutoSize = new ColumnAutoSizeController<TRowData>({
@@ -320,86 +438,312 @@ export class GridEngine<TRowData = unknown> {
 			getRawRowById: (rowId) => this.rowModel?.getRawRowById(rowId) ?? null,
 			batchCellValues: (updates, source) => this.batchCellValues(updates, source),
 			dispatchEvent: (type, payload) => this.eventBus.dispatchEvent(type, payload),
+			validateWriteProposal: (updates, source) => this.dataIntegrity?.validateWriteProposal(updates, source) ?? Promise.resolve([]),
+			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.groupingFeature = new GroupingFeatureController<TRowData>({
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
 			invalidation: this.invalidation,
-		});
-		this.validationFeature = new ValidationManager<TRowData>({
-			ctx: featureContext,
-			getRowModel: () => this.rowModel,
-			data: this.data,
-			rowValidator: config.rowValidator,
+			requestRender: (reason) => this.requestRender(reason),
+			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.editingFeature = new EditingFeatureController<TRowData>({
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
 			data: this.data,
 			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
-			setCellValue: (rowId, colField, value, undoable) => this.setCellValue(rowId, colField, value, undoable),
-			clearValidationError: (rowId, colField) => this.validationFeature._setCellError(rowId, colField, null),
-			setValidationError: (rowId, colField, error) => this.validationFeature._setCellError(rowId, colField, error),
-			validateCellPostCommit: (rowId, colField) => this.validationFeature.validateCell(rowId, colField).then(() => undefined),
+			validateCommittedCells: (cells, source) => this.dataIntegrity?.validateCommittedCells(cells, source) ?? Promise.resolve(),
+			validateWriteProposal: (updates, source) => this.dataIntegrity?.validateWriteProposal(updates, source) ?? Promise.resolve([]),
+			checkCapability: (action, p) => this.capabilityManager.can(action, p),
+			dispatchEvent: (type, payload) => this.eventBus.dispatchEvent(type, payload),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
 		this.stateFeature = new GridStateFeatureController<TRowData>({
 			stateManager: this.stateManager,
-			invalidation: this.invalidation,
-			commandHistory: this.commandHistory,
-			eventBus: this.eventBus,
-			requestRender: (reason) => this.requestRender(reason),
+			applyChange: (change) => this.changeApplier.commit(change),
+			getRowModel: () => this.rowModel,
+			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 		});
 		this.dataMutation = new DataMutationController<TRowData>({
 			data: this.data,
 			columns: this.columns,
-			commandHistory: this.commandHistory,
-			eventBus: this.eventBus,
 			getRowModel: () => this.rowModel,
 			syncFormulaForCell: (rowId, colField, value) => this.syncFormulaForCell(rowId, colField, value),
 			invalidateFormulaCell: (rowId, colField) => this.invalidateFormulaCell(rowId, colField),
-			getBatchedUpdates: () => this.batchedUpdates,
-			enqueueCellUpdate: (rowId, colField) => this.enqueueCellUpdate(rowId, colField),
-			scheduleBatchFlush: () => this.scheduleBatchFlush(),
-			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
 		});
 
-		// Link sub-models back to this engine context
+		if (config.dataIntegrity) {
+			const diFeatureCtx = {
+				columns: this.columns,
+				getState: () => this.stateManager.getState(),
+				applyChange: (change: import('./GridChangeApplier.js').GridCommit<TRowData>) => this.changeApplier.commit(change),
+			};
+			const modelType = ((config.rowModelConfig as { type?: string } | undefined)?.type ?? 'client') as GridIntegrityRowModelKind;
+			const rowProvider = createGridIntegrityRowProvider<TRowData>({
+				getRowModel: () => this.rowModel,
+				getState: () => this.stateManager.getState(),
+				rowModelKind: modelType,
+			});
+
+			this.dataIntegrity = new GridDataIntegrityManager<TRowData>(config.dataIntegrity, {
+				ctx: diFeatureCtx,
+				data: this.data,
+				getRowModel: () => this.rowModel,
+				getApi: () => this._apiRef!,
+				scheduler: defaultGridScheduler,
+				rowProvider,
+				capabilityManager: this.capabilityManager,
+				commitCells: (updates) => this.batchCellValues(updates as import('../api/GridApi.js').BatchCellValueUpdate[], 'api'),
+				applyRowPatch: (rowId, patch) => {
+					const row = this.rowModel?.getRawRowById(rowId);
+					if (!row) {
+						return {
+							status: 'rejected',
+							reason: 'row unavailable in current row-model scope',
+						} as const;
+					}
+					const updated = { ...row, ...patch };
+					return this.toGridWriteResult(
+						this.changeApplier.commit({
+							reason: 'rows:apply-transaction',
+							domainMutations: [{ kind: 'row-transaction', transaction: { update: [updated] } }],
+						})
+					);
+				},
+				requestIntegrityRepaint: (request) => {
+					if (request.cells && request.cells.length > 0) {
+						for (const { rowId, colField } of request.cells) {
+							this.notifyCellChange(rowId, colField);
+						}
+					} else {
+						this.requestInsightRepaint();
+					}
+				},
+			});
+			this.insights.register(this.dataIntegrity);
+		}
+
 		this.viewport.init(this);
 		this.geometry.init();
 		this.selection.init();
 		this.edit.init();
 
-		// Setup columns if they are passed in config
 		if (config.columns) {
 			this.columns.updateColumns(config.columns, config.columnWidths || {}, config.defaultColWidth);
 		}
 	}
 
 	public setData(payload: { columns?: ColumnDef<TRowData>[]; defaultColWidth?: number; defaultRowHeight?: number }): void {
-		this.stateManager.setState((state) => ({
-			...state,
-			...payload,
-		}));
-		this.invalidation.invalidateFull('set data');
-		this.requestRender('set data');
+		const domains: Array<keyof GridDomainVersions> = [];
+		if (payload.columns !== undefined || payload.defaultColWidth !== undefined) domains.push('columns');
+		if (payload.defaultRowHeight !== undefined) domains.push('geometry');
+		this.changeApplier.apply({
+			reason: 'columns:set-data',
+			state: (state) => ({ ...state, ...payload }),
+			invalidations: [{ kind: 'full', reason: 'set data' }],
+			domains,
+			requestRender: true,
+		});
 		this.commandHistory.clear();
 	}
 
-	public getState(): GridState<TRowData> {
+	public getState(): InternalGridState<TRowData> {
 		return this.stateManager.getState();
 	}
 
-	public setState(updater: GridStateUpdater<TRowData>): void {
-		this.stateManager.setState(updater);
+	public initializeRowModelState(model: {
+		columns?: InternalGridState<TRowData>['columns'];
+		getRowId?: ((row: TRowData) => string) | undefined;
+	}): void {
+		const nextState: Partial<InternalGridState<TRowData>> = {};
+		if (model.columns) nextState.columns = model.columns;
+		if (model.getRowId !== undefined) nextState.getRowId = model.getRowId;
+		if (Object.keys(nextState).length === 0) return;
+		this.changeApplier.apply({
+			reason: 'rows:initialize-model',
+			state: nextState,
+			requestRender: false,
+		});
+	}
+
+	public bumpRowModelGlobalVersion(): void {
+		this.changeApplier.apply({
+			reason: 'rows:bump-global-version',
+			state: (state) => ({ globalVersion: state.globalVersion + 1 }),
+			domains: ['rows'],
+			requestRender: false,
+		});
+	}
+
+	public applyRowModelRefreshInvalidation(
+		refreshResult: RowModelRefreshResult | void,
+		options: {
+			invalidationReason: GridInvalidationReason;
+			requestRenderReason?: string;
+			includeHeaders?: boolean;
+			includeOverlay?: boolean;
+			groupId?: string;
+		}
+	): void {
+		const changed = refreshResult?.changed === true;
+		if (!changed && !options.includeHeaders && !options.includeOverlay) return;
+
+		const reason = options.invalidationReason;
+		const targetGroupId = refreshResult?.groupId ?? options.groupId;
+		if (targetGroupId) {
+			this.invalidation.invalidateGroup(targetGroupId, reason);
+		}
+		if (refreshResult?.changedStartIndex !== undefined && refreshResult.changedEndIndex !== undefined) {
+			this.invalidation.invalidateRowRange(refreshResult.changedStartIndex, refreshResult.changedEndIndex, reason);
+		}
+		if (refreshResult && refreshResult.previousRowCount !== refreshResult.nextRowCount) {
+			this.invalidation.invalidateGeometry(reason);
+		}
+		if (changed) {
+			this.invalidation.invalidateViewport(reason);
+		}
+		if (options.includeHeaders) {
+			this.invalidation.invalidateHeaders(reason);
+		}
+		if (options.includeOverlay) {
+			this.invalidation.invalidateOverlay(reason);
+		}
+		this.requestRender(options.requestRenderReason ?? String(reason));
+	}
+
+	public getManagedRowDragPolicy(): ManagedRowDragPolicyResult {
+		const state = this.stateManager.getState();
+		if (!asRowOrderCapableModel(this.rowModel)) {
+			return {
+				allowed: false,
+				reason: 'unsupported-row-model',
+				message: 'Managed row drag requires a client row model with row-order support.',
+			};
+		}
+		if (state.sortModel && state.sortModel.length > 0) {
+			return {
+				allowed: false,
+				reason: 'sort-active',
+				message: 'Managed row drag is blocked while sort is active.',
+			};
+		}
+		if (state.filterModel && Object.keys(state.filterModel).length > 0) {
+			return {
+				allowed: false,
+				reason: 'filter-active',
+				message: 'Managed row drag is blocked while filters are active.',
+			};
+		}
+		if ((state.groupBy?.length ?? 0) > 0) {
+			return {
+				allowed: false,
+				reason: 'group-active',
+				message: 'Managed row drag is blocked while grouping is active.',
+			};
+		}
+		if (state.getParentId) {
+			return {
+				allowed: false,
+				reason: 'tree-active',
+				message: 'Managed row drag is blocked while tree data is active.',
+			};
+		}
+		if (state.pagination) {
+			return {
+				allowed: false,
+				reason: 'pagination-active',
+				message: 'Managed row drag is blocked while pagination is active.',
+			};
+		}
+		return { allowed: true };
+	}
+
+	public setRowOrder(rowIds: string[], emitEvent = true, reason: 'rows:set-order' | 'rows:drag-reorder' = 'rows:set-order'): GridWriteResult {
+		return this.toGridWriteResult(
+			this.changeApplier.commit({
+				reason,
+				domainMutations: [{ kind: 'row-order', rowIds, emitEvent, reason }],
+			})
+		);
+	}
+
+	public applyTransaction(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null {
+		const execution = this.changeApplier.commitDetailed({
+			reason: 'rows:apply-transaction',
+			domainMutations: [{ kind: 'row-transaction', transaction }],
+		});
+		const result = execution.appliedMutations[0]?.result as RowNodeTransaction<TRowData> | undefined;
+		return result ?? null;
+	}
+
+	public replaceRows(rows: readonly TRowData[]): GridWriteResult {
+		return this.toGridWriteResult(this.changeApplier.commit({ reason: 'rows:replace', domainMutations: [{ kind: 'replace-rows', rows }] }));
+	}
+
+	public updateRows(updater: (rows: TRowData[]) => TRowData[]): GridWriteResult {
+		return this.toGridWriteResult(this.changeApplier.commit({ reason: 'rows:update', domainMutations: [{ kind: 'batch-row-update', updater }] }));
+	}
+
+	public updateExpansionState(updater: (expansion: InternalGridState<TRowData>['expansion']) => InternalGridState<TRowData>['expansion']): void {
+		this.changeApplier.apply({
+			reason: 'rows:update-expansion',
+			state: (state) => ({ expansion: updater(state.expansion) }),
+			requestRender: false,
+		});
+	}
+
+	public setRowModelLoadingState(loading: boolean): void {
+		this.changeApplier.apply({
+			reason: 'rows:set-loading-state',
+			state: (state) => ({ loading, globalVersion: state.globalVersion + 1 }),
+			invalidations: [{ kind: 'viewport', reason: 'loading' }],
+			domains: ['rows', 'geometry'],
+			requestRender: true,
+		});
+	}
+
+	public setServerPaginationState(payload: NonNullable<InternalGridState<TRowData>['serverPagination']>): void {
+		this.changeApplier.apply({
+			reason: 'rows:set-server-pagination',
+			state: { serverPagination: payload },
+			requestRender: false,
+		});
+	}
+
+	public setServerPageState(state: NonNullable<InternalGridState<TRowData>['serverPage']>): void {
+		this.changeApplier.apply({
+			reason: 'rows:set-server-page',
+			state: { serverPage: state },
+			requestRender: false,
+		});
+	}
+
+	public setVisibleRanges(
+		visibleRowRange: InternalGridState<TRowData>['visibleRowRange'],
+		visibleColRange: InternalGridState<TRowData>['visibleColRange']
+	): void {
+		this.changeApplier.apply({
+			reason: 'viewport:set-visible-ranges',
+			state: { visibleRowRange, visibleColRange },
+			invalidations: [{ kind: 'viewport', reason: 'viewport' }],
+			requestRender: true,
+		});
 	}
 
 	public subscribe(listener: Listener<TRowData>): () => void {
 		return this.stateManager.subscribe(listener);
 	}
-
 	public subscribeToKey(key: string, listener: Listener<TRowData>): () => void {
 		return this.stateManager.subscribeToKey(key, listener);
+	}
+	public subscribeToSelector<TValue>(
+		keys: readonly string[],
+		selector: (state: import('../state/GridState.js').InternalGridState<TRowData>) => TValue,
+		listener: (value: TValue) => void,
+		isEqual?: (left: TValue, right: TValue) => boolean
+	): () => void {
+		return this.stateManager.subscribeToSelector(keys, selector, listener, isEqual);
 	}
 
 	public addEventListener<K extends keyof GridEventPayloadMap<TRowData>>(
@@ -416,86 +760,69 @@ export class GridEngine<TRowData = unknown> {
 	public getRowId(row: TRowData): string {
 		return this.data.getRowId(row);
 	}
-
 	public isRowLoading(rowId: string): boolean {
 		return this.data.isRowLoading(rowId);
 	}
-
 	public getCellDisplayValue(rowId: string, colField: string): unknown {
 		return this.data.getCellValue(rowId, colField);
 	}
-
 	public getCachedDisplayValue(rowId: string, colField: string): string | undefined {
 		return this.data.getCachedDisplayValue(rowId, colField);
 	}
-
+	public primeDisplayValue(rowId: string, colField: string): string | undefined {
+		return this.data.primeDisplayValue(rowId, colField);
+	}
+	public getCellDisplaySnapshot(rowId: string, colField: string): CellDisplaySnapshot | undefined {
+		return this.cellDisplaySnapshots.get(rowId, colField);
+	}
 	public getCheapDisplayValue(rowId: string, colField: string): string {
 		return this.data.getCheapDisplayValue(rowId, colField);
 	}
-
 	public getComputedCellValue(rowId: string, colField: string): unknown {
 		return this.data.getComputedCellValue(rowId, colField);
 	}
-
 	public getRawCellValue(rowId: string, colField: string): unknown {
 		return this.data.getRawCellValue(rowId, colField);
 	}
-
 	public getDisplayedColumns(): ColumnDef<TRowData>[] {
 		return this.columns.getDisplayedColumns().slice();
 	}
-
 	public getPinnedColumns(): { left: number; right: number } {
-		return {
-			left: this.viewport.pinLeftColumns,
-			right: this.viewport.pinRightColumns,
-		};
+		return { left: this.viewport.pinLeftColumns, right: this.viewport.pinRightColumns };
 	}
-
 	public getColumnIndex(colField: string): number {
 		return this.columns.getColumnIndex(colField);
 	}
-
 	public getColumnField(colIndex: number): string | null {
 		return this.columns.getColumnField(colIndex);
 	}
-
 	public getColumnDef(colField: string): ColumnDef<TRowData> | undefined {
 		return this.columns.getColumnDef(colField);
 	}
-
 	public getValueGetterDependents(colField: string): string[] {
 		return this.columns.getValueGetterDependents(colField);
 	}
-
 	public hasValueGetter(colField: string): boolean {
 		return this.columns.hasValueGetter(colField);
 	}
-
 	public getCompiledPlanVersion(): number {
 		return this.columns.getCompiledPlanVersion();
 	}
-
 	public isScrollingFast(): boolean {
 		return this.viewport.isScrollingFast;
 	}
-
 	public getScrollVelocity(): { vx: number; vy: number } {
 		return this.viewport.getVelocity();
 	}
-
 	public getRowOverscanPx(): number {
 		return this.stateFeature.getRowOverscanPx();
 	}
-
 	public setRowOverscanPx(px: number): void {
 		this.stateFeature.setRowOverscanPx(px);
 	}
-
 	public getColBuffer(): number {
 		return this.stateFeature.getColBuffer();
 	}
-
 	public setColBuffer(colBuffer: number): void {
 		this.stateFeature.setColBuffer(colBuffer);
 	}
@@ -507,15 +834,12 @@ export class GridEngine<TRowData = unknown> {
 	public resizeColumn(colField: string, width: number, undoable = true): void {
 		this.columnFeature.resizeColumn(colField, width, undoable);
 	}
-
 	public autoSizeColumn(colField: string, opts?: AutoSizeColumnOptions): void {
 		this.columnAutoSize.autoSizeColumn(colField, opts);
 	}
-
 	public autoSizeAllColumns(opts?: AutoSizeAllColumnsOptions): void {
 		this.columnAutoSize.autoSizeAllColumns(opts);
 	}
-
 	public copySelectedRange(): Promise<void> {
 		return this.clipboard.copySelectedRange();
 	}
@@ -526,75 +850,167 @@ export class GridEngine<TRowData = unknown> {
 		return this.clipboard.copyRange(minRow, maxRow, minCol, maxCol);
 	}
 	public getColumnDistinctValues(colField: string): (string | number | null)[] {
-		return computeDistinctValues(this.rowModel?.getAllDataNodes?.() ?? [], colField);
+		return [...this.getColumnDistinctValueSummary(colField).values];
 	}
-
+	public getColumnDistinctValueSummary(colField: string): GridDistinctValueSummary {
+		return computeDistinctValueSummary(this.getDistinctValueSourceNodes(), colField, {
+			maxValues: this.stateManager.getState().runtimeLimits?.maxFilterDistinctValues,
+		});
+	}
 	public moveColumn(colField: string, toIndex: number): void {
 		this.columnFeature.moveColumn(colField, toIndex);
 	}
-
 	public setColumnOrderByFields(colFields: string[]): void {
 		this.columnFeature.setColumnOrderByFields(colFields);
 	}
-
 	public setColumnReorderEnabled(enabled: boolean): void {
 		this.columnFeature.setColumnReorderEnabled(enabled);
 	}
-
-	public setStyleRules(styleRules: GridState<TRowData>['styleRules']): void {
+	public setStyleRules(styleRules: InternalGridState<TRowData>['styleRules']): void {
 		this.stateFeature.setStyleRules(styleRules);
 	}
-
+	public setShowFloatingFilters(enabled: boolean): void {
+		this.stateFeature.setShowFloatingFilters(enabled);
+	}
+	public setShowFilterChipBar(enabled: boolean): void {
+		this.stateFeature.setShowFilterChipBar(enabled);
+	}
+	public setSidebarOpenPanel(panelId: string | null): void {
+		this.stateFeature.setSidebarOpenPanel(panelId);
+	}
+	public setChartOpen(chartOpen: boolean): void {
+		this.stateFeature.setChartOpen(chartOpen);
+	}
+	public setThemeName(themeName: InternalGridState<TRowData>['themeName']): void {
+		this.stateFeature.setThemeName(themeName);
+	}
 	public resizeRow(rowId: string, height: number, undoable = true): void {
 		this.stateFeature.resizeRow(rowId, height, undoable);
 	}
-
+	public setRowHeights(rowHeights: Record<string, number>): void {
+		this.stateFeature.setRowHeights(rowHeights);
+	}
+	public setDefaultRowHeight(defaultRowHeight: number): void {
+		this.stateFeature.setDefaultRowHeight(defaultRowHeight);
+	}
 	public setSortModel(sortModel: SortModel | null, undoable = true): void {
 		this.stateFeature.setSortModel(sortModel, undoable);
 	}
-
 	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
 		this.stateFeature.setFilterModel(filterModel, undoable);
+	}
+	public setQueryModel(queryModel: GridQueryModel | null): void {
+		this.stateFeature.setQueryModel(queryModel);
+	}
+	public setPaginationPage(page: number, metrics?: { pageCount: number; totalRows: number }): void {
+		this.stateFeature.setPaginationPage(page, metrics);
+	}
+	public setPinnedColumnsState(left: number, right: number): void {
+		this.changeApplier.apply({
+			reason: 'columns:set-pinned-counts',
+			state: { pinnedColumns: { left, right } },
+			invalidations: [
+				{ kind: 'geometry', reason: 'pin' },
+				{ kind: 'viewport', reason: 'pin' },
+				{ kind: 'headers', reason: 'pin' },
+			],
+			domains: ['columns', 'geometry'],
+			requestRender: true,
+		});
 	}
 
 	public setGroupBy(colIds: string[]): void {
 		this.groupingFeature.setGroupBy(colIds);
 	}
-
 	public addGroupBy(colId: string, atIndex?: number): void {
 		this.groupingFeature.addGroupBy(colId, atIndex);
 	}
-
 	public removeGroupBy(colId: string): void {
 		this.groupingFeature.removeGroupBy(colId);
 	}
-
 	public moveGroupBy(colId: string, toIndex: number): void {
 		this.groupingFeature.moveGroupBy(colId, toIndex);
 	}
-
 	public setShowGroupPanel(enabled: boolean): void {
 		this.groupingFeature.setShowGroupPanel(enabled);
 	}
-
 	public setAggDefs(defs: import('../rows/stages/aggregateStage.js').AggregationDef<TRowData>[]): void {
 		this.groupingFeature.setAggDefs(defs);
 	}
-
 	public setShowGroupFooter(enabled: boolean): void {
 		this.groupingFeature.setShowGroupFooter(enabled);
 	}
-
 	public setStickyGroupRows(enabled: boolean): void {
 		this.groupingFeature.setStickyGroupRows(enabled);
 	}
+	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): GridWriteResult {
+		const validationFailure = this.validateWriteProposalSync([{ rowId, colField, proposedValue: value }], 'api');
+		if (validationFailure) return validationFailure;
 
-	public setCellValue(rowId: string, colField: string, value: unknown, undoable = true): void {
-		this.dataMutation.applyCellValueChange(rowId, colField, value, { undoable });
+		const execution = this.changeApplier.commitDetailed({
+			reason: 'data:set-cell-value',
+			domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }],
+		});
+		this.scheduleAutoValidationForCommittedWrites(this.collectCommittedWriteCells(execution.appliedMutations), 'api');
+		return this.toGridWriteResult(execution.result);
 	}
 
-	public batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill' = 'api'): void {
-		this.dataMutation.applyBatchCellValues(updates, { undoable: true, source });
+	public async setCellValueAsync(rowId: string, colField: string, value: unknown, undoable = true): Promise<GridWriteResult> {
+		const validationFailure = await this.validateWriteProposalAsync([{ rowId, colField, proposedValue: value }], 'api');
+		if (validationFailure) return validationFailure;
+		const execution = this.changeApplier.commitDetailed({
+			reason: 'data:set-cell-value',
+			domainMutations: [{ kind: 'cell-value', rowId, colField, value, undoable, source: 'api' }],
+		});
+		this.scheduleAutoValidationForCommittedWrites(this.collectCommittedWriteCells(execution.appliedMutations), 'api');
+		return this.toGridWriteResult(execution.result);
+	}
+
+	public batchCellValues(
+		updates: { rowId: string; colField: string; value: unknown }[],
+		source: 'paste' | 'api' | 'fill' = 'api'
+	): GridWriteResult {
+		const validationFailure = this.validateWriteProposalSync(
+			updates.map((update) => ({ rowId: update.rowId, colField: update.colField, proposedValue: update.value })),
+			source
+		);
+		if (validationFailure) return validationFailure;
+
+		const execution = this.changeApplier.commitDetailed({
+			reason: 'data:batch-cell-values',
+			domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }],
+		});
+		this.scheduleAutoValidationForCommittedWrites(this.collectCommittedWriteCells(execution.appliedMutations), source);
+		return this.toGridWriteResult(execution.result);
+	}
+
+	public async batchCellValuesAsync(
+		updates: { rowId: string; colField: string; value: unknown }[],
+		source: 'paste' | 'api' | 'fill' = 'api'
+	): Promise<GridWriteResult> {
+		const validationFailure = await this.validateWriteProposalAsync(
+			updates.map((update) => ({ rowId: update.rowId, colField: update.colField, proposedValue: update.value })),
+			source
+		);
+		if (validationFailure) return validationFailure;
+
+		const execution = this.changeApplier.commitDetailed({
+			reason: 'data:batch-cell-values',
+			domainMutations: [{ kind: 'batch-cell', updates, undoable: true, source }],
+		});
+		this.scheduleAutoValidationForCommittedWrites(this.collectCommittedWriteCells(execution.appliedMutations), source);
+		return this.toGridWriteResult(execution.result);
+	}
+
+	public batchStreamCells(updates: readonly { rowId: string; colField: string; value: unknown }[]): void {
+		if (!updates.length) return;
+		this.changeApplier.commit({
+			reason: 'data:stream-cells',
+			domainMutations: [
+				{ kind: 'batch-cell', updates: updates as { rowId: string; colField: string; value: unknown }[], undoable: false, source: 'api' },
+			],
+			historyPolicy: 'suppress',
+		});
 	}
 
 	public startEdit(rowId: string, colField: string): void {
@@ -607,19 +1023,27 @@ export class GridEngine<TRowData = unknown> {
 
 	public registerRowModel(rowModel: RowModel<TRowData>): void {
 		this.rowModel = rowModel;
-		this.rowModelVersion++;
-		this.geometryVersion++;
-		this.notifyDomainVersionListeners();
 		// Refresh coordinates
 		const state = this.stateManager.getState();
 		this.geometry.updateRows(this.getRowHeightsList(rowModel, state.rowHeights, state.defaultRowHeight), state.defaultRowHeight);
-		this.stateManager.setState({ globalVersion: state.globalVersion + 1 });
-		this.invalidation.invalidateGeometry('row model registered');
-		this.invalidation.invalidateFull('row model registered');
-		this.requestRender('row model registered');
+		this.changeApplier.apply({
+			reason: 'rows:register-model',
+			state: { globalVersion: state.globalVersion + 1 },
+			invalidations: [
+				{ kind: 'geometry', reason: 'row model registered' },
+				{ kind: 'full', reason: 'row model registered' },
+			],
+			domains: ['rows', 'geometry'],
+			requestRender: true,
+		});
 	}
 
 	public getRowModel(): RowModel<TRowData> | null {
+		return this.rowModel;
+	}
+
+	/** Renderer-facing row model contract. Renderer paths must use this, not getRowModel(). */
+	public getVisualRowModel(): VisualRowModel<TRowData> | null {
 		return this.rowModel;
 	}
 
@@ -683,51 +1107,47 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public batch = (callback: () => void): void => {
-		this.beginRenderTransaction();
-		this.stateManager.startTransaction();
-		try {
-			callback();
-		} finally {
-			this.stateManager.endTransaction();
-			this.flushCellUpdatesSync();
-			this.endRenderTransaction();
-		}
+		this.renderBridge.batch(callback);
 	};
 
 	public scheduleBatchFlush(): void {
-		this.cellNotifications.scheduleBatchFlush();
+		this.renderBridge.scheduleBatchFlush();
 	}
 
 	public flushCellUpdates(): void {
-		this.cellNotifications.flushCellUpdates();
+		this.renderBridge.flushCellUpdates();
 	}
 
 	public enqueueCellUpdate(rowId: string, colField: string): void {
-		this.cellNotifications.enqueueCellUpdate(rowId, colField);
+		this.renderBridge.enqueueCellUpdate(rowId, colField);
 	}
 
 	public flushCellUpdatesSync(): void {
-		this.cellNotifications.flushCellUpdatesSync();
+		this.renderBridge.flushCellUpdatesSync();
 	}
 
 	public notifyBulkCellChange(changes: Map<string, Set<string>>): void {
-		this.cellNotifications.notifyBulkCellChange(changes);
+		this.renderBridge.notifyBulkCellChange(changes);
 	}
 
-	public notifyCellChange(rowId: string, colField: string): void {
-		this.cellNotifications.notifyCellChange(rowId, colField);
+	public publishCommittedCellChanges(changes: Map<string, Set<string>>): void {
+		this.renderBridge.publishCommittedCellChanges(changes, this.batchedUpdates);
+	}
+
+	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true): void {
+		this.renderBridge.notifyCellChange(rowId, colField, includeRenderInvalidation);
 	}
 
 	public registerCellSubscription = (sub: CellSubscription): void => {
-		this.cellNotifications.registerCellSubscription(sub);
+		this.renderBridge.registerCellSubscription(sub);
 	};
 
 	public unregisterCellSubscription = (sub: CellSubscription): void => {
-		this.cellNotifications.unregisterCellSubscription(sub);
+		this.renderBridge.unregisterCellSubscription(sub);
 	};
 
 	public updateCellSubscription = (sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void => {
-		this.cellNotifications.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
+		this.renderBridge.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
 	};
 
 	// ── Row node selection ─────────────────────────────────────────────────────
@@ -761,6 +1181,7 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	private applySelectionRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'program'): void => {
+		const prevSelection = this.stateManager.getState().selection;
 		const validStart = this.isDataCellSelectable(start) ? start : null;
 		const validEnd = this.isDataCellSelectable(end) ? end : null;
 		if ((start || end) && (!validStart || !validEnd)) {
@@ -768,14 +1189,56 @@ export class GridEngine<TRowData = unknown> {
 			end = validEnd;
 		}
 		const range = start !== null && end !== null ? { start, end } : null;
-		const selection = this.selection.setSelection({
+		const previewSelection = {
 			focus: end,
 			anchor: start,
 			range,
+			bounds: this.selection.calculateRangeBounds(
+				range,
+				(id) => this.rowModel?.getVisualIndexByRowId(id) ?? -1,
+				(field) => this.columns.getColumnIndex(field)
+			),
 			source,
+		};
+		const committedSelection = {
+			focus: end,
+			anchor: start,
+			range,
+			bounds: null,
+			source,
+		};
+		const events: GridCommitEvent<TRowData>[] = [];
+		if (prevSelection.focus !== previewSelection.focus) {
+			events.push({
+				type: GridEventName.focusChanged,
+				payload: (state) => ({ focus: state.selection.focus, selection: state.selection }),
+			});
+		}
+		const selectionChange = this.selection.describeChange(prevSelection, previewSelection, this.rowModel, this.stateManager.getState().columns);
+		events.push({
+			type: GridEventName.selectionChanged,
+			payload: (state) => ({
+				selection: state.selection,
+				result: selectionChange,
+			}),
 		});
-		this.stateManager.setState({
-			selection,
+		const invalidations = [
+			...selectionChange.invalidatedCells.map((cell) => ({
+				kind: 'cell' as const,
+				rowId: cell.rowId,
+				colId: cell.colField,
+				reason: 'selection' as const,
+			})),
+			...selectionChange.invalidatedRows.map((rowId) => ({ kind: 'row' as const, rowId, reason: 'selection' as const })),
+			...(selectionChange.overlayChanged ? ([{ kind: 'overlay' as const, reason: 'selection' as const }] as const) : []),
+			{ kind: 'headers' as const, reason: 'selection' as const },
+		];
+		this.changeApplier.apply({
+			reason: 'selection:set-range',
+			state: { selection: committedSelection },
+			invalidations,
+			domains: ['selection'],
+			events,
 		});
 	};
 
@@ -830,10 +1293,128 @@ export class GridEngine<TRowData = unknown> {
 	public fillRange(source: GridCellRange, target: GridCellRange): void {
 		this.spreadsheetFill.fillRange(source, target);
 	}
+	public fillRangeAsync(source: GridCellRange, target: GridCellRange): Promise<GridWriteResult> {
+		return this.spreadsheetFill.fillRangeAsync(source, target);
+	}
+	/** Request a full repaint triggered by an insight layer decoration change. */
+	public requestInsightRepaint(): void {
+		this.invalidation.invalidateFull('insight-decorations');
+		this.eventBus.dispatchEvent(GridEventName.renderInvalidated, { reason: 'insight-decorations' });
+	}
+
 	public destroy(): void {
+		this.insights.clear();
 		this.cellNotifications.clear();
 		this.eventBus.clear();
 		this.stateManager.destroy();
-		this.domainVersionListeners.clear();
+		this.domainSubscriptions.clear();
 	}
+
+	private toGridWriteResult(result: InternalGridCommitResult): GridWriteResult {
+		switch (result.status) {
+			case 'committed':
+				return {
+					status: 'applied',
+					changeId: result.changeId,
+					faults: result.faults,
+					rejections: this.toGridWriteRejections(result.rejectedMutations),
+				};
+			case 'noop':
+				return { status: 'noop' };
+			case 'rejected':
+				return {
+					status: 'rejected',
+					reason: result.reason,
+					rejections: this.toGridWriteRejections(result.rejections),
+				};
+			case 'failed-before-commit':
+				return { status: 'failed', error: result.fault };
+		}
+	}
+
+	private toGridWriteRejections(rejections: readonly GridMutationRejection[] | undefined): readonly GridWriteRejection[] | undefined {
+		if (!rejections || rejections.length === 0) return undefined;
+		return rejections.map((rejection) => ({
+			mutationKind: rejection.mutationKind,
+			reason: rejection.reason,
+			index: rejection.index,
+		}));
+	}
+
+	private collectCommittedWriteCells(
+		appliedMutations: readonly import('./GridDomainMutation.js').AppliedDomainMutation<TRowData>[]
+	): GridCellPointer[] {
+		const cells: GridCellPointer[] = [];
+		for (const mutation of appliedMutations) {
+			const result = mutation.result as
+				| import('../features/DataMutationController.js').CellValueChangeResult
+				| { committed?: readonly import('../features/DataMutationController.js').CellValueChangeResult[] }
+				| undefined;
+			if (!result) continue;
+			if ('applied' in result) {
+				if (result.applied) cells.push({ rowId: result.rowId, colField: result.colField });
+				continue;
+			}
+			for (const committed of result.committed ?? []) {
+				if (committed.applied) cells.push({ rowId: committed.rowId, colField: committed.colField });
+			}
+		}
+		return cells;
+	}
+
+	private scheduleAutoValidationForCommittedWrites(
+		cells: readonly GridCellPointer[],
+		source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'
+	): void {
+		if (!this.dataIntegrity || cells.length === 0 || !this.dataIntegrity.shouldAutoValidateWrite(source)) return;
+		void this.dataIntegrity.validateCommittedCells(cells, source).catch((error) => {
+			this.runtimeFaults.report({
+				source: 'grid-change',
+				operation: 'auto-validate-committed-writes',
+				error,
+				context: { source, cellCount: cells.length },
+			});
+		});
+	}
+
+	private validateWriteProposalSync(
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'
+	): GridWriteResult | null {
+		if (!this.dataIntegrity || !this.dataIntegrity.shouldPreflightWriteSync(source)) return null;
+		const issues = this.dataIntegrity.validateWriteProposalSync(updates, source);
+		return issues.length > 0 ? this.toValidationFailedWriteResult(issues) : null;
+	}
+
+	private async validateWriteProposalAsync(
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'api' | 'edit' | 'fill' | 'paste' | 'undo' | 'redo'
+	): Promise<GridWriteResult | null> {
+		if (!this.dataIntegrity || !this.dataIntegrity.shouldPreflightWrite(source)) return null;
+		const issues = await this.dataIntegrity.validateWriteProposal(updates, source);
+		return issues.length > 0 ? this.toValidationFailedWriteResult(issues) : null;
+	}
+
+	private toValidationFailedWriteResult(
+		issues: readonly import('../features/dataIntegrity/integrityTypes.js').GridIntegrityIssue[]
+	): GridWriteResult {
+		return {
+			status: 'validationFailed',
+			reason: issues[0]?.message ?? 'blocking validation failed',
+			issues,
+		};
+	}
+}
+
+function _createEmptyIntegrityState<TRowData>(): GridIntegrityState<TRowData> {
+	return {
+		validation: { issues: [], cellErrorIndex: {} },
+		quality: { issues: [] },
+		diff: { model: null, result: null, cellDiffIndex: {} },
+		conflicts: { conflicts: [], cellConflictIndex: {}, resolvedConflicts: 0, lastConflictAt: null },
+		liveStream: { issues: [], session: null },
+		publishedIssues: {},
+		serverReport: null,
+		summary: { status: 'clean', totalIssues: 0, blockingIssues: 0, warnings: 0, errors: 0, bySource: {} },
+	};
 }

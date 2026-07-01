@@ -1,0 +1,299 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$comment": "Machine-readable feature registry. Authoritative for Plans 090–103. Levels: foundation | reference | incubating | deferred. See docs/architecture/core-target.md §6 for definitions.",
+	"features": [
+		{
+			"id": "client-row-model",
+			"name": "Client row model (sort, filter, group, tree)",
+			"level": "foundation",
+			"modules": ["src/rowModel.ts", "src/rows/RowPipeline.ts", "src/rows/stages/"],
+			"apiMethods": ["setData", "applyTransaction", "updateRows", "setSort", "setFilters", "setGrouping", "setTreeData"],
+			"tests": "src/rowModel.*.test.ts",
+			"owner": "ClientRowModelController"
+		},
+		{
+			"id": "column-virtualization",
+			"name": "Column virtualization (pin left, pin right, center lanes)",
+			"level": "foundation",
+			"modules": ["src/models/ColumnModel.ts", "src/renderer/layoutPlan.ts", "src/renderer/layerRegistry.ts"],
+			"apiMethods": ["setColumns", "setColumnWidths", "pinColumn"],
+			"tests": "src/renderer/layoutPlan.test.ts",
+			"owner": "ColumnModel"
+		},
+		{
+			"id": "cell-selection",
+			"name": "Cell selection and keyboard navigation",
+			"level": "foundation",
+			"modules": ["src/models/SelectionModel.ts", "src/navigation.ts"],
+			"apiMethods": ["getSelection", "setSelection", "clearSelection", "focusCell"],
+			"tests": "src/navigation.test.ts",
+			"owner": "SelectionModel"
+		},
+		{
+			"id": "inline-editing",
+			"name": "Inline cell editing",
+			"level": "foundation",
+			"modules": ["src/features/EditingFeatureController.ts", "src/models/EditModel.ts"],
+			"apiMethods": ["startEditing", "stopEditing", "getEditingCell"],
+			"tests": "src/engine/gridFeatureEffects.test.ts",
+			"owner": "EditingFeatureController"
+		},
+		{
+			"id": "virtual-scroll",
+			"name": "Virtual scroll (row + column)",
+			"level": "foundation",
+			"modules": ["src/renderer/renderScrollCoordinator.ts", "src/renderer/scrollEngine.ts"],
+			"apiMethods": ["scrollToRow", "scrollToCell"],
+			"tests": "src/renderer/renderEngine.test.ts",
+			"owner": "RenderScrollCoordinator"
+		},
+		{
+			"id": "column-resize",
+			"name": "Column resize",
+			"level": "foundation",
+			"modules": ["src/features/ColumnFeatureController.ts"],
+			"apiMethods": ["setColumnWidth"],
+			"owner": "ColumnFeatureController"
+		},
+		{
+			"id": "row-geometry",
+			"name": "Row geometry (variable height)",
+			"level": "foundation",
+			"modules": ["src/models/GeometryModel.ts"],
+			"owner": "GeometryModel"
+		},
+		{
+			"id": "frame-coordinator",
+			"name": "Frame coordinator / scheduler",
+			"level": "foundation",
+			"modules": ["src/renderer/frameCoordinator.ts", "src/renderer/gridScheduler.ts"],
+			"owner": "DefaultFrameCoordinator"
+		},
+		{
+			"id": "grid-api",
+			"name": "GridApi public surface",
+			"level": "foundation",
+			"modules": ["src/api/GridApi.ts", "src/store.ts", "src/createGrid.ts"],
+			"owner": "GridStore"
+		},
+		{
+			"id": "grid-events",
+			"name": "GridEvents pub/sub",
+			"level": "foundation",
+			"modules": ["src/api/GridEvents.ts", "src/events/EventBus.ts"],
+			"owner": "EventBus"
+		},
+		{
+			"id": "diagnostics",
+			"name": "Diagnostics / instrumentation",
+			"level": "foundation",
+			"modules": ["src/diagnostics/GridInstrumentation.ts", "src/diagnostics/RuntimeFaultReporter.ts"],
+			"owner": "GridInstrumentation"
+		},
+		{
+			"id": "server-row-model",
+			"name": "Server row model",
+			"level": "reference",
+			"modules": ["src/serverRowModel.ts"],
+			"apiMethods": ["setServerDatasource", "purgeCache", "refreshServerRows"],
+			"owner": "ServerRowModelController"
+		},
+		{
+			"id": "grouping-aggregation",
+			"name": "Grouping and aggregation",
+			"level": "reference",
+			"modules": ["src/features/GroupingFeatureController.ts", "src/rows/stages/aggregateStage.ts", "src/rows/stages/groupStage.ts"],
+			"apiMethods": ["setGrouping", "expandGroup", "collapseGroup", "expandAllGroups", "collapseAllGroups"],
+			"owner": "GroupingFeatureController"
+		},
+		{
+			"id": "pagination",
+			"name": "Pagination (client + server)",
+			"level": "reference",
+			"modules": ["src/rows/pageModel.ts", "src/renderer/paginationBarRenderer.ts"],
+			"apiMethods": ["goToPage"],
+			"owner": "PaginationBarRenderer"
+		},
+		{
+			"id": "column-reorder",
+			"name": "Column reorder (drag)",
+			"level": "reference",
+			"modules": ["src/renderer/columnInteractionController.ts"],
+			"owner": "ColumnInteractionController"
+		},
+		{
+			"id": "row-drag",
+			"name": "Row drag",
+			"level": "reference",
+			"modules": ["src/features/RowDragController.ts"],
+			"owner": "RowDragController"
+		},
+		{
+			"id": "floating-filters",
+			"name": "Floating filters",
+			"level": "reference",
+			"modules": ["src/renderer/floatingFilterRenderer.ts"],
+			"owner": "FloatingFilterRenderer"
+		},
+		{
+			"id": "filter-chip-bar",
+			"name": "Filter chip bar",
+			"level": "reference",
+			"modules": ["src/renderer/filterChipBarRenderer.ts"],
+			"owner": "FilterChipBarRenderer"
+		},
+		{
+			"id": "status-bar",
+			"name": "Status bar",
+			"level": "reference",
+			"modules": ["src/renderer/statusBarRenderer.ts"],
+			"owner": "StatusBarRenderer"
+		},
+		{
+			"id": "context-menu",
+			"name": "Context menu",
+			"level": "reference",
+			"modules": ["src/contextMenu.ts", "src/gridPlugins.ts"],
+			"owner": "registerGridContextMenu"
+		},
+		{
+			"id": "clipboard",
+			"name": "Copy / paste",
+			"level": "reference",
+			"modules": ["src/features/ClipboardController.ts"],
+			"owner": "ClipboardController"
+		},
+		{
+			"id": "csv-export",
+			"name": "CSV export",
+			"level": "reference",
+			"modules": ["src/export/csvExport.ts"],
+			"apiMethods": ["exportCsv"],
+			"owner": "csvExport"
+		},
+		{
+			"id": "state-persistence",
+			"name": "State persistence",
+			"level": "reference",
+			"modules": ["src/persistence/statePersistence.ts"],
+			"apiMethods": ["hasPersistence", "clearPersistedState", "setAutoSave", "saveNow"],
+			"owner": "statePersistence"
+		},
+		{
+			"id": "master-detail",
+			"name": "Master-detail rows",
+			"level": "reference",
+			"modules": ["src/renderer/fullWidthRowRenderer.ts"],
+			"apiMethods": ["expandDetail", "collapseDetail"],
+			"owner": "FullWidthRowRenderer"
+		},
+		{
+			"id": "sticky-groups",
+			"name": "Sticky group rows",
+			"level": "reference",
+			"modules": ["src/renderer/stickyGroupRenderer.ts"],
+			"owner": "StickyGroupRenderer"
+		},
+		{
+			"id": "cell-validation",
+			"name": "Cell validation",
+			"level": "reference",
+			"modules": ["src/features/ValidationManager.ts"],
+			"owner": "ValidationManager"
+		},
+		{
+			"id": "theme-system",
+			"name": "Theme system",
+			"level": "reference",
+			"modules": ["src/renderer/themes.ts"],
+			"apiMethods": [],
+			"notes": "Fully exported and stable; promoted from incubating.",
+			"owner": "ThemeManager"
+		},
+		{
+			"id": "fill-drag",
+			"name": "Fill drag (spreadsheet-style cell range fill)",
+			"level": "incubating",
+			"modules": ["src/renderer/fillDragController.ts"],
+			"notes": "UI interaction works; depends on deferred SpreadsheetFillEngine in GridEngine. Must be decoupled before foundation cut.",
+			"owner": "FillDragController"
+		},
+		{
+			"id": "formula-dag",
+			"name": "Formula / DAG engine",
+			"level": "incubating",
+			"modules": ["src/calculations/dagEngine.ts"],
+			"apiMethods": ["getFormula", "hasFormula", "setFormula", "clearFormula"],
+			"notes": "DagEngine is directly imported by GridEngine — violates foundation isolation invariant. API methods are @experimental. Must be extracted before Plan 097.",
+			"knownCoupling": "src/engine/GridEngine.ts imports src/calculations/dagEngine.ts directly",
+			"owner": "DagEngine"
+		},
+		{
+			"id": "undo-redo",
+			"name": "Undo / redo",
+			"level": "incubating",
+			"modules": ["src/commands/CommandHistory.ts"],
+			"apiMethods": ["undo", "redo", "canUndo", "canRedo"],
+			"notes": "CommandHistory is wired into GridEngine; undo coverage limited to cell edits. API methods are @experimental.",
+			"owner": "CommandHistory"
+		},
+		{
+			"id": "column-auto-size",
+			"name": "Column auto-size",
+			"level": "incubating",
+			"modules": ["src/features/ColumnAutoSizeController.ts"],
+			"apiMethods": ["autoSizeColumn", "autoSizeAllColumns"],
+			"owner": "ColumnAutoSizeController"
+		},
+		{
+			"id": "header-menus",
+			"name": "Header menus",
+			"level": "incubating",
+			"modules": ["src/renderer/headerMenuController.ts"],
+			"apiMethods": ["openPanel", "closePanel", "togglePanel", "getOpenPanel"],
+			"owner": "HeaderMenuController"
+		},
+		{
+			"id": "chart-overlay",
+			"name": "Chart overlay",
+			"level": "incubating",
+			"modules": [],
+			"apiMethods": ["openChart", "closeChart", "toggleChart", "isChartOpen"],
+			"notes": "State stored as GridState fields; no chart renderer in core. API methods are @experimental. Candidate for deletion if no renderer is added before Plan 103.",
+			"owner": "GridStore (stub)"
+		},
+		{
+			"id": "spreadsheet-fill-range",
+			"name": "Spreadsheet fill range (server-side copy-down)",
+			"level": "deferred",
+			"modules": ["src/spreadsheet/fillRange.ts"],
+			"notes": "SpreadsheetFillEngine is directly imported by GridEngine — violates foundation isolation invariant. Must be isolated or removed before Plan 097. Not exported from index.ts.",
+			"knownCoupling": "src/engine/GridEngine.ts imports src/spreadsheet/fillRange.ts directly",
+			"owner": "SpreadsheetFillEngine"
+		}
+	],
+	"alphaFeatureMatrix": [
+		"client-row-model",
+		"column-virtualization",
+		"cell-selection",
+		"inline-editing",
+		"virtual-scroll",
+		"column-resize",
+		"row-geometry",
+		"frame-coordinator",
+		"grid-api",
+		"grid-events",
+		"diagnostics",
+		"server-row-model",
+		"grouping-aggregation",
+		"pagination",
+		"column-reorder",
+		"floating-filters",
+		"filter-chip-bar",
+		"status-bar",
+		"clipboard",
+		"csv-export",
+		"state-persistence",
+		"cell-validation"
+	]
+}

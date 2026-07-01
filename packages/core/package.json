@@ -1,6 +1,6 @@
 {
 	"name": "@open-grid/core",
-	"version": "1.0.0",
+	"version": "0.1.0-alpha.0",
 	"description": "Framework-agnostic high-performance spreadsheet and grid engine core",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -10,6 +10,10 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
+		},
+		"./experimental": {
+			"types": "./dist/experimental.d.ts",
+			"import": "./dist/experimental.js"
 		},
 		"./internal": {
 			"types": "./dist/internal.d.ts",

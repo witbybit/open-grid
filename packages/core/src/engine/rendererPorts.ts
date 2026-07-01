@@ -12,6 +12,8 @@ export interface RendererPort {
 	getStats(): RenderStats;
 	resetStats(): void;
 	getContainer(): HTMLElement | null;
+	scrollCellIntoView(rowId: string, colField: string): void;
+	scrollRowIntoView(rowId: string): void;
 }
 
 /**
@@ -28,7 +30,8 @@ export interface ThemePort {
 
 /**
  * Aggregate of all runtime ports available to the API facade.
- * Ports are supplied during composition; never attached after construction.
+ * Ports are mutable host capability bindings with a headless fallback;
+ * use bindRuntimePorts() / unbindRuntimePorts() to manage the lifecycle.
  */
 export interface GridRuntimePorts {
 	renderer: RendererPort;
@@ -41,6 +44,8 @@ export const headlessRendererPort: RendererPort = {
 	getStats: () => createEmptyRenderStats(),
 	resetStats: () => {},
 	getContainer: () => null,
+	scrollCellIntoView: () => {},
+	scrollRowIntoView: () => {},
 };
 
 /** Default theme port for headless contexts — returns dark theme tokens, accepts but ignores mutations. */
@@ -53,7 +58,18 @@ export const headlessThemePort: ThemePort = {
 	onThemeChange: () => () => {},
 };
 
-/** Convenience factory for a fully headless ports object. */
-export function createHeadlessPorts(): GridRuntimePorts {
-	return { renderer: headlessRendererPort, theme: headlessThemePort };
+/** Stable singleton headless ports object. Avoids allocation on every renderer unmount. */
+export const HEADLESS_PORTS: GridRuntimePorts = { renderer: headlessRendererPort, theme: headlessThemePort };
+
+/** Opaque token returned by a successful bindRuntimePorts(). Captures the binding generation to detect stale host callbacks. */
+export interface RuntimePortBinding {
+	readonly generation: number;
 }
+
+/**
+ * Result of bindRuntimePorts().
+ * ok=false means the current ports are unchanged — the caller must not mount.
+ */
+export type RuntimePortBindResult =
+	| { readonly ok: true; readonly binding: RuntimePortBinding }
+	| { readonly ok: false; readonly reason: 'already-bound' | 'destroyed' };

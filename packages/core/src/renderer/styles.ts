@@ -87,7 +87,7 @@ export const CORE_STYLES = `
     z-index: 10;
   }
 
-  /* ── Exit-animation overlay (Plan 043) ──────────────────────────────────── */
+  /* ── Exit-animation overlay ─────────────────────────────────────────────── */
   /* Sits in the rows' content coordinate space; ghosts carry their own translateY.
      Pointer-inert and above normal rows so fade-outs read on top of rows sliding up. */
   .og-layer-exiting {
@@ -108,46 +108,55 @@ export const CORE_STYLES = `
     pointer-events: none;
   }
 
-  /* ── Floating filter row (Plan 060) ─────────────────────────────────────── */
+  /* ── Floating filter row ────────────────────────────────────────────────── */
 
   /* Wrapper: sticky horizontal stripe, same z-index as the header. */
+  /*
+   * Floating filter wrapper — same flex+sticky model as the header wrapper.
+   * overflow:clip preserves sticky propagation for pin lanes; no left:0 so the
+   * wrapper scrolls horizontally (pin lanes handle their own sticky anchoring).
+   */
   .og-layer-floating-filter-wrapper {
     position: sticky;
     top: 0;
-    left: 0;
     z-index: 11;
     box-sizing: border-box;
     background-color: var(--og-floating-filter-bg, var(--og-header-bg));
     border-bottom: 1px solid var(--og-border-color);
-    overflow: visible;
+    overflow: clip;
   }
 
-  /* Center lane — horizontally scrolls with the scroll viewport transform. */
+  /* Center lane — grows to fill space between pin lanes. */
   .og-layer-floating-filter {
-    position: absolute;
-    top: 0;
-    left: 0;
+    order: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
     height: 100%;
     overflow: hidden;
   }
 
-  /* Left / right pinned lanes — absolutely positioned, always visible. */
+  /* Left / right pin lanes — compositor-sticky, structurally clipped. */
   .og-layer-floating-filter-left,
   .og-layer-floating-filter-right {
-    position: absolute;
-    top: 0;
+    position: sticky;
+    flex-shrink: 0;
     height: 100%;
     z-index: 2;
+    overflow: hidden;
+    contain: layout paint;
     background-color: var(--og-floating-filter-bg, var(--og-header-bg));
   }
 
   .og-layer-floating-filter-left {
+    order: 0;
     left: 0;
     border-right: 1px solid var(--og-pin-left-border-color, var(--og-border-color));
     box-shadow: var(--og-pin-left-shadow, none);
   }
 
   .og-layer-floating-filter-right {
+    order: 2;
     right: 0;
     border-left: 1px solid var(--og-pin-right-border-color, var(--og-border-color));
     box-shadow: var(--og-pin-right-shadow, none);
@@ -227,7 +236,7 @@ export const CORE_STYLES = `
     text-overflow: ellipsis;
   }
 
-  /* Operator picker button (Plan 059) */
+  /* Operator picker button */
   .og-floating-filter-op-btn {
     flex-shrink: 0;
     display: inline-flex;
@@ -285,7 +294,7 @@ export const CORE_STYLES = `
     opacity: 0.4;
   }
 
-  /* ── Bottom chrome: status bar + pagination (Plan 039 Phase 5) ───────────── */
+  /* ── Bottom chrome: status bar + pagination ─────────────────────────────── */
 
   .og-layer-status-bar,
   .og-layer-pagination {
@@ -381,7 +390,7 @@ export const CORE_STYLES = `
     align-items: center;
     gap: 6px;
     padding: 0 10px;
-    background: var(--og-filter-chip-bar-bg);
+    background: var(--og-filter-chip-bar-bg, var(--og-header-bg));
     border-bottom: 1px solid var(--og-border-color);
     overflow: hidden;
   }
@@ -393,9 +402,9 @@ export const CORE_STYLES = `
     height: 22px;
     padding: 0 8px 0 10px;
     border-radius: 11px;
-    background: var(--og-filter-chip-bg);
-    border: 1px solid var(--og-filter-chip-border);
-    color: var(--og-filter-chip-color);
+    background: var(--og-filter-chip-bg, color-mix(in srgb, var(--og-focus-ring) 12%, transparent));
+    border: 1px solid var(--og-filter-chip-border, color-mix(in srgb, var(--og-focus-ring) 35%, transparent));
+    color: var(--og-filter-chip-color, var(--og-focus-ring));
     font-size: 11px;
     white-space: nowrap;
     flex-shrink: 0;
@@ -455,7 +464,7 @@ export const CORE_STYLES = `
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: var(--og-accent, #3b82f6);
+    color: var(--og-focus-ring);
     opacity: 0.85;
   }
 
@@ -649,34 +658,43 @@ export const CORE_STYLES = `
 
   /*
    * Header wrapper — sticky at the top of the scroll viewport.
-   * Three absolutely-positioned child layers overlap inside it (center, left-pin, right-pin).
+   * Uses a flex row so the three child lanes (left-pin | center | right-pin) sit
+   * side-by-side. overflow:clip (not hidden) preserves sticky propagation to
+   * og-scroll-viewport for the left/right pin lanes.
    */
   .og-layer-header-wrapper {
     position: sticky;
     top: 0;
     height: var(--og-total-header-height, 40px);
     z-index: 30;
-    overflow: hidden;
+    overflow: clip;
     flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
   }
 
+  /* Center lane — grows to fill the space between the two pin lanes. */
   .og-layer-header {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    order: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
     pointer-events: auto;
     border-bottom: 2px solid var(--og-border-color);
     background-color: var(--og-header-bg);
   }
 
+  /* Left / right pin lanes — compositor-sticky so they never lag behind body rows. */
   .og-layer-header-left {
-    position: absolute;
-    top: 0;
+    order: 0;
+    position: sticky;
     left: 0;
+    flex-shrink: 0;
     height: 100%;
     z-index: 5;
+    overflow: hidden;
+    contain: layout paint;
     pointer-events: auto;
     border-bottom: 2px solid var(--og-border-color);
     border-right: 1px solid var(--og-pin-left-border-color);
@@ -685,11 +703,14 @@ export const CORE_STYLES = `
   }
 
   .og-layer-header-right {
-    position: absolute;
-    top: 0;
-    left: 0;
+    order: 2;
+    position: sticky;
+    right: 0;
+    flex-shrink: 0;
     height: 100%;
     z-index: 5;
+    overflow: hidden;
+    contain: layout paint;
     pointer-events: auto;
     border-bottom: 2px solid var(--og-border-color);
     border-left: 1px solid var(--og-pin-right-border-color);
@@ -847,7 +868,7 @@ export const CORE_STYLES = `
     position: absolute;
     top: 0;
     height: 100%;
-    contain: style;
+    contain: layout paint style;
     box-sizing: border-box;
     padding: 0 12px;
     display: flex;
@@ -957,6 +978,7 @@ export const CORE_STYLES = `
     z-index: 40;
     background-color: inherit;
     overflow: hidden;
+    contain: layout paint;
   }
 
   .og-row-pin-left {
@@ -1114,38 +1136,41 @@ export const CORE_STYLES = `
     opacity: var(--og-readonly-cell-opacity, 0.65);
   }
 
-  /* ── Cell validation error ────────────────────────────────────────────────── */
-  .og-cell-invalid {
+  /* ── Cell validation / integrity error ───────────────────────────────────── */
+  /* og-cell-integrity-error is emitted via the decoration layer (getCellDecorations).  */
+  /* og-cell-validation-error is a more specific alias applied for in-editor validators. */
+  .og-cell-integrity-error,
+  .og-cell-validation-error {
     outline: 2px solid var(--og-error);
     outline-offset: -2px;
     background-color: color-mix(in srgb, var(--og-error) 6%, transparent);
     z-index: 15;
   }
 
-  /* Error wins over selection bg — blend error tint into selection colour */
-  .og-cell-invalid.og-cell-selected {
+  /* Error wins over selection bg */
+  .og-cell-integrity-error.og-cell-selected,
+  .og-cell-validation-error.og-cell-selected {
     background-color: color-mix(in srgb, var(--og-error) 8%, var(--og-selection-bg));
   }
 
   /* Error wins over focus outline colour and bg */
-  .og-cell-invalid.og-cell-focused {
+  .og-cell-integrity-error.og-cell-focused,
+  .og-cell-validation-error.og-cell-focused {
     outline-color: var(--og-error);
     background-color: color-mix(in srgb, var(--og-error) 8%, var(--og-selection-bg));
     z-index: 20;
   }
 
-  /* Error border on the inline editor input when the cell is invalid */
-  .og-cell-invalid .og-cell-editor {
+  /* Error border on the inline editor input */
+  .og-cell-integrity-error .og-cell-editor,
+  .og-cell-validation-error .og-cell-editor {
     border-color: var(--og-error);
   }
 
-  /* Hide badge while the editor is open — the red editor border already signals the error */
-  .og-cell:has(.og-cell-editor) .og-cell-error-badge {
-    display: none;
-  }
-
-  /* Validation error badge — shown inside the cell via og-cell-error-badge */
-  .og-cell-error-badge {
+  /* Badge dot via CSS pseudo-element — no DOM manipulation required */
+  .og-cell-integrity-error::after,
+  .og-cell-validation-error::after {
+    content: '';
     position: absolute;
     top: 3px;
     right: 3px;
@@ -1154,7 +1179,103 @@ export const CORE_STYLES = `
     border-radius: 50%;
     background: var(--og-error);
     pointer-events: none;
-    flex-shrink: 0;
+  }
+
+  /* Hide badge while the editor is open — the red editor border signals the error */
+  .og-cell-integrity-error:has(.og-cell-editor)::after,
+  .og-cell-validation-error:has(.og-cell-editor)::after {
+    display: none;
+  }
+
+  /* ── Cell diff decorations ───────────────────────────────────────────────── */
+
+  .og-cell-diff-changed {
+    outline: 2px solid var(--og-diff-changed, #f6ad55);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-diff-changed, #f6ad55) 8%, transparent);
+  }
+
+  .og-cell-diff-added {
+    outline: 2px solid var(--og-diff-added, #68d391);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-diff-added, #68d391) 8%, transparent);
+  }
+
+  .og-cell-diff-removed {
+    outline: 2px solid var(--og-diff-removed, #fc8181);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-diff-removed, #fc8181) 8%, transparent);
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+
+  /* ── Row diff decorations ─────────────────────────────────────────────────── */
+
+  .og-row-diff-added {
+    background-color: color-mix(in srgb, var(--og-diff-added, #68d391) 6%, transparent) !important;
+  }
+
+  .og-row-diff-changed {
+    background-color: color-mix(in srgb, var(--og-diff-changed, #f6ad55) 5%, transparent) !important;
+  }
+
+  .og-row-diff-removed {
+    background-color: color-mix(in srgb, var(--og-diff-removed, #fc8181) 6%, transparent) !important;
+    opacity: 0.7;
+  }
+
+  /* ── Cell conflict decoration ─────────────────────────────────────────────── */
+
+  .og-cell-conflict {
+    outline: 2px solid var(--og-conflict, #b794f4);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-conflict, #b794f4) 8%, transparent);
+  }
+
+  .og-cell-conflict::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--og-conflict, #b794f4);
+    pointer-events: none;
+  }
+
+  /* ── Cell insight decorations (generic) ───────────────────────────────────── */
+
+  .og-cell-insight-error {
+    outline: 2px solid var(--og-error);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-error) 6%, transparent);
+  }
+
+  .og-cell-insight-warning {
+    outline: 2px solid var(--og-warning, #ed8936);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-warning, #ed8936) 6%, transparent);
+  }
+
+  .og-cell-insight-info {
+    outline: 2px solid var(--og-info, #63b3ed);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-info, #63b3ed) 6%, transparent);
+  }
+
+  /* ── Cell quality decorations ─────────────────────────────────────────────── */
+
+  .og-cell-quality-error {
+    outline: 2px solid var(--og-error);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-error) 6%, transparent);
+  }
+
+  .og-cell-quality-warning {
+    outline: 2px solid var(--og-warning, #ed8936);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--og-warning, #ed8936) 6%, transparent);
   }
 
   /* Validation error tooltip — shown on hover/focus of invalid cells */
@@ -1222,8 +1343,13 @@ export const CORE_STYLES = `
 
   .og-header-cell-movable {
     cursor: grab;
-    /* Transitions apply to pickup (class added) and drop (class removed).
-       transform is on the inline style so it animates here too. */
+    transition: box-shadow 0.15s ease, opacity 0.15s ease;
+  }
+
+  /* Transform transition only active during live column reorder — prevents animation
+     during topology changes (pin/unpin, scroll) where the cell jumps to a new position
+     and should appear immediately rather than sliding from the old one. */
+  .og-col-reordering .og-header-cell-movable {
     transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, opacity 0.15s ease;
   }
 
@@ -1245,7 +1371,7 @@ export const CORE_STYLES = `
     transition: opacity 0.15s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  /* Live column-reorder preview (Plan 047): body cells slide to their previewed
+  /* Live column-reorder preview: body cells slide to their previewed
      post-drop position via a translateX composed on top of their left offset. The
      glide transition is scoped to an active drag, so steady-state scroll/resize
      frames — which never carry this class — never transition transform. On drop the

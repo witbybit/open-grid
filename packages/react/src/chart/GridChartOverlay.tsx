@@ -84,7 +84,7 @@ function extractData(
 ): ExtractedData {
 	if (!bounds) return { categories: [], series: [], allSeries: [] };
 
-	const columns = api.getState().columns || [];
+	const columns = api.getStateSnapshot().columns || [];
 	const selectedRows: { id: string; label: string }[] = [];
 	for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
 		const row = api.getDataRowAtVisualIndex(r);
@@ -375,10 +375,13 @@ export function GridChartOverlay<TRowData>({ api }: { api: GridApi<TRowData> }) 
 	const bounds = selection?.bounds;
 
 	// ── Live data version ───────────────────────────────────────────────────
-	// bounds reference is now stable during live updates (no longer jumps on
-	// globalVersion change). Subscribe to globalVersion so the chart re-extracts
-	// fresh cell values from the fixed window on every 10hz tick.
-	const dataVersion = useGridKeySelector('globalVersion', (s) => s.globalVersion);
+	// bounds reference is now stable during live updates. Subscribe to rows
+	// domain version so the chart re-extracts fresh cell values from the fixed
+	// window whenever row data changes.
+	const [dataVersion, setDataVersion] = useState(0);
+	useEffect(() => {
+		return api.subscribeDomain('rows', setDataVersion);
+	}, [api]);
 
 	// ── Extract chart data ──────────────────────────────────────────────────
 	const { categories, series, allSeries } = useMemo(

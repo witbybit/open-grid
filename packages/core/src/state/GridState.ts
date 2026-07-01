@@ -1,9 +1,21 @@
 import type { FilterModel, SortDirection, SortModel } from '../rowModel.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { ColumnDef, GridStyleRule } from '../columnDef.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { GridSelectionState, ActiveEditState, RowSelectionOptions } from '../api/GridApi.js';
+import type {
+	GridCellConflict,
+	GridCellDiff,
+	GridDiffModel,
+	GridDiffResult,
+	GridIntegrityIssue,
+	GridIntegrityIssueSource,
+	GridIntegritySummary,
+	GridTransactionStreamState,
+	ServerIntegrityReport,
+} from './integrityStateTypes.js';
 
 /**
  * User-configured and persisted fields.
@@ -23,6 +35,7 @@ export interface GridModelState<TRowData = unknown> {
 
 	sortModel: SortModel | null;
 	filterModel: FilterModel | null;
+	queryModel: GridQueryModel | null;
 	themeName: BuiltInThemeName;
 
 	groupBy?: string[];
@@ -33,7 +46,7 @@ export interface GridModelState<TRowData = unknown> {
 	showFilterChipBar?: boolean;
 	pinnedColumns?: { left: number; right: number };
 
-	/** Show an always-visible inline filter row below the column headers (Plan 060). */
+	/** Show an always-visible inline filter row below the column headers. */
 	showFloatingFilters?: boolean;
 	/**
 	 * 'managed': grid reorders rows automatically on drop.
@@ -42,8 +55,7 @@ export interface GridModelState<TRowData = unknown> {
 	 */
 	rowDragMode?: 'managed' | 'unmanaged';
 
-	// Bottom chrome (Plan 039 Phase 5). Presence gates the bottom-chrome height in the
-	// layout plan; full panel/page config is filled in when the feature lands.
+	// Bottom chrome. Presence gates the bottom-chrome height in the layout plan.
 	showStatusBar?: boolean;
 	pagination?: { pageSize: number; page?: number };
 
@@ -78,6 +90,7 @@ export interface GridModelState<TRowData = unknown> {
 		maxRenderedRows?: number;
 		maxRenderedCells?: number;
 		suppressRenderedRangeLimit?: boolean;
+		maxFilterDistinctValues?: number;
 	};
 	overscanAdaptive?: boolean;
 }
@@ -96,6 +109,9 @@ export interface GridRuntimeState {
 	selection: GridSelectionState;
 }
 
+/** Which row model is active for this grid instance. */
+export type RowModelType = 'client' | 'infinite' | 'server';
+
 /**
  * Transient UI state — session-only, not persisted by default.
  * Controls loading indicators, open panels, active editor, etc.
@@ -104,29 +120,76 @@ export interface GridUIState {
 	loading?: boolean;
 	loadingSkeletonCount?: number;
 	activeEdit: ActiveEditState | null;
-	/**
-	 * Sparse map of `rowId:colField` → error message for cells with active validation errors.
-	 * Set by `api.validateCell()` / `api.validateGrid()`, cleared by `api.clearValidationErrors()`.
-	 * Also populated when a cell edit fails validation and the editor is closed without fixing it.
-	 */
-	validationErrors?: Record<string, string>;
 	sidebarOpenPanel?: string | null;
 	chartOpen?: boolean;
+	/** Populated by the infinite row model when server pagination metadata is known. */
 	serverPagination?: {
 		page: number;
 		pageCount: number;
 		totalRows: number;
 		pageSize: number;
 	};
+	/** Populated by the server-page row model. Replaces serverPagination for explicit page loading. */
+	serverPage?: {
+		page: number;
+		pageSize: number;
+		pageCount: number;
+		totalRowCount: number;
+		loading: boolean;
+		error: string | null;
+	};
+}
+
+export interface GridIntegrityValidationState {
+	issues: readonly GridIntegrityIssue[];
+	cellErrorIndex: Record<string, GridIntegrityIssue>;
+}
+
+export interface GridIntegrityQualityState {
+	issues: readonly GridIntegrityIssue[];
+}
+
+export interface GridIntegrityDiffState<TRowData = unknown> {
+	model: GridDiffModel<TRowData> | null;
+	result: GridDiffResult | null;
+	cellDiffIndex: Record<string, GridCellDiff>;
+}
+
+export interface GridIntegrityConflictState {
+	conflicts: readonly GridCellConflict[];
+	cellConflictIndex: Record<string, string>;
+	resolvedConflicts: number;
+	lastConflictAt: number | null;
+}
+
+export interface GridIntegrityLiveStreamState {
+	issues: readonly GridIntegrityIssue[];
+	session: GridTransactionStreamState | null;
+}
+
+export interface GridIntegrityState<TRowData = unknown> {
+	validation: GridIntegrityValidationState;
+	quality: GridIntegrityQualityState;
+	diff: GridIntegrityDiffState<TRowData>;
+	conflicts: GridIntegrityConflictState;
+	liveStream: GridIntegrityLiveStreamState;
+	publishedIssues: Partial<Record<GridIntegrityIssueSource, readonly GridIntegrityIssue[]>>;
+	serverReport: ServerIntegrityReport | null;
+	summary: GridIntegritySummary;
 }
 
 /**
- * Full grid state: intersection of model, runtime, and UI slices.
- * Preserved as a single type for backward compat — all existing code that
- * reads or writes `GridState` fields continues to compile unchanged.
- * Future: callers will migrate to reading from the specific slice they need.
+ * Full internal grid state: intersection of model, runtime, and UI slices.
+ * This is an implementation detail used inside the core runtime, not a stable
+ * public snapshot contract.
  */
-export type GridState<TRowData = unknown> = GridModelState<TRowData> & GridRuntimeState & GridUIState;
+export type InternalGridState<TRowData = unknown> = GridModelState<TRowData> &
+	GridRuntimeState &
+	GridUIState & {
+		integrity: GridIntegrityState<TRowData>;
+	};
+
+export type GridInitialState<TRowData = unknown> = GridModelState<TRowData> & Omit<GridUIState, never> & Partial<Pick<GridRuntimeState, 'selection'>>;
 
 /** Serializable snapshot of a single column's user-configurable state. */
 export interface ColumnState {
@@ -148,6 +211,8 @@ export interface GridCellRangeBounds {
 	maxCol: number;
 }
 
-export type GridStateUpdater<TRowData = unknown> = Partial<GridState<TRowData>> | ((state: GridState<TRowData>) => Partial<GridState<TRowData>>);
+export type GridStateUpdater<TRowData = unknown> =
+	| Partial<InternalGridState<TRowData>>
+	| ((state: InternalGridState<TRowData>) => Partial<InternalGridState<TRowData>>);
 
-export type Listener<TRowData = unknown> = (state: GridState<TRowData>) => void;
+export type Listener<TRowData = unknown> = (state: InternalGridState<TRowData>) => void;

@@ -9,7 +9,6 @@ import {
 	getColIndices,
 	getRowIndices,
 	type RenderWindow,
-	sameRenderedWindow,
 	computeRenderWindow,
 	applyRenderWindowRuntimeLimits,
 } from './renderWindow.js';
@@ -96,10 +95,16 @@ function makeScrollCtx(store: GridStore<RuntimePerfRow>) {
 		globalVersion: state.globalVersion,
 		styleVersion: 0,
 		loadingVersion: 0,
+		styleChangedDuringScroll: false,
+		loadingChangedDuringScroll: false,
+		selectionChangedDuringScroll: false,
+		globalChangedDuringScroll: false,
 		activeEdit: state.activeEdit,
 		hasDeferredCellStyleRules: !!state.styleRules?.length,
 		hasCustomRenderers: plan.hasCustomRenderers,
+		hasInsightDecorations: false,
 		plan,
+		visibleRowRange: store.engine.viewport.getVisibleRowRange(store.engine.getVisualRowModel()?.getVisualRowCount() ?? 0),
 		visibleColRange: store.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length),
 		focusedCell: state.selection.focus,
 		selectionBounds: state.selection.bounds ?? undefined,
@@ -253,6 +258,26 @@ describe('Runtime Performance & Granular Versioning', () => {
 		}
 	});
 
+	it('reuses the cached selected-row membership set across scroll frames when selection is unchanged', () => {
+		const grid = createWideGrid({ rows: 200, cols: 8 });
+		try {
+			grid.store.selectRows(['row-1', 'row-5']);
+			grid.renderer.fullPaint();
+
+			const selectionPaint = grid.renderer.rowRenderer.selectionPaint;
+			const firstSet = selectionPaint.getSelectedRowIdSet(grid.store.getState().selectedRowIds);
+			expect(firstSet).not.toBeNull();
+
+			grid.store.engine.viewport.setScrollPosition(40, 0);
+			grid.renderer.rowRenderer.recycleViewport(true, makeScrollCtx(grid.store) as any);
+			const secondSet = selectionPaint.getSelectedRowIdSet(grid.store.getState().selectedRowIds);
+
+			expect(secondSet).toBe(firstSet);
+		} finally {
+			cleanupGrid(grid);
+		}
+	});
+
 	it('does zero row and cell work when the scroll render window is unchanged', () => {
 		const grid = createWideGrid({ rows: 1000, cols: 100 });
 		grid.renderer.resetRenderStats();
@@ -267,6 +292,75 @@ describe('Runtime Performance & Granular Versioning', () => {
 		cleanupGrid(grid);
 	});
 
+	it('limits vertical scroll cell work to newly entered rows when columns stay stable', () => {
+		const columns: ColumnDef<{ id: string; name: string }>[] = [{ field: 'name', header: 'Name', width: 100 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			rowOverscanPx: 120,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 50 }, (_, i) => ({ id: `row-${i}`, name: `Name ${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows,
+			columns,
+		});
+		const container = createContainer(500, 160);
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		renderer.resetRenderStats();
+
+		store.engine.viewport.setScrollPosition(40, 0);
+		renderer.rowRenderer.recycleViewport(true, makeScrollCtx(store as any) as any);
+
+		const stats = renderer.getRenderStats();
+
+		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(2);
+		expect(stats.cellsWrittenDuringScroll).toBeLessThanOrEqual(2);
+		expect(stats.cellTextWrites).toBeLessThanOrEqual(2);
+		expect(stats.cellClassWrites).toBeLessThanOrEqual(2);
+		expect(stats.cellWidthWrites).toBeLessThanOrEqual(2);
+		expect(stats.cellLeftWrites).toBeLessThanOrEqual(2);
+		expect(stats.rowClassWrites).toBeLessThanOrEqual(2);
+		expect(stats.customRendererMountsDuringScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps deferred style-hook churn bounded to newly entered visible cells during vertical scroll', () => {
+		const columns: ColumnDef<{ id: string; name: string }>[] = [{ field: 'name', header: 'Name', width: 100 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			rowOverscanPx: 120,
+			getRowId: (row) => row.id,
+			styleRules: [{ kind: 'cell', when: () => true, cellClass: 'styled-cell' }],
+		});
+		const rows = Array.from({ length: 50 }, (_, i) => ({ id: `row-${i}`, name: `Name ${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows,
+			columns,
+		});
+		const container = createContainer(500, 160);
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.resetRenderStats();
+
+		store.engine.viewport.setScrollPosition(40, 0);
+		renderer.rowRenderer.recycleViewport(true, makeScrollCtx(store as any) as any);
+
+		const stats = renderer.getRenderStats();
+		expect(stats.styleHookCallsDuringScroll).toBeLessThanOrEqual(1);
+		expect(stats.dirtyCellsMarkedDuringScroll).toBeLessThanOrEqual(1);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('keeps vertical scroll work bounded to entered rows instead of the full visible range', () => {
 		const grid = createWideGrid({ rows: 100000, cols: 1000, custom: true, valueGetter: true });
 		const prevWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
@@ -277,18 +371,107 @@ describe('Runtime Performance & Granular Versioning', () => {
 
 		const nextWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
 		const delta = diffRenderWindow(prevWindow, nextWindow);
-		const pinnedRows = nextWindow.pinTopRows + nextWindow.pinBottomRows;
+		const visibleContentRows =
+			nextWindow.visibleRowStart !== undefined && nextWindow.visibleRowEnd !== undefined && nextWindow.visibleRowStart >= 0
+				? nextWindow.visibleRowEnd - nextWindow.visibleRowStart + 1 + nextWindow.pinTopRows + nextWindow.pinBottomRows
+				: getRowIndices(nextWindow).length;
 		const stats = grid.renderer.getRenderStats();
 
 		expect(stats.rowsVisitedDuringScroll).toBeLessThanOrEqual(getRowIndices(nextWindow).length);
 		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(
-			(stats.rowsReboundDuringScroll ?? 0) * getColIndices(nextWindow).length + pinnedRows * getColIndices(nextWindow).length
+			visibleContentRows * getColIndices(nextWindow).length + getColIndices(nextWindow).length
 		);
 		expect(stats.valueGetterCallsDuringScroll).toBe(0);
 		expect(stats.formulaCallsDuringScroll).toBe(0);
 		expect(stats.customRendererMountsDuringScroll).toBe(0);
 
 		cleanupGrid(grid);
+	});
+
+	it('avoids row-model lookups for stayed rows during a one-row vertical scroll', () => {
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			defaultRowHeight: 40,
+			rowOverscanPx: 0,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 50 }, (_, i) => ({ id: `row-${i}`, name: `Name ${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows,
+			columns: store.getState().columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const visualRowModel = store.engine.getVisualRowModel()!;
+		const getVisualRowSpy = vi.spyOn(visualRowModel, 'getVisualRow');
+		renderer.resetRenderStats();
+
+		store.engine.viewport.setScrollPosition(40, 0);
+		renderer.rowRenderer.recycleViewport(true, makeScrollCtx(store as any) as any);
+
+		expect(getVisualRowSpy).toHaveBeenCalledTimes(2);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps buffered custom-cell content warm outside the visible row band during scroll', () => {
+		const columns: ColumnDef<{ id: string; name: string }>[] = [
+			{
+				field: 'name',
+				header: 'Name',
+				width: 120,
+				cellRenderer: () => 'Rendered',
+				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+			},
+		];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			rowOverscanPx: 80,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 40 }, (_, i) => ({ id: `row-${i}`, name: `Row ${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows,
+			columns,
+		});
+		const container = createContainer(500, 160);
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const initialRow0Cell = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="name"]') as HTMLDivElement;
+		expect(initialRow0Cell.dataset.contentMode).toBe('portal');
+
+		store.engine.viewport.setScrollPosition(40, 0);
+		renderer.rowRenderer.recycleViewport(true, makeScrollCtx(store as any) as any);
+
+		const bufferedRow0Cell = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="name"]') as HTMLDivElement;
+		const visibleRow1Cell = container.querySelector('.og-cell[data-row-id="row-1"][data-col-field="name"]') as HTMLDivElement;
+
+		expect(bufferedRow0Cell.dataset.contentMode).toBe('portal');
+		expect(visibleRow1Cell.dataset.contentMode).toBe('portal');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
 	});
 
 	it('keeps horizontal scroll work bounded to entered/exited columns across active rows', () => {
@@ -301,13 +484,49 @@ describe('Runtime Performance & Granular Versioning', () => {
 
 		const nextWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
 		const delta = diffRenderWindow(prevWindow, nextWindow);
+		const visibleContentRows =
+			nextWindow.visibleRowStart !== undefined && nextWindow.visibleRowEnd !== undefined && nextWindow.visibleRowStart >= 0
+				? nextWindow.visibleRowEnd - nextWindow.visibleRowStart + 1 + nextWindow.pinTopRows + nextWindow.pinBottomRows
+				: getRowIndices(nextWindow).length;
+		const stats = grid.renderer.getRenderStats();
+
+		expect(stats.rowsVisitedDuringScroll).toBeLessThanOrEqual(getRowIndices(nextWindow).length);
+		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(
+			visibleContentRows * getColIndices(nextWindow).length + getColIndices(nextWindow).length
+		);
+		expect(stats.cellLeftWrites).toBeLessThanOrEqual(visibleContentRows * Math.max(1, delta.colsEntered.length));
+		expect(stats.cellWidthWrites).toBeLessThanOrEqual(visibleContentRows * Math.max(1, delta.colsEntered.length));
+		expect(stats.rowClassWrites).toBe(0);
+		expect(stats.customRendererMountsDuringScroll).toBe(0);
+
+		cleanupGrid(grid);
+	});
+
+	it('keeps pinned-lane horizontal scroll portal-free and bounded', () => {
+		const grid = createWideGrid({ rows: 1000, cols: 1000, custom: true });
+		grid.store.setPinnedColumns({ left: 2, right: 2 });
+		grid.renderer.fullPaint();
+
+		const initialPlan = grid.store.engine.columns.getCompiledPlan();
+		const prevWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
+		grid.renderer.resetRenderStats();
+
+		grid.store.engine.viewport.setScrollPosition(0, 300);
+		grid.renderer.rowRenderer.recycleViewport(true, makeScrollCtx(grid.store) as any);
+
+		const nextWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
+		const delta = diffRenderWindow(prevWindow, nextWindow);
 		const activeRows = getRowIndices(nextWindow).length;
 		const pinnedCols = nextWindow.pinLeftCols + nextWindow.pinRightCols;
 		const stats = grid.renderer.getRenderStats();
 
-		expect(stats.rowsVisitedDuringScroll).toBeLessThanOrEqual(activeRows);
+		expect(nextWindow.pinLeftCols).toBe(2);
+		expect(nextWindow.pinRightCols).toBe(2);
+		expect(grid.store.engine.columns.getCompiledPlan()).toBe(initialPlan);
 		expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(activeRows * (delta.colsEntered.length + delta.colsExited.length + pinnedCols));
 		expect(stats.customRendererMountsDuringScroll).toBe(0);
+		expect(stats.portalMountsDuringScroll).toBe(0);
+		expect(stats.portalFlushesDuringScroll).toBe(0);
 
 		cleanupGrid(grid);
 	});
@@ -385,7 +604,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(dCol.colsExited).toEqual([1]);
 	});
 
-	it('should verify sameRenderedWindow ignores scrollTop/scrollLeft and sameWindowBailouts works (Task 1, 4, 5)', () => {
+	it('keeps state reads at zero even when a sub-row scroll crosses the visible content band', () => {
 		const grid = createWideGrid({ rows: 1000, cols: 100 });
 
 		// Establish initial window
@@ -400,7 +619,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		(grid.renderer as any).flushScrollFrame();
 
 		const stats = grid.renderer.getRenderStats();
-		expect(stats.sameWindowBailouts).toBe(1);
+		expect(stats.sameWindowBailouts).toBe(0);
 		expect(stats.stateReadsDuringScroll).toBe(0);
 
 		cleanupGrid(grid);

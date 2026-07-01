@@ -8,6 +8,7 @@ export interface FlattenConfig<TData = unknown> {
 	expandedDetailRowIds: Set<string>;
 	defaultRowHeight: number;
 	rowHeightsRecord: Record<string, number>;
+	getRowHeight?: (row: TData, rowId: string) => number | undefined;
 	groupRowHeight?: number;
 	detailRowHeight?: number;
 	getDetailHeight?: (params: { row: TData; rowId: string }) => number;
@@ -40,7 +41,7 @@ function flattenNodeRecursively<TData>(
 ): void {
 	if (node.kind === 'data') {
 		const rowId = node.node.id;
-		const explicitHeight = config.rowHeightsRecord[rowId];
+		const explicitHeight = config.rowHeightsRecord[rowId] ?? config.getRowHeight?.(node.node.data, rowId);
 		const height = explicitHeight !== undefined ? explicitHeight : config.defaultRowHeight;
 
 		result.push({

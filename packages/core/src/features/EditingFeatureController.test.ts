@@ -48,7 +48,6 @@ function makeEditingFeature(store: GridStore<TestRow>): EditingFeatureController
 		getRowModel: () => engine.getRowModel(),
 		data: engine.data,
 		notifyCellChange: (rowId, colField) => engine.notifyCellChange(rowId, colField),
-		setCellValue: (rowId, colField, value, undoable) => engine.setCellValue(rowId, colField, value, undoable),
 	};
 	return new EditingFeatureController(deps);
 }
@@ -86,56 +85,6 @@ describe('EditingFeatureController', () => {
 		store.destroy();
 	});
 
-	it('commitEdit with sync validator failure returns false', async () => {
-		const store = makeStore([
-			{ field: 'id', header: 'ID', width: 50 },
-			{
-				field: 'name',
-				header: 'Name',
-				width: 150,
-				valueValidator: async () => 'Too short',
-			},
-			{ field: 'price', header: 'Price', width: 100 },
-		]);
-		const ctrl = makeController(store);
-		const feature = makeEditingFeature(store);
-
-		feature.startEdit('1', 'name');
-		const result = await feature.commitEdit('1', 'name', 'A');
-
-		expect(result).toBe(false);
-		expect(store.getState().activeEdit).not.toBeNull();
-
-		ctrl.dispose();
-		store.destroy();
-	});
-
-	it('commitEdit with async validator failure returns false', async () => {
-		const store = makeStore([
-			{ field: 'id', header: 'ID', width: 50 },
-			{
-				field: 'name',
-				header: 'Name',
-				width: 150,
-				valueValidator: async () => {
-					await new Promise((resolve) => setTimeout(resolve, 0));
-					return 'Async validation failed';
-				},
-			},
-			{ field: 'price', header: 'Price', width: 100 },
-		]);
-		const ctrl = makeController(store);
-		const feature = makeEditingFeature(store);
-
-		feature.startEdit('1', 'name');
-		const result = await feature.commitEdit('1', 'name', 'B');
-
-		expect(result).toBe(false);
-
-		ctrl.dispose();
-		store.destroy();
-	});
-
 	it('commitEdit with valueSetter returning false returns false (rollback)', async () => {
 		const store = makeStore([
 			{ field: 'id', header: 'ID', width: 50 },
@@ -154,6 +103,7 @@ describe('EditingFeatureController', () => {
 		const result = await feature.commitEdit('1', 'name', 'New Name');
 
 		expect(result).toBe(false);
+		expect(store.canUndo()).toBe(false);
 
 		ctrl.dispose();
 		store.destroy();
@@ -163,13 +113,151 @@ describe('EditingFeatureController', () => {
 		const store = makeStore();
 		const ctrl = makeController(store);
 		const feature = makeEditingFeature(store);
-		const stopSpy = vi.spyOn(feature, 'stopEdit');
+		const engine = (store as any).engine;
 
 		feature.startEdit('1', 'name');
 		const result = await feature.commitEdit('1', 'name', 'Updated Name');
 
 		expect(result).toBe(true);
-		expect(stopSpy).toHaveBeenCalledWith(false);
+		expect(store.getState().activeEdit).toBeNull();
+		expect(store.canUndo()).toBe(true);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('commitEdit invokes async valueSetter exactly once and commits through history once', async () => {
+		const valueSetter = vi.fn(async ({ row }) => {
+			row.name = 'Server Accepted';
+			return true;
+		});
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 50 },
+			{
+				field: 'name',
+				header: 'Name',
+				width: 150,
+				valueSetter,
+			},
+			{ field: 'price', header: 'Price', width: 100 },
+		]);
+		const ctrl = makeController(store);
+		const feature = makeEditingFeature(store);
+		const engine = (store as any).engine;
+
+		feature.startEdit('1', 'name');
+		const result = await feature.commitEdit('1', 'name', 'Updated Name');
+
+		expect(result).toBe(true);
+		expect(valueSetter).toHaveBeenCalledTimes(1);
+		expect(engine.getRawCellValue('1', 'name')).toBe('Server Accepted');
+		expect(store.canUndo()).toBe(true);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('commitEdit returns false and does not call valueSetter when the row is no longer available', async () => {
+		const valueSetter = vi.fn(async () => true);
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 50 },
+			{
+				field: 'name',
+				header: 'Name',
+				width: 150,
+				valueSetter,
+			},
+			{ field: 'price', header: 'Price', width: 100 },
+		]);
+		const ctrl = makeController(store);
+		const feature = makeEditingFeature(store);
+
+		store.setRows([{ id: '2', name: 'Product B', price: 20 }]);
+
+		const result = await feature.commitEdit('1', 'name', 'Missing');
+
+		expect(result).toBe(false);
+		expect(valueSetter).not.toHaveBeenCalled();
+		expect(store.canUndo()).toBe(false);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('commitEdit respects validateOnEdit: false and does not auto-publish validation errors', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 50 },
+					{ field: 'name', header: 'Name', width: 150 },
+					{ field: 'price', header: 'Price', width: 100 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						validateOnEdit: false,
+						cellRules: [
+							{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) },
+						],
+					},
+				},
+			}
+		);
+		const ctrl = makeController(store);
+
+		await store.commitEdit('1', 'name', '');
+		await new Promise((res) => setTimeout(res, 0));
+
+		expect(store.engine.dataIntegrity?.getCellErrorMessage('1', 'name')).toBeNull();
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('commitEdit rejects blocking proposal validation when validateOnSubmit is enabled', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 50 },
+					{ field: 'name', header: 'Name', width: 150 },
+					{ field: 'price', header: 'Price', width: 100 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						validateOnSubmit: true,
+						cellRules: [
+							{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) },
+						],
+					},
+				},
+			}
+		);
+		const ctrl = makeController(store);
+		const blockedHandler = vi.fn();
+		store.addEventListener(GridEventName.writeBlocked, blockedHandler);
+
+		store.startEditing('1', 'name');
+		const result = await store.commitEdit('1', 'name', '');
+
+		expect(result).toBe(false);
+		expect(blockedHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'edit',
+					status: 'validationFailed',
+					rowCount: 1,
+					colCount: 1,
+				}),
+			})
+		);
+		expect(store.getState().activeEdit).toEqual({ rowId: '1', colField: 'name' });
+		expect(store.getCellValue('1', 'name')).toBe('Product A');
+		expect(store.canUndo()).toBe(false);
 
 		ctrl.dispose();
 		store.destroy();

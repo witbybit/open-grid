@@ -1,9 +1,9 @@
 import type { ColumnModel } from '../models/ColumnModel.js';
-import type { GridState } from '../state/GridState.js';
-import type { GridChange } from '../engine/GridChangeApplier.js';
+import type { InternalGridState } from '../state/GridState.js';
+import type { GridCommit, GridCommitResult } from '../engine/GridChangeApplier.js';
 
 export interface GridFeatureContext<TRowData = unknown> {
 	columns: ColumnModel<TRowData>;
-	getState: () => GridState<TRowData>;
-	applyChange: (change: GridChange<TRowData>) => void;
+	getState: () => InternalGridState<TRowData>;
+	applyChange: (change: GridCommit<TRowData>) => GridCommitResult;
 }

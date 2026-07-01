@@ -1,4 +1,5 @@
-import { RowNode, validateRowIds } from '../store.js';
+import { validateRowIds } from '../ids.js';
+import { RowNode } from '../rowNode.js';
 
 export type RowUpdate<T> = (rows: T[]) => T[];
 
@@ -20,6 +21,12 @@ export interface StoreTransactionResult<T> {
 	updated: RowNode<T>[];
 	changedFieldsByRow: Map<string, Set<string>>;
 	changedValuesByRow: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
+}
+
+export interface RowDataStoreTransactionSnapshot<T> {
+	readonly nodesById: ReadonlyMap<string, RowNode<T>>;
+	readonly rowDataById: ReadonlyMap<string, T>;
+	readonly sourceOrder: readonly string[];
 }
 
 const hasOwn = Object.prototype.hasOwnProperty;
@@ -229,6 +236,22 @@ export class RowDataStore<T> {
 
 	public getSourceOrder(): string[] {
 		return this.sourceOrder.slice();
+	}
+
+	public captureTransactionSnapshot(): RowDataStoreTransactionSnapshot<T> {
+		return {
+			nodesById: new Map(this.rowsById),
+			rowDataById: new Map(this.sourceOrder.map((id) => [id, structuredClone(this.rowsById.get(id)!.data)])),
+			sourceOrder: this.sourceOrder.slice(),
+		};
+	}
+
+	public restoreTransactionSnapshot(snapshot: RowDataStoreTransactionSnapshot<T>): void {
+		for (const [id, node] of snapshot.nodesById) {
+			node.setData(structuredClone(snapshot.rowDataById.get(id)!));
+		}
+		this.rowsById = new Map(snapshot.nodesById);
+		this.sourceOrder = snapshot.sourceOrder.slice();
 	}
 
 	/** Reorder rows by providing a new array of row IDs. IDs not present in the store are silently dropped. */

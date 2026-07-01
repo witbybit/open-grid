@@ -1,4 +1,5 @@
-import { compilePathGetter, RowNode, type ColumnDef } from '../store.js';
+import { compilePathGetter, type ColumnDef } from '../columnDef.js';
+import { RowNode } from '../rowNode.js';
 import type { GroupDef } from './RowPipeline.js';
 import type { RowPipelineContext, RowPipelineExpansion } from './stages/types.js';
 

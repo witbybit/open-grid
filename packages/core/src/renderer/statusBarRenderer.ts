@@ -1,8 +1,9 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName } from '../api/GridEvents.js';
+import { asDataRowCountModel, type RowModel } from '../rowModel.js';
 
 /**
- * Status bar (Plan 039 Phase 5) — read-only chrome docked at the bottom of the grid.
+ * Status bar — read-only chrome docked at the bottom of the grid.
  *
  * Renders a row of panels with live counts (total data rows, selected rows). It is a
  * first-class layer: `ViewportRenderer` builds the `.og-layer-status-bar` element from
@@ -45,10 +46,15 @@ export class StatusBarRenderer<TRowData = unknown> {
 		return n.toLocaleString();
 	}
 
+	private getDataRowCount(rowModel: RowModel<TRowData> | null): number {
+		if (!rowModel) return 0;
+		return asDataRowCountModel(rowModel)?.getDataRowCount() ?? rowModel.getVisualRowCount();
+	}
+
 	public render(): void {
 		if (!this.bar) return;
 		const rowModel = this.engine.getRowModel();
-		const totalRows = rowModel?.getDataRowCount?.() ?? rowModel?.getVisualRowCount?.() ?? 0;
+		const totalRows = this.getDataRowCount(rowModel);
 		const selectedCount = this.engine.stateManager.getState().selectedRowIds?.length ?? 0;
 
 		const panels: Array<{ label: string; value: string }> = [{ label: 'Rows', value: this.formatNumber(totalRows) }];

@@ -1,16 +1,20 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName } from '../api/GridEvents.js';
+import {
+	asDataRowCountModel,
+	asPageWindowCapableRowModel,
+	asServerPageControllableRowModel,
+	type PageWindowCapableRowModel,
+	type ServerPageControllableRowModel,
+} from '../rowModel.js';
 
 /**
- * Pagination bar (Plan 039 Phase 5) — chrome docked at the bottom of the grid.
+ * Pagination bar — chrome docked at the bottom of the grid.
  *
  * Renders a page summary + first/prev/next/last controls. Navigation updates
  * `state.pagination.page` and dispatches `paginationChanged` ({page, pageCount,
  * totalRows, pageSize}). This is the integration seam: a server row model (or app code)
- * reacts to the event to fetch/slice the page. NOTE (Plan 039): client-side auto-slicing
- * of the rendered rows is the remaining data-layer step — it must thread a page window
- * through the row pipeline so the visual-row index maps, geometry, and group/sticky meta
- * stay consistent; until then the bar drives page state + the event, not the row set.
+ * reacts to the event to fetch/slice the page.
  *
  * First-class layer: `ViewportRenderer` builds `.og-layer-pagination` from the registry
  * and positions it from the plan; this renderer only fills + wires it.
@@ -31,10 +35,10 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		for (const evt of [GridEventName.rowsUpdated, GridEventName.filterChanged, GridEventName.groupByChanged, GridEventName.paginationChanged]) {
 			this.unsubscribers.push(this.engine.eventBus.addEventListener(evt, rerender));
 		}
-		// Server pagination totals land on the serverPagination state key (which may update
-		// before this bar mounts and catches the event) — subscribe to it directly so the
-		// bar reflects server page counts regardless of load timing.
+		// Server pagination totals land on the serverPagination/serverPage state keys (which may update
+		// before this bar mounts and catches the event) — subscribe to both directly.
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('serverPagination', rerender));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('serverPage', rerender));
 	}
 
 	public unmount(): void {
@@ -43,23 +47,40 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		this.bar = null;
 	}
 
+	private getPageWindowCapableRowModel(): PageWindowCapableRowModel | null {
+		return asPageWindowCapableRowModel(this.engine.getRowModel());
+	}
+
+	private getPageNavigationCapableRowModel(): ServerPageControllableRowModel<TRowData> | null {
+		return asServerPageControllableRowModel(this.engine.getRowModel());
+	}
+
+	private getDataRowCount(rowModel: ReturnType<GridEngine<TRowData>['getRowModel']>): number {
+		if (!rowModel) return 0;
+		return asDataRowCountModel(rowModel)?.getDataRowCount() ?? rowModel.getVisualRowCount();
+	}
+
 	private getModel(): { page: number; pageSize: number; totalRows: number; pageCount: number } {
 		const state = this.engine.stateManager.getState();
 		const pageSize = Math.max(1, state.pagination?.pageSize ?? 100);
 		const rowModel = this.engine.getRowModel();
-		// Server pagination: the server row model is the authority (block loading reports
-		// the total + page count via serverPagination state).
+		// Server-page model: explicit page loading; serverPage is authoritative.
+		const serverPage = state.serverPage;
+		if (serverPage) {
+			return { page: serverPage.page, pageSize: serverPage.pageSize, totalRows: serverPage.totalRowCount, pageCount: serverPage.pageCount };
+		}
+		// Infinite row model: block loading reports totals via serverPagination state.
 		const serverPg = state.serverPagination;
 		if (serverPg) {
 			return { page: serverPg.page, pageSize: serverPg.pageSize, totalRows: serverPg.totalRows, pageCount: serverPg.pageCount };
 		}
-		// Client pagination: the row pipeline's page window is authoritative (Plan 041) — its
+		// Client pagination: the row pipeline's page window is authoritative — its
 		// total is the post-filter/post-group visible count, the correct denominator.
-		const pageWindow = rowModel?.getPageWindow?.();
+		const pageWindow = this.getPageWindowCapableRowModel()?.getPageWindow();
 		if (pageWindow) {
 			return { page: pageWindow.page, pageSize: pageWindow.pageSize, totalRows: pageWindow.totalRows, pageCount: pageWindow.pageCount };
 		}
-		const totalRows = rowModel?.getVisualRowCount?.() ?? rowModel?.getDataRowCount?.() ?? 0;
+		const totalRows = this.getDataRowCount(rowModel);
 		const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
 		const page = Math.min(Math.max(0, state.pagination?.page ?? 0), pageCount - 1);
 		return { page, pageSize, totalRows, pageCount };
@@ -68,20 +89,18 @@ export class PaginationBarRenderer<TRowData = unknown> {
 	private goToPage(page: number): void {
 		const { pageSize, totalRows, pageCount } = this.getModel();
 		const next = Math.min(Math.max(0, page), pageCount - 1);
-		const rowModel = this.engine.getRowModel();
 		// Server row model owns its paging (loads blocks + dispatches paginationChanged).
-		if (rowModel?.goToPage) {
-			rowModel.goToPage(next);
+		const pagingRowModel = this.getPageNavigationCapableRowModel();
+		if (pagingRowModel) {
+			pagingRowModel.goToPage(next);
 			this.render();
 			return;
 		}
 		// Client: drive via state + event; the client row model re-runs the pipeline page
-		// window on paginationChanged (Plan 041), and the scroll resets to the page top.
+		// window on paginationChanged, and the scroll resets to the page top.
 		const current = this.engine.stateManager.getState().pagination;
 		if (current && current.page === next) return;
-		this.engine.stateManager.setState({ pagination: { pageSize, page: next } });
-		this.engine.eventBus.dispatchEvent(GridEventName.paginationChanged, { page: next, pageCount, totalRows, pageSize });
-		this.render();
+		this.engine.setPaginationPage(next, { pageCount, totalRows });
 	}
 
 	private button(label: string, ariaLabel: string, disabled: boolean, onClick: () => void): HTMLButtonElement {

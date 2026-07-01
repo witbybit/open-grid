@@ -1,13 +1,7 @@
-import type {
-	ColumnDef,
-	GridCellRange,
-	GridCellRangeBounds,
-	GridCellPointer,
-	GridSelectionSource,
-	GridSelectionState,
-	RowModel,
-	SelectionChangeResult,
-} from '../store.js';
+import type { GridCellRange, GridCellPointer, GridSelectionSource, GridSelectionState, SelectionChangeResult } from '../api/GridApi.js';
+import type { ColumnDef } from '../columnDef.js';
+import type { RowModel } from '../rowModel.js';
+import type { GridCellRangeBounds } from '../state/GridState.js';
 
 export class SelectionModel {
 	private state: GridSelectionState = {

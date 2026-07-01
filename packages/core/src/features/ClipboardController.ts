@@ -1,19 +1,28 @@
 import type { ColumnDef } from '../columnDef.js';
+import type { GridWriteResult } from '../api/GridApi.js';
 import type { VisualRow } from '../visualRow.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import { GridEventName } from '../api/GridEvents.js';
+import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
+import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
+import { dispatchWriteBlockedEvent, isWriteBlockedResult } from './writeBlockedEvent.js';
 
 interface ClipboardContext<TRowData> {
-	getState(): GridState<TRowData>;
+	getState(): InternalGridState<TRowData>;
 	getVisualRow(rowIdx: number): VisualRow<TRowData> | null;
 	getVisualIndexByRowId(rowId: string): number | null;
 	getColumnIndex(colField: string): number;
 	getCellValue(rowId: string, colField: string): unknown;
 	getCheapDisplayValue(rowId: string, colField: string): string;
 	getRawRowById(rowId: string): TRowData | null;
-	batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill'): void;
+	batchCellValues(updates: { rowId: string; colField: string; value: unknown }[], source: 'paste' | 'api' | 'fill'): GridWriteResult;
 	dispatchEvent<K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]): void;
+	validateWriteProposal?: (
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'paste' | 'api' | 'fill' | 'edit' | 'undo' | 'redo'
+	) => Promise<readonly GridIntegrityIssue[]>;
+	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
 
 interface CopyResult {
@@ -72,6 +81,8 @@ export class ClipboardController<TRowData = unknown> {
 
 			const lines = text.split(/\r?\n/);
 			const updates: { rowId: string; colField: string; value: unknown }[] = [];
+			const blockedCapabilityCells: Array<{ rowId: string; colField: string }> = [];
+			let blockedCapabilityReason: string | null = null;
 			let pastedRows = 0;
 			let pastedCols = 0;
 
@@ -90,6 +101,16 @@ export class ClipboardController<TRowData = unknown> {
 						const row = this.c.getRawRowById(rowId);
 						if (row !== null) value = col.onPaste({ row, rowId, colField: col.field, pastedText: cells[c] });
 					}
+					if (this.c.checkCapability) {
+						const r = this.c.checkCapability('paste', { rowId, colField: col.field });
+						if (!r.allowed) {
+							blockedCapabilityCells.push({ rowId, colField: col.field });
+							if (blockedCapabilityReason === null) {
+								blockedCapabilityReason = typeof r.reason === 'string' ? r.reason : 'paste blocked by capability policy';
+							}
+							continue;
+						}
+					}
 					updates.push({ rowId, colField: col.field, value });
 					colsPasted++;
 				}
@@ -98,8 +119,45 @@ export class ClipboardController<TRowData = unknown> {
 			}
 
 			if (updates.length > 0) {
-				this.c.batchCellValues(updates, 'paste');
-				this.c.dispatchEvent(GridEventName.cellsPasted, { rowCount: pastedRows, colCount: pastedCols });
+				const issues = await this.c.validateWriteProposal?.(
+					updates.map((update) => ({ rowId: update.rowId, colField: update.colField, proposedValue: update.value })),
+					'paste'
+				);
+				if ((issues?.length ?? 0) > 0) {
+					dispatchWriteBlockedEvent(
+						this.c.dispatchEvent,
+						'paste',
+						{ status: 'validationFailed', reason: issues![0]?.message ?? 'blocking validation failed', issues: issues! },
+						updates.map((update) => ({ rowId: update.rowId, colField: update.colField }))
+					);
+					return;
+				}
+				const result = this.c.batchCellValues(updates, 'paste');
+				if (result.status === 'applied' || result.status === 'noop') {
+					this.c.dispatchEvent(GridEventName.cellsPasted, { rowCount: pastedRows, colCount: pastedCols });
+					if (blockedCapabilityCells.length > 0 && blockedCapabilityReason) {
+						dispatchWriteBlockedEvent(
+							this.c.dispatchEvent,
+							'paste',
+							{ status: 'capabilityDenied', reason: blockedCapabilityReason },
+							blockedCapabilityCells
+						);
+					}
+				} else if (isWriteBlockedResult(result)) {
+					dispatchWriteBlockedEvent(
+						this.c.dispatchEvent,
+						'paste',
+						result,
+						updates.map((update) => ({ rowId: update.rowId, colField: update.colField }))
+					);
+				}
+			} else if (blockedCapabilityCells.length > 0 && blockedCapabilityReason) {
+				dispatchWriteBlockedEvent(
+					this.c.dispatchEvent,
+					'paste',
+					{ status: 'capabilityDenied', reason: blockedCapabilityReason },
+					blockedCapabilityCells
+				);
 			}
 		} catch {
 			// Clipboard access denied — silently ignore
@@ -119,7 +177,7 @@ export class ClipboardController<TRowData = unknown> {
 		});
 	}
 
-	private _buildTsv(minRow: number, maxRow: number, minCol: number, maxCol: number, state: GridState<TRowData>): CopyResult | null {
+	private _buildTsv(minRow: number, maxRow: number, minCol: number, maxCol: number, state: InternalGridState<TRowData>): CopyResult | null {
 		const cells: Array<{ rowId: string; colField: string }> = [];
 		const rows: string[] = [];
 
@@ -130,6 +188,10 @@ export class ClipboardController<TRowData = unknown> {
 			for (let c = minCol; c <= maxCol; c++) {
 				const col = state.columns[c] as ColumnDef<TRowData> | undefined;
 				if (!col) continue;
+				if (this.c.checkCapability) {
+					const res = this.c.checkCapability('copy', { rowId: vr.rowId, colField: col.field });
+					if (!res.allowed) continue;
+				}
 				rowCells.push(this._getCellText(vr.rowId, col.field, state));
 				cells.push({ rowId: vr.rowId, colField: col.field });
 			}
@@ -145,7 +207,7 @@ export class ClipboardController<TRowData = unknown> {
 		};
 	}
 
-	private _getCellText(rowId: string, colField: string, state: GridState<TRowData>): string {
+	private _getCellText(rowId: string, colField: string, state: InternalGridState<TRowData>): string {
 		const col = state.columns.find((c) => c.field === colField) as ColumnDef<TRowData> | undefined;
 		if (col?.onCopy) {
 			const row = this.c.getRawRowById(rowId);

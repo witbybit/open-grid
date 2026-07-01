@@ -4,6 +4,8 @@ import type { RowNode } from '../rowNode.js';
 import type { GridCellPointer, GridSelectionState, SelectionChangeResult, RowSelectionChangeResult, GridCellClickParams } from './GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
+import type { GridViewDefinition, GridWorkspaceState } from '../workspace/workspaceTypes.js';
+import type { GridIntegrityIssue } from '../features/dataIntegrity/integrityTypes.js';
 
 export interface GridEvent<T = unknown> {
 	type: string;
@@ -19,6 +21,7 @@ export enum GridEventName {
 	cellsCopied = 'cellsCopied',
 	cellsPasted = 'cellsPasted',
 	cellValueChanged = 'cellValueChanged',
+	writeBlocked = 'writeBlocked',
 	columnOrderChanged = 'columnOrderChanged',
 	columnReorderToggled = 'columnReorderToggled',
 	columnResized = 'columnResized',
@@ -39,8 +42,14 @@ export enum GridEventName {
 	runtimeFault = 'runtimeFault',
 	selectionChanged = 'selectionChanged',
 	paginationChanged = 'paginationChanged',
-	serverBlockLoaded = 'serverBlockLoaded',
-	serverBlockLoadFailed = 'serverBlockLoadFailed',
+	// ── Infinite (block/range) row model events ───────────────────────────────
+	infiniteBlockLoaded = 'infiniteBlockLoaded',
+	infiniteBlockLoadFailed = 'infiniteBlockLoadFailed',
+	// ── Server-page row model events ──────────────────────────────────────────
+	serverPageLoadingStarted = 'serverPageLoadingStarted',
+	serverPageLoaded = 'serverPageLoaded',
+	serverPageLoadFailed = 'serverPageLoadFailed',
+	serverPageChanged = 'serverPageChanged',
 	showGroupFooterChanged = 'showGroupFooterChanged',
 	sortChanged = 'sortChanged',
 	cellValidationChanged = 'cellValidationChanged',
@@ -50,6 +59,27 @@ export enum GridEventName {
 	rowDragEnd = 'rowDragEnd',
 	rowDragCancelled = 'rowDragCancelled',
 	rowOrderChanged = 'rowOrderChanged',
+	// ── Query model events ────────────────────────────────────────────────────────
+	queryModelChanged = 'queryModelChanged',
+	// ── Workspace events ──────────────────────────────────────────────────────────
+	viewSaved = 'viewSaved',
+	viewApplied = 'viewApplied',
+	viewDeleted = 'viewDeleted',
+	viewRenamed = 'viewRenamed',
+	workspaceStateChanged = 'workspaceStateChanged',
+}
+
+export type GridWriteBlockedSource = 'edit' | 'paste' | 'fill';
+export type GridWriteBlockedStatus = 'validationFailed' | 'capabilityDenied' | 'rejected';
+
+export interface GridWriteBlockedEventPayload {
+	source: GridWriteBlockedSource;
+	status: GridWriteBlockedStatus;
+	reason: string;
+	cells: ReadonlyArray<{ rowId: string; colField: string }>;
+	rowCount: number;
+	colCount: number;
+	issues?: readonly GridIntegrityIssue[];
 }
 
 export interface GridEventPayloadMap<TRowData = unknown> {
@@ -59,6 +89,7 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.cellsCopied]: { cells: Array<{ rowId: string; colField: string }>; rowCount: number; colCount: number; text: string };
 	[GridEventName.cellsPasted]: { rowCount: number; colCount: number };
 	[GridEventName.cellValueChanged]: { rowId: string; colField: string; oldValue: unknown; newValue: unknown };
+	[GridEventName.writeBlocked]: GridWriteBlockedEventPayload;
 	[GridEventName.columnOrderChanged]: { columns: ColumnDef<TRowData>[]; columnFields: string[] };
 	[GridEventName.columnReorderToggled]: { enabled: boolean };
 	[GridEventName.columnResized]: { colField: string; width: number };
@@ -89,19 +120,23 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	};
 	[GridEventName.runtimeFault]: RuntimeFault;
 	[GridEventName.selectionChanged]: { selection: GridSelectionState; result: SelectionChangeResult };
-	[GridEventName.serverBlockLoaded]: {
+	[GridEventName.infiniteBlockLoaded]: {
 		blockIndex: number;
 		loadedBlockStart: number;
 		loadedBlockEnd: number;
 		totalRecords: number;
 		durationMs: number;
 	};
-	[GridEventName.serverBlockLoadFailed]: {
+	[GridEventName.infiniteBlockLoadFailed]: {
 		blockIndex: number;
 		startRow: number;
 		endRow: number;
 		message: string;
 	};
+	[GridEventName.serverPageLoadingStarted]: { page: number; pageSize: number };
+	[GridEventName.serverPageLoaded]: { page: number; pageSize: number; pageCount: number; totalRowCount: number };
+	[GridEventName.serverPageLoadFailed]: { page: number; pageSize: number; message: string };
+	[GridEventName.serverPageChanged]: { page: number; pageSize: number; pageCount: number; totalRowCount: number };
 	[GridEventName.showGroupFooterChanged]: { showGroupFooter: boolean | undefined };
 	[GridEventName.sortChanged]: { sortModel: SortModel | null };
 	[GridEventName.cellValidationChanged]: { rowId: string; colField: string; error: string | null };
@@ -111,4 +146,10 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.rowDragEnd]: { rowId: string; overRowId: string | null; overVisualIndex: number | null };
 	[GridEventName.rowDragCancelled]: { rowId: string };
 	[GridEventName.rowOrderChanged]: { rowIds: string[] };
+	[GridEventName.queryModelChanged]: { queryModel: import('../query/GridQueryModel.js').GridQueryModel | null };
+	[GridEventName.viewSaved]: { view: GridViewDefinition };
+	[GridEventName.viewApplied]: { view: GridViewDefinition };
+	[GridEventName.viewDeleted]: { id: string };
+	[GridEventName.viewRenamed]: { id: string; name: string };
+	[GridEventName.workspaceStateChanged]: { state: GridWorkspaceState };
 }

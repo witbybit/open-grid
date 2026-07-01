@@ -1,5 +1,50 @@
-export { createApiFacade, createClientGrid, createServerGrid, createLocalStorageAdapter } from './createGrid.js';
-export type { ClientGridOptions, ServerGridOptions, GridPersistenceAdapter, PersistedGridState } from './createGrid.js';
+export { createClientGrid, createInfiniteGrid, createServerPageGrid, createLocalStorageAdapter } from './createGrid.js';
+export type {
+	ClientGridOptions,
+	InfiniteGridOptions,
+	ServerPageGridOptions,
+	GridPersistenceAdapter,
+	PersistedGridState,
+	GridWorkspaceAdapter,
+} from './createGrid.js';
+export type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from './workspace/workspaceTypes.js';
+export { createLocalStorageWorkspaceAdapter } from './workspace/localStorageWorkspaceAdapter.js';
+export { createWorkspaceController } from './workspace/GridWorkspaceController.js';
+export type { GridWorkspaceController } from './workspace/GridWorkspaceController.js';
+export type {
+	GridQueryModel,
+	GridQueryGroup,
+	GridQueryCondition,
+	GridQueryNode,
+	QueryDiagnostics,
+	QueryConditionDiagnostic,
+} from './query/GridQueryModel.js';
+export { createEmptyQueryModel, isQueryModelActive, countQueryNodes } from './query/GridQueryModel.js';
+export type { GridAnalysisStateSummary } from './analysis/analysisState.js';
+export { summarizeAnalysisState } from './analysis/analysisState.js';
+export type { GridDistinctValueSummary } from './distinctValues.js';
+export { getQueryOperator, getQueryOperatorsForType } from './query/queryOperatorRegistry.js';
+export type { QueryOperatorDefinition, QueryEvaluateParams } from './query/queryOperatorRegistry.js';
+export { evaluateQueryModel, applyQueryModelFilter, createQueryEvaluationContext } from './query/evaluateQueryModel.js';
+export type { QueryEvaluationContext } from './query/evaluateQueryModel.js';
+export type {
+	GridCapabilityAction,
+	GridCapabilityParams,
+	GridCapabilityResult,
+	GridCapabilityCallback,
+	GridCapabilitiesConfig,
+	CapabilityDiagnostics,
+} from './capabilities/capabilityTypes.js';
+export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from './capabilities/capabilityTypes.js';
+export type { InfiniteDatasource, InfiniteGetRowsParams, InfiniteRowModelOptions } from './infiniteRowModel.js';
+export type {
+	ServerDatasource,
+	ServerGetPageParams,
+	ServerPaginationOptions,
+	ServerPageState,
+	ServerPageRowModelOptions,
+} from './serverPageRowModel.js';
+export type { RowModelType } from './state/GridState.js';
 export type { PersistenceStatus, PersistenceSaveStatus } from './persistence/statePersistence.js';
 export { GRID_STATE_SCHEMA_VERSION, validateSchemaVersion } from './persistence/statePersistence.js';
 
@@ -7,7 +52,7 @@ export { RowNode } from './rowNode.js';
 export { GridEventName } from './api/GridEvents.js';
 export type { RowDataTransaction, RowNodeTransaction } from './api/GridApi.js';
 export type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './api/GridApi.js';
-export type { GridEventPayloadMap } from './api/GridEvents.js';
+export type { GridEventPayloadMap, GridWriteBlockedEventPayload, GridWriteBlockedSource, GridWriteBlockedStatus } from './api/GridEvents.js';
 export type {
 	CellEditorProps,
 	CellPointer,
@@ -15,6 +60,9 @@ export type {
 	CellState,
 	ColumnState,
 	GridApi,
+	GridSnapshotKeyListener,
+	GridSnapshotListener,
+	GridStateSnapshot,
 	GridCellAccess,
 	GridCellClickParams,
 	ActiveEditState,
@@ -53,21 +101,16 @@ export type {
 	GridStyleRule,
 	ValueGetterParams,
 } from './columnDef.js';
-export type { GridState, Listener } from './state/GridState.js';
-export type { RowModel } from './rowModel.js';
+export type { GridInitialState } from './state/GridState.js';
+export type {
+	VisualRowModel,
+	AllDataNodesCapableRowModel,
+	FilteredDataNodesCapableRowModel,
+	CurrentPageDataNodesCapableRowModel,
+} from './rowModel.js';
 export type { VisualRow, DataVisualRow, GroupVisualRow, DetailVisualRow, FooterVisualRow, LoadingVisualRow } from './visualRow.js';
 export type { PersistedGridState as SerializableGridState } from './persistence/statePersistence.js';
 
-export {
-	canEditCell,
-	canFocusVisualRow,
-	isDataVisualRow,
-	isDataCellSelectable,
-	isEditableVisualRow,
-	isFullWidthVisualRow,
-	isSelectableVisualRow,
-} from './visualRow.js';
-export { compileStyleRules } from './styling/styleRules.js';
 export { isDomCellRenderer } from './columnDef.js';
 export type {
 	FilterModel,
@@ -77,6 +120,7 @@ export type {
 	NumberFilterCondition,
 	DateFilterCondition,
 	SetFilterCondition,
+	SelectFilterCondition,
 	CompoundFilterCondition,
 	TextFilterOperator,
 	NumberFilterOperator,
@@ -85,7 +129,19 @@ export type {
 	RowModelConfig,
 	SortModel,
 } from './rowModel.js';
-export type { AggregationDef } from './rows/stages/aggregateStage.js';
+export type {
+	ColumnFilterDef,
+	ColumnFilterType,
+	FilterSelectOption,
+	FilterFetchParams,
+	FilterFetchResult,
+	FilterPageParams,
+	FilterPageResult,
+	CustomFilterRendererParams,
+	FilterSurface,
+} from './filters/filterDef.js';
+export { resolveColumnFilterDef } from './filters/filterDef.js';
+export type { AggregationDef } from './rowModel.js';
 export type { OpOption } from './filterOperations.js';
 export {
 	TEXT_OPS,
@@ -100,20 +156,45 @@ export {
 	getFilterChipText,
 } from './filterOperations.js';
 export type { CsvExportOptions } from './export/csvExport.js';
-export {
-	parseVisualRowId,
-	toDataVisualRowId,
-	toDetailVisualRowId,
-	toFooterVisualRowId,
-	toGroupVisualRowId,
-	toLoadingVisualRowId,
-} from './rows/visualRowIds.js';
-export type { GroupPathItem } from './rows/visualRowIds.js';
-export type { IGridDatasource } from './serverRowModel.js';
 export type { GridContextMenuItem, GridContextMenuOptions } from './contextMenu.js';
-export type { BatchCellValueUpdate } from './features/DataMutationController.js';
-export type { CellValidationError, RowValidatorParams, RowValidator } from './features/ValidationManager.js';
-export type { ValueValidatorParams, EditableParams, TooltipParams, ValueFormatterParams } from './columnDef.js';
+export type { BatchCellValueUpdate } from './api/GridApi.js';
+export type {
+	GridIntegrityApi,
+	GridCommitResult,
+	GridIntegrityIssue,
+	GridIntegrityIssueSource,
+	GridIntegrityIssueType,
+	GridIntegritySeverity,
+	GridIntegrityIssueFilter,
+	GridIntegritySummary,
+	GridIntegrityScope,
+	GridIntegrityRunOptions,
+	GridIntegrityRunResult,
+	GridDataIntegrityConfig,
+	GridValidationIntegrityOptions,
+	GridQualityIntegrityOptions,
+	GridDiffIntegrityOptions,
+	GridLiveStreamIntegrityOptions,
+	GridConflictIntegrityOptions,
+	GridCellIntegrityRule,
+	GridRowIntegrityRule,
+	GridIntegrityRuleResult,
+	GridDataQualityRule,
+	GridDataQualityRuleContext,
+	GridDiffModel,
+	GridDiffResult,
+	GridCellDiff,
+	GridDiffAcceptResult,
+	GridCellConflict,
+	ResolveConflictOptions,
+	ConflictResolutionResult,
+	ServerIntegrityReport,
+	GridTransactionStreamHandle,
+	GridTransactionStreamState,
+} from './integrity.js';
+export { required, email, min, max, number, date, oneOf, regex, customCellRule } from './integrity.js';
+export { duplicateValueRule, missingRequiredRule } from './integrity.js';
+export type { TooltipParams, ValueFormatterParams } from './columnDef.js';
 export type { FloatingFilterRendererParams } from './renderer/floatingFilterRenderer.js';
 export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';
 export type { GridNavigationOptions } from './navigation.js';
@@ -138,4 +219,8 @@ export {
 export type { ThemeTokens, BuiltInThemeName } from './renderer/themes.js';
 export type { GridDomainVersions } from './state/GridDomainVersions.js';
 export type { GridInstrumentation, GridInstrumentationSnapshot, FrameMetrics, FallbackMetric } from './diagnostics/GridInstrumentation.js';
-export { GridMetric, NoopGridInstrumentation, RecordingGridInstrumentation, NOOP_INSTRUMENTATION } from './diagnostics/GridInstrumentation.js';
+export { GridMetric } from './diagnostics/GridInstrumentation.js';
+
+// ── Insight Layer ─────────────────────────────────────────────────────────────
+export type { GridInsightLayer, GridInsightLayerId, GridInsightSeverity, GridCellDecoration, GridRowDecoration } from './insights/insightTypes.js';
+export { GridInsightRegistry } from './insights/GridInsightRegistry.js';

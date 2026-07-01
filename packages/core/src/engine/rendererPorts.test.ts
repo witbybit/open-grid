@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { headlessRendererPort, headlessThemePort, createHeadlessPorts } from './rendererPorts.js';
+import { headlessRendererPort, headlessThemePort, HEADLESS_PORTS } from './rendererPorts.js';
 import { DARK_THEME } from '../renderer/themes.js';
 
 describe('headlessRendererPort', () => {
@@ -55,17 +55,13 @@ describe('headlessThemePort', () => {
 	});
 });
 
-describe('createHeadlessPorts', () => {
-	it('returns an object with renderer and theme ports', () => {
-		const ports = createHeadlessPorts();
-		expect(ports.renderer).toBe(headlessRendererPort);
-		expect(ports.theme).toBe(headlessThemePort);
+describe('HEADLESS_PORTS', () => {
+	it('contains the headless renderer and theme ports', () => {
+		expect(HEADLESS_PORTS.renderer).toBe(headlessRendererPort);
+		expect(HEADLESS_PORTS.theme).toBe(headlessThemePort);
 	});
 
-	it('can be called multiple times — each call returns the same singleton ports', () => {
-		const a = createHeadlessPorts();
-		const b = createHeadlessPorts();
-		expect(a.renderer).toBe(b.renderer);
-		expect(a.theme).toBe(b.theme);
+	it('is a stable singleton — same reference on every access', () => {
+		expect(HEADLESS_PORTS).toBe(HEADLESS_PORTS);
 	});
 });

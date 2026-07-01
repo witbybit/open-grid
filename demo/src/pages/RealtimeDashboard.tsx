@@ -1,13 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Grid, GridEventName, type GridApi, type GridContextMenuOptions, type GridReadyEvent, type StyleRule } from '@open-grid/react';
-import { Activity, BarChart3, Code2, RefreshCw, TrendingUp, Zap } from 'lucide-react';
+import {
+	Grid,
+	GridEventName,
+	duplicateValueRule,
+	type GridApi,
+	type GridContextMenuOptions,
+	type GridReadyEvent,
+	type StyleRule,
+	type GridIntegrityIssue,
+	type GridTransactionStreamHandle,
+} from '@open-grid/react';
+import { Activity, BarChart3, Code2, RefreshCw, TrendingUp, Zap, ShieldCheck } from 'lucide-react';
 import { createDashboardColumns, createDashboardRows } from './demoGridConfigs';
 import type { DashboardStockRow } from '../components/FastRenderers';
 
 interface RealtimeDashboardProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	onGridReady?: (event: GridReadyEvent<DashboardStockRow>) => void;
 }
 
@@ -24,9 +34,15 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 	const autoFireRef = useRef(false);
 	const autoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 	autoFireRef.current = autoFire;
-	// Stable set of rowIds captured when selection changes. Recomputed on explicit
-	// sort/filter/selection changes but NOT on live data updates — so the chart always
-	// shows the same companies even as their values stream in.
+
+	// ── Integrity state ────────────────────────────────────────────────────────
+	const streamRef = useRef<GridTransactionStreamHandle<DashboardStockRow> | null>(null);
+	const streamTickRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const [qualityIssues, setQualityIssues] = useState<GridIntegrityIssue[] | null>(null);
+	const [diffActive, setDiffActive] = useState(false);
+	const [streamRunning, setStreamRunning] = useState(false);
+	const [conflictCount, setConflictCount] = useState(0);
+
 	const selectedRowIdsRef = useRef<string[]>([]);
 	const selectedColsRef = useRef<string[]>([]);
 
@@ -54,8 +70,6 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 		[]
 	);
 
-	// Re-reads stats + sparkline for the currently captured rowIds/cols.
-	// Called both on selection change (after re-capturing) and on live data updates.
 	const refreshStats = useCallback(() => {
 		if (!api) return;
 		const rowIds = selectedRowIdsRef.current;
@@ -78,7 +92,6 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 		} else {
 			setStats({ sum: 0, avg: 0, min: 0, max: 0, count: 0 });
 		}
-		// Sparkline: prices for selected companies, falling back to first 18 rows
 		if (rowIds.length > 0) {
 			setPrices(rowIds.map((id) => parseFloat(String(api.getCellValue(id, 'price'))) || 0));
 		} else {
@@ -93,12 +106,9 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 		setCompanyCount(rowIds.length);
 	}, [api]);
 
-	// Called only when the selection changes. Re-evaluates which rows are in the range
-	// using the current sort order, then refreshes stats. Triggered by explicit user
-	// interactions (cell click, drag, sort/filter model change) but NOT by live data.
 	const updateStatsAndChart = useCallback(() => {
 		if (!api) return;
-		const state = api.getState();
+		const state = api.getStateSnapshot();
 		const range = state.selection.range;
 		if (range) {
 			selectedRowIdsRef.current = api.rows().inRange(range).getIds();
@@ -120,16 +130,11 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 		updateStatsAndChart();
 		const log = (msg: string, type = 'info') =>
 			setEventLogs((prev) => [{ id: ++eventLogIdRef.current, time: new Date().toLocaleTimeString(), msg, type }, ...prev].slice(0, 10));
-		// Selection change: re-evaluate which rows are in range, then refresh values.
 		const unsubSelection = api.subscribeToKey('selection', updateStatsAndChart);
-		// Live data from updateRows fires rowsUpdated (not cellValueChanged).
-		// We only refresh values for the already-captured rowIds — no re-evaluation
-		// of which rows are selected, so the chart stays locked to the same companies.
 		const unsubRows = api.addEventListener(GridEventName.rowsUpdated, () => {
 			log('rowsUpdated');
 			refreshStats();
 		});
-		// Individual cell edits still fire cellValueChanged.
 		const unsubValue = api.addEventListener(GridEventName.cellValueChanged, () => {
 			log('cellValueChanged');
 			refreshStats();
@@ -140,6 +145,8 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 			unsubValue();
 		};
 	}, [api, updateStatsAndChart, refreshStats]);
+
+	// ── autoFire (uses raw updateRows — no conflict tracking) ──────────────────
 
 	const triggerVolatility = useCallback(() => {
 		if (!api) return;
@@ -182,6 +189,136 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 		[]
 	);
 
+	// ── Integrity: Data Quality ────────────────────────────────────────────────
+
+	const handleRunQuality = useCallback(async () => {
+		if (!api) return;
+		const result = await api.integrity.run({ modules: ['quality'] });
+		const issues = result.issues.filter((i) => i.source === 'dataQuality') as GridIntegrityIssue[];
+		setQualityIssues(issues);
+	}, [api]);
+
+	const handleClearQuality = useCallback(() => {
+		if (!api) return;
+		api.integrity.clearIssues({ source: 'dataQuality' });
+		setQualityIssues(null);
+	}, [api]);
+
+	// ── Integrity: Diff ────────────────────────────────────────────────────────
+
+	const handleActivateDiff = useCallback(() => {
+		if (!api) return;
+		const currentRows = api.rows().getAll() as DashboardStockRow[];
+		api.integrity.setDiffModel({
+			base: { rows, getRowId: (r: DashboardStockRow) => r.id },
+			compare: { rows: currentRows, getRowId: (r: DashboardStockRow) => r.id },
+		});
+		setDiffActive(true);
+	}, [api, rows]);
+
+	const handleClearDiff = useCallback(() => {
+		if (!api) return;
+		api.integrity.clearDiff();
+		setDiffActive(false);
+	}, [api]);
+
+	// ── Integrity: Live Stream ─────────────────────────────────────────────────
+
+	const handleStartStream = useCallback(() => {
+		if (!api || streamRef.current) return;
+		const stream = api.integrity.createStream({
+			batchMs: 400,
+			flashChanges: true,
+			coalesceBy: 'cell',
+			dirtyCellPolicy: 'markConflict',
+		});
+		streamRef.current = stream;
+		setStreamRunning(true);
+
+		let tick = 0;
+		function pushTick() {
+			if (!streamRef.current) return;
+			const allRows = rows;
+			const n = 3 + (tick % 5);
+			const updates = Array.from({ length: n }, (_, j) => {
+				const row = allRows[Math.abs(Math.floor(Math.sin((tick * 7 + j) * 1.3) * allRows.length)) % allRows.length];
+				const newPrice = parseFloat((parseFloat(row.price) * (0.98 + (tick % 3) * 0.01)).toFixed(2));
+				tick++;
+				return { rowId: row.id, colField: 'price', value: newPrice };
+			});
+			stream.push({ cells: updates });
+			streamTickRef.current = setTimeout(pushTick, 600 + (tick % 5) * 80);
+		}
+		pushTick();
+	}, [api, rows]);
+
+	const handleStopStream = useCallback(() => {
+		if (streamTickRef.current) clearTimeout(streamTickRef.current);
+		streamTickRef.current = null;
+		streamRef.current?.destroy();
+		streamRef.current = null;
+		setStreamRunning(false);
+	}, []);
+
+	// ── Integrity: Conflicts ───────────────────────────────────────────────────
+
+	const handleInjectConflicts = useCallback(() => {
+		if (!api) return;
+		const now = Date.now();
+		api.integrity.publishIssues('conflict', [
+			{
+				id: 'ci-AAPL-price',
+				source: 'conflict',
+				type: 'conflict',
+				severity: 'error',
+				blocking: true,
+				rowId: 'AAPL',
+				colField: 'price',
+				message: 'Conflict: local 173.50 vs remote 168.20',
+				createdAt: now,
+			},
+			{
+				id: 'ci-MSFT-volume',
+				source: 'conflict',
+				type: 'conflict',
+				severity: 'error',
+				blocking: true,
+				rowId: 'MSFT',
+				colField: 'volume',
+				message: 'Conflict: local 42.5 vs remote 38.1',
+				createdAt: now,
+			},
+			{
+				id: 'ci-NVDA-change',
+				source: 'conflict',
+				type: 'conflict',
+				severity: 'error',
+				blocking: true,
+				rowId: 'NVDA',
+				colField: 'change',
+				message: 'Conflict: local +3.4 vs remote -1.2',
+				createdAt: now,
+			},
+		]);
+		setConflictCount(3);
+	}, [api]);
+
+	const handleClearConflicts = useCallback(() => {
+		if (!api) return;
+		api.integrity.clearIssues({ source: 'conflict' });
+		setConflictCount(0);
+	}, [api]);
+
+	// ── Cleanup ────────────────────────────────────────────────────────────────
+
+	useEffect(
+		() => () => {
+			if (streamTickRef.current) clearTimeout(streamTickRef.current);
+			streamRef.current?.destroy();
+		},
+		[]
+	);
+
 	const contextMenuOptions = useMemo<GridContextMenuOptions<DashboardStockRow>>(
 		() => ({
 			customItems: [
@@ -209,6 +346,7 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 	return (
 		<div className='flex flex-col xl:flex-row h-full w-full gap-5 overflow-hidden'>
 			<div className='flex-1 flex flex-col gap-4 min-h-0 min-w-0'>
+				{/* Top bar */}
 				<div className='bg-slate-900/10 border border-slate-900 rounded-xl p-3 flex items-center justify-between gap-4 shrink-0'>
 					<div className='flex items-center gap-2'>
 						<span className='w-2 h-2 rounded-full bg-emerald-500 animate-ping' />
@@ -229,9 +367,11 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 						{autoFire ? 'Auto 10hz ON' : 'Auto 10hz'}
 					</button>
 				</div>
+
+				{/* Grid */}
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						mode='client'
+						rowModelType='client'
 						rows={rows}
 						columns={columns}
 						styleRules={styleRules}
@@ -240,7 +380,77 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 						enableChart
 						pinLeftColumns={2}
 						enableNavigation
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
+						onCellValueChanged={onCellValueChanged}
+						dataIntegrity={{
+							validation: {
+								enabled: true,
+								validateOnEdit: true,
+								cellRules: [
+									{
+										id: 'price-positive',
+										field: 'price',
+										severity: 'error',
+										blocking: true,
+										validate({ value }) {
+											const n = parseFloat(String(value));
+											if (isNaN(n) || n <= 0) return { message: 'Price must be a positive number' };
+											return null;
+										},
+									},
+									{
+										id: 'volume-non-negative',
+										field: 'volume',
+										severity: 'warning',
+										blocking: false,
+										validate({ value }) {
+											const n = parseFloat(String(value));
+											if (isNaN(n) || n < 0) return { message: 'Volume cannot be negative' };
+											return null;
+										},
+									},
+								],
+							},
+							quality: {
+								enabled: true,
+								rules: [
+									duplicateValueRule<DashboardStockRow>('symbol'),
+									{
+										id: 'high-risk-price',
+										label: 'High-Risk Price Threshold',
+										run(context) {
+											return context.rows
+												.filter((ref) => {
+													const row = ref.row as DashboardStockRow;
+													return row.risk === 'high' && parseFloat(String(row.price)) < 100;
+												})
+												.map((ref) => ({
+													id: `high-risk-${ref.rowId}`,
+													source: 'dataQuality' as const,
+													type: 'custom' as const,
+													severity: 'warning' as const,
+													blocking: false,
+													rowId: ref.rowId,
+													colField: 'price',
+													message: 'High-risk stock priced below $100 — verify position',
+													createdAt: Date.now(),
+												}));
+										},
+									},
+								],
+							},
+							diff: true,
+							liveStream: {
+								enabled: true,
+								dirtyCellPolicy: 'markConflict',
+								flashChanges: true,
+							},
+							conflicts: true,
+						}}
+						sidebar={{
+							panels: ['dataIntegrity'],
+							position: 'right',
+						}}
 						onGridReady={(event) => {
 							setApi(event.api);
 							onGridReady?.(event);
@@ -248,7 +458,122 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 					/>
 				</div>
 			</div>
+
+			{/* Right sidebar */}
 			<div className='w-full xl:w-80 flex flex-col gap-4 shrink-0 overflow-y-auto max-h-full xl:max-h-none pr-1.5'>
+				{/* Data Integrity Controls */}
+				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3'>
+					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
+						<ShieldCheck className='w-4 h-4 text-indigo-400' />
+						Data Integrity Pipeline
+					</h3>
+
+					{/* Quality */}
+					<div className='flex flex-col gap-1.5'>
+						<div className='text-[9px] font-bold uppercase tracking-widest text-slate-600'>Quality</div>
+						<div className='flex gap-2 flex-wrap'>
+							<button
+								onClick={handleRunQuality}
+								className='flex-1 py-1.5 px-2 rounded-lg border border-indigo-700/50 bg-indigo-950/40 text-indigo-300 text-[10px] font-bold hover:bg-indigo-900/40 transition-colors cursor-pointer'
+							>
+								Run Quality Check
+							</button>
+							{qualityIssues !== null && (
+								<button
+									onClick={handleClearQuality}
+									className='py-1.5 px-2 rounded-lg border border-slate-700/50 bg-slate-800/40 text-slate-400 text-[10px] font-bold hover:bg-slate-700/40 transition-colors cursor-pointer'
+								>
+									Clear
+								</button>
+							)}
+						</div>
+						{qualityIssues !== null && (
+							<div className='text-[10px] text-slate-400'>
+								{qualityIssues.length} issues —{' '}
+								<span className='text-red-400'>{qualityIssues.filter((i) => i.severity === 'error').length} errors</span>{' '}
+								<span className='text-amber-400'>{qualityIssues.filter((i) => i.severity === 'warning').length} warnings</span>
+							</div>
+						)}
+					</div>
+
+					{/* Diff */}
+					<div className='flex flex-col gap-1.5'>
+						<div className='text-[9px] font-bold uppercase tracking-widest text-slate-600'>Diff vs EOD Snapshot</div>
+						<div className='flex gap-2'>
+							{!diffActive ? (
+								<button
+									onClick={handleActivateDiff}
+									className='flex-1 py-1.5 px-2 rounded-lg border border-amber-700/50 bg-amber-950/40 text-amber-300 text-[10px] font-bold hover:bg-amber-900/40 transition-colors cursor-pointer'
+								>
+									Activate Diff
+								</button>
+							) : (
+								<button
+									onClick={handleClearDiff}
+									className='flex-1 py-1.5 px-2 rounded-lg border border-slate-700/50 bg-slate-800/40 text-slate-400 text-[10px] font-bold hover:bg-slate-700/40 transition-colors cursor-pointer'
+								>
+									Clear Diff
+								</button>
+							)}
+						</div>
+						{diffActive && <div className='text-[10px] text-amber-400/80'>Diff active — changed cells highlighted</div>}
+					</div>
+
+					{/* Live Stream */}
+					<div className='flex flex-col gap-1.5'>
+						<div className='text-[9px] font-bold uppercase tracking-widest text-slate-600'>Live Stream (Integrity)</div>
+						<div className='flex gap-2'>
+							{!streamRunning ? (
+								<button
+									onClick={handleStartStream}
+									className='flex-1 py-1.5 px-2 rounded-lg border border-emerald-700/50 bg-emerald-950/40 text-emerald-300 text-[10px] font-bold hover:bg-emerald-900/40 transition-colors cursor-pointer'
+								>
+									Start Feed
+								</button>
+							) : (
+								<button
+									onClick={handleStopStream}
+									className='flex-1 py-1.5 px-2 rounded-lg border border-rose-700/50 bg-rose-950/40 text-rose-300 text-[10px] font-bold hover:bg-rose-900/40 transition-colors cursor-pointer'
+								>
+									Stop Feed
+								</button>
+							)}
+						</div>
+						{streamRunning && (
+							<div className='text-[10px] text-emerald-400/80 flex items-center gap-1'>
+								<span className='w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block' />
+								Streaming — edit a cell to trigger a conflict
+							</div>
+						)}
+					</div>
+
+					{/* Conflicts */}
+					<div className='flex flex-col gap-1.5'>
+						<div className='text-[9px] font-bold uppercase tracking-widest text-slate-600'>Conflicts</div>
+						<div className='flex gap-2'>
+							<button
+								onClick={handleInjectConflicts}
+								disabled={conflictCount > 0}
+								className='flex-1 py-1.5 px-2 rounded-lg border border-purple-700/50 bg-purple-950/40 text-purple-300 text-[10px] font-bold hover:bg-purple-900/40 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+							>
+								Inject 3 Conflicts
+							</button>
+							{conflictCount > 0 && (
+								<button
+									onClick={handleClearConflicts}
+									className='py-1.5 px-2 rounded-lg border border-slate-700/50 bg-slate-800/40 text-slate-400 text-[10px] font-bold hover:bg-slate-700/40 transition-colors cursor-pointer'
+								>
+									Clear
+								</button>
+							)}
+						</div>
+						{conflictCount > 0 && (
+							<div className='text-[10px] text-red-400'>{conflictCount} unresolved — open Conflicts panel to resolve</div>
+						)}
+					</div>
+				</div>
+
+				{/* Selection Analytics */}
 				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3'>
 					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
 						<BarChart3 className='w-4 h-4 text-emerald-400' />
@@ -273,6 +598,8 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 						))}
 					</div>
 				</div>
+
+				{/* Live Price Sparkline */}
 				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3'>
 					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
 						<Activity className='w-4 h-4 text-cyan-400' />
@@ -283,6 +610,8 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 						<polyline fill='none' stroke='#10b981' strokeWidth='1.5' points={svgPoints} />
 					</svg>
 				</div>
+
+				{/* Realtime Event Logger */}
 				<div className='p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-2'>
 					<h3 className='text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5'>
 						<RefreshCw className='w-4 h-4 text-purple-400' />

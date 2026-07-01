@@ -1,31 +1,16 @@
 /**
  * Column definition types, cell renderer interfaces, and path utilities.
- *
- * Circular type-only imports from store.ts are intentional and safe — they are
- * erased at build time and TypeScript resolves them lazily.
  */
 import type { RowNode } from './rowNode.js';
-import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState } from './store.js';
+import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState } from './api/GridApi.js';
 import type { GroupVisualRow, DetailVisualRow } from './visualRow.js';
+import type { GridCapabilityCallback } from './capabilities/capabilityTypes.js';
 
 // ─── Value getter / setter / validator params ─────────────────────────────────
 
 export interface ValueGetterParams<TRowData = unknown> {
 	node: RowNode<TRowData>;
 	row: TRowData;
-	colField: string;
-}
-
-export interface ValueValidatorParams<TRowData = unknown> {
-	value: unknown;
-	oldValue: unknown;
-	row: TRowData;
-	colField: string;
-}
-
-export interface EditableParams<TRowData = unknown> {
-	row: TRowData;
-	rowId: string;
 	colField: string;
 }
 
@@ -67,6 +52,34 @@ export interface CellRendererCapabilities {
 	 * Ideal for real-time feeds (tick data, live prices) where even setState latency is too high.
 	 */
 	imperativeUpdate?: boolean;
+	/**
+	 * Returns a cheap plain-text representation of the cell value for use as a scroll impostor.
+	 *
+	 * Called during the pre-scroll prewarm pass and at scroll-frame synthesis time when the grid
+	 * needs a text stand-in for a not-yet-mounted portal (scrollBehavior:'live' or imperativeUpdate
+	 * columns). The string is shown in place of the full renderer while the grid is in motion;
+	 * the real renderer is mounted in the post-scroll fidelity lane.
+	 *
+	 * Return an empty string to fall back to the generic display-value text.
+	 * Leave undefined to skip the impostor contract entirely (renderer is mounted synchronously).
+	 */
+	scrollImpostor?: (params: { value: unknown; formattedValue: string }) => string;
+	/**
+	 * Controls what the scroll impostor looks like when the cell is not live during scroll.
+	 *
+	 * - `'html'` — After each fidelity render the grid captures the portal host's innerHTML and
+	 *              stores it in the cell display snapshot. During the next scroll, that static HTML
+	 *              is injected as an inert visual clone rather than plain text. The cell looks
+	 *              identical to its settled state while the grid is in motion.
+	 *
+	 * Leave undefined (default) for the standard plain-text impostor — fastest, but shows only
+	 * the raw display value string during scroll (no badge styling, colors, or icons).
+	 *
+	 * Only meaningful for columns that also have scrollImpostor defined (or a scrollBehavior that
+	 * activates the impostor path). Cells that have never completed a fidelity render fall back
+	 * to plain text until their first post-scroll upgrade.
+	 */
+	scrollSnapshot?: 'html';
 }
 
 // ─── Imperative handle ────────────────────────────────────────────────────────
@@ -207,7 +220,6 @@ export interface ColumnDef<TRowData = unknown> {
 	/** Named column type registered via `columnTypes` on the grid options. Resolved in the React layer. */
 	type?: string;
 	hide?: boolean;
-	movable?: boolean;
 	loading?: boolean;
 	valueGetter?: (params: ValueGetterParams<TRowData>) => unknown;
 	valueGetterDependencies?: string[];
@@ -220,12 +232,6 @@ export interface ColumnDef<TRowData = unknown> {
 	 * valueFormatter: ({ value }) => value != null ? `$${Number(value).toFixed(2)}` : ''
 	 */
 	valueFormatter?: (params: ValueFormatterParams<TRowData>) => string;
-	/**
-	 * Called before committing an edit to validate the new value.
-	 * Return a non-empty string to block the commit and surface an error message.
-	 * Supports async (return a Promise) for server-side checks.
-	 */
-	valueValidator?: (params: ValueValidatorParams<TRowData>) => string | null | Promise<string | null>;
 	/**
 	 * Called during commit to apply the value to the row's data object.
 	 * Sync: return false to reject. Async: return Promise<false> to reject after optimistic update.
@@ -242,16 +248,6 @@ export interface ColumnDef<TRowData = unknown> {
 	enableRowGroup?: boolean;
 	/** Set to true to hide/disable the header menu for this column. Defaults to false. */
 	suppressHeaderMenu?: boolean;
-	/** Set to false to disable column pinning for this column. Defaults to true. */
-	pinnable?: boolean;
-	/** Set to false to disable filtering for this column. Defaults to true. */
-	filterable?: boolean;
-	/**
-	 * Whether this cell is editable. Defaults to true.
-	 * Pass false to make the entire column read-only.
-	 * Pass a function for conditional editability (e.g., locked rows, permission checks).
-	 */
-	editable?: boolean | ((params: EditableParams<TRowData>) => boolean);
 	/** Minimum column width in pixels. Enforced during resize. */
 	minWidth?: number;
 	/** Maximum column width in pixels. Enforced during resize. */
@@ -281,32 +277,64 @@ export interface ColumnDef<TRowData = unknown> {
 	 */
 	headerGroup?: string | string[];
 	/**
+	 * Rich filter definition for this column. Supersedes `filterType` and `filterValues`.
+	 * Supports multi-select, single-select, async-*, infinite-*, and fully custom React UI.
+	 * Backwards-compatible — existing filterType/filterValues still work and are normalised
+	 * to filterDef internally.
+	 */
+	filterDef?: import('./filters/filterDef.js').ColumnFilterDef<TRowData>;
+	/**
 	 * Filter UI type shown for this column in the sidebar and header menu.
 	 * Defaults to `'text'`. Use `'none'` to hide the filter UI for this column.
+	 * @deprecated Prefer filterDef.type — this field is normalised into filterDef on mount.
 	 */
 	filterType?: 'text' | 'number' | 'date' | 'set' | 'none';
 	/**
 	 * For set filter: explicit list of selectable values.
 	 * When omitted, distinct values are derived from row data via `api.getColumnDistinctValues()`.
+	 * @deprecated Prefer filterDef.options — this field is normalised into filterDef on mount.
 	 */
 	filterValues?: (string | number | null)[];
 	/**
-	 * Custom floating filter renderer for this column (Plan 060).
+	 * Custom floating filter renderer for this column.
 	 * Receives a `FloatingFilterRendererParams` object and must populate `eCell`.
 	 * When omitted, the default input (text / number / date / set badge) is used.
+	 * @deprecated Prefer filterDef.renderFloatingFilter for React-based renderers.
 	 */
 	floatingFilterRenderer?: (params: import('./renderer/floatingFilterRenderer.js').FloatingFilterRendererParams<TRowData>) => void;
 	/**
-	 * Show a drag handle in this column's cells, allowing rows to be reordered by dragging.
-	 * Typically placed on the first column. Works in both managed and unmanaged drag modes.
-	 * Pass a function for conditional per-row drag handles (return false to hide for a row).
-	 */
-	rowDrag?: boolean | ((params: { rowData: TRowData; rowId: string }) => boolean);
-	/**
 	 * Prevent cell range selection from starting when the user clicks on cells in this column.
-	 * Automatically applied to columns with `rowDrag` set. Useful for action / checkbox columns.
+	 * Useful for action / checkbox / drag-handle columns.
 	 */
 	disableCellRangeSelection?: boolean;
+	/**
+	 * Marks this column as required for data-quality purposes.
+	 * Does not block editing — use `GridDataIntegrityManager.validation` cell rules to enforce hard constraints.
+	 */
+	required?: boolean;
+
+	// ── Column-level capability callbacks ────────────────────────────────────────
+	/** Return false / { allowed: false } to make this column read-only. */
+	canEdit?: GridCapabilityCallback<TRowData>;
+	canSelect?: GridCapabilityCallback<TRowData>;
+	canCopy?: GridCapabilityCallback<TRowData>;
+	canPaste?: GridCapabilityCallback<TRowData>;
+	canGroup?: GridCapabilityCallback<TRowData>;
+	canFill?: GridCapabilityCallback<TRowData>;
+	canSort?: GridCapabilityCallback<TRowData>;
+	canFilter?: GridCapabilityCallback<TRowData>;
+	canPin?: GridCapabilityCallback<TRowData>;
+	canResize?: GridCapabilityCallback<TRowData>;
+	canDelete?: GridCapabilityCallback<TRowData>;
+	canExpand?: GridCapabilityCallback<TRowData>;
+	/**
+	 * When defined, this column shows a row-drag handle. The callback is called per row to
+	 * conditionally show/hide the handle (return false to hide for a specific row).
+	 */
+	canDrag?: GridCapabilityCallback<TRowData>;
+	/** Return false / { allowed: false } to prevent header drag-reordering for this column. */
+	canMoveColumn?: GridCapabilityCallback<TRowData>;
+	canExport?: GridCapabilityCallback<TRowData>;
 }
 
 /**

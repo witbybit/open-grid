@@ -5,6 +5,7 @@ import {
 	GridCellPointer,
 	GridContextMenuOptions,
 	GridContextMenuHandle,
+	type GridEventPayloadMap,
 	registerGridContextMenu,
 	VisualRow,
 } from '@open-grid/core';
@@ -28,16 +29,25 @@ export interface GridViewProps<TRowData = unknown> {
 	enableContextMenu?: boolean;
 	contextMenuOptions?: GridContextMenuOptions<TRowData>;
 	onCellClick?: (params: GridCellClickParams<TRowData>) => void;
+	onWriteBlocked?: (event: GridEventPayloadMap<TRowData>[GridEventName.writeBlocked]) => void;
+	onCellValueChanged?: (event: GridEventPayloadMap<TRowData>[GridEventName.cellValueChanged]) => void;
 	navigationOptions?: {
 		editTrigger?: 'singleClick' | 'doubleClick';
 		arrowKeyNavigationEdit?: boolean;
-		onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	};
 	groupRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => ReactNode;
 	detailRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => ReactNode;
 	footerRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => ReactNode;
 	sidebar?: GridSidebarConfig<TRowData>;
 	enableChart?: boolean;
+	autoRowHeight?: boolean;
+}
+
+function warnInitialOnlyGridViewProp(propName: string): void {
+	console.warn(
+		`[open-grid/react] Prop "${propName}" is initial-only for the current grid instance. ` +
+			'Changing it after mount does not reconfigure the existing runtime. Remount or replace the grid api if you need the new value to take effect.'
+	);
 }
 
 export function GridView<TRowData = unknown>({
@@ -51,18 +61,32 @@ export function GridView<TRowData = unknown>({
 	enableContextMenu = true,
 	contextMenuOptions,
 	onCellClick,
+	onWriteBlocked,
+	onCellValueChanged,
 	navigationOptions = {},
 	groupRowRenderer,
 	detailRowRenderer,
 	footerRowRenderer,
 	sidebar,
 	enableChart = false,
+	autoRowHeight,
 }: GridViewProps<TRowData>) {
 	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const hostRef = useRef<GridHostWithAdapter<TRowData> | null>(null);
+	const apiRef = useRef(api);
+	apiRef.current = api;
 	const [adapterHandle, setAdapterHandle] = useState<GridAdapterHandle<unknown> | null>(null);
 	const isGridActiveRef = useRef(false);
+	const warnedInitialOnlyPropsRef = useRef(new Set<string>());
+	const sidebarDefaultOpenRef = useRef(sidebar?.defaultOpen);
+	const sidebarInitialApiRef = useRef(api);
+
+	if (sidebarInitialApiRef.current !== api) {
+		sidebarInitialApiRef.current = api;
+		sidebarDefaultOpenRef.current = sidebar?.defaultOpen;
+		warnedInitialOnlyPropsRef.current.clear();
+	}
 
 	useEffect(() => {
 		if (pinLeftColumns !== undefined || pinRightColumns !== undefined) {
@@ -108,7 +132,13 @@ export function GridView<TRowData = unknown>({
 								mount.isScrolling,
 								mount.isFocused,
 								mount.isSelected,
-								mount.slotGeneration
+								{
+									cellInstanceId: mount.cellInstanceId ?? '',
+									rowSlotId: mount.rowSlotId,
+									slotGeneration: mount.slotGeneration,
+									rowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
+									portalHostId: mount.portalHostId ?? '',
+								}
 							)
 						)
 							return;
@@ -125,11 +155,23 @@ export function GridView<TRowData = unknown>({
 						mount.isScrolling,
 						mount.isFocused,
 						mount.isSelected,
-						mount.slotGeneration
+						{
+							cellInstanceId: mount.cellInstanceId ?? '',
+							rowSlotId: mount.rowSlotId,
+							slotGeneration: mount.slotGeneration,
+							rowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
+							portalHostId: mount.portalHostId ?? '',
+						}
 					);
 				},
 				unmountCellContent: (unmount) => {
-					portalStore.unmountCell(unmount.cellKey, unmount.container, unmount.flushSync ?? false);
+					portalStore.unmountCell(unmount.cellKey, unmount.container, unmount.flushSync ?? false, {
+						cellInstanceId: unmount.cellInstanceId ?? '',
+						rowSlotId: unmount.rowSlotId,
+						slotGeneration: unmount.slotGeneration,
+						rowBindingGeneration: unmount.cellRowBindingGeneration ?? 0,
+						portalHostId: unmount.portalHostId ?? '',
+					});
 				},
 				flushCellContent: () => {},
 			},
@@ -149,6 +191,7 @@ export function GridView<TRowData = unknown>({
 					portalStore.unmountMenu(unmount.colField, unmount.container);
 				},
 			},
+			autoRowHeight,
 		});
 		hostRef.current = host;
 		setAdapterHandle(host.adapterHandle as GridAdapterHandle<unknown>);
@@ -156,45 +199,49 @@ export function GridView<TRowData = unknown>({
 		return () => {
 			hostRef.current = null;
 			setAdapterHandle(null);
+			isGridActiveRef.current = false;
 			host.destroy();
-			portalStore.clear();
+			portalStore.clear(true);
 		};
 	}, [api, portalStore]);
 
-	const [contextMenu, setContextMenu] = useState<GridContextMenuHandle<TRowData> | null>(null);
 	const contextMenuOptionsRef = useRef(contextMenuOptions);
 	contextMenuOptionsRef.current = contextMenuOptions;
+	const contextMenuRef = useRef<GridContextMenuHandle<TRowData> | null>(null);
 
 	useEffect(() => {
 		if (!enableContextMenu) {
-			setContextMenu(null);
+			contextMenuRef.current = null;
 			return;
 		}
 		const plugin = registerGridContextMenu<TRowData>(api, contextMenuOptions);
-		setContextMenu(plugin);
+		contextMenuRef.current = plugin;
 
 		return () => {
+			if (contextMenuRef.current === plugin) {
+				contextMenuRef.current = null;
+			}
 			plugin.dispose();
-			setContextMenu(null);
 		};
 	}, [api, enableContextMenu]);
 
 	useEffect(() => {
-		if (contextMenu && contextMenuOptionsRef.current) {
-			contextMenu.setOptions(contextMenuOptionsRef.current);
-		}
-	}, [contextMenu, contextMenuOptions]);
+		contextMenuRef.current?.setOptions(contextMenuOptionsRef.current ?? {});
+	}, [contextMenuOptions]);
 
 	const navigation = useGridNavigationController<TRowData>(
 		{
-			onCellValueChanged: (rowId, colField, val) => {
-				if (enableNavigation) navigationOptions.onCellValueChanged?.(rowId, colField, val);
-			},
 			editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
 			arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
 		},
 		enableNavigation
 	);
+	const navigationRef = useRef(navigation);
+	navigationRef.current = navigation;
+	const onCellClickRef = useRef(onCellClick);
+	onCellClickRef.current = onCellClick;
+	const enableContextMenuRef = useRef(enableContextMenu);
+	enableContextMenuRef.current = enableContextMenu;
 
 	useEffect(() => {
 		if (!enableNavigation) return;
@@ -206,9 +253,12 @@ export function GridView<TRowData = unknown>({
 		const handleGlobalKeyDown = (e: KeyboardEvent) => {
 			const activeEl = document.activeElement;
 			const isInside = isWithinThisGrid(activeEl) || isGridActiveRef.current;
-			if (isInside && navigation) {
-				navigation.handleKeyDown(e);
+			if (isInside) {
+				navigationRef.current?.handleKeyDown(e);
 			}
+		};
+		const handleGlobalMouseUp = () => {
+			navigationRef.current?.handleMouseUp();
 		};
 		const handlePointerDown = (e: MouseEvent) => {
 			isGridActiveRef.current = isWithinThisGrid(e.target);
@@ -230,18 +280,18 @@ export function GridView<TRowData = unknown>({
 			container.addEventListener('focusout', handleFocusOut);
 		}
 		window.addEventListener('keydown', handleGlobalKeyDown);
-		if (navigation) window.addEventListener('mouseup', navigation.handleMouseUp);
+		window.addEventListener('mouseup', handleGlobalMouseUp);
 		document.addEventListener('mousedown', handlePointerDown, true);
 		return () => {
 			window.removeEventListener('keydown', handleGlobalKeyDown);
-			if (navigation) window.removeEventListener('mouseup', navigation.handleMouseUp);
+			window.removeEventListener('mouseup', handleGlobalMouseUp);
 			document.removeEventListener('mousedown', handlePointerDown, true);
 			if (container) {
 				container.removeEventListener('focusin', handleFocusIn);
 				container.removeEventListener('focusout', handleFocusOut);
 			}
 		};
-	}, [navigation, enableNavigation]);
+	}, [enableNavigation]);
 
 	const getCellPointerFromEvent = useCallback((e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
 		const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
@@ -252,61 +302,43 @@ export function GridView<TRowData = unknown>({
 		return { cellEl, pointer };
 	}, []);
 
-	const getCellClickParams = useCallback(
-		(pointer: GridCellPointer, event: MouseEvent): GridCellClickParams<TRowData> | null => {
-			const access = hostRef.current?.adapterHandle.getCellAccess(pointer.rowId, pointer.colField) ?? null;
-			if (!access) return null;
-			return {
-				rowId: access.rowId,
-				rowIndex: access.rowIndex,
-				row: access.row,
-				node: access.node,
-				colField: access.colField,
-				colIndex: access.colIndex,
-				column: access.column,
-				value: access.value,
-				api,
-				event,
-			};
-		},
-		[api]
-	);
-
 	const handleMouseDown = useCallback(
 		(e: MouseEvent) => {
-			if (!navigation) return;
+			const nav = navigationRef.current;
+			if (!nav) return;
 			const target = getCellPointerFromEvent(e);
 			if (!target) return;
 			const { cellEl, pointer } = target;
 
 			isGridActiveRef.current = true;
-			const state = api.getState();
+			const state = apiRef.current.getStateSnapshot();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
-			// Skip range selection for columns that have rowDrag or disableCellRangeSelection set.
-			const colDef = api.getColumnDef(pointer.colField);
-			if (colDef && (colDef.rowDrag || colDef.disableCellRangeSelection)) return;
+			// Skip range selection for columns that have canDrag (drag handle) or disableCellRangeSelection set.
+			const colDef = apiRef.current.getColumnDef(pointer.colField);
+			if (colDef && (colDef.canDrag !== undefined || colDef.disableCellRangeSelection)) return;
 
 			cellEl.tabIndex = -1;
 			cellEl.focus();
-			navigation.handleMouseDown(pointer.rowId, pointer.colField, e);
+			nav.handleMouseDown(pointer.rowId, pointer.colField, e);
 		},
-		[api, navigation, getCellPointerFromEvent]
+		[getCellPointerFromEvent]
 	);
 
 	const handleMouseOver = useCallback(
 		(e: MouseEvent) => {
-			if (!navigation) return;
+			const nav = navigationRef.current;
+			if (!nav) return;
 			const target = getCellPointerFromEvent(e);
 			if (!target) return;
 			const { cellEl, pointer } = target;
 
 			if (e.relatedTarget && cellEl.contains(e.relatedTarget as Node)) return;
 
-			navigation.handleMouseEnter(pointer.rowId, pointer.colField);
+			nav.handleMouseEnter(pointer.rowId, pointer.colField);
 		},
-		[navigation, getCellPointerFromEvent]
+		[getCellPointerFromEvent]
 	);
 
 	const handleClick = useCallback(
@@ -315,51 +347,67 @@ export function GridView<TRowData = unknown>({
 			if (!target) return;
 			const { pointer } = target;
 
-			const clickParams = getCellClickParams(pointer, e);
+			const access = hostRef.current?.adapterHandle.getCellAccess(pointer.rowId, pointer.colField) ?? null;
+			const clickParams = access
+				? {
+						rowId: access.rowId,
+						rowIndex: access.rowIndex,
+						row: access.row,
+						node: access.node,
+						colField: access.colField,
+						colIndex: access.colIndex,
+						column: access.column,
+						value: access.value,
+						api: apiRef.current,
+						event: e,
+					}
+				: null;
 			if (clickParams) {
-				onCellClick?.(clickParams);
-				api.dispatchEvent(GridEventName.cellClicked, clickParams);
+				onCellClickRef.current?.(clickParams as GridCellClickParams<TRowData>);
+				apiRef.current.dispatchEvent(GridEventName.cellClicked, clickParams as GridCellClickParams<TRowData>);
 			}
 
-			if (!navigation) return;
+			const nav = navigationRef.current;
+			if (!nav) return;
 
-			const state = api.getState();
+			const state = apiRef.current.getStateSnapshot();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
-			navigation.handleClick(pointer.rowId, pointer.colField, e);
+			nav.handleClick(pointer.rowId, pointer.colField, e);
 		},
-		[api, navigation, getCellPointerFromEvent, getCellClickParams, onCellClick]
+		[getCellPointerFromEvent]
 	);
 
 	const handleDoubleClick = useCallback(
 		(e: MouseEvent) => {
-			if (!navigation) return;
+			const nav = navigationRef.current;
+			if (!nav) return;
 			const target = getCellPointerFromEvent(e);
 			if (!target) return;
 			const { pointer } = target;
 
-			const state = api.getState();
+			const state = apiRef.current.getStateSnapshot();
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
-			navigation.setCellEditing(pointer.rowId, pointer.colField, true);
+			nav.setCellEditing(pointer.rowId, pointer.colField, true);
 		},
-		[api, navigation, getCellPointerFromEvent]
+		[getCellPointerFromEvent]
 	);
 
 	const handleContextMenu = useCallback(
 		(e: MouseEvent) => {
-			if (!enableContextMenu || !contextMenu) return;
+			if (!enableContextMenuRef.current || !contextMenuRef.current) return;
 
 			const target = getCellPointerFromEvent(e);
 			if (!target) return;
 			const { pointer } = target;
 
 			e.preventDefault();
-			contextMenu.show(pointer.rowId, pointer.colField, e.clientX, e.clientY);
+			contextMenuRef.current.show(pointer.rowId, pointer.colField, e.clientX, e.clientY);
 		},
-		[enableContextMenu, contextMenu, getCellPointerFromEvent]
+		[getCellPointerFromEvent]
 	);
 
 	useEffect(() => {
@@ -395,10 +443,32 @@ export function GridView<TRowData = unknown>({
 		};
 	}, [api]);
 
-	const sidebarDefaultOpenRef = useRef(sidebar?.defaultOpen);
+	useEffect(() => {
+		if (!onWriteBlocked) return;
+		return api.addEventListener(GridEventName.writeBlocked, ({ payload }) => {
+			onWriteBlocked(payload);
+		});
+	}, [api, onWriteBlocked]);
+
+	useEffect(() => {
+		if (!onCellValueChanged) return;
+		return api.addEventListener(GridEventName.cellValueChanged, ({ payload }) => {
+			onCellValueChanged(payload);
+		});
+	}, [api, onCellValueChanged]);
+
 	useEffect(() => {
 		if (sidebarDefaultOpenRef.current != null) api.openPanel(sidebarDefaultOpenRef.current);
-	}, []);
+	}, [api]);
+
+	useEffect(() => {
+		const initialValue = sidebarDefaultOpenRef.current;
+		const currentValue = sidebar?.defaultOpen;
+		if (Object.is(initialValue, currentValue)) return;
+		if (warnedInitialOnlyPropsRef.current.has('sidebar.defaultOpen')) return;
+		warnedInitialOnlyPropsRef.current.add('sidebar.defaultOpen');
+		warnInitialOnlyGridViewProp('sidebar.defaultOpen');
+	}, [api, sidebar?.defaultOpen]);
 
 	const hasSidebar = sidebar != null;
 	const sidebarPosition = sidebar?.position ?? 'right';

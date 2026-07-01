@@ -44,7 +44,7 @@ describe('GroupingFeatureController', () => {
 	describe('setGroupBy', () => {
 		it('clears expansion.groups', () => {
 			const store = makeStore();
-			store.setState((s) => ({
+			store.engine.stateManager.setState((s) => ({
 				...s,
 				expansion: { groups: { 'group-1': true as const }, treeRows: {}, details: {} },
 			}));
@@ -83,14 +83,16 @@ describe('GroupingFeatureController', () => {
 				invalidation: (store as any).engine.invalidation,
 			});
 
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			feature.setGroupBy(['category']);
 
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'geometry' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'viewport' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'overlay' }));
+			expect(spyApply).toHaveBeenCalled();
+			const plan = spyApply.mock.calls[0][0];
+			expect(plan.geometry).toBe(true);
+			expect(plan.viewport).toBe(true);
+			expect(plan.headers).toBe(true);
+			expect(plan.overlay).toBe(true);
 			store.destroy();
 		});
 
@@ -182,12 +184,14 @@ describe('GroupingFeatureController', () => {
 			const listener = vi.fn();
 			store.addEventListener(GridEventName.aggDefsChanged, listener);
 
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			feature.setAggDefs([] as any[]);
 
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'viewport' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'overlay' }));
+			expect(spyApply).toHaveBeenCalled();
+			const plan = spyApply.mock.calls[0][0];
+			expect(plan.viewport).toBe(true);
+			expect(plan.overlay).toBe(true);
 			expect(listener).toHaveBeenCalledOnce();
 
 			ctrl.dispose();

@@ -55,9 +55,35 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 	}, [api, rowId, colField]);
 
 	// activeEdit subscription lives here — only this mounted instance subscribes, not every cell
+	// Memoize the getSnapshot function to cache the activeEdit state and avoid infinite loops
+	const updateGenRef = useRef(0);
+	const cacheRef = useRef<{ gen: number; value: ActiveEditState | null }>({ gen: -1, value: null });
+
 	const activeEditState = useSyncExternalStore(
-		(cb) => api.subscribeToKey('activeEdit', () => cb()),
-		() => api.getState().activeEdit as ActiveEditState | null
+		useCallback(
+			(cb) =>
+				api.subscribeToKey('activeEdit', () => {
+					updateGenRef.current++;
+					cb();
+				}),
+			[api]
+		),
+		useCallback(() => {
+			const currentGen = updateGenRef.current;
+			const cache = cacheRef.current;
+
+			// If subscription hasn't fired since last call, return cached value
+			if (cache.gen === currentGen && cache.gen !== -1) {
+				return cache.value;
+			}
+
+			// Recompute value
+			const value = api.getStateSnapshot().activeEdit as ActiveEditState | null;
+
+			// Cache and return
+			cacheRef.current = { gen: currentGen, value };
+			return value;
+		}, [api])
 	);
 	const validationError =
 		activeEditState?.rowId === rowId && activeEditState?.colField === colField ? (activeEditState.validationError ?? null) : null;
@@ -229,10 +255,36 @@ function DefaultGroupRowRendererInner<TRowData = unknown>({ visualRow, api }: { 
 	if (visualRow.kind !== 'group') return null;
 	const expanded = visualRow.expanded;
 	const depth = visualRow.depth;
+
+	// Memoize getSnapshot to cache selectedRowIds and avoid infinite loops
+	const selRowIdUpdateGenRef = useRef(0);
+	const selRowIdCacheRef = useRef<{ gen: number; value: readonly string[] }>({ gen: -1, value: [] });
+
 	const selectedRowIds = useSyncExternalStore(
-		useCallback((onStoreChange) => api.subscribeToKey('selectedRowIds', onStoreChange), [api]),
-		() => api.getState().selectedRowIds,
-		() => api.getState().selectedRowIds
+		useCallback(
+			(onStoreChange) =>
+				api.subscribeToKey('selectedRowIds', () => {
+					selRowIdUpdateGenRef.current++;
+					onStoreChange();
+				}),
+			[api]
+		),
+		useCallback(() => {
+			const currentGen = selRowIdUpdateGenRef.current;
+			const cache = selRowIdCacheRef.current;
+
+			// If subscription hasn't fired since last call, return cached value
+			if (cache.gen === currentGen && cache.gen !== -1) {
+				return cache.value;
+			}
+
+			// Recompute value
+			const value = api.getStateSnapshot().selectedRowIds;
+
+			// Cache and return
+			selRowIdCacheRef.current = { gen: currentGen, value };
+			return value;
+		}, [api])
 	);
 	const adapterHandle = useContext(GridAdapterContext);
 	const descendantIds = adapterHandle?.getGroupVisibleDescendantRowIds(visualRow.groupId) ?? [];

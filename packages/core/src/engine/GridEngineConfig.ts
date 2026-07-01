@@ -1,7 +1,10 @@
-import type { ColumnDef, GridCellPointer, GridSelectionState, GridStyleRule, RowSelectionOptions } from '../store.js';
-import type { RowValidator } from '../features/ValidationManager.js';
+import type { ColumnDef, GridStyleRule } from '../columnDef.js';
+import type { GridCellPointer, GridSelectionState, RowSelectionOptions } from '../api/GridApi.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { SortModel, FilterModel } from '../rowModel.js';
+import type { GridQueryModel } from '../query/GridQueryModel.js';
+import type { GridCapabilitiesConfig } from '../capabilities/capabilityTypes.js';
+import type { GridDataIntegrityConfig } from '../features/dataIntegrity/integrityTypes.js';
 
 export interface GridEngineConfig<TRowData = unknown> {
 	columns: ColumnDef<TRowData>[];
@@ -17,17 +20,16 @@ export interface GridEngineConfig<TRowData = unknown> {
 	selectedRowIds?: string[];
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
+	queryModel?: GridQueryModel | null;
+	capabilities?: GridCapabilitiesConfig<TRowData>;
+	canPerformAction?: GridCapabilitiesConfig<TRowData>['canPerformAction'];
 	themeName?: BuiltInThemeName;
 	activeEdit?: GridCellPointer | null;
 	loadingSkeletonCount?: number;
 	styleRules?: GridStyleRule<TRowData>[];
 	loading?: boolean;
-	/**
-	 * Grid-level cross-field validator. Runs after per-column valueValidators on every
-	 * validateCell / validateGrid call. Return a map of colField → error string to set
-	 * cross-field errors; return null/empty string for a field to clear its row-level error.
-	 */
-	rowValidator?: RowValidator<TRowData>;
+	/** Unified Data Integrity pipeline configuration. */
+	dataIntegrity?: GridDataIntegrityConfig<TRowData>;
 
 	// Tree / Grouping / Master-Detail State Configuration
 	groupBy?: string[];
@@ -61,6 +63,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 		maxRenderedRows?: number;
 		maxRenderedCells?: number;
 		suppressRenderedRangeLimit?: boolean;
+		maxFilterDistinctValues?: number;
 	};
 	/**
 	 * When true, the overscan buffer automatically expands in the scroll direction proportional

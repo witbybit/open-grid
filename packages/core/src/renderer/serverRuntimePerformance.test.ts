@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ServerRowModelController, type IGridDatasource } from '../serverRowModel.js';
+import { InfiniteRowModelController, type InfiniteDatasource } from '../infiniteRowModel.js';
 import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
 import { diffRenderWindow, getColIndices, getRowIndices, type RenderWindow } from './renderWindow.js';
@@ -140,6 +140,20 @@ async function flushAnimationFrame(): Promise<void> {
 	await flushAsync();
 }
 
+async function settleVisibleServerRows(grid: AuditGrid, maxFrames = 6): Promise<void> {
+	for (let frame = 0; frame < maxFrames; frame++) {
+		const hasVisibleLoadingCells = Array.from(grid.container.querySelectorAll<HTMLElement>('.og-cell.og-cell-loading')).some((cell) => {
+			const row = cell.closest('.og-row') as HTMLElement | null;
+			if (!row) return false;
+			const projectedTop = parseRowTop(row) - grid.store.engine.viewport.scrollTop + 40;
+			const height = Number.parseFloat(row.style.height || '40');
+			return projectedTop + height > 40 && projectedTop < grid.store.engine.viewport.viewportHeight;
+		});
+		if (!hasVisibleLoadingCells) return;
+		await flushAnimationFrame();
+	}
+}
+
 function parseRowTop(el: HTMLElement): number {
 	// Rows are positioned via transform: translateY(<top>px)
 	const match = /translateY\((-?\d+(?:\.\d+)?)px\)/.exec(el.style.transform);
@@ -164,6 +178,7 @@ function getScrollContext(grid: AuditGrid) {
 		activeEdit: state.activeEdit,
 		hasDeferredCellStyleRules: !!state.styleRules?.length,
 		hasCustomRenderers: plan.hasCustomRenderers,
+		hasInsightDecorations: false,
 		plan,
 		visibleColRange: grid.store.engine.viewport.getVisibleColumnRange(plan.displayedColumns.length),
 		focusedCell: state.selection.focus,
@@ -174,11 +189,18 @@ function getScrollContext(grid: AuditGrid) {
 
 type AuditGrid = Awaited<ReturnType<typeof createServerAuditGrid>>;
 
-async function createServerAuditGrid(options: { rows?: number; cols?: number; blockSize?: number } = {}) {
+async function createServerAuditGrid(
+	options: {
+		rows?: number;
+		cols?: number;
+		blockSize?: number;
+		configureStore?: (store: GridStore<AuditPerfRow>) => void;
+	} = {}
+) {
 	const totalRows = options.rows ?? 1_000_000;
 	const columns = createAuditColumns(options.cols ?? 1200);
 	const requests: Array<{ startRow: number; endRow: number }> = [];
-	const datasource: IGridDatasource = {
+	const datasource: InfiniteDatasource<AuditPerfRow> = {
 		getRows: async ({ startRow, endRow }) => {
 			requests.push({ startRow, endRow });
 			return {
@@ -196,7 +218,8 @@ async function createServerAuditGrid(options: { rows?: number; cols?: number; bl
 		getRowId: (row) => row.id,
 		runtimeLimits: { maxRenderedRows: 28, maxRenderedCells: 360 },
 	});
-	const controller = new ServerRowModelController<AuditPerfRow>(store.getServerRowModelRuntime(), {
+	options.configureStore?.(store);
+	const controller = new InfiniteRowModelController<AuditPerfRow>(store.getInfiniteRowModelRuntime(), {
 		datasource,
 		blockSize: options.blockSize ?? 100,
 		columns,
@@ -438,6 +461,101 @@ function assertHorizontalGeometryIsContinuous(grid: AuditGrid, expectedScrollLef
 		const next = projectedCells[index];
 		expect(next.screenLeft - prev.screenRight).toBeLessThanOrEqual(1);
 	}
+}
+
+function isCellVisibleOnScreen(grid: AuditGrid, cell: HTMLElement, expectedScrollLeft: number, viewportWidth: number): boolean {
+	const parent = cell.parentElement;
+	if (parent?.classList.contains('og-row-pin-left') || parent?.classList.contains('og-row-pin-right')) return true;
+	const field = cell.dataset.colField;
+	const visibleCols = grid.store.engine.viewport.getVisibleColumnRange(grid.store.engine.columns.getDisplayedColumns().length);
+	if (field) {
+		const colIndex = grid.store.engine.columns.getColumnIndex(field);
+		if (colIndex < visibleCols.startIdx || colIndex > visibleCols.endIdx) return false;
+	}
+	const left = parseCellLeft(cell);
+	const width = Number.parseFloat(cell.style.width || '0');
+	return left - expectedScrollLeft + width > 0 && left - expectedScrollLeft < viewportWidth;
+}
+
+function assertNoBlankVisibleCells(grid: AuditGrid, expectedScrollTop: number, expectedScrollLeft: number): void {
+	const viewportHeight = grid.store.engine.viewport.viewportHeight;
+	const viewportWidth = grid.store.engine.viewport.viewportWidth;
+	const visibleRows = Array.from(grid.container.querySelectorAll<HTMLElement>('.og-row')).filter((row) => {
+		if (!row.querySelector(':scope > .og-cell, :scope > .og-row-pin-left .og-cell, :scope > .og-row-pin-right .og-cell')) return false;
+		const projectedTop = parseRowTop(row) - expectedScrollTop + 40;
+		const height = Number.parseFloat(row.style.height || '40');
+		return projectedTop + height > 40 && projectedTop < viewportHeight;
+	});
+
+	expect(visibleRows.length).toBeGreaterThan(0);
+	for (const row of visibleRows) {
+		const visibleCells = Array.from(row.querySelectorAll<HTMLElement>('.og-cell')).filter((cell) =>
+			isCellVisibleOnScreen(grid, cell, expectedScrollLeft, viewportWidth)
+		);
+		expect(visibleCells.length).toBeGreaterThan(0);
+		for (const cell of visibleCells) {
+			const contentMode = cell.dataset.contentMode ?? CellSlot.fromElement(cell as HTMLDivElement).lastContentMode;
+			const contentText = cell.querySelector<HTMLElement>(':scope > .og-cell-content')?.textContent?.trim() ?? '';
+			const portalHost = cell.querySelector<HTMLElement>(':scope > .og-cell-portal-host');
+			const hasPortalContent = !!portalHost && portalHost.childElementCount > 0;
+			const isLoading = cell.classList.contains('og-cell-loading') || contentMode === 'loading';
+			if (contentMode === 'empty') continue;
+			expect(isLoading || contentText.length > 0 || hasPortalContent).toBe(true);
+		}
+	}
+}
+
+function collectFeatherScenarioEvidence(grid: AuditGrid) {
+	const stats = grid.renderer.getRenderStats();
+	return {
+		motion: {
+			scrollFrames: stats.scrollFrames,
+			stateReadsDuringScroll: stats.stateReadsDuringScroll,
+			cellsVisitedDuringScroll: stats.cellsVisitedDuringScroll,
+			cellsWrittenDuringScroll: stats.cellsWrittenDuringScroll,
+			portalOpsDuringScroll: stats.portalOpsDuringScroll,
+			valueGetterCallsDuringScroll: stats.valueGetterCallsDuringScroll,
+			getCellValueCallsDuringScroll: stats.getCellValueCallsDuringScroll,
+			formulaCallsDuringScroll: stats.formulaCallsDuringScroll,
+			customRendererMountsDuringScroll: stats.customRendererMountsDuringScroll,
+		},
+		fidelity: {
+			prewarmPasses: stats.prewarmPasses,
+			prewarmedDisplayValues: stats.prewarmedDisplayValues,
+			prewarmedCellSnapshots: stats.prewarmedCellSnapshots,
+			cellsDecoratedAfterScroll: stats.cellsDecoratedAfterScroll,
+			motionCellsDecoratedAfterScroll: stats.motionCellsDecoratedAfterScroll,
+			fidelityCellsDecoratedAfterScroll: stats.fidelityCellsDecoratedAfterScroll,
+			postScrollMotionChunks: stats.postScrollMotionChunks,
+			postScrollFidelityChunks: stats.postScrollFidelityChunks,
+			postScrollDirtyCellsDecorated: stats.postScrollDirtyCellsDecorated,
+			customRendererWarmHits: stats.customRendererWarmHits,
+			customRendererWarmMisses: stats.customRendererWarmMisses,
+		},
+	};
+}
+
+function assertVisibleIntegrityDecorationsStayPresent(grid: AuditGrid): void {
+	const decorated = grid.container.querySelectorAll(
+		'.og-cell-validation-error, .og-cell-conflict, .og-cell-diff-changed, .og-cell-quality-warning, .og-cell-quality-error'
+	);
+	if (decorated.length === 0) {
+		const sample = Array.from(
+			grid.container.querySelectorAll<HTMLElement>('.og-cell[data-col-field="id"], .og-cell[data-col-field="auditMetric_159"]')
+		)
+			.slice(0, 12)
+			.map((cell) => ({
+				rowId: cell.dataset.rowId,
+				colField: cell.dataset.colField,
+				className: cell.className,
+				title: cell.title,
+				validationError: cell.dataset.validationError,
+				contentMode: cell.dataset.contentMode,
+				text: cell.querySelector<HTMLElement>(':scope > .og-cell-content')?.textContent?.trim() ?? '',
+			}));
+		throw new Error(`Missing integrity decorations: ${JSON.stringify(sample)}`);
+	}
+	expect(decorated.length).toBeGreaterThan(0);
 }
 
 function assertScrollStatsAreRuthless(grid: AuditGrid, prevWindow: RenderWindow | null): void {
@@ -694,11 +812,120 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		const statsAfter = grid.renderer.rowRenderer.portalMountManager['customRendererManager'].getStats();
 		const missesAfter = statsAfter.warmMisses;
 
-		// The warmMisses should not increase for already-rendered/live cells on scroll.
-		// Slot model may cold-mount renderers for new slots added as the pool grows into overscan rows.
-		expect(missesAfter).toBeLessThanOrEqual(missesBefore + 20);
+		// custom-live portals are frozen in place during scroll — no extra warm misses from them.
+		// custom (defer) portals now use the impostor path: portal released during scroll, full bind
+		// (triggered by post-scroll RAF) restores via warm cache. New visible rows from the 120px scroll
+		// cold-mount fresh renderers for cells that were never previously mounted. Cap at 75.
+		expect(missesAfter).toBeLessThanOrEqual(missesBefore + 75);
 		cleanupGrid(grid);
 	});
+
+	it('keeps a custom-renderer-heavy viewport free of blank visible cells during vertical, horizontal, and diagonal scroll', async () => {
+		const grid = await createServerAuditGrid({ rows: 50_000, cols: 180 });
+		const positions = [
+			{ top: 120, left: 0 },
+			{ top: 120, left: 3_000 },
+			{ top: 2_400, left: 6_000 },
+			{ top: 80, left: 500 },
+			{ top: 6_000, left: 0 },
+		];
+
+		for (const position of positions) {
+			grid.renderer.resetRenderStats();
+			await browserScrollTo(grid, position.top, position.left);
+			assertWindowIsContiguousAndCapped(grid);
+			assertNoStaleOrOverlappingDom(grid);
+			assertNoBlankVisibleCells(grid, position.top, position.left);
+			const evidence = collectFeatherScenarioEvidence(grid);
+			expect(evidence.motion.valueGetterCallsDuringScroll).toBe(0);
+			expect(evidence.motion.getCellValueCallsDuringScroll).toBe(0);
+			expect(evidence.motion.formulaCallsDuringScroll).toBe(0);
+			expect(evidence.motion.customRendererMountsDuringScroll).toBe(0);
+		}
+
+		cleanupGrid(grid);
+	}, 20_000);
+
+	it('keeps integrity-heavy decorations visible and coherent through diagonal server scroll', async () => {
+		const grid = await createServerAuditGrid({
+			rows: 100_000,
+			cols: 160,
+			configureStore: (store) => {
+				store.setPinnedColumns({ left: 1, right: 1 });
+				store.engine.insights.register({
+					id: 'feather-contract-integrity',
+					getCellDecorations: (_rowId, colField) => {
+						if (colField === 'id') {
+							return [
+								{
+									layerId: 'feather-contract-integrity',
+									kind: 'validationError',
+									className: 'og-cell-validation-error',
+									title: 'Integrity review required',
+								},
+							];
+						}
+						if (colField === 'auditMetric_159') {
+							return [
+								{
+									layerId: 'feather-contract-integrity',
+									kind: 'conflict',
+									className: 'og-cell-conflict',
+									title: 'Conflict pending',
+								},
+							];
+						}
+						return [];
+					},
+				});
+			},
+		});
+		grid.store.engine.requestInsightRepaint();
+		await flushAnimationFrame();
+		await settleVisibleServerRows(grid);
+		assertVisibleIntegrityDecorationsStayPresent(grid);
+		const flings = [
+			{ top: 40, left: 96 },
+			{ top: 1_200, left: 3_600 },
+			{ top: 20_000, left: 10_000 },
+			{ top: 80, left: 0 },
+		];
+
+		for (const fling of flings) {
+			grid.renderer.resetRenderStats();
+			await browserScrollTo(grid, fling.top, fling.left);
+			await settleVisibleServerRows(grid);
+			assertNoStaleOrOverlappingDom(grid);
+			assertNoBlankVisibleCells(grid, fling.top, fling.left);
+			assertVisibleIntegrityDecorationsStayPresent(grid);
+			const evidence = collectFeatherScenarioEvidence(grid);
+			expect(evidence.motion.valueGetterCallsDuringScroll).toBe(0);
+			expect(evidence.motion.getCellValueCallsDuringScroll).toBe(0);
+		}
+
+		cleanupGrid(grid);
+	}, 20_000);
+
+	it('records separate motion and fidelity evidence for feather-scroll review scenarios', async () => {
+		const grid = await createServerAuditGrid({ rows: 20_000, cols: 120 });
+		await browserScrollTo(grid, 2_000, 4_000);
+		const evidence = collectFeatherScenarioEvidence(grid);
+
+		expect(evidence.motion.scrollFrames).toBeGreaterThan(0);
+		expect(evidence.motion.stateReadsDuringScroll).toBeGreaterThanOrEqual(0);
+		expect(evidence.motion.valueGetterCallsDuringScroll).toBe(0);
+		expect(evidence.motion.getCellValueCallsDuringScroll).toBe(0);
+		expect(evidence.motion.formulaCallsDuringScroll).toBe(0);
+		expect(evidence.fidelity.prewarmPasses).toBeGreaterThanOrEqual(0);
+		expect(evidence.fidelity.prewarmedDisplayValues).toBeGreaterThanOrEqual(0);
+		expect(evidence.fidelity.prewarmedCellSnapshots).toBeGreaterThanOrEqual(0);
+		expect(evidence.fidelity.motionCellsDecoratedAfterScroll).toBeGreaterThanOrEqual(0);
+		expect(evidence.fidelity.fidelityCellsDecoratedAfterScroll).toBeGreaterThanOrEqual(0);
+		expect(evidence.fidelity.postScrollMotionChunks).toBeGreaterThanOrEqual(0);
+		expect(evidence.fidelity.postScrollFidelityChunks).toBeGreaterThanOrEqual(0);
+
+		cleanupGrid(grid);
+	}, 20_000);
 
 	it('does not produce zombie cells under stable-slot virtualization', async () => {
 		const cols = createAuditColumns(20);
@@ -711,7 +938,7 @@ describe('Server demo ruthless runtime performance contracts', () => {
 			colBuffer: 1,
 			getRowId: (row) => row.id,
 		});
-		const datasource: IGridDatasource = {
+		const datasource: InfiniteDatasource<AuditPerfRow> = {
 			getRows: async ({ startRow, endRow }) => {
 				return {
 					rows: Array.from({ length: endRow - startRow }, (_, offset) => createAuditRow(startRow + offset)),
@@ -719,7 +946,11 @@ describe('Server demo ruthless runtime performance contracts', () => {
 				};
 			},
 		};
-		const controller = new ServerRowModelController<AuditPerfRow>(store.getServerRowModelRuntime(), { datasource, blockSize: 50, columns: cols });
+		const controller = new InfiniteRowModelController<AuditPerfRow>(store.getInfiniteRowModelRuntime(), {
+			datasource,
+			blockSize: 50,
+			columns: cols,
+		});
 		const container = createContainer();
 		const renderer = new RenderEngine(store.engine, store);
 		renderer.mount(container);
@@ -738,4 +969,100 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		renderer.unmount();
 		container.remove();
 	});
+
+	it('feather-scroll A/B: all custom-renderer columns are portal-free during every scroll frame', async () => {
+		// A grid with 100% custom-renderer columns (worst case for the old synchronous-mount path).
+		// Prior to Plan 153 Step 3, custom (defer) cells called mountCellImmediately during scroll;
+		// portalMountsDuringScroll and customRendererMountsDuringScroll would both have been > 0.
+		// After: every scroll frame is portal-free. Portals mount in the fidelity idle lane instead.
+		const columns = Array.from({ length: 80 }, (_, i): ColumnDef<AuditPerfRow> => {
+			const mode = i % 3 === 0 ? ('live' as const) : ('defer' as const);
+			return {
+				field: i === 0 ? 'id' : `auditMetric_${i + 100}`,
+				header: `Col ${i}`,
+				width: 120 + (i % 4) * 20,
+				cellRenderer: () => null,
+				cellRendererCapabilities: { scrollBehavior: mode },
+				valueGetter: i % 5 === 0 ? ({ row }: { row: AuditPerfRow }) => `m${i}|${row.severity}` : undefined,
+			};
+		});
+
+		const store = new GridStore<AuditPerfRow>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			rowOverscanPx: 40,
+			colBuffer: 1,
+			getRowId: (row) => row.id,
+		});
+		const datasource: InfiniteDatasource<AuditPerfRow> = {
+			getRows: async ({ startRow, endRow }) => ({
+				rows: Array.from({ length: endRow - startRow }, (_, offset) => createAuditRow(startRow + offset)),
+				totalCount: 10_000,
+			}),
+		};
+		const controller = new InfiniteRowModelController<AuditPerfRow>(store.getInfiniteRowModelRuntime(), {
+			datasource,
+			blockSize: 100,
+			columns,
+		});
+		const container = createContainer();
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.onMountCellContent = ({ cellKey, container: host }) => {
+			const el = document.createElement('span');
+			el.textContent = cellKey;
+			host.replaceChildren(el);
+		};
+		renderer.mount(container);
+		await flushAsync();
+		renderer.fullPaint();
+		await settleVisibleServerRows({ store, container, renderer } as any);
+
+		const scenarios: Array<{ label: string; top: number; left: number }> = [
+			{ label: 'vertical short', top: 200, left: 0 },
+			{ label: 'vertical long', top: 4_000, left: 0 },
+			{ label: 'horizontal', top: 4_000, left: 3_000 },
+			{ label: 'diagonal', top: 8_000, left: 6_000 },
+			{ label: 'back to top', top: 0, left: 0 },
+		];
+
+		for (const { label, top, left } of scenarios) {
+			renderer.resetRenderStats();
+			await browserScrollTo({ store, container, renderer } as any, top, left);
+			await settleVisibleServerRows({ store, container, renderer } as any);
+
+			const ev = collectFeatherScenarioEvidence({ store, container, renderer } as any);
+
+			// Motion lane: scroll frames are portal-free.
+			expect(ev.motion.customRendererMountsDuringScroll).toBe(0);
+			expect(ev.motion.valueGetterCallsDuringScroll).toBe(0);
+			expect(ev.motion.getCellValueCallsDuringScroll).toBe(0);
+			expect(ev.motion.formulaCallsDuringScroll).toBe(0);
+
+			// Quality: no blank visible cells after scroll settles.
+			assertNoBlankVisibleCells({ store, container, renderer } as any, top, left);
+
+			if (ev.motion.scrollFrames > 0) {
+				// Fidelity lane ran and upgraded cells post-scroll.
+				expect(ev.fidelity.fidelityCellsDecoratedAfterScroll).toBeGreaterThan(0);
+			}
+
+			assertWindowIsContiguousAndCapped({ store, container, renderer } as any);
+			assertNoStaleOrOverlappingDom({ store, container, renderer } as any);
+
+			if (process.env.FEATHER_BENCH) {
+				// eslint-disable-next-line no-console
+				console.log(
+					`[feather-bench] ${label}: scrollFrames=${ev.motion.scrollFrames} ` +
+						`written=${ev.motion.cellsWrittenDuringScroll} ` +
+						`portalOps=${ev.motion.portalOpsDuringScroll} ` +
+						`fidelityCells=${ev.fidelity.fidelityCellsDecoratedAfterScroll}`
+				);
+			}
+		}
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	}, 30_000);
 });

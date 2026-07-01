@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { GridStore } from '../store.js';
 import { ClientRowModelController } from '../rowModel.js';
-import { computeGridLayoutPlan, GROUP_BAND_HEIGHT, GROUP_PANEL_HEIGHT, LEAF_HEADER_HEIGHT } from './layoutPlan.js';
+import { computeGridLayoutPlan, FILTER_CHIP_BAR_HEIGHT, GROUP_BAND_HEIGHT, GROUP_PANEL_HEIGHT, LEAF_HEADER_HEIGHT } from './layoutPlan.js';
 
 describe('GridLayoutPlan', () => {
 	it('uses one chrome contract for group panel, header, sticky group, and overlay origins', () => {
@@ -56,6 +56,37 @@ describe('GridLayoutPlan', () => {
 		store.destroy();
 	});
 
+	it('allocates filter chip bar chrome for query-only analysis state', () => {
+		const store = new GridStore<{ id: string; name: string }>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name', filterType: 'text' }],
+			defaultRowHeight: 40,
+			showFilterChipBar: true,
+			queryModel: {
+				version: 1,
+				root: {
+					kind: 'group',
+					id: 'root',
+					operator: 'and',
+					children: [{ kind: 'condition', id: 'q1', columnId: 'name', operator: 'contains', value: 'o' }],
+				},
+			},
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'One' }],
+			columns: store.getState().columns,
+		});
+
+		store.setViewportSize(500, 300);
+		const plan = computeGridLayoutPlan(store.engine);
+
+		expect(plan.chrome.filterChipBarHeight).toBe(FILTER_CHIP_BAR_HEIGHT);
+		expect(plan.origins.headerTop).toBe(FILTER_CHIP_BAR_HEIGHT);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('centralizes content dimensions and pinned column widths', () => {
 		const store = new GridStore<{ id: string; a: string; b: string; c: string }>({
 			getRowId: (row) => row.id,
@@ -94,7 +125,7 @@ describe('GridLayoutPlan', () => {
 			getRowId: (row) => row.id,
 			columns: [
 				{ field: 'a', header: 'A', width: 80 },
-				{ field: 'b', header: 'B', width: 120, movable: false },
+				{ field: 'b', header: 'B', width: 120, canMoveColumn: () => false },
 				{ field: 'c', header: 'C', width: 160 },
 			],
 			defaultRowHeight: 30,
@@ -110,10 +141,14 @@ describe('GridLayoutPlan', () => {
 
 		expect(plan.headerBands).toHaveLength(1);
 		expect(plan.headerBands[0]).toMatchObject({ depth: 0, top: 0, height: LEAF_HEADER_HEIGHT });
+		// After WS10: cell.left is lane-relative for all lanes.
+		// a (left lane): laneOffset = absoluteLeft - 0 = 0
+		// b (center lane): laneOffset = absoluteLeft(80) - pinLeftWidth(80) = 0
+		// c (right lane): laneOffset = absoluteLeft(200) - pinRightBaseLeft(200) = 0
 		expect(plan.headerBands[0].cells.map((cell) => [cell.field, cell.label, cell.left, cell.width, cell.pinned, cell.movable])).toEqual([
 			['a', 'A', 0, 80, 'left', true],
-			['b', 'B', 80, 120, 'center', false],
-			['c', 'C', 200, 160, 'right', true],
+			['b', 'B', 0, 120, 'center', false],
+			['c', 'C', 0, 160, 'right', true],
 		]);
 
 		controller.dispose();
@@ -423,6 +458,82 @@ describe('GridLayoutPlan', () => {
 			expect(plan.origins.paginationTop).toBe(plan.origins.bottomChromeTop + statusBarHeight);
 			// Top chrome is unaffected by bottom chrome.
 			expect(plan.origins.overlayTop).toBe(plan.chrome.topChromeHeight);
+
+			ctrl.dispose();
+			store.destroy();
+		});
+	});
+
+	describe('Plan 119 — stable header cell identity', () => {
+		it('leaf header cells use column field as id (stable across pin/unpin)', () => {
+			const store = new GridStore<{ id: string; a: string; b: string }>({
+				getRowId: (r) => r.id,
+				columns: [
+					{ field: 'a', header: 'A', width: 100 },
+					{ field: 'b', header: 'B', width: 100 },
+				],
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(300, 300);
+
+			const before = computeGridLayoutPlan(store.engine);
+			const leafBefore = before.headerBands[0].cells;
+			expect(leafBefore[0].id).toBe('a');
+			expect(leafBefore[1].id).toBe('b');
+
+			store.setViewportPins({ left: 1, right: 0 });
+			const after = computeGridLayoutPlan(store.engine);
+			const leafAfter = after.headerBands[0].cells;
+			// IDs are unchanged even though colStart values may differ
+			expect(leafAfter[0].id).toBe('a');
+			expect(leafAfter[1].id).toBe('b');
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('group cell id encodes first+last column fields (stable when no pin boundary change)', () => {
+			const store = new GridStore<{ id: string; a: string; b: string; c: string }>({
+				getRowId: (r) => r.id,
+				columns: [
+					{ field: 'a', header: 'A', width: 80, headerGroup: 'Revenue' },
+					{ field: 'b', header: 'B', width: 80, headerGroup: 'Revenue' },
+					{ field: 'c', header: 'C', width: 80 },
+				],
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(400, 300);
+
+			const plan = computeGridLayoutPlan(store.engine);
+			const groupCell = plan.headerBands[0].cells[0];
+			// Stable key: grp:depth:lane:firstField:lastField
+			expect(groupCell.id).toBe('grp:0:center:a:b');
+
+			ctrl.dispose();
+			store.destroy();
+		});
+
+		it('group cell id changes when pin boundary splits the span (correct invalidation)', () => {
+			const store = new GridStore<{ id: string; a: string; b: string }>({
+				getRowId: (r) => r.id,
+				columns: [
+					{ field: 'a', header: 'A', width: 100, headerGroup: 'Sales' },
+					{ field: 'b', header: 'B', width: 100, headerGroup: 'Sales' },
+				],
+			});
+			const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: [], columns: store.getState().columns });
+			store.setViewportSize(300, 300);
+
+			const unpinned = computeGridLayoutPlan(store.engine);
+			expect(unpinned.headerBands[0].cells).toHaveLength(1);
+			expect(unpinned.headerBands[0].cells[0].id).toBe('grp:0:center:a:b');
+
+			store.setViewportPins({ left: 1, right: 0 });
+			const pinned = computeGridLayoutPlan(store.engine);
+			// Span splits into two cells — each has its own stable lane-aware id
+			expect(pinned.headerBands[0].cells).toHaveLength(2);
+			expect(pinned.headerBands[0].cells[0].id).toBe('grp:0:left:a:a');
+			expect(pinned.headerBands[0].cells[1].id).toBe('grp:0:center:b:b');
 
 			ctrl.dispose();
 			store.destroy();

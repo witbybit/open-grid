@@ -127,3 +127,102 @@
 .animate-spin-slow {
 	animation: spin-slow 20s linear infinite;
 }
+
+/* ── Live Stream decorations ─────────────────────────────────────────────────── */
+
+@keyframes og-cell-live-flash {
+	from {
+		background-color: rgba(255, 230, 120, 0.75);
+	}
+	to {
+		background-color: transparent;
+	}
+}
+
+.og-cell-live-flash {
+	animation: og-cell-live-flash 600ms ease-out forwards;
+}
+
+/* ── Data Diff decorations ───────────────────────────────────────────────────── */
+
+.og-cell-diff-changed {
+	outline: 1px solid rgba(245, 158, 11, 0.7);
+	background-color: rgba(245, 158, 11, 0.06);
+}
+
+.og-cell-diff-added {
+	outline: 1px solid rgba(34, 197, 94, 0.6);
+	background-color: rgba(34, 197, 94, 0.06);
+}
+
+.og-cell-diff-removed {
+	outline: 1px solid rgba(239, 68, 68, 0.6);
+	background-color: rgba(239, 68, 68, 0.06);
+}
+
+.og-row-diff-added {
+	border-left: 2px solid rgba(34, 197, 94, 0.8);
+}
+
+.og-row-diff-removed {
+	border-left: 2px solid rgba(239, 68, 68, 0.8);
+}
+
+.og-row-diff-changed {
+	border-left: 2px solid rgba(245, 158, 11, 0.7);
+}
+
+/* ── Conflict decorations ────────────────────────────────────────────────────── */
+
+.og-cell-conflict {
+	background: repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.06), rgba(239, 68, 68, 0.06) 4px, transparent 4px, transparent 8px);
+	outline: 1px solid rgba(239, 68, 68, 0.55);
+}
+
+/* ── Data Quality decorations ────────────────────────────────────────────────── */
+
+.og-cell-quality-error {
+	box-shadow: inset 0 -2px 0 rgba(248, 113, 113, 0.9);
+	background-color: rgba(248, 113, 113, 0.07);
+}
+
+.og-cell-quality-warning {
+	box-shadow: inset 0 -2px 0 rgba(251, 191, 36, 0.85);
+	background-color: rgba(251, 191, 36, 0.05);
+}
+
+.og-cell-quality-info {
+	box-shadow: inset 0 -2px 0 rgba(56, 189, 248, 0.7);
+}
+
+/* ── Insight Layer Foundation (Plan 126) ────────────────────────────────────── */
+
+/* Cell-level severity classes — set via GridInsightLayer.getCellDecorations() */
+.og-cell-insight-info {
+	box-shadow: inset 0 -2px 0 rgba(56, 189, 248, 0.7); /* sky-400 */
+}
+
+.og-cell-insight-warning {
+	box-shadow: inset 0 -2px 0 rgba(251, 191, 36, 0.8); /* amber-400 */
+	background-color: rgba(251, 191, 36, 0.06);
+}
+
+.og-cell-insight-error {
+	box-shadow: inset 0 -2px 0 rgba(248, 113, 113, 0.9); /* red-400 */
+	background-color: rgba(248, 113, 113, 0.08);
+}
+
+/* Row-level severity classes — set via GridInsightLayer.getRowDecorations() */
+.og-row-insight-info {
+	border-left: 2px solid rgba(56, 189, 248, 0.5);
+}
+
+.og-row-insight-warning {
+	border-left: 2px solid rgba(251, 191, 36, 0.7);
+	background-color: rgba(251, 191, 36, 0.04);
+}
+
+.og-row-insight-error {
+	border-left: 2px solid rgba(248, 113, 113, 0.8);
+	background-color: rgba(248, 113, 113, 0.06);
+}

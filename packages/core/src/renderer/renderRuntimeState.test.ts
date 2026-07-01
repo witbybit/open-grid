@@ -180,12 +180,12 @@ describe('RenderRuntimeState', () => {
 			expect(s.isFrameActive()).toBe(false);
 		});
 
-		it('canFlushPortals is true only in idle and paint-frame', () => {
+		it('canFlushPortals is true only in idle (Plan 095: paint-frame removed)', () => {
 			const s = new RenderRuntimeState();
 			expect(s.canFlushPortals()).toBe(true); // idle
 
 			s.transitionTo('paint-frame');
-			expect(s.canFlushPortals()).toBe(true);
+			expect(s.canFlushPortals()).toBe(false); // paint-frame no longer allows flushing
 
 			s.transitionTo('idle');
 			s.transitionTo('scroll-pending');
@@ -196,6 +196,40 @@ describe('RenderRuntimeState', () => {
 
 			s.transitionTo('post-scroll');
 			expect(s.canFlushPortals()).toBe(false);
+		});
+
+		it('withPortalFlushPermission grants and revokes portal flush permission (Plan 095)', () => {
+			const s = new RenderRuntimeState();
+			s.transitionTo('paint-frame');
+
+			expect(s.canFlushPortals()).toBe(false);
+			let insidePermission = false;
+			s.withPortalFlushPermission(() => {
+				insidePermission = s.canFlushPortals();
+			});
+			expect(insidePermission).toBe(true);
+			expect(s.canFlushPortals()).toBe(false); // revoked after fn returns
+		});
+
+		it('nested withPortalFlushPermission reports a fault and no-ops (Plan 095)', () => {
+			const faults: string[] = [];
+			const s = new RenderRuntimeState((msg) => faults.push(msg));
+			let nestedRan = false;
+
+			s.withPortalFlushPermission(() => {
+				// try to nest
+				s.withPortalFlushPermission(() => {
+					nestedRan = true;
+				});
+			});
+
+			expect(nestedRan).toBe(false);
+			expect(faults.some((m) => m.includes('nested portal flush'))).toBe(true);
+		});
+
+		it('idle flush still works without withPortalFlushPermission (Plan 095)', () => {
+			const s = new RenderRuntimeState();
+			expect(s.canFlushPortals()).toBe(true); // idle — permission not needed
 		});
 
 		it('canRunDecoration is true only in idle', () => {

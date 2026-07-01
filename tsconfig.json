@@ -3,6 +3,13 @@
 		"target": "ES2022",
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
+		"baseUrl": ".",
+		"paths": {
+			"@open-grid/core": ["packages/core/src/index.ts"],
+			"@open-grid/core/internal": ["packages/core/src/internal.ts"],
+			"@open-grid/react": ["packages/react/src/index.ts"],
+			"@open-grid/react/experimental": ["packages/react/src/experimental.ts"]
+		},
 		"strict": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,

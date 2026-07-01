@@ -1,13 +1,14 @@
-import { GridEventName, type GridState, type RowModel } from '../store.js';
-import type { StateManager } from '../state/StateManager.js';
+import type { GridStateUpdater, InternalGridState } from '../state/GridState.js';
+import type { RowModel } from '../rowModel.js';
+import { asCapableRowModel, asSelectableDataRowModel } from '../rowModel.js';
+import type { StateCommitPhase } from '../state/StateManager.js';
 import type { DataModel } from '../models/DataModel.js';
 import type { ColumnModel } from '../models/ColumnModel.js';
 import type { GeometryModel } from '../models/GeometryModel.js';
 import type { ViewportModel } from '../models/ViewportModel.js';
 import type { SelectionModel } from '../models/SelectionModel.js';
-import type { InvalidationManager } from '../renderer/invalidationManager.js';
-import type { EventBus } from '../events/EventBus.js';
 import type { CellNotificationController } from './CellNotificationController.js';
+import type { GridSelectionState } from '../api/GridApi.js';
 
 interface RangeBounds {
 	minRow: number;
@@ -16,52 +17,42 @@ interface RangeBounds {
 	maxCol: number;
 }
 
-export interface GridStateReactionControllerDeps<TRowData = unknown> {
-	getStateManager: () => StateManager<TRowData>;
+export interface GridProjectionPipelineDeps<TRowData = unknown> {
 	data: DataModel<TRowData>;
 	columns: ColumnModel<TRowData>;
 	geometry: GeometryModel;
 	viewport: ViewportModel<TRowData>;
 	selection: SelectionModel;
-	invalidation: InvalidationManager;
-	eventBus: EventBus<TRowData>;
 	cellNotifications: CellNotificationController<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	getRowHeightsList: (rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number) => number[];
-	notifyCellChange: (rowId: string, colField: string) => void;
-	requestRender: (reason: string) => void;
-	incrementColumnVersion: () => void;
-	incrementGeometryVersion: () => void;
-	incrementRowModelVersion: () => void;
+	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
 }
 
-export class GridStateReactionController<TRowData = unknown> {
-	constructor(private readonly deps: GridStateReactionControllerDeps<TRowData>) {}
+export interface GridProjectionRunInput<TRowData = unknown> {
+	phase: StateCommitPhase<TRowData>;
+}
 
-	// True when a structural change (sort/filter/groupBy/expansion) has occurred that
-	// causes rows to reorder. The row model refreshes asynchronously via its event
-	// listeners (sortChanged → refresh() → bumpGlobalVersion()), so we defer bounds
-	// recalculation to the subsequent 'globalVersion' reaction when the model is current.
-	// Live data updates (updateRows) also bump globalVersion but must NOT shift bounds.
+export class GridProjectionPipeline<TRowData = unknown> {
+	constructor(private readonly deps: GridProjectionPipelineDeps<TRowData>) {}
+
 	private pendingStructuralBoundsUpdate = false;
 
-	public handleStateChanges = (prevState: GridState<TRowData>, updatedKeys: string[]): void => {
-		const stateManager = this.deps.getStateManager();
-		let currState = stateManager.getState();
-		const updatedSet = new Set(updatedKeys);
+	public run({ phase }: GridProjectionRunInput<TRowData>): void {
+		let currState = phase.getState();
+		const updatedSet = new Set(phase.getChangedKeys());
+		const prevState = phase.prevState;
 
 		if (updatedSet.has('columns') || updatedSet.has('columnWidths') || updatedSet.has('defaultColWidth')) {
 			this.deps.columns.updateColumns(currState.columns, currState.columnWidths, currState.defaultColWidth);
-			this.deps.incrementColumnVersion();
-			this.deps.incrementGeometryVersion();
 		}
 
 		if (updatedSet.has('globalVersion')) {
 			this.deps.data.clearValueGetterCache();
 		}
 
-		if (updatedSet.has('globalVersion') || updatedSet.has('sortModel') || updatedSet.has('filterModel')) {
-			this.deps.incrementRowModelVersion();
+		if (updatedSet.has('sortModel') || updatedSet.has('filterModel') || updatedSet.has('groupBy') || updatedSet.has('expansion')) {
+			this.pendingStructuralBoundsUpdate = true;
 		}
 
 		const rowModel = this.deps.getRowModel();
@@ -78,31 +69,36 @@ export class GridStateReactionController<TRowData = unknown> {
 				this.deps.getRowHeightsList(rowModel, currState.rowHeights, currState.defaultRowHeight),
 				currState.defaultRowHeight
 			);
-			this.deps.incrementGeometryVersion();
 		}
 
-		// Flag structural row-order changes so the subsequent globalVersion reaction
-		// (fired by rowModel.refresh() → bumpGlobalVersion()) knows to recompute bounds.
-		if (updatedSet.has('sortModel') || updatedSet.has('filterModel') || updatedSet.has('groupBy') || updatedSet.has('expansion')) {
-			this.pendingStructuralBoundsUpdate = true;
+		if (rowModel) {
+			const normalizedSelection = this.normalizeSelectionState(currState.selection, rowModel);
+			const normalizedActiveEdit = this.normalizeActiveEdit(currState.activeEdit, rowModel);
+			const normalizedSelectedRowIds = this.normalizeSelectedRowIds(currState.selectedRowIds, rowModel);
+			const derivedState: Partial<InternalGridState<TRowData>> = {};
+
+			if (normalizedSelection !== currState.selection) {
+				derivedState.selection = normalizedSelection;
+			}
+			if (normalizedActiveEdit !== currState.activeEdit) {
+				derivedState.activeEdit = normalizedActiveEdit;
+			}
+			if (normalizedSelectedRowIds !== currState.selectedRowIds) {
+				derivedState.selectedRowIds = normalizedSelectedRowIds;
+			}
+
+			if (Object.keys(derivedState).length > 0) {
+				const affectedKeys = phase.setDerivedState(derivedState);
+				for (const key of affectedKeys) updatedSet.add(key);
+				currState = phase.getState();
+			}
 		}
 
-		if (
-			updatedSet.has('selection') ||
-			updatedSet.has('columns') ||
-			// globalVersion only triggers bounds recalculation when a structural change
-			// (sort/filter/group/expansion) is pending. Plain data updates (updateRows at
-			// 10 hz) also bump globalVersion but must NOT shift the selection bounds —
-			// they carry no row-order change that the user initiated.
-			(updatedSet.has('globalVersion') && this.pendingStructuralBoundsUpdate)
-		) {
+		if (updatedSet.has('selection') || updatedSet.has('columns') || (updatedSet.has('globalVersion') && this.pendingStructuralBoundsUpdate)) {
 			if (updatedSet.has('globalVersion')) this.pendingStructuralBoundsUpdate = false;
 			const rangeBounds = this.deps.selection.calculateRangeBounds(
 				currState.selection.range,
-				(id) => {
-					const activeRowModel = this.deps.getRowModel();
-					return activeRowModel ? activeRowModel.getVisualIndexByRowId(id) : -1;
-				},
+				(id) => this.deps.getRowModel()?.getVisualIndexByRowId(id) ?? -1,
 				(field) => this.deps.columns.getColumnIndex(field)
 			);
 			const nextBounds = this.areRangeBoundsEqual(currState.selection.bounds, rangeBounds) ? currState.selection.bounds : rangeBounds;
@@ -111,21 +107,14 @@ export class GridStateReactionController<TRowData = unknown> {
 				bounds: nextBounds,
 			});
 			if (currState.selection !== selection) {
-				for (const key of stateManager.setDerivedState({ selection }, prevState)) {
-					const wasAlreadyUpdated = updatedSet.has(key);
-					updatedSet.add(key);
-					updatedKeys.push(key);
-					if (!wasAlreadyUpdated) {
-						stateManager.triggerKeyChange(key, prevState);
-					}
-				}
-				currState = stateManager.getState();
+				const affectedKeys = phase.setDerivedState({ selection });
+				for (const key of affectedKeys) updatedSet.add(key);
+				currState = phase.getState();
 			}
 		}
 
 		if (updatedSet.has('selection')) {
 			this.deps.selection.setSelection(currState.selection);
-			this.deps.invalidation.invalidateOverlay('selection');
 		}
 
 		const needsRangeUpdate =
@@ -153,35 +142,34 @@ export class GridStateReactionController<TRowData = unknown> {
 				currState.visibleColRange.endIdx !== nextColRange.endIdx;
 
 			if (rowRangeChanged || colRangeChanged) {
-				for (const key of stateManager.setDerivedState({ visibleRowRange: nextRowRange, visibleColRange: nextColRange }, prevState)) {
-					const wasAlreadyUpdated = updatedSet.has(key);
-					updatedSet.add(key);
-					updatedKeys.push(key);
-					if (!wasAlreadyUpdated) {
-						stateManager.triggerKeyChange(key, prevState);
-					}
-				}
-				currState = stateManager.getState();
+				const affectedKeys = phase.setDerivedState({
+					visibleRowRange: nextRowRange,
+					visibleColRange: nextColRange,
+				} satisfies GridStateUpdater<TRowData>);
+				for (const key of affectedKeys) updatedSet.add(key);
+				currState = phase.getState();
 			}
 		}
 
+		this.publishTargetedNotifications(prevState, currState, updatedSet);
+	}
+
+	private publishTargetedNotifications(
+		prevState: InternalGridState<TRowData>,
+		currState: InternalGridState<TRowData>,
+		updatedSet: ReadonlySet<string>
+	): void {
 		const notifiedCells = new Set<string>();
 		const notifyCellOnce = (rowId: string, colField: string): void => {
 			const key = `${rowId}:${colField}`;
 			if (notifiedCells.has(key)) return;
 			notifiedCells.add(key);
-			this.deps.notifyCellChange(rowId, colField);
+			this.deps.notifyCellChange(rowId, colField, false);
 		};
 
 		if (updatedSet.has('selection')) {
-			if (prevState.selection.focus) {
-				notifyCellOnce(prevState.selection.focus.rowId, prevState.selection.focus.colField);
-				this.deps.invalidation.invalidateCell(prevState.selection.focus.rowId, prevState.selection.focus.colField, 'focus');
-			}
-			if (currState.selection.focus) {
-				notifyCellOnce(currState.selection.focus.rowId, currState.selection.focus.colField);
-				this.deps.invalidation.invalidateCell(currState.selection.focus.rowId, currState.selection.focus.colField, 'focus');
-			}
+			if (prevState.selection.focus) notifyCellOnce(prevState.selection.focus.rowId, prevState.selection.focus.colField);
+			if (currState.selection.focus) notifyCellOnce(currState.selection.focus.rowId, currState.selection.focus.colField);
 		}
 
 		if (updatedSet.has('activeEdit')) {
@@ -203,7 +191,6 @@ export class GridStateReactionController<TRowData = unknown> {
 						const col = displayedColumns[colIdx];
 						if (visualRow?.kind === 'data' && col) {
 							notifyCellOnce(visualRow.rowId, col.field);
-							this.deps.invalidation.invalidateCell(visualRow.rowId, col.field, 'selection');
 						}
 					}
 				);
@@ -214,48 +201,73 @@ export class GridStateReactionController<TRowData = unknown> {
 			const prevWidths = prevState.columnWidths;
 			const currWidths = currState.columnWidths;
 			const allCols = new Set([...Object.keys(prevWidths), ...Object.keys(currWidths)]);
-			allCols.forEach((colField) => {
+			for (const colField of allCols) {
 				if (prevWidths[colField] !== currWidths[colField]) {
 					this.deps.cellNotifications.notifyColumnSubscribers(colField);
 				}
-			});
+			}
 		}
 
 		if (updatedSet.has('globalVersion')) {
 			this.deps.cellNotifications.notifyAllCellSubscribers();
 		}
+	}
 
-		if (updatedSet.has('selection') && prevState.selection.focus !== currState.selection.focus) {
-			this.deps.eventBus.dispatchEvent(GridEventName.focusChanged, { focus: currState.selection.focus, selection: currState.selection });
+	private normalizeSelectionState(selection: GridSelectionState, rowModel: RowModel<TRowData>): GridSelectionState {
+		const hasPointer = (pointer: { rowId: string; colField: string } | null): boolean => {
+			if (!pointer) return false;
+			return rowModel.getVisualIndexByRowId(pointer.rowId) >= 0 && this.deps.columns.getColumnIndex(pointer.colField) >= 0;
+		};
+
+		if (!selection.focus) return selection;
+
+		if (!hasPointer(selection.focus)) {
+			return {
+				focus: null,
+				anchor: null,
+				range: null,
+				bounds: null,
+				source: selection.source,
+			};
 		}
-		if (updatedSet.has('selection')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.selectionChanged, {
-				selection: currState.selection,
-				result: this.deps.selection.describeChange(prevState.selection, currState.selection, this.deps.getRowModel(), currState.columns),
-			});
-			this.deps.requestRender('selection');
+
+		const anchorValid = hasPointer(selection.anchor);
+		const rangeStartValid = hasPointer(selection.range?.start ?? null);
+		const rangeEndValid = hasPointer(selection.range?.end ?? null);
+
+		if (anchorValid && rangeStartValid && rangeEndValid) {
+			return selection;
 		}
-		if (updatedSet.has('sortModel')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.sortChanged, { sortModel: currState.sortModel });
-		}
-		if (updatedSet.has('filterModel')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.filterChanged, { filterModel: currState.filterModel });
-		}
-		if (updatedSet.has('groupBy')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.groupByChanged, { groupBy: currState.groupBy });
-		}
-		if (updatedSet.has('aggDefs')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.aggDefsChanged, { aggDefs: currState.aggDefs });
-		}
-		if (updatedSet.has('showGroupFooter')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.showGroupFooterChanged, { showGroupFooter: currState.showGroupFooter });
-		}
-		if (updatedSet.has('enableStickyGroupRows')) {
-			this.deps.eventBus.dispatchEvent(GridEventName.enableStickyGroupRowsChanged, {
-				enableStickyGroupRows: currState.enableStickyGroupRows,
-			});
-		}
-	};
+
+		return this.deps.selection.createCellSelection(selection.focus, selection.source);
+	}
+
+	private normalizeActiveEdit(
+		activeEdit: InternalGridState<TRowData>['activeEdit'],
+		rowModel: RowModel<TRowData>
+	): InternalGridState<TRowData>['activeEdit'] {
+		if (!activeEdit) return activeEdit;
+		if (rowModel.getVisualIndexByRowId(activeEdit.rowId) < 0) return null;
+		if (this.deps.columns.getColumnIndex(activeEdit.colField) < 0) return null;
+		return activeEdit;
+	}
+
+	private normalizeSelectedRowIds(selectedRowIds: string[], rowModel: RowModel<TRowData>): string[] {
+		if (selectedRowIds.length === 0) return selectedRowIds;
+
+		const capabilities = asCapableRowModel(rowModel)?.getCapabilities();
+		if (!capabilities || capabilities.allRowSelection) return selectedRowIds;
+		if (!capabilities.loadedRowSelection && !capabilities.pageRowSelection) return selectedRowIds;
+
+		const selectableRowModel = asSelectableDataRowModel(rowModel);
+		if (!selectableRowModel) return selectedRowIds;
+
+		const allowedIds = new Set(selectableRowModel.getSelectableDataRowIds(capabilities.pageRowSelection ? 'page' : 'loaded'));
+		if (allowedIds.size === 0) return [];
+
+		const nextIds = selectedRowIds.filter((rowId) => allowedIds.has(rowId));
+		return nextIds.length === selectedRowIds.length ? selectedRowIds : nextIds;
+	}
 
 	private areRangeBoundsEqual(left: RangeBounds | null, right: RangeBounds | null): boolean {
 		return (
@@ -270,7 +282,7 @@ export class GridStateReactionController<TRowData = unknown> {
 	}
 
 	private getSelectionNotificationViewport(
-		state: GridState<TRowData>,
+		state: InternalGridState<TRowData>,
 		rowModel: RowModel<TRowData>
 	): { minRow: number; maxRow: number; minCol: number; maxCol: number } {
 		const rowCount = rowModel.getVisualRowCount();

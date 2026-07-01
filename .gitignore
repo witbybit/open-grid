@@ -7,8 +7,15 @@ web_modules/
 dist/
 build/
 .turbo/
+.tmp/
 out/
 .vite
+
+# Accidental TypeScript emit into source trees
+packages/core/src/**/*.js
+packages/core/src/**/*.d.ts
+packages/react/src/**/*.js
+packages/react/src/**/*.d.ts
 
 # Log files
 npm-debug.log*

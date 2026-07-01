@@ -3,12 +3,12 @@ import { GridEventName, type GridApi } from '@open-grid/react';
 import { TableProperties, Terminal } from 'lucide-react';
 
 export const StateInspector = React.memo(({ api }: { api: GridApi<any> }) => {
-	const [selection, setSelection] = useState(() => api.getState().selection);
+	const [selection, setSelection] = useState(() => api.getStateSnapshot().selection);
 
 	useEffect(() => {
-		setSelection(api.getState().selection);
+		setSelection(api.getStateSnapshot().selection);
 		return api.subscribeToKey('selection', () => {
-			setSelection(api.getState().selection);
+			setSelection(api.getStateSnapshot().selection);
 		});
 	}, [api]);
 

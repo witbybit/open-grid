@@ -1,6 +1,7 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import { computeGridLayoutPlan } from './layoutPlan.js';
+import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 import type {
 	ColumnFilter,
 	FilterModel,
@@ -56,13 +57,9 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 
 	// Cell elements keyed by column field (survives reorder)
 	private cells = new Map<string, HTMLDivElement>();
-	private lastScrollLeft = 0;
-	private lastSyncedViewportWidth = -1;
-	private lastLeftTransform = '';
-	private lastRightLeft = -1;
-	private lastRightTransform = '';
 	private lastFilterModel: FilterModel | null = null;
 	private lastVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1 };
+	private lastTopologyVersion = -1;
 	private unsubscribers: (() => void)[] = [];
 
 	constructor(engine: GridEngine<TRowData>) {
@@ -96,53 +93,10 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		this.syncVisibleFilters(true, layoutPlan ?? computeGridLayoutPlan(this.engine));
 	}
 
-	public syncScrollLeft(layoutPlan: GridLayoutPlan): void {
-		const scrollLeft = layoutPlan.viewport.scrollLeft;
-		const clientWidth = layoutPlan.viewport.clientWidth;
-		if (scrollLeft === this.lastScrollLeft && clientWidth === this.lastSyncedViewportWidth) return;
-		this.lastScrollLeft = scrollLeft;
-		this.lastSyncedViewportWidth = clientWidth;
-		// Close the set-filter dropdown on horizontal scroll (it's fixed-position and won't track)
+	public syncScrollLeft(_layoutPlan: GridLayoutPlan): void {
+		// Pin lanes now use CSS position:sticky — no JS counter-transform needed.
+		// Close the set-filter dropdown on horizontal scroll (it's fixed-position and won't track).
 		closeOpenMenus();
-		this.syncPinnedPositions(layoutPlan);
-	}
-
-	private syncPinnedPositions(plan: GridLayoutPlan): void {
-		if (!this.filterLayer || !this.filterLeftLayer || !this.filterRightLayer) return;
-
-		const scrollLeft = plan.viewport.scrollLeft;
-		const clientWidth = plan.viewport.clientWidth;
-		const pinLeftWidth = plan.columns.pinLeftWidth;
-		const pinRightWidth = plan.columns.pinRightWidth;
-
-		// Center lane scrolls with the viewport
-		const centerTransform = `translate3d(${-scrollLeft}px, 0, 0)`;
-		if (this.filterLayer.style.transform !== centerTransform) {
-			this.filterLayer.style.transform = centerTransform;
-		}
-
-		// Left pin: counter-scroll so it stays fixed at left edge
-		const leftTransform = `translate3d(${scrollLeft}px, 0, 0)`;
-		if (this.lastLeftTransform !== leftTransform) {
-			this.lastLeftTransform = leftTransform;
-			this.filterLeftLayer.style.transform = leftTransform;
-		}
-
-		// Right pin: position at right edge of client, counter-scroll
-		const rightLeft = scrollLeft + clientWidth - pinRightWidth;
-		if (this.lastRightLeft !== rightLeft) {
-			this.lastRightLeft = rightLeft;
-			this.filterRightLayer.style.left = `${rightLeft}px`;
-		}
-		const rightTransform = `translate3d(${scrollLeft}px, 0, 0)`;
-		if (this.lastRightTransform !== rightTransform) {
-			this.lastRightTransform = rightTransform;
-			this.filterRightLayer.style.transform = rightTransform;
-		}
-
-		// Hide left/right layers when empty
-		this.filterLeftLayer.style.display = pinLeftWidth > 0 ? '' : 'none';
-		this.filterRightLayer.style.display = pinRightWidth > 0 ? '' : 'none';
 	}
 
 	private syncVisibleFilters(force: boolean, plan: GridLayoutPlan): void {
@@ -151,41 +105,47 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 
 		const columnPlan = this.engine.columns.getCompiledPlan();
 		const columns = columnPlan.displayedColumns as InternalColumnDef<TRowData>[];
-		const colLefts = columnPlan.colLefts;
 		const colWidths = columnPlan.colWidths;
+		const topology = plan.columnTopology;
 		const colStart = plan.columns.colStart;
 		const colEnd = plan.columns.colEnd;
-		const pinLeftCount = plan.columns.pinLeftCount;
-		const firstRightPinColIdx = columns.length - plan.columns.pinRightCount;
 		const filterModel = this.engine.stateManager.getState().filterModel;
 
-		const rangeKey = `${colStart}:${colEnd}:${pinLeftCount}:${plan.columns.pinRightCount}`;
+		const rangeKey = `${colStart}:${colEnd}:${plan.columns.pinLeftCount}:${plan.columns.pinRightCount}`;
 		const filterChanged = filterModel !== this.lastFilterModel;
+		const topologyChanged = topology.version !== this.lastTopologyVersion;
 		if (
 			!force &&
 			rangeKey ===
 				`${this.lastVisibleRange.startIdx}:${this.lastVisibleRange.endIdx}:${this.lastVisibleRange.pinLeft}:${this.lastVisibleRange.pinRight}` &&
-			!filterChanged
+			!filterChanged &&
+			!topologyChanged
 		) {
 			return;
 		}
 		this.lastFilterModel = filterModel;
-		this.lastVisibleRange = { startIdx: colStart, endIdx: colEnd, pinLeft: pinLeftCount, pinRight: plan.columns.pinRightCount };
+		if (topologyChanged) this.engine.instrumentation.increment(GridMetric.TOPOLOGY_VERSION_CHANGED);
+		this.lastTopologyVersion = topology.version;
+		this.lastVisibleRange = { startIdx: colStart, endIdx: colEnd, pinLeft: plan.columns.pinLeftCount, pinRight: plan.columns.pinRightCount };
 
 		const colCount = columns.length;
 		const seen = new Set<string>();
 
 		for (let c = 0; c < colCount; c++) {
 			const col = columns[c];
-			const isPinLeft = c < pinLeftCount;
-			const isPinRight = c >= firstRightPinColIdx;
-			const isCenter = !isPinLeft && !isPinRight;
+			const placement = topology.byColumnId.get(col.field);
+			if (!placement) continue;
+
+			const isPinLeft = placement.lane === 'left';
+			const isPinRight = placement.lane === 'right';
+			const isCenter = placement.lane === 'center';
 
 			if (isCenter && (c < colStart || c > colEnd)) continue;
 
 			seen.add(col.field);
 
-			const left = colLefts[c] ?? 0;
+			// laneOffset is already lane-relative for all three lanes.
+			const left = placement.laneOffset;
 			const width = colWidths[c] ?? this.engine.stateManager.getState().defaultColWidth;
 			const currentFilter = (filterModel?.[col.field] ?? null) as ColumnFilter | null;
 
@@ -196,6 +156,12 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 				// Update position if column widths changed
 				cell.style.left = `${left}px`;
 				cell.style.width = `${width}px`;
+				// Reparent if lane changed (pin/unpin relocation — move, do not destroy/recreate).
+				const targetParent = isPinLeft ? this.filterLeftLayer : isPinRight ? this.filterRightLayer : this.filterLayer;
+				if (targetParent && cell.parentNode !== targetParent) {
+					targetParent.appendChild(cell);
+					this.engine.instrumentation.increment(GridMetric.FLOATING_FILTER_VIEW_RELOCATED);
+				}
 				// Sync filter value if it changed
 				this.updateCellFilterValue(cell, currentFilter, col);
 			}
@@ -208,8 +174,6 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 				this.cells.delete(field);
 			}
 		}
-
-		this.syncPinnedPositions(plan);
 	}
 
 	private createCell(
@@ -230,8 +194,7 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 
 		const setFilter = (filter: ColumnFilter | null): void => {
 			const newModel = applyFilterToModel(col.field, filter, this.engine.stateManager.getState().filterModel);
-			this.engine.stateManager.setState({ filterModel: newModel });
-			this.engine.invalidation.invalidateFull('floating-filter');
+			this.engine.setFilterModel(newModel);
 		};
 
 		// Use custom renderer if provided
@@ -750,8 +713,7 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 				const newModel: FilterModel = { ...(state.filterModel ?? {}) };
 				if (newFilter == null) delete newModel[colField];
 				else newModel[colField] = newFilter;
-				this.engine.stateManager.setState({ filterModel: Object.keys(newModel).length > 0 ? newModel : null });
-				this.engine.invalidation.invalidateFull('floating-filter');
+				this.engine.setFilterModel(Object.keys(newModel).length > 0 ? newModel : null);
 			};
 			const setFilter2 = currentFilter?.type === 'set' ? currentFilter : null;
 			if ((setFilter2 && !hasBadge) || (!setFilter2 && !hasEmpty)) {
@@ -781,8 +743,7 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 					const newModel: FilterModel = { ...(state.filterModel ?? {}) };
 					if (newFilter == null) delete newModel[colField];
 					else newModel[colField] = newFilter;
-					this.engine.stateManager.setState({ filterModel: Object.keys(newModel).length > 0 ? newModel : null });
-					this.engine.invalidation.invalidateFull('floating-filter');
+					this.engine.setFilterModel(Object.keys(newModel).length > 0 ? newModel : null);
 				};
 				this.buildDefaultInput(cell, col, currentFilter, setFilter);
 			}
@@ -828,11 +789,7 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 		for (const cell of this.cells.values()) cell.remove();
 		this.cells.clear();
 		this.lastVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1 };
-		this.lastScrollLeft = 0;
-		this.lastSyncedViewportWidth = -1;
-		this.lastLeftTransform = '';
-		this.lastRightLeft = -1;
-		this.lastRightTransform = '';
 		this.lastFilterModel = null;
+		this.lastTopologyVersion = -1;
 	}
 }

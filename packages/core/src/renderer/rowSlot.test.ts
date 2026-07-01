@@ -59,12 +59,20 @@ describe('RowSlot & CellSlot Controllers', () => {
 		cell.setBinding('slot-1', 'row-1', 0, 'name', 0, 'slot-1::name', 'text');
 		cell.lastMountedRowVersion = 5;
 		cell.lastMountedGlobalVersion = 3;
+		cell.lastMountedInsightVersion = 2;
+		cell.lastMountedStyleVersion = 4;
+		cell.lastMountedLoadingVersion = 1;
+		cell.lastMountedSelectionVersion = 6;
 
 		cell.unbindCold();
 
 		expect(cell.binding).toBeNull();
 		expect(cell.lastMountedRowVersion).toBe(-1);
 		expect(cell.lastMountedGlobalVersion).toBe(-1);
+		expect(cell.lastMountedInsightVersion).toBe(-1);
+		expect(cell.lastMountedStyleVersion).toBe(-1);
+		expect(cell.lastMountedLoadingVersion).toBe(-1);
+		expect(cell.lastMountedSelectionVersion).toBe(-1);
 	});
 
 	it('should prevent redundant DOM writes on RowSlot if layout values match', () => {
@@ -78,5 +86,34 @@ describe('RowSlot & CellSlot Controllers', () => {
 
 		const updated2 = row.update(2, 'row-2', 'data', 80, 40, 'og-row selected');
 		expect(updated2).toBe(false);
+	});
+
+	it('unbindHot() hides the row without detaching warm cell DOM', () => {
+		const rowEl = document.createElement('div');
+		const row = new RowSlot('row-1', rowEl);
+		const cellEl = document.createElement('div');
+		const cell = new CellSlot(cellEl);
+		cell.columnId = 'name';
+		row.cellsByColumnId.set('name', cell);
+		row.centerCells.push(cell);
+		rowEl.appendChild(cellEl);
+
+		row.unbindHot();
+
+		expect(rowEl.style.visibility).toBe('hidden');
+		expect(cellEl.parentNode).toBe(rowEl);
+		expect(row.cellsByColumnId.get('name')).toBe(cell);
+	});
+
+	it('unbindHot() preserves warm row dataset mirrors for same-row rebound', () => {
+		const rowEl = document.createElement('div');
+		const row = new RowSlot('row-1', rowEl);
+
+		row.update(2, 'row-2', 'data', 80, 40, 'og-row selected');
+		row.unbindHot();
+
+		expect(rowEl.dataset.rowIndex).toBe('2');
+		expect(rowEl.dataset.rowId).toBe('row-2');
+		expect(rowEl.getAttribute('aria-rowindex')).toBe('3');
 	});
 });

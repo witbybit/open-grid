@@ -3,7 +3,7 @@ import type { RowSlot } from './rowSlot.js';
 import type { PortalMountManager } from './portalMountManager.js';
 
 /**
- * Phase 7 — Real full-width row renderer.
+ * Full-width row renderer.
  *
  * Owns full-width row host management for group, detail, footer, and loading full-width
  * rows. RowSlot delegates to this when the row kind is not 'data'.

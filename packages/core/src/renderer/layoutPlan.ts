@@ -1,6 +1,9 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { computeRenderWindow, type RenderWindow, type StickyGroupStackItem } from './renderWindow.js';
 import type { InternalColumnDef } from '../columnDef.js';
+import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
+import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
+import { summarizeAnalysisState } from '../analysis/analysisState.js';
 
 export const LEAF_HEADER_HEIGHT = 40;
 export const GROUP_PANEL_HEIGHT = 42;
@@ -37,10 +40,10 @@ export interface HeaderBandLayout {
 }
 
 /**
- * One horizontal pin lane (Plan 039 Phase 4). `baseLeft` is the absolute X (in content
- * coordinates) where the lane's columns begin — the single value used to convert an
- * absolute `colLefts[c]` into a lane-relative offset. Header and body both read this so
- * they cannot drift, and a pin/unpin animation has one geometry to interpolate.
+ * One horizontal pin lane. `baseLeft` is the absolute X (in content coordinates) where
+ * the lane's columns begin — the single value used to convert an absolute `colLefts[c]`
+ * into a lane-relative offset. Header and body both read this so they cannot drift, and
+ * a pin/unpin animation has one geometry to interpolate.
  */
 export interface ColumnLane {
 	width: number;
@@ -121,60 +124,54 @@ export interface GridLayoutPlan {
 	headerBands: HeaderBandLayout[];
 	stickyGroups: StickyGroupStackItem[];
 	renderWindow: RenderWindow;
+	/** Authoritative column topology: lane membership, lane-relative offsets, group segments. */
+	columnTopology: CompiledColumnTopology;
 }
 
 export function getRightPinnedLaneScreenLeft(layoutPlan: GridLayoutPlan): number {
 	return layoutPlan.viewport.clientWidth - layoutPlan.columns.lanes.right.width;
 }
 
-function normalizeHeaderGroups(headerGroup: string | string[] | undefined): string[] {
-	if (!headerGroup) return [];
-	return Array.isArray(headerGroup) ? headerGroup : [headerGroup];
-}
-
+/**
+ * Builds HeaderBandLayout[] from the compiled column topology (WS10).
+ * All `left` values are lane-relative offsets — the renderer uses them directly
+ * without any per-lane subtraction.
+ */
 function buildHeaderBands<TRowData>(
-	columns: InternalColumnDef<TRowData>[],
-	colLefts: ArrayLike<number>,
-	colWidths: ArrayLike<number>,
-	totalColumnsWidth: number,
-	pinLeftCount: number,
-	firstRightPinColIdx: number,
+	topology: CompiledColumnTopology,
+	columns: readonly InternalColumnDef<TRowData>[],
 	leafHeaderHeight: number,
 	enableColumnReorder: boolean,
 	defaultColWidth: number
 ): HeaderBandLayout[] {
-	const colCount = columns.length;
-
-	// Compute max group depth across all columns
-	let maxGroupDepth = 0;
-	for (let c = 0; c < colCount; c++) {
-		const groups = normalizeHeaderGroups(columns[c].headerGroup);
-		if (groups.length > maxGroupDepth) maxGroupDepth = groups.length;
-	}
-
+	const maxGroupDepth = topology.groupSegments.length;
 	const groupBandsHeight = maxGroupDepth * GROUP_BAND_HEIGHT;
 	const leafBandTop = groupBandsHeight;
 
-	// Build leaf band
-	const leafCells: HeaderCellLayout[] = columns.map((column, colIndex) => {
-		const pinned: 'left' | 'center' | 'right' = colIndex < pinLeftCount ? 'left' : colIndex >= firstRightPinColIdx ? 'right' : 'center';
+	// Leaf band — laneOffset is already lane-relative for all three lanes.
+	const leafCells: HeaderCellLayout[] = topology.placements.map((placement) => {
+		const col = columns[placement.absoluteIndex];
 		return {
-			id: column.field,
-			field: column.field,
-			label: column.header ?? column.field,
+			id: placement.columnId,
+			field: placement.columnId,
+			label: col.header ?? col.field,
 			depth: maxGroupDepth,
-			colStart: colIndex,
-			colEnd: colIndex,
-			left: colLefts[colIndex] ?? 0,
-			width: colWidths[colIndex] ?? defaultColWidth,
+			colStart: placement.absoluteIndex,
+			colEnd: placement.absoluteIndex,
+			left: placement.laneOffset,
+			width: placement.width || defaultColWidth,
 			top: leafBandTop,
 			height: leafHeaderHeight,
-			pinned,
+			pinned: placement.lane,
 			isLeaf: true,
-			movable: enableColumnReorder && column.movable !== false && !column.checkboxSelection,
+			movable:
+				enableColumnReorder &&
+				!col.checkboxSelection &&
+				(col.canMoveColumn === undefined ||
+					normalizeCapabilityResult(col.canMoveColumn({ action: 'moveColumn', colField: col.field })).allowed),
 			resizable: true,
-			sortable: column.sortable !== false && !column.checkboxSelection,
-			checkboxSelection: !!column.checkboxSelection,
+			sortable: col.sortable !== false && !col.checkboxSelection,
+			checkboxSelection: !!col.checkboxSelection,
 		};
 	});
 
@@ -184,73 +181,45 @@ function buildHeaderBands<TRowData>(
 
 	const bands: HeaderBandLayout[] = [];
 
-	// Build one band per group depth level
+	// Group bands from pre-computed topology segments (also lane-relative).
 	for (let d = 0; d < maxGroupDepth; d++) {
 		const bandTop = d * GROUP_BAND_HEIGHT;
-		const cells: HeaderCellLayout[] = [];
-		let i = 0;
+		const segments = topology.groupSegments[d];
+		if (!segments || segments.length === 0) continue;
 
-		while (i < colCount) {
-			const groups = normalizeHeaderGroups(columns[i].headerGroup);
-			const groupName = groups[d];
+		const cells: HeaderCellLayout[] = segments.map((seg) => ({
+			id: seg.id,
+			field: '',
+			label: seg.label,
+			depth: d,
+			colStart: seg.colStart,
+			colEnd: seg.colEnd,
+			left: seg.laneOffset,
+			width: seg.width,
+			top: bandTop,
+			height: GROUP_BAND_HEIGHT,
+			pinned: seg.lane,
+			isLeaf: false,
+			movable: false,
+			resizable: false,
+			sortable: false,
+			checkboxSelection: false,
+		}));
 
-			if (!groupName) {
-				// Column has no group at this depth — skip it in this band
-				i++;
-				continue;
-			}
-
-			const pinned: 'left' | 'center' | 'right' = i < pinLeftCount ? 'left' : i >= firstRightPinColIdx ? 'right' : 'center';
-
-			// Extend the span as long as: same group name, same pin zone, and column has a group at this depth
-			let j = i + 1;
-			while (j < colCount) {
-				const nextGroups = normalizeHeaderGroups(columns[j].headerGroup);
-				const nextGroupName = nextGroups[d];
-				const nextPinned: 'left' | 'center' | 'right' = j < pinLeftCount ? 'left' : j >= firstRightPinColIdx ? 'right' : 'center';
-				if (nextGroupName !== groupName || nextPinned !== pinned) break;
-				j++;
-			}
-
-			// j is one past the last column in this span
-			const left = colLefts[i] ?? 0;
-			const rightEdge = j < colCount ? (colLefts[j] ?? totalColumnsWidth) : totalColumnsWidth;
-			const width = rightEdge - left;
-
-			cells.push({
-				id: `grp-${d}-${i}`,
-				field: '',
-				label: groupName,
-				depth: d,
-				colStart: i,
-				colEnd: j - 1,
-				left,
-				width,
-				top: bandTop,
-				height: GROUP_BAND_HEIGHT,
-				pinned,
-				isLeaf: false,
-				movable: false,
-				resizable: false,
-				sortable: false,
-				checkboxSelection: false,
-			});
-
-			i = j;
-		}
-
-		if (cells.length > 0) {
-			bands.push({ depth: d, top: bandTop, height: GROUP_BAND_HEIGHT, cells });
-		}
+		bands.push({ depth: d, top: bandTop, height: GROUP_BAND_HEIGHT, cells });
 	}
 
-	// Leaf band goes last
 	bands.push({ depth: maxGroupDepth, top: leafBandTop, height: leafHeaderHeight, cells: leafCells });
 
 	return bands;
 }
 
-export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, renderWindow = computeRenderWindow(engine)): GridLayoutPlan {
+export function computeGridLayoutPlan<TRowData>(
+	engine: GridEngine<TRowData>,
+	renderWindow?: RenderWindow,
+	leafHeaderHeightPx?: number
+): GridLayoutPlan {
+	const rw = renderWindow ?? computeRenderWindow(engine);
 	const state = engine.stateManager.getState();
 	const columnPlan = engine.columns.getCompiledPlan();
 	const viewportWidth = engine.viewport.viewportWidth;
@@ -260,25 +229,23 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const totalColumnsWidth = columnPlan.totalWidth;
 	const contentWidth = Math.max(totalColumnsWidth, viewportWidth);
 	const groupPanelHeight = state.showGroupPanel ? GROUP_PANEL_HEIGHT : 0;
-	const filterChipBarHeight =
-		state.showFilterChipBar && state.filterModel && Object.keys(state.filterModel).length > 0 ? FILTER_CHIP_BAR_HEIGHT : 0;
-	const leafHeaderHeight = LEAF_HEADER_HEIGHT;
-	const pinLeftCount = Math.min(engine.viewport.pinLeftColumns, renderWindow.colCount);
-	const pinRightCount = Math.min(engine.viewport.pinRightColumns, Math.max(0, renderWindow.colCount - pinLeftCount));
-	const firstRightPinColIdx = Math.max(pinLeftCount, renderWindow.colCount - pinRightCount);
+	const analysis = summarizeAnalysisState(state.filterModel, state.queryModel);
+	const filterChipBarHeight = state.showFilterChipBar && analysis.totalActiveItems > 0 ? FILTER_CHIP_BAR_HEIGHT : 0;
+	const leafHeaderHeight = leafHeaderHeightPx !== undefined && leafHeaderHeightPx > 0 ? leafHeaderHeightPx : LEAF_HEADER_HEIGHT;
+	const pinLeftCount = Math.min(engine.viewport.pinLeftColumns, rw.colCount);
+	const pinRightCount = Math.min(engine.viewport.pinRightColumns, Math.max(0, rw.colCount - pinLeftCount));
+	const firstRightPinColIdx = Math.max(pinLeftCount, rw.colCount - pinRightCount);
 	const pinLeftWidth = pinLeftCount > 0 ? engine.geometry.colLefts[pinLeftCount] || 0 : 0;
 	const pinRightWidth =
-		pinRightCount > 0 && firstRightPinColIdx < renderWindow.colCount
+		pinRightCount > 0 && firstRightPinColIdx < rw.colCount
 			? totalColumnsWidth - (engine.geometry.colLefts[firstRightPinColIdx] || totalColumnsWidth)
 			: 0;
 
+	const columnTopology = compileColumnTopology(columnPlan);
+
 	const headerBands = buildHeaderBands(
+		columnTopology,
 		columnPlan.displayedColumns,
-		columnPlan.colLefts,
-		columnPlan.colWidths,
-		totalColumnsWidth,
-		pinLeftCount,
-		firstRightPinColIdx,
 		leafHeaderHeight,
 		state.enableColumnReorder ?? true,
 		state.defaultColWidth
@@ -291,9 +258,8 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const floatingFilterHeight = state.showFloatingFilters ? FLOATING_FILTER_HEIGHT : 0;
 	const topChromeHeight = groupPanelHeight + filterChipBarHeight + totalHeaderHeight + floatingFilterHeight;
 
-	// Bottom chrome — status bar + pagination bar. These are config-gated; until the
-	// config lands (Plan 039 Phase 5) both heights resolve to 0 and the layout is
-	// identical to the top-only era. Heights come from constants, never magic literals.
+	// Bottom chrome — status bar + pagination bar. Config-gated: when absent both heights
+	// resolve to 0. Heights come from constants, never magic literals.
 	const statusBarHeight = state.showStatusBar ? STATUS_BAR_HEIGHT : 0;
 	const paginationHeight = state.pagination ? PAGINATION_HEIGHT : 0;
 	const bottomChromeHeight = statusBarHeight + paginationHeight;
@@ -303,12 +269,12 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 	const paginationTop = bottomChromeTop + statusBarHeight;
 
 	let pinnedTopHeight = 0;
-	for (let i = 0; i < renderWindow.pinTopRows && i < renderWindow.rowCount; i++) {
+	for (let i = 0; i < rw.pinTopRows && i < rw.rowCount; i++) {
 		pinnedTopHeight += engine.geometry.getRowHeight(i, state.defaultRowHeight);
 	}
 	let pinnedBottomHeight = 0;
-	for (let i = 0; i < renderWindow.pinBottomRows && i < renderWindow.rowCount; i++) {
-		pinnedBottomHeight += engine.geometry.getRowHeight(renderWindow.rowCount - 1 - i, state.defaultRowHeight);
+	for (let i = 0; i < rw.pinBottomRows && i < rw.rowCount; i++) {
+		pinnedBottomHeight += engine.geometry.getRowHeight(rw.rowCount - 1 - i, state.defaultRowHeight);
 	}
 
 	return {
@@ -338,20 +304,20 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 			bottomChromeHeight,
 		},
 		rows: {
-			rowStart: renderWindow.rowStart,
-			rowEnd: renderWindow.rowEnd,
-			pinnedTopCount: renderWindow.pinTopRows,
-			pinnedBottomCount: renderWindow.pinBottomRows,
+			rowStart: rw.rowStart,
+			rowEnd: rw.rowEnd,
+			pinnedTopCount: rw.pinTopRows,
+			pinnedBottomCount: rw.pinBottomRows,
 			pinnedTopHeight,
 			pinnedBottomHeight,
-			visibleTop: renderWindow.visibleTop ?? engine.viewport.scrollTop + pinnedTopHeight,
-			visibleBottom: renderWindow.visibleBottom ?? engine.viewport.scrollTop + viewportHeight - pinnedBottomHeight,
-			bufferTopPx: renderWindow.bufferTopPx ?? 0,
-			bufferBottomPx: renderWindow.bufferBottomPx ?? totalRowsHeight,
+			visibleTop: rw.visibleTop ?? engine.viewport.scrollTop + pinnedTopHeight,
+			visibleBottom: rw.visibleBottom ?? engine.viewport.scrollTop + viewportHeight - pinnedBottomHeight,
+			bufferTopPx: rw.bufferTopPx ?? 0,
+			bufferBottomPx: rw.bufferBottomPx ?? totalRowsHeight,
 		},
 		columns: {
-			colStart: renderWindow.colStart,
-			colEnd: renderWindow.colEnd,
+			colStart: rw.colStart,
+			colEnd: rw.colEnd,
 			pinLeftCount,
 			pinRightCount,
 			pinLeftWidth,
@@ -376,7 +342,7 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 					// `colLefts[c] - baseLeft` lane-relative conversion done by header + body.
 					baseLeft: totalColumnsWidth - pinRightWidth,
 					colStart: pinRightCount > 0 ? firstRightPinColIdx : -1,
-					colEnd: pinRightCount > 0 ? renderWindow.colCount - 1 : -1,
+					colEnd: pinRightCount > 0 ? rw.colCount - 1 : -1,
 				},
 			},
 		},
@@ -390,7 +356,8 @@ export function computeGridLayoutPlan<TRowData>(engine: GridEngine<TRowData>, re
 			paginationTop,
 		},
 		headerBands,
-		stickyGroups: renderWindow.stickyGroupStack ?? [],
-		renderWindow,
+		stickyGroups: rw.stickyGroupStack ?? [],
+		renderWindow: rw,
+		columnTopology,
 	};
 }

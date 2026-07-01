@@ -34,7 +34,6 @@ function makeStateHost(overrides?: Partial<RowRendererRuntimeStateHost<unknown>>
 		dirtyRowsAfterScroll: new Set(),
 		dirtyBuckets: [[], [], [], []],
 		activeRows: new Map(),
-		pendingPortalReleasesAfterScroll: new Map(),
 		programmaticScrollCell: null,
 		deferredFocusCell: null,
 		runtimeState: makeIdleState(),
@@ -51,7 +50,7 @@ function makeStateHost(overrides?: Partial<RowRendererRuntimeStateHost<unknown>>
 
 function makeDeps(stateHost: RowRendererRuntimeStateHost<unknown>): RowRendererRuntimeBridgeDeps<unknown> {
 	return {
-		engine: {} as any,
+		engine: { runtimeFaults: { report: vi.fn() } } as any,
 		cellRenderer: {
 			getOrCreateCellContentLayer: vi.fn(() => document.createElement('div')),
 			getOrCreatePortalHost: vi.fn(() => document.createElement('div')),
@@ -61,6 +60,7 @@ function makeDeps(stateHost: RowRendererRuntimeStateHost<unknown>): RowRendererR
 		portalMountManager: {
 			releaseCellForScroll: vi.fn(),
 			releaseCell: vi.fn(),
+			getActiveIdentity: vi.fn(() => ({ rowSlotId: 'slot-0', slotGeneration: 1 })),
 		} as any,
 		getViewportContainer: () => null,
 		selectionPaint: {} as any,
@@ -176,6 +176,17 @@ describe('RowRendererRuntimeBridge – releaseCellPortal', () => {
 		expect(stateHost.currentScrollPortalOps).toBe(1);
 		expect(deps.portalMountManager.releaseCell).not.toHaveBeenCalled();
 	});
+
+	it('reports a fault and skips release when pooled identity is missing', () => {
+		const { bridge, deps } = makeBridge();
+		const cell = cellWithKey('cell-missing');
+		(deps.portalMountManager.getActiveIdentity as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+		bridge.releaseCellPortal(cell);
+
+		expect(deps.portalMountManager.releaseCell).not.toHaveBeenCalled();
+		expect((deps.engine as any).runtimeFaults.report).toHaveBeenCalledOnce();
+	});
 });
 
 // ─── applyFocus ───────────────────────────────────────────────────────────────
@@ -221,26 +232,5 @@ describe('RowRendererRuntimeBridge – applyFocus', () => {
 		bridge.applyFocus(cell);
 
 		expect(renderStats.focusCallsDuringScroll).toBe(1);
-	});
-});
-
-// ─── cancelPendingPortalRelease ───────────────────────────────────────────────
-
-describe('RowRendererRuntimeBridge – cancelPendingPortalRelease', () => {
-	it('removes the key from pendingPortalReleasesAfterScroll', () => {
-		const { bridge, stateHost } = makeBridge();
-		stateHost.pendingPortalReleasesAfterScroll.set('key-abc', {});
-
-		bridge.cancelPendingPortalRelease('key-abc');
-
-		expect(stateHost.pendingPortalReleasesAfterScroll.has('key-abc')).toBe(false);
-	});
-
-	it('is a no-op when the key does not exist', () => {
-		const { bridge, stateHost } = makeBridge();
-
-		bridge.cancelPendingPortalRelease('nonexistent');
-
-		expect(stateHost.pendingPortalReleasesAfterScroll.size).toBe(0);
 	});
 });

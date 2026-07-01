@@ -262,7 +262,6 @@ export function ThemeTweaker({ api }: ThemeTweakerProps) {
 						palette={p}
 						onChange={(v) => {
 							patch('leafHeaderHeight', `${v}px`);
-							patch('totalHeaderHeight', `${v}px`);
 						}}
 					/>
 				</TweakSection>

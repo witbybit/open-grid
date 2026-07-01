@@ -1,4 +1,5 @@
-import { compileStyleRules, type GridStyleRule } from '@open-grid/core';
+import { type GridStyleRule } from '@open-grid/core';
+import { compileStyleRules } from '@open-grid/core/experimental';
 import { describe, expect, it } from 'vitest';
 
 interface Row {

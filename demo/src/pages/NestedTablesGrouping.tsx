@@ -236,10 +236,19 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 	);
 
 	// Trigger latency profiling on cell change
-	const handleChildCellValueChanged = (rowId: string, colField: string, val: unknown) => {
+	const handleChildCellValueChanged = ({
+		rowId,
+		colField,
+		newValue,
+	}: {
+		rowId: string;
+		colField: string;
+		oldValue: unknown;
+		newValue: unknown;
+	}) => {
 		const start = performance.now();
 		if (colField === 'quantity' && detailApi) {
-			const q = parseInt(String(val)) || 0;
+			const q = parseInt(String(newValue)) || 0;
 			const row = detailApi.getRawRowById(rowId);
 			if (row) {
 				const p = row.price;
@@ -281,14 +290,12 @@ const NestedOrderGrid = ({ visualRow, parentApi }: NestedOrderGridProps) => {
 			</div>
 			<div className='flex-1 min-h-0 border border-slate-850 rounded-lg overflow-hidden bg-slate-950/70 shadow-inner'>
 				<Grid
-					mode='client'
+					rowModelType='client'
 					rows={items}
 					columns={detailColumns}
 					enableNavigation={true}
-					navigationOptions={{
-						editTrigger: 'singleClick',
-						onCellValueChanged: handleChildCellValueChanged,
-					}}
+					navigationOptions={{ editTrigger: 'singleClick' }}
+					onCellValueChanged={handleChildCellValueChanged}
 					onGridReady={({ api }) => setDetailApi(api)}
 				/>
 			</div>
@@ -546,7 +553,7 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 					{activeTab === 'group' && (
 						<Grid
 							key={`group-${gridVersion}`}
-							mode='client'
+							rowModelType='client'
 							rows={groupRows}
 							columns={groupingColumns}
 							initialState={groupInitialState as any}
@@ -562,7 +569,7 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 					{activeTab === 'tree' && (
 						<Grid
 							key={`tree-${gridVersion}`}
-							mode='client'
+							rowModelType='client'
 							rows={treeRows}
 							columns={treeColumns}
 							initialState={treeInitialState as any}
@@ -577,7 +584,7 @@ export default function NestedTablesGrouping({ onGridReady }: NestedTablesGroupi
 					{activeTab === 'detail' && (
 						<Grid
 							key={`detail-${gridVersion}`}
-							mode='client'
+							rowModelType='client'
 							rows={masterRows}
 							columns={masterColumns}
 							initialState={masterInitialState}

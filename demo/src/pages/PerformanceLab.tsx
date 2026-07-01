@@ -250,7 +250,7 @@ export default function PerformanceLab({ onGridReady }: PerformanceLabProps) {
 
 			<div ref={hostRef} className='min-h-0 flex-1'>
 				<Grid
-					mode='client'
+					rowModelType='client'
 					rows={allRows}
 					columns={columns}
 					pagination={{ pageSize: PAGE_SIZE }}

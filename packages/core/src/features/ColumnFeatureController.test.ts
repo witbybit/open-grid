@@ -74,19 +74,21 @@ describe('ColumnFeatureController', () => {
 			store.destroy();
 		});
 
-		it('invalidates geometry, headers, and column', () => {
+		it('invalidates geometry, headers, and viewport', () => {
 			const store = makeStore();
 			const ctrl = makeController(store);
 			const engine = (store as any).engine;
 			const feature = new ColumnFeatureController(getFeatureContext(store));
 
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			feature.resizeColumn('name', 200);
 
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'geometry' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'column', colId: 'name' }));
+			expect(spyApply).toHaveBeenCalled();
+			const plan = spyApply.mock.calls[0][0];
+			expect(plan.geometry).toBe(true);
+			expect(plan.headers).toBe(true);
+			expect(plan.viewport).toBe(true);
 
 			ctrl.dispose();
 			store.destroy();
@@ -133,13 +135,14 @@ describe('ColumnFeatureController', () => {
 			const feature = new ColumnFeatureController(getFeatureContext(store));
 			const listener = vi.fn();
 			store.addEventListener(GridEventName.columnReorderToggled, listener);
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			feature.setColumnReorderEnabled(false);
 
 			expect(listener).toHaveBeenCalledOnce();
 			expect(listener).toHaveBeenCalledWith(expect.objectContaining({ payload: { enabled: false } }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
+			expect(spyApply).toHaveBeenCalled();
+			expect(spyApply.mock.calls[0][0].headers).toBe(true);
 
 			store.destroy();
 		});

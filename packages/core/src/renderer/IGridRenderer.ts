@@ -3,7 +3,7 @@ import type { RowNode } from '../rowNode.js';
 import type { VisualRow } from '../visualRow.js';
 
 /**
- * Explicit renderer lifecycle operation type (Phase 6).
+ * Explicit renderer lifecycle operation type.
  * Adapters can use this to distinguish first mount from updates, rebinds, and warm restores.
  *
  *   mount   — first render of this renderer for this slot
@@ -16,13 +16,22 @@ import type { VisualRow } from '../visualRow.js';
 export type RendererLifecycleOperation = 'mount' | 'update' | 'rebind' | 'restore' | 'unmount' | 'destroy';
 
 /**
- * Stable identity for a mounted cell renderer.
+ * Physical slot identity for a mounted cell renderer.
  * `generation` increments each time the physical slot is rebound to a
  * different visual row, allowing consumers to detect stale async work.
+ * `lane` and `laneIndex` locate the slot within the virtualised column lanes.
  */
 export interface CellMountIdentity {
 	slotId: string;
 	generation: number;
+	columnId: string;
+	lane: 'left' | 'center' | 'right';
+	laneIndex: number;
+}
+
+/** Logical row/column identity, independent of the physical slot binding. */
+export interface CellPayloadIdentity {
+	rowId: string;
 	columnId: string;
 }
 
@@ -41,16 +50,31 @@ export interface GridCellContentMount<TRowData = unknown> {
 	rowIndex?: number;
 	colIndex?: number;
 	/** Stable physical slot ID — bypasses the stale activeRows resolver during the binding loop. */
-	rowSlotId?: string;
-	/** Generation counter from the physical slot — incremented on each row rebind. */
-	slotGeneration?: number;
+	rowSlotId: string;
+	/** Generation counter from the physical slot — incremented on each row rebind. Required for stale-mount detection. */
+	slotGeneration: number;
+	/**
+	 * Per-cell row-binding generation (from CellSlot.rowBindingGeneration).
+	 * Increments on each unbindHot() of this specific cell — more granular than slotGeneration
+	 * (which is shared by all cells in a row slot). Optional for back-compat with call sites
+	 * that do not have access to the CellSlot directly.
+	 */
+	cellRowBindingGeneration?: number;
+	/**
+	 * Stable identity of the physical CellSlot that owns this portal host (CellSlot.cellInstanceId).
+	 * When present, PortalMountManager uses this to reject mounts/releases from a different
+	 * CellSlot instance that happens to share the same rowSlotId and generation.
+	 */
+	cellInstanceId?: string;
+	/** Stable host-element identifier matching CellSlot.portalHostId. */
+	portalHostId?: string;
 	isEditing: boolean;
 	isLoading: boolean;
 	phase?: CellRendererPhase;
 	isScrolling?: boolean;
 	isFocused?: boolean;
 	isSelected?: boolean;
-	/** Phase 6: explicit lifecycle operation so adapters skip reconciliation when not needed. */
+	/** Explicit lifecycle operation so adapters skip reconciliation when not needed. */
 	lifecycleOperation?: RendererLifecycleOperation;
 }
 
@@ -59,8 +83,19 @@ export interface GridCellContentUnmount {
 	container?: HTMLElement;
 	flushSync?: boolean;
 	reason?: 'scrolled-out' | 'destroyed' | 'edited' | 'invalidated';
+	rowSlotId: string;
 	/** Generation at the time this release was requested — used to reject stale releases. */
-	slotGeneration?: number;
+	slotGeneration: number;
+	/**
+	 * Per-cell row-binding generation at the time the release was requested.
+	 * When provided, flushDeferred rejects the release if the active identity has
+	 * a newer generation (the cell was rebound before the deferred release flushed).
+	 */
+	cellRowBindingGeneration?: number;
+	/** Physical CellSlot identity at the time this release was requested. */
+	cellInstanceId?: string;
+	/** Stable portal host ID at the time this release was requested. */
+	portalHostId?: string;
 }
 
 export interface GridCellContentFlush {

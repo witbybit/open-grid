@@ -29,6 +29,10 @@ const ColumnGroupHeaderDemo = lazy(() => import('./pages/ColumnGroupHeaderDemo')
 const ClipboardDemo = lazy(() => import('./pages/ClipboardDemo'));
 const FloatingFiltersDemo = lazy(() => import('./pages/FloatingFiltersDemo'));
 const RowDragDemo = lazy(() => import('./pages/RowDragDemo'));
+const AdvancedFiltersDemo = lazy(() => import('./pages/AdvancedFiltersDemo'));
+const DataIntegrityLab = lazy(() => import('./pages/DataIntegrityLab'));
+const ProjectsComplianceDemo = lazy(() => import('./pages/ProjectsComplianceDemo'));
+const KanbanBoardDemo = lazy(() => import('./pages/KanbanBoardDemo'));
 
 const PAGES: readonly GridPageType[] = [
 	'perf',
@@ -50,6 +54,10 @@ const PAGES: readonly GridPageType[] = [
 	'colgroups',
 	'floatingfilters',
 	'rowdrag',
+	'advancedfilters',
+	'integrity',
+	'projects',
+	'kanban',
 ];
 
 function GridPageFallback() {
@@ -117,7 +125,7 @@ export default function App() {
 
 	useEffect(() => {
 		if (!activeApi) return;
-		const columns = activeApi.getState().columns;
+		const columns = activeApi.getStateSnapshot().columns;
 		if (columns.length > 0 && !columns.some((column) => column.field === sortField)) {
 			setSortField(columns[0].field);
 		}
@@ -133,12 +141,12 @@ export default function App() {
 	const handleGridReady = useCallback((event: GridReadyEvent<any>) => registerGridApi(activePage, event), [activePage, registerGridApi]);
 
 	const handleCellValueChanged = useCallback(
-		(rowId: string, colField: string, value: unknown) => {
+		({ rowId, colField, newValue }: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => {
 			if (!activeApi) return;
-			setInactiveRiskSideEffects(activeApi, rowId, colField, value);
+			setInactiveRiskSideEffects(activeApi, rowId, colField, newValue);
 			if (activePage === 'gantt' && colField === 'status') {
-				if (value === 'Done') activeApi.setCellValue(rowId, 'progress', 100);
-				else if (value === 'Pending') activeApi.setCellValue(rowId, 'progress', 0);
+				if (newValue === 'Done') activeApi.setCellValue(rowId, 'progress', 100);
+				else if (newValue === 'Pending') activeApi.setCellValue(rowId, 'progress', 0);
 			}
 			performance.mark('open-grid-demo-cell-change');
 		},
@@ -165,7 +173,7 @@ export default function App() {
 	const applySpreadsheetRangeAction = useCallback(
 		(action: 'fill' | 'clear' | 'addPercent' | 'sum') => {
 			if (!activeApi) return;
-			const state = activeApi.getState();
+			const state = activeApi.getStateSnapshot();
 			const range = state.selection.range;
 			if (!range) {
 				window.alert('Please select a range of cells first using click-and-drag or Shift+Arrows.');
@@ -240,8 +248,31 @@ export default function App() {
 		if (activePage === 'clipboard') return <ClipboardDemo />;
 		if (activePage === 'floatingfilters') return <FloatingFiltersDemo {...commonGridProps} />;
 		if (activePage === 'rowdrag') return <RowDragDemo />;
+		if (activePage === 'advancedfilters') return <AdvancedFiltersDemo />;
+		if (activePage === 'integrity') return <DataIntegrityLab />;
+		if (activePage === 'projects') return <ProjectsComplianceDemo onGridReady={handleGridReady} />;
+		if (activePage === 'kanban')
+			return <KanbanBoardDemo onGridReady={handleGridReady} pinLeftColumns={pinLeftColumns} pinRightColumns={pinRightColumns} />;
 		return <CrudValidationDemo {...commonGridProps} />;
 	})();
+
+	const showRightSidebar = !(
+		[
+			'crud',
+			'projects',
+			'integrity',
+			'floatingfilters',
+			'colgroups',
+			'multiselect',
+			'grouping',
+			'native',
+			'panels',
+			'kanban',
+			'skins',
+		] as GridPageType[]
+	).includes(activePage);
+
+	const showTitleBanner = !(['crud', 'advancedfilters', 'panels', 'kanban'] as GridPageType[]).includes(activePage);
 
 	return (
 		<DemoGridApiScope value={contextValue}>
@@ -254,15 +285,18 @@ export default function App() {
 						setLeftSidebarCollapsed={setLeftSidebarCollapsed}
 					/>
 					<div className='flex min-w-0 flex-1 flex-col gap-5 overflow-hidden pr-1.5'>
-						<ShowroomTitleBanner
-							activePage={activePage}
-							runBulkCalculationTest={runBulkCalculationTest}
-							applySpreadsheetRangeAction={applySpreadsheetRangeAction}
-							compactLayout={compactLayout}
-							setCompactLayout={setCompactLayout}
-							rightSidebarCollapsed={rightSidebarCollapsed}
-							setRightSidebarCollapsed={setRightSidebarCollapsed}
-						/>
+						{showTitleBanner && (
+							<ShowroomTitleBanner
+								activePage={activePage}
+								runBulkCalculationTest={runBulkCalculationTest}
+								applySpreadsheetRangeAction={applySpreadsheetRangeAction}
+								compactLayout={compactLayout}
+								setCompactLayout={setCompactLayout}
+								rightSidebarCollapsed={rightSidebarCollapsed}
+								setRightSidebarCollapsed={setRightSidebarCollapsed}
+								showRightSidebar={showRightSidebar}
+							/>
+						)}
 						{activePage === 'layout' && (
 							<div className='flex shrink-0 flex-wrap items-center gap-3 rounded-xl border border-slate-900 bg-slate-900/10 p-3 text-xs font-semibold'>
 								<span className='flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-500'>
@@ -289,7 +323,7 @@ export default function App() {
 							<Suspense fallback={<GridPageFallback />}>{activePageContent}</Suspense>
 						</div>
 					</div>
-					{activeApi && (
+					{activeApi && showRightSidebar && (
 						<ShowroomRightSidebar
 							rightSidebarCollapsed={rightSidebarCollapsed}
 							activeApi={activeApi}

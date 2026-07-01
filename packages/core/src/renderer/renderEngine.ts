@@ -30,7 +30,6 @@ import { FilterChipBarRenderer } from './filterChipBarRenderer.js';
 import { FloatingFilterRenderer } from './floatingFilterRenderer.js';
 import { StatusBarRenderer } from './statusBarRenderer.js';
 import { PaginationBarRenderer } from './paginationBarRenderer.js';
-import type { GridLayoutPlan } from './layoutPlan.js';
 import { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import { RenderInvalidationCoordinator } from './RenderInvalidationCoordinator.js';
 import { ValidationTooltipController } from './ValidationTooltipController.js';
@@ -42,6 +41,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { GridApi, InternalGridApi } from '../api/GridApi.js';
 import { RowDragController } from '../features/RowDragController.js';
 import { RenderRuntimeState } from './renderRuntimeState.js';
+import { defaultGridScheduler } from './gridScheduler.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -81,7 +81,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly rowDrag: RowDragController<TRowData>;
 	private _pendingTransition = false;
 
-	// Authoritative render lifecycle phase (Plan 065). Initialized first in constructor.
+	// Authoritative render lifecycle phase. Initialized first in constructor.
 	private runtimeState!: RenderRuntimeState;
 
 	private lastStyleRules: unknown = undefined;
@@ -106,6 +106,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private readonly portalFlushBudget = 24;
 	private readonly postScrollDecorationBudget = 32;
+	private readonly postScrollFidelityBudget = 12;
+
+	private autoRowHeightEnabled = false;
+	private readonly scrollPrewarmBudget = 48;
+	private readonly scrollPrewarmRowPadding = 2;
+	private readonly scrollPrewarmColPadding = 2;
 
 	private renderStats = createRenderRuntimeStats();
 
@@ -165,12 +171,20 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			stateVersion: 0,
 			rowVersions: this.engine.rowVersions,
 			globalVersion: 0,
+			insightVersion: 0,
 			styleVersion: 0,
 			loadingVersion: 0,
+			selectionVersion: 0,
+			styleChangedDuringScroll: false,
+			loadingChangedDuringScroll: false,
+			selectionChangedDuringScroll: false,
+			globalChangedDuringScroll: false,
 			activeEdit: null,
 			hasDeferredCellStyleRules: false,
 			hasCustomRenderers: false,
+			hasInsightDecorations: false,
 			plan: this.engine.columns.getCompiledPlan(),
+			visibleRowRange: { startIdx: 0, endIdx: 0 },
 			visibleColRange: { startIdx: 0, endIdx: 0 },
 			focusedCell: null,
 			selectionBounds: undefined,
@@ -191,7 +205,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.frameCoordinator = new DefaultFrameCoordinator({
 			onScrollFrame: () => this.flushScrollFrame(),
 			onPaintFrame: () => this.flushPaint(),
+			onPostScrollWork: () => this.flushPaint(),
+			onScrollEnd: () => this.scrollCoordinator.finishScrolling(),
 			onFault: (msg) => engine.runtimeFaults.report({ source: 'renderer', operation: 'frame-reentry', error: new Error(msg) }),
+			runtimeState: this.runtimeState,
+			gridScheduler: defaultGridScheduler,
 		});
 
 		this.viewportRenderer = new ViewportRenderer<TRowData>(engine, this.geometryController);
@@ -208,6 +226,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		engine.setScrollStateProvider(this.runtimeState);
 		this.rowRenderer.runtimeState = this.runtimeState;
 		this.portalMountManager.setRuntimeState(this.runtimeState);
+		this.portalMountManager.setRuntimeStats(this.renderStats);
 		this.portalMountManager.setPhysicalRowSlotIdResolver((rowIndex) => this.rowRenderer.activeRows.get(rowIndex)?.id);
 		this.layoutTransition = new LayoutTransitionController(() => this.rowRenderer.activeRows, {
 			getExitLayer: () => this.viewportRenderer.getLayer('exiting'),
@@ -217,7 +236,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				const model = this.engine.getRowModel();
 				return model ? model.getVisualIndexById(visualRowId) >= 0 : false;
 			},
-			// Grid root for semantic column-pin effects (Plan 044).
+			// Grid root for semantic column-pin effects.
 			getGridRoot: () => this.viewportRenderer.container,
 		});
 
@@ -262,7 +281,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			// change. Bounded to discrete insertion changes during a drag, not per pixel.
 			schedulePaint: () => this.scheduleFullPaint('column interaction'),
 		});
-		// Feed the live column-reorder preview offset into the body bind path (Plan 047).
+		// Feed the live column-reorder preview offset into the body bind path.
 		this.rowRenderer.columnShiftSource = (colIndex) => this.columnInteractions.getColumnShift(colIndex);
 		this.fillDrag = new FillDragController<TRowData>({
 			engine,
@@ -283,15 +302,19 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.stickyGroupRenderer = new StickyGroupRenderer<TRowData>(engine, this.portalMountManager);
 		this.rowDrag = new RowDragController<TRowData>(engine);
 		const scrollState: RenderScrollCoordinatorState<TRowData> = {
-			scrollEndRafId: null,
-			scrollEndQuietFrames: 0,
-			scrollEndTickerActive: false,
 			viewportDirtyAfterScroll: false,
 			flushPendingAfterScroll: false,
 			needsPostScrollPortalFlush: false,
 			portalFlushScheduled: false,
+			prewarmScheduled: false,
+			prewarmTimer: null,
+			prewarmRequest: null,
+			lastPrewarmRequest: null,
 			postScrollDecorationScheduled: false,
 			postScrollDecorationTimer: null,
+			postScrollFidelityScheduled: false,
+			postScrollFidelityTimer: null,
+			fidelityEpoch: 0,
 			cachedMaxScrollLeft: this.cachedMaxScrollLeft,
 			cachedTotalWidth: this.cachedTotalWidth,
 			cachedTotalHeight: this.cachedTotalHeight,
@@ -302,6 +325,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			activeRenderWindowBufIdx: this._activeRenderWindowBufIdx,
 			portalFlushBudget: this.portalFlushBudget,
 			postScrollDecorationBudget: this.postScrollDecorationBudget,
+			postScrollFidelityBudget: this.postScrollFidelityBudget,
+			scrollPrewarmBudget: this.scrollPrewarmBudget,
+			scrollPrewarmRowPadding: this.scrollPrewarmRowPadding,
+			scrollPrewarmColPadding: this.scrollPrewarmColPadding,
 		};
 		this.scrollCoordinator = new RenderScrollCoordinator<TRowData>(
 			{
@@ -314,6 +341,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				stickyGroupRenderer: this.stickyGroupRenderer,
 				portalMountManager: this.portalMountManager,
 				frameCoordinator: this.frameCoordinator,
+				gridScheduler: defaultGridScheduler,
 				requestScrollFrame: () => this.frameCoordinator.requestScrollFrame(),
 				layoutTransition: this.layoutTransition,
 				renderStats: this.renderStats,
@@ -355,6 +383,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				syncLayoutPlan: (renderWindow) => this.viewportCoordinator.syncLayoutPlan(renderWindow),
 				updateCachedGeometryBoundsFromState: (defaultColWidth, defaultRowHeight) =>
 					this.updateCachedGeometryBoundsFromState(defaultColWidth, defaultRowHeight),
+				onAfterViewportPaint: () => this.measureAndUpdateRowHeights(),
 			},
 			paintState
 		);
@@ -492,14 +521,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.stickyGroupRenderer.unmount();
 		this.layoutTransition.destroy();
 		this.frameCoordinator.destroy();
-		this.clearScrollEndTimer();
 		this.clearPostScrollDecorationTimer();
-		this.portalMountManager.releaseAll();
 
-		// Release all active rows and cells
+		// Unmount renderers first so they can properly release portal identities
+		// before releaseAll() clears activeIdentityByKey.
 		this.rowRenderer.unmount();
 		this.headerRenderer.unmount();
 		this.overlayRenderer.unmount();
+
+		this.portalMountManager.releaseAll();
 
 		this.viewportRenderer.unmount();
 	}
@@ -512,48 +542,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.scrollCoordinator.onScroll(scrollTop, scrollLeft, timestamp);
 	};
 
-	private markScrolling(): void {
-		this.scrollCoordinator.markScrolling();
-	}
-
-	private scheduleScrollEnd(): void {
-		this.scrollCoordinator.scheduleScrollEnd();
-	}
-
-	private finishScrolling(): void {
-		this.scrollCoordinator.finishScrolling();
-	}
-
-	private clearScrollEndTimer(): void {
-		this.scrollCoordinator.clearScrollEndTimer();
-	}
-
-	private flushPendingPortalReleasesAfterScroll(): void {
-		this.scrollCoordinator.flushPendingPortalReleasesAfterScroll();
-	}
-
-	private scheduleBudgetedPortalFlush(): void {
-		this.scrollCoordinator.scheduleBudgetedPortalFlush();
-	}
-
 	private clearPostScrollDecorationTimer(): void {
 		this.scrollCoordinator.clearPostScrollDecorationTimer();
 	}
 
-	private scheduleBudgetedDecoration(): void {
-		this.scrollCoordinator.scheduleBudgetedDecoration();
-	}
-
-	private restoreDeferredFocus(): void {
-		this.scrollCoordinator.restoreDeferredFocus();
-	}
-
 	private flushScrollFrame(): void {
 		this.scrollCoordinator.flushScrollFrame();
-	}
-
-	private syncCheapScrollOnly(layoutPlan: GridLayoutPlan): void {
-		this.scrollCoordinator.syncCheapScrollOnly(layoutPlan);
 	}
 
 	private updateCachedGeometryBoundsFromState(defaultColWidth: number, defaultRowHeight: number): void {
@@ -563,6 +557,38 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private updateCachedGeometryBounds(): void {
 		const state = this.engine.stateManager.getState();
 		this.scrollCoordinator.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
+	}
+
+	public setAutoRowHeight(enabled: boolean): void {
+		this.autoRowHeightEnabled = enabled;
+	}
+
+	private measureAndUpdateRowHeights(): void {
+		if (!this.autoRowHeightEnabled) return;
+		if (!this.engine.getRowModel()) return;
+
+		const state = this.engine.stateManager.getState();
+		const slots = this.rowRenderer.rowSlotPool?.getSlots() ?? [];
+
+		for (const slot of slots) {
+			if (slot.rowKind !== 'data') continue;
+			const visualRowId = slot.visualRowId;
+			if (!visualRowId.startsWith('row:')) continue;
+
+			const rawRowId = decodeURIComponent(visualRowId.slice(4));
+			// Cells typically use h-full (height:100%) so the row's own scrollHeight
+			// reflects only its explicit height. Instead, take the maximum scrollHeight
+			// across all cells — a cell whose content overflows its h-full container will
+			// report the natural content height here.
+			const cells = slot.element.querySelectorAll<HTMLElement>('.og-cell');
+			const measuredHeight = cells.length > 0 ? Math.max(...Array.from(cells, (c) => c.scrollHeight)) : slot.element.scrollHeight;
+			if (measuredHeight <= 0) continue;
+
+			const currentHeight = state.rowHeights[rawRowId] ?? state.defaultRowHeight;
+			if (Math.abs(measuredHeight - currentHeight) > 1) {
+				this.engine.resizeRow(rawRowId, measuredHeight, false);
+			}
+		}
 	}
 
 	public schedulePaint(): void {
@@ -625,6 +651,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	public scrollCellIntoView(rowId: string, colField: string): void {
 		this.viewportCoordinator.scrollCellIntoView(rowId, colField);
+	}
+
+	public scrollRowIntoView(rowId: string): void {
+		this.viewportCoordinator.scrollRowIntoView(rowId);
 	}
 
 	private onRowMouseOver = (event: MouseEvent): void => {

@@ -6,7 +6,7 @@ import { createGanttColumns, createGanttRows, type GanttRow } from './demoGridCo
 interface GanttSchedulingWorkspaceProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	onGridReady?: (event: GridReadyEvent<GanttRow>) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
@@ -78,7 +78,7 @@ export default function GanttSchedulingWorkspace({
 
 	useEffect(() => {
 		if (!api) return;
-		const readSelection = () => setSelectedRange(api.getState().selection.range ?? null);
+		const readSelection = () => setSelectedRange(api.getStateSnapshot().selection.range ?? null);
 		readSelection();
 		const unsubSelection = api.subscribeToKey('selection', readSelection);
 		const unsubCell = api.addEventListener(GridEventName.cellValueChanged, () => setRevision((value) => value + 1));
@@ -125,7 +125,7 @@ export default function GanttSchedulingWorkspace({
 
 	const handleBatchExpedite = useCallback(() => {
 		if (!api) return;
-		const range = api.getState().selection.range;
+		const range = api.getStateSnapshot().selection.range;
 		if (!range) {
 			alert('Please select a range of cells using drag selection first.');
 			return;
@@ -151,14 +151,15 @@ export default function GanttSchedulingWorkspace({
 
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						mode='client'
+						rowModelType='client'
 						rows={rows}
 						columns={columns}
 						getRowId={(row) => row.id}
 						styleRules={styleRules}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
+						onCellValueChanged={onCellValueChanged}
 						onGridReady={(event) => {
 							setApi(event.api);
 							onGridReady?.(event);

@@ -1,14 +1,18 @@
 import React from 'react';
 import { useGridKeySelector } from '../hooks.js';
 import type { GridApi } from '../types.js';
+import { summarizeAnalysisState } from '@open-grid/core';
 import { ColumnsPanel } from './panels/ColumnsPanel.js';
 import { FiltersPanel } from './panels/FiltersPanel.js';
 import { SortPanel } from './panels/SortPanel.js';
 import { ThemesPanel } from './panels/ThemesPanel.js';
+import { ViewsPanel } from './panels/ViewsPanel.js';
+import { QueryPanel } from './panels/QueryPanel.js';
+import { DataIntegrityPanel } from './panels/DataIntegrityPanel.js';
 
 // ── Sidebar types ─────────────────────────────────────────────────────────────
 
-export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes';
+export type BuiltinSidebarPanelId = 'columns' | 'filters' | 'sort' | 'themes' | 'views' | 'query' | 'dataIntegrity';
 
 export interface SidebarPanelDef<TRowData = unknown> {
 	id: string;
@@ -53,6 +57,26 @@ const _ThemesIcon = () => (
 		<path d='M7.5 1.5a6 6 0 1 0 6 6c0-.6-.1-1.1-.2-1.6a.9.9 0 0 0-1.3-.6 2.8 2.8 0 0 1-1.4.4 2.9 2.9 0 0 1-2.9-2.9c0-.5.1-1 .4-1.4A.9.9 0 0 0 7.5 1.5Z' />
 	</svg>
 );
+const _ViewsIcon = () => (
+	<svg width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'>
+		<rect x='1.5' y='1.5' width='12' height='12' rx='2' />
+		<path d='M1.5 5.5h12' />
+		<path d='M5.5 5.5v8' />
+	</svg>
+);
+const _QueryIcon = () => (
+	<svg width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'>
+		<circle cx='7.5' cy='7.5' r='6' />
+		<path d='M5.5 6a2 2 0 1 1 2 2v1' />
+		<circle cx='7.5' cy='11.5' r='0.5' fill='currentColor' />
+	</svg>
+);
+const _DataIntegrityIcon = () => (
+	<svg width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'>
+		<path d='M7.5 1.5L13 4v4c0 3-2.5 5-5.5 5.5C4.5 13 2 11 2 8V4z' />
+		<path d='M5 7.5l1.5 1.5 3-3' />
+	</svg>
+);
 
 interface _ResolvedPanel<TRowData> {
 	id: string;
@@ -66,8 +90,19 @@ const _BUILTIN_ICONS: Record<BuiltinSidebarPanelId, React.ReactNode> = {
 	filters: <_FiltersIcon />,
 	sort: <_SortIcon />,
 	themes: <_ThemesIcon />,
+	views: <_ViewsIcon />,
+	query: <_QueryIcon />,
+	dataIntegrity: <_DataIntegrityIcon />,
 };
-const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = { columns: 'Columns', filters: 'Filters', sort: 'Sort', themes: 'Themes' };
+const _BUILTIN_LABELS: Record<BuiltinSidebarPanelId, string> = {
+	columns: 'Columns',
+	filters: 'Filters',
+	sort: 'Sort',
+	themes: 'Themes',
+	views: 'Views',
+	query: 'Query',
+	dataIntegrity: 'Data Integrity',
+};
 
 function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TRowData>): _ResolvedPanel<TRowData> {
 	if (typeof def !== 'string') {
@@ -82,6 +117,9 @@ function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TR
 			if (def === 'filters') return <FiltersPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'sort') return <SortPanel api={api as GridApi<any>} onClose={onClose} />;
 			if (def === 'themes') return <ThemesPanel api={api as GridApi<any>} onClose={onClose} />;
+			if (def === 'views') return <ViewsPanel api={api as GridApi<any>} onClose={onClose} />;
+			if (def === 'query') return <QueryPanel api={api as GridApi<any>} onClose={onClose} />;
+			if (def === 'dataIntegrity') return <DataIntegrityPanel api={api as GridApi<any>} onClose={onClose} />;
 			return null;
 		},
 	};
@@ -89,14 +127,18 @@ function _resolvePanel<TRowData>(def: BuiltinSidebarPanelId | SidebarPanelDef<TR
 
 const _SIDEBAR_TAB_W = 44;
 export function GridSidebar<TRowData>({ api, config }: { api: GridApi<TRowData>; config: GridSidebarConfig<TRowData> }) {
-	const { panels = ['columns', 'filters', 'sort', 'themes'], position = 'right', width = 264 } = config;
+	const { panels = ['columns', 'filters', 'sort', 'themes', 'views'], position = 'right', width = 264 } = config;
 	const activeId = useGridKeySelector<string | null>('sidebarOpenPanel', (s) => s.sidebarOpenPanel ?? null);
 	const themeName = useGridKeySelector('themeName', (s) => s.themeName);
-	const filterCount = useGridKeySelector<number>('filterModel', (s) => (s.filterModel ? Object.keys(s.filterModel).length : 0));
+	const filterCount = useGridKeySelector<number>('filterModel', (s) => summarizeAnalysisState(s.filterModel, null).filterCount);
+	const queryConditionCount = useGridKeySelector<number>(
+		'queryModel',
+		(s) => summarizeAnalysisState(null, s.queryModel ?? null).queryConditionCount
+	);
 	const sortCount = useGridKeySelector<number>('sortModel', (s) => (s.sortModel ? s.sortModel.length : 0));
 	const theme = api.getTheme();
 
-	const getBadge = (id: string) => (id === 'filters' ? filterCount : id === 'sort' ? sortCount : 0);
+	const getBadge = (id: string) => (id === 'filters' ? filterCount : id === 'query' ? queryConditionCount : id === 'sort' ? sortCount : 0);
 	const resolvedPanels = (panels as Array<BuiltinSidebarPanelId | SidebarPanelDef<TRowData>>).map(_resolvePanel);
 	const activeDef = resolvedPanels.find((p) => p.id === activeId) ?? null;
 
