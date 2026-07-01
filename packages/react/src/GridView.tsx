@@ -40,6 +40,7 @@ export interface GridViewProps<TRowData = unknown> {
 	footerRowRenderer?: (props: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) => ReactNode;
 	sidebar?: GridSidebarConfig<TRowData>;
 	enableChart?: boolean;
+	autoRowHeight?: boolean;
 }
 
 function warnInitialOnlyGridViewProp(propName: string): void {
@@ -68,6 +69,7 @@ export function GridView<TRowData = unknown>({
 	footerRowRenderer,
 	sidebar,
 	enableChart = false,
+	autoRowHeight,
 }: GridViewProps<TRowData>) {
 	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -189,6 +191,7 @@ export function GridView<TRowData = unknown>({
 					portalStore.unmountMenu(unmount.colField, unmount.container);
 				},
 			},
+			autoRowHeight,
 		});
 		hostRef.current = host;
 		setAdapterHandle(host.adapterHandle as GridAdapterHandle<unknown>);

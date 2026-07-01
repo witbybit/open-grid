@@ -1,12 +1,11 @@
 /**
- * Kanban Board Demo — variable-height rows via getRowHeight
+ * Kanban Board Demo — variable-height rows
  *
- * Every card row has a different height derived from its data (description length, tag count,
- * attachment presence). The grid never calls setRowHeight — all heights come from the
- * getRowHeight callback passed to <Grid />, which runs before geometry is compiled.
+ * Compares two approaches side-by-side via a toggle:
+ *   - getRowHeight   — pre-computed heights from data, zero DOM cost
+ *   - autoRowHeight  — measured from scrollHeight after first paint, zero manual math
  *
  * Rich cell renderers used:
- *   - Avatar cell          — circular avatar image + name chip
  *   - Priority badge cell  — colour-coded severity pill
  *   - Progress arc cell    — SVG arc showing % complete
  *   - Tag cloud cell       — wrapping coloured label chips
@@ -89,7 +88,7 @@ function isOverdue(dateStr: string) {
 	return new Date(dateStr) < new Date();
 }
 
-// ─── Row height calculation ───────────────────────────────────────────────────
+// ─── Row height calculation (getRowHeight approach) ──────────────────────────
 
 const BASE_HEIGHT = 20;
 const DESC_HEIGHT = 56;
@@ -340,7 +339,7 @@ const ROWS: KanbanCard[] = RAW_CARDS.map((c, i) => ({ ...c, id: String(i + 1) })
 function TitleCell({ row }: CellRendererProps<KanbanCard>) {
 	const p = PRIORITY_META[row.priority];
 	return (
-		<div className='flex h-full flex-col justify-start gap-1.5 px-3 py-2.5'>
+		<div className='flex flex-col justify-start gap-1.5 px-3 py-2.5'>
 			<div className='flex items-center gap-2 min-w-0'>
 				<span
 					className={`inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${p.bg} ${p.color}`}
@@ -530,8 +529,28 @@ interface Props {
 	pinRightColumns?: number;
 }
 
+type HeightMode = 'getRowHeight' | 'autoRowHeight';
+
+const MODE_META: Record<HeightMode, { label: string; badge: string; description: string }> = {
+	getRowHeight: {
+		label: 'getRowHeight',
+		badge: 'Pre-computed',
+		description:
+			'Heights are computed from row data before geometry — zero DOM measurement, no initial flash. ' +
+			'Requires manual math that must stay in sync with cell content.',
+	},
+	autoRowHeight: {
+		label: 'autoRowHeight',
+		badge: 'DOM-measured',
+		description:
+			"Rows render at defaultRowHeight first, then each cell's scrollHeight is measured and fed back into geometry. " +
+			'No manual math — content changes are reflected automatically, at the cost of a two-pass render.',
+	},
+};
+
 export default function KanbanBoardDemo({ onGridReady, pinLeftColumns = 0, pinRightColumns = 0 }: Props) {
 	const [api, setApi] = useState<GridApi<KanbanCard> | null>(null);
+	const [heightMode, setHeightMode] = useState<HeightMode>('getRowHeight');
 	const [stats, setStats] = useState({ total: ROWS.length, byStatus: {} as Record<string, number> });
 
 	const getRowHeight = useCallback((row: KanbanCard) => computeCardHeight(row), []);
@@ -550,23 +569,11 @@ export default function KanbanBoardDemo({ onGridReady, pinLeftColumns = 0, pinRi
 		setStats({ total: ROWS.length, byStatus });
 	}, []);
 
-	const heights = useMemo(
-		() =>
-			Object.entries(
-				ROWS.reduce<Record<number, number>>((acc, row) => {
-					const h = computeCardHeight(row);
-					acc[h] = (acc[h] ?? 0) + 1;
-					return acc;
-				}, {})
-			)
-				.sort(([a], [b]) => Number(a) - Number(b))
-				.map(([h, count]) => `${h}px × ${count}`),
-		[]
-	);
+	const modeMeta = MODE_META[heightMode];
 
 	return (
 		<div className='flex h-full min-h-0 flex-col gap-3'>
-			{/* Header stats */}
+			{/* Header stats + mode toggle */}
 			<div className='flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-slate-900 bg-slate-900/30 px-4 py-2.5'>
 				<span className='mr-2 text-[10px] font-extrabold uppercase tracking-wider text-slate-500'>Sprint Board</span>
 				{Object.entries(STATUS_META).map(([status, meta]) => {
@@ -582,45 +589,67 @@ export default function KanbanBoardDemo({ onGridReady, pinLeftColumns = 0, pinRi
 						</span>
 					);
 				})}
-				<div className='ml-auto flex items-center gap-1.5 rounded-lg border border-slate-700/40 bg-slate-800/40 px-2.5 py-1'>
-					<span className='text-[9px] font-bold uppercase tracking-wider text-slate-500'>Row heights</span>
-					{heights.map((h) => (
-						<span key={h} className='rounded bg-indigo-500/15 px-1.5 py-px text-[9px] font-mono font-semibold text-indigo-300'>
-							{h}
-						</span>
+				{/* Mode toggle */}
+				<div className='ml-auto flex items-center gap-1 rounded-lg border border-slate-700/40 bg-slate-800/40 p-0.5'>
+					{(Object.keys(MODE_META) as HeightMode[]).map((mode) => (
+						<button
+							key={mode}
+							onClick={() => setHeightMode(mode)}
+							className={`rounded px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+								heightMode === mode
+									? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+									: 'text-slate-500 hover:text-slate-300 border border-transparent'
+							}`}
+						>
+							{MODE_META[mode].label}
+						</button>
 					))}
 				</div>
 			</div>
 
-			{/* Grid */}
+			{/* Grid — key forces remount when mode changes (both props are initial-only) */}
 			<div className='min-h-0 flex-1'>
-				<Grid<KanbanCard>
-					rowModelType='client'
-					rows={ROWS}
-					columns={COLUMNS}
-					getRowId={(r) => r.id}
-					getRowHeight={getRowHeight}
-					pinLeftColumns={pinLeftColumns}
-					pinRightColumns={pinRightColumns}
-					onGridReady={handleGridReady}
-					initialState={{ defaultColWidth: 120 }}
-				/>
+				{heightMode === 'getRowHeight' ? (
+					<Grid<KanbanCard>
+						key='getRowHeight'
+						rowModelType='client'
+						rows={ROWS}
+						columns={COLUMNS}
+						getRowId={(r) => r.id}
+						getRowHeight={getRowHeight}
+						pinLeftColumns={pinLeftColumns}
+						pinRightColumns={pinRightColumns}
+						onGridReady={handleGridReady}
+						initialState={{ defaultColWidth: 120 }}
+					/>
+				) : (
+					<Grid<KanbanCard>
+						key='autoRowHeight'
+						rowModelType='client'
+						rows={ROWS}
+						columns={COLUMNS}
+						getRowId={(r) => r.id}
+						autoRowHeight
+						pinLeftColumns={pinLeftColumns}
+						pinRightColumns={pinRightColumns}
+						onGridReady={handleGridReady}
+						initialState={{ defaultColWidth: 120, defaultRowHeight: 80 }}
+					/>
+				)}
 			</div>
 
 			{/* Legend */}
-			<div className='flex shrink-0 flex-wrap items-center gap-3 px-1 pb-1 text-[10px] text-slate-500'>
-				<span className='font-semibold uppercase tracking-wider'>How it works:</span>
-				<span>
-					Row heights come from <code className='text-slate-400'>getRowHeight(row)</code> — no DOM measurement, no ResizeObserver
+			<div className='flex shrink-0 flex-wrap items-center gap-2 rounded-lg border border-slate-800/60 bg-slate-900/20 px-3 py-2 text-[10px] text-slate-500'>
+				<span
+					className={`shrink-0 rounded border px-1.5 py-px font-bold text-[9px] uppercase tracking-wider ${
+						heightMode === 'getRowHeight'
+							? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+							: 'bg-violet-500/10 text-violet-400 border-violet-500/20'
+					}`}
+				>
+					{modeMeta.badge}
 				</span>
-				<span>·</span>
-				<span>Cards with a description add 32 px, tags add 28 px, attachments add 28 px — all pre-computed before geometry</span>
-				<span>·</span>
-				<span>Binary-search virtualization window adapts automatically to variable heights</span>
-				<span>·</span>
-				<span>
-					<code className='text-slate-400'>frozenHtml</code> scroll impostors are guarded — invalidated if row height changed since capture
-				</span>
+				<span>{modeMeta.description}</span>
 			</div>
 		</div>
 	);

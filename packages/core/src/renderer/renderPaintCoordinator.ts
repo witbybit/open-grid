@@ -33,6 +33,7 @@ export interface RenderPaintCoordinatorDeps<TRowData = unknown> {
 	recycleViewport: (isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow) => void;
 	syncLayoutPlan: (renderWindow?: RenderWindow) => GridLayoutPlan;
 	updateCachedGeometryBoundsFromState: (defaultColWidth: number, defaultRowHeight: number) => void;
+	onAfterViewportPaint?: () => void;
 }
 
 export class RenderPaintCoordinator<TRowData = unknown> {
@@ -110,6 +111,7 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		this.deps.headerRenderer.repaintHeaders(layoutPlan);
 		this.deps.floatingFilterRenderer.repaint(layoutPlan);
 		this.deps.overlayRenderer.repaintOverlay();
+		this.deps.onAfterViewportPaint?.();
 	}
 }
 

@@ -107,6 +107,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private readonly portalFlushBudget = 24;
 	private readonly postScrollDecorationBudget = 32;
 	private readonly postScrollFidelityBudget = 12;
+
+	private autoRowHeightEnabled = false;
 	private readonly scrollPrewarmBudget = 48;
 	private readonly scrollPrewarmRowPadding = 2;
 	private readonly scrollPrewarmColPadding = 2;
@@ -381,6 +383,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 				syncLayoutPlan: (renderWindow) => this.viewportCoordinator.syncLayoutPlan(renderWindow),
 				updateCachedGeometryBoundsFromState: (defaultColWidth, defaultRowHeight) =>
 					this.updateCachedGeometryBoundsFromState(defaultColWidth, defaultRowHeight),
+				onAfterViewportPaint: () => this.measureAndUpdateRowHeights(),
 			},
 			paintState
 		);
@@ -554,6 +557,38 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private updateCachedGeometryBounds(): void {
 		const state = this.engine.stateManager.getState();
 		this.scrollCoordinator.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
+	}
+
+	public setAutoRowHeight(enabled: boolean): void {
+		this.autoRowHeightEnabled = enabled;
+	}
+
+	private measureAndUpdateRowHeights(): void {
+		if (!this.autoRowHeightEnabled) return;
+		if (!this.engine.getRowModel()) return;
+
+		const state = this.engine.stateManager.getState();
+		const slots = this.rowRenderer.rowSlotPool?.getSlots() ?? [];
+
+		for (const slot of slots) {
+			if (slot.rowKind !== 'data') continue;
+			const visualRowId = slot.visualRowId;
+			if (!visualRowId.startsWith('row:')) continue;
+
+			const rawRowId = decodeURIComponent(visualRowId.slice(4));
+			// Cells typically use h-full (height:100%) so the row's own scrollHeight
+			// reflects only its explicit height. Instead, take the maximum scrollHeight
+			// across all cells — a cell whose content overflows its h-full container will
+			// report the natural content height here.
+			const cells = slot.element.querySelectorAll<HTMLElement>('.og-cell');
+			const measuredHeight = cells.length > 0 ? Math.max(...Array.from(cells, (c) => c.scrollHeight)) : slot.element.scrollHeight;
+			if (measuredHeight <= 0) continue;
+
+			const currentHeight = state.rowHeights[rawRowId] ?? state.defaultRowHeight;
+			if (Math.abs(measuredHeight - currentHeight) > 1) {
+				this.engine.resizeRow(rawRowId, measuredHeight, false);
+			}
+		}
 	}
 
 	public schedulePaint(): void {

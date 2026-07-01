@@ -43,6 +43,7 @@ export interface GridHostOptions<TRowData = unknown> {
 	cellContent?: GridCellContentAdapter<TRowData>;
 	rowContent?: GridRowContentAdapter<TRowData>;
 	headerMenu?: GridHeaderMenuAdapter<TRowData>;
+	autoRowHeight?: boolean;
 }
 
 export interface GridHost {
@@ -102,6 +103,7 @@ export function mountGridHost<TRowData>(
 	renderEngine.onUnmountRowContent = options.rowContent?.unmountRowContent;
 	renderEngine.onMountHeaderMenu = options.headerMenu?.mountHeaderMenu;
 	renderEngine.onUnmountHeaderMenu = options.headerMenu?.unmountHeaderMenu;
+	if (options.autoRowHeight) renderEngine.setAutoRowHeight(true);
 
 	// Bind live runtime ports — exclusive: only one host may be active at a time.
 	const bindResult = internalApi.bindRuntimePorts({
