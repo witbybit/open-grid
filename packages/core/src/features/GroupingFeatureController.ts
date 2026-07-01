@@ -1,24 +1,35 @@
-import { GridEventName } from '../store.js';
-import type { RowModel, RowModelRefreshResult } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { InvalidationManager } from '../renderer/invalidationManager.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
+import { asRowExpansionCapableModel, type RowModel, type RowExpansionCapableModel, type RowModelRefreshResult } from '../rowModel.js';
+import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 
 export interface GroupingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	invalidation: InvalidationManager;
+	requestRender?: (reason: string) => void;
+	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 }
 
 export class GroupingFeatureController<TRowData = unknown> {
 	private readonly ctx: GridFeatureContext<TRowData>;
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly invalidation: InvalidationManager;
+	private readonly requestRender: (reason: string) => void;
+	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 
 	constructor(deps: GroupingFeatureControllerDeps<TRowData>) {
 		this.ctx = deps.ctx;
 		this.getRowModel = deps.getRowModel;
 		this.invalidation = deps.invalidation;
+		this.requestRender = deps.requestRender ?? (() => {});
+		this.checkCapability = deps.checkCapability;
+	}
+
+	private getExpansionCapableRowModel(): RowExpansionCapableModel<TRowData> | null {
+		return asRowExpansionCapableModel(this.getRowModel());
 	}
 
 	public applyRowModelRefreshInvalidation(result: RowModelRefreshResult | void, reason: 'group expansion' | 'detail', groupId?: string): void {
@@ -35,9 +46,14 @@ export class GroupingFeatureController<TRowData = unknown> {
 			this.invalidation.invalidateGeometry(reason);
 		}
 		this.invalidation.invalidateViewport(reason);
+		this.requestRender(reason);
 	}
 
 	public setGroupBy(colIds: string[]): void {
+		if (this.checkCapability) {
+			const denied = colIds.some((colField) => !this.checkCapability!('group', { colField }).allowed);
+			if (denied) return;
+		}
 		const state = this.ctx.getState();
 		const newExpansion = { ...state.expansion, groups: {} as Record<string, true> };
 		this.ctx.applyChange({
@@ -49,10 +65,16 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'headers', reason: 'groupBy' },
 				{ kind: 'overlay', reason: 'groupBy' },
 			],
+			domains: ['rows'],
+			events: [{ type: GridEventName.groupByChanged, payload: { groupBy: colIds } }],
 		});
 	}
 
 	public addGroupBy(colId: string, atIndex?: number): void {
+		if (this.checkCapability) {
+			const result = this.checkCapability('group', { colField: colId });
+			if (!result.allowed) return;
+		}
 		const current = this.ctx.getState().groupBy ?? [];
 		if (current.includes(colId)) return;
 		const next = [...current];
@@ -70,7 +92,11 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'headers', reason: 'groupBy' },
 				{ kind: 'overlay', reason: 'groupBy' },
 			],
-			events: [{ type: GridEventName.groupColumnAdded, payload: { colId, index: insertAt, groupBy: next } as never }],
+			domains: ['rows'],
+			events: [
+				{ type: GridEventName.groupByChanged, payload: { groupBy: next } },
+				{ type: GridEventName.groupColumnAdded, payload: { colId, index: insertAt, groupBy: next } },
+			],
 		});
 	}
 
@@ -90,7 +116,11 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'headers', reason: 'groupBy' },
 				{ kind: 'overlay', reason: 'groupBy' },
 			],
-			events: [{ type: GridEventName.groupColumnRemoved, payload: { colId, groupBy: next } as never }],
+			domains: ['rows'],
+			events: [
+				{ type: GridEventName.groupByChanged, payload: { groupBy: next } },
+				{ type: GridEventName.groupColumnRemoved, payload: { colId, groupBy: next } },
+			],
 		});
 	}
 
@@ -115,7 +145,11 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'headers', reason: 'groupBy' },
 				{ kind: 'overlay', reason: 'groupBy' },
 			],
-			events: [{ type: GridEventName.groupColumnMoved, payload: { colId, fromIndex, toIndex: boundedTo, groupBy: next } as never }],
+			domains: ['rows'],
+			events: [
+				{ type: GridEventName.groupByChanged, payload: { groupBy: next } },
+				{ type: GridEventName.groupColumnMoved, payload: { colId, fromIndex, toIndex: boundedTo, groupBy: next } },
+			],
 		});
 	}
 
@@ -124,6 +158,8 @@ export class GroupingFeatureController<TRowData = unknown> {
 			reason: 'grouping:set-agg-defs',
 			state: { aggDefs: defs },
 			invalidations: [{ kind: 'viewport' }, { kind: 'overlay' }],
+			domains: ['rows'],
+			events: [{ type: GridEventName.aggDefsChanged, payload: { aggDefs: defs } }],
 		});
 	}
 
@@ -136,6 +172,8 @@ export class GroupingFeatureController<TRowData = unknown> {
 				{ kind: 'viewport', reason: 'showGroupFooter' },
 				{ kind: 'overlay', reason: 'showGroupFooter' },
 			],
+			domains: ['rows', 'geometry'],
+			events: [{ type: GridEventName.showGroupFooterChanged, payload: { showGroupFooter: enabled } }],
 		});
 	}
 
@@ -144,6 +182,8 @@ export class GroupingFeatureController<TRowData = unknown> {
 			reason: 'grouping:set-sticky-rows',
 			state: { enableStickyGroupRows: enabled },
 			invalidations: [{ kind: 'viewport', reason: 'enableStickyGroupRows' }],
+			domains: ['rows'],
+			events: [{ type: GridEventName.enableStickyGroupRowsChanged, payload: { enableStickyGroupRows: enabled } }],
 		});
 	}
 
@@ -151,22 +191,28 @@ export class GroupingFeatureController<TRowData = unknown> {
 		this.ctx.applyChange({
 			reason: 'grouping:set-panel',
 			state: { showGroupPanel: enabled },
+			invalidations: [
+				{ kind: 'geometry', reason: 'showGroupPanel' },
+				{ kind: 'viewport', reason: 'showGroupPanel' },
+				{ kind: 'headers', reason: 'showGroupPanel' },
+			],
+			domains: ['geometry'],
 		});
 	}
 
 	public expandAllGroups(): void {
-		this.applyRowModelRefreshInvalidation(this.getRowModel()?.expandAllGroups?.(), 'group expansion');
+		this.applyRowModelRefreshInvalidation(this.getExpansionCapableRowModel()?.expandAllGroups(), 'group expansion');
 	}
 
 	public collapseAllGroups(): void {
-		this.applyRowModelRefreshInvalidation(this.getRowModel()?.collapseAllGroups?.(), 'group expansion');
+		this.applyRowModelRefreshInvalidation(this.getExpansionCapableRowModel()?.collapseAllGroups(), 'group expansion');
 	}
 
 	public toggleGroupExpanded(groupId: string): void {
-		this.applyRowModelRefreshInvalidation(this.getRowModel()?.toggleGroupExpanded?.(groupId), 'group expansion', groupId);
+		this.applyRowModelRefreshInvalidation(this.getExpansionCapableRowModel()?.toggleGroupExpanded(groupId), 'group expansion', groupId);
 	}
 
 	public toggleDetailExpanded(rowId: string): void {
-		this.applyRowModelRefreshInvalidation(this.getRowModel()?.toggleDetailExpanded?.(rowId), 'detail');
+		this.applyRowModelRefreshInvalidation(this.getExpansionCapableRowModel()?.toggleDetailExpanded(rowId), 'detail');
 	}
 }

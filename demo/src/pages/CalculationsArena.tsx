@@ -8,7 +8,7 @@ interface CalculationsArenaProps {
 	massiveColumns?: boolean;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	onGridReady?: (event: GridReadyEvent<PerformanceRow>) => void;
 	pinLeftColumns?: number;
 	pinRightColumns?: number;
@@ -98,14 +98,15 @@ export default function CalculationsArena({
 				</div>
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						mode='client'
+						rowModelType='client'
 						rows={rows}
 						columns={columns}
 						styleRules={styleRules}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						enableNavigation
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
+						onCellValueChanged={onCellValueChanged}
 						onGridReady={(event) => {
 							setApi(event.api);
 							onGridReady?.(event);

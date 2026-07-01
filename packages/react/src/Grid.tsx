@@ -1,11 +1,21 @@
-import { createClientGrid, createServerGrid, createLocalStorageAdapter } from '@open-grid/core';
+import { createClientGrid, createInfiniteGrid, createServerPageGrid, createLocalStorageAdapter } from '@open-grid/core';
 import { useEffect, useMemo, useRef, useInsertionEffect, type PropsWithChildren } from 'react';
 import { GridProvider } from './gridContext.js';
 import { GridView, type GridViewProps } from './GridView.js';
 import { resolveColumnTypes } from './resolveColumnTypes.js';
-import type { ColumnDef, GridState, GridPersistenceAdapter, GridDatasource, RowSelectionMode, RowSelectionOptions } from './types.js';
+import type {
+	ColumnDef,
+	GridInitialState,
+	GridPersistenceAdapter,
+	GridWorkspaceAdapter,
+	RowSelectionMode,
+	RowSelectionOptions,
+	InfiniteDatasource,
+	ServerDatasource,
+	ServerPaginationOptions,
+} from './types.js';
 import type { GridReadyEvent, StyleRule, ColumnTypeDefinition } from './types.js';
-import type { RowValidator } from '@open-grid/core';
+import type { GridCapabilitiesConfig } from '@open-grid/core';
 
 type GridShellProps<TRowData> = Omit<GridViewProps<TRowData>, 'api'>;
 const DEFAULT_PAGE_SIZE = 100;
@@ -23,16 +33,19 @@ export interface GridPaginationConfig {
 interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	columns: ColumnDef<TRowData>[];
 	getRowId?: (row: TRowData) => string;
-	initialState?: Partial<GridState<TRowData>>;
+	initialState?: Partial<GridInitialState<TRowData>>;
 	persistence?: string | GridPersistenceAdapter;
+	workspace?: GridWorkspaceAdapter;
 	rowOverscanPx?: number;
 	colBuffer?: number;
 	overscanAdaptive?: boolean;
-	runtimeLimits?: GridState<TRowData>['runtimeLimits'];
+	runtimeLimits?: GridInitialState<TRowData>['runtimeLimits'];
 	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
 	styleRules?: StyleRule<TRowData>[];
-	/** Grid-level cross-field validator. Runs after per-column valueValidators. */
-	rowValidator?: RowValidator<TRowData>;
+	/** Unified Data Integrity pipeline — validation, quality, diff, live stream, conflict resolution. */
+	dataIntegrity?: import('@open-grid/core').GridDataIntegrityConfig<TRowData>;
+	/** Grid-level capability rules. Control which actions are allowed per cell, column, or row. */
+	capabilities?: GridCapabilitiesConfig<TRowData>;
 	detailRowHeight?: number;
 	/** Enable the core pagination bar (and, in client mode, page-window row slicing). */
 	pagination?: boolean | GridPaginationConfig;
@@ -49,17 +62,27 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 }
 
 export interface GridClientProps<TRowData = unknown> extends GridCommonProps<TRowData> {
-	mode: 'client';
+	rowModelType?: 'client';
 	rows: TRowData[];
+	/** Per-row height callback. Return a pixel height for each row, or `undefined` to use `defaultRowHeight`. Overridden by `api.setRowHeight()`. Initial-only. */
+	getRowHeight?: (row: TRowData) => number | undefined;
 }
 
-export interface GridServerProps<TRowData = unknown> extends GridCommonProps<TRowData> {
-	mode: 'server';
-	datasource: GridDatasource<TRowData>;
+/** Block/range (infinite scroll) row model — datasource receives startRow/endRow. */
+export interface GridInfiniteProps<TRowData = unknown> extends GridCommonProps<TRowData> {
+	rowModelType: 'infinite';
+	datasource: InfiniteDatasource<TRowData>;
 	blockSize?: number;
 }
 
-export type GridProps<TRowData = unknown> = GridClientProps<TRowData> | GridServerProps<TRowData>;
+/** Explicit page-based server row model — datasource receives page/pageSize. */
+export interface GridServerPageProps<TRowData = unknown> extends GridCommonProps<TRowData> {
+	rowModelType: 'server';
+	datasource: ServerDatasource<TRowData>;
+	pagination?: ServerPaginationOptions;
+}
+
+export type GridProps<TRowData = unknown> = GridClientProps<TRowData> | GridInfiniteProps<TRowData> | GridServerPageProps<TRowData>;
 export type GridRootProps<TRowData = unknown> = PropsWithChildren<GridProps<TRowData>>;
 
 function normalizePagination(pagination: boolean | GridPaginationConfig | undefined): { pageSize: number; initialPage: number } | null {
@@ -80,7 +103,7 @@ function createInitialState<TRowData>(
 	}
 ) {
 	const { initialState, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits } = base;
-	const merged: Partial<GridState<TRowData>> = {
+	const merged: Partial<GridInitialState<TRowData>> = {
 		rowOverscanPx,
 		overscanAdaptive,
 		colBuffer,
@@ -97,18 +120,27 @@ function createInitialState<TRowData>(
 	return merged;
 }
 
+function warnInitialOnlyGridProp(propName: string): void {
+	console.warn(
+		`[open-grid/react] Prop "${propName}" is initial-only on <Grid /> after mount. ` +
+			'Changing it does not reconfigure the existing grid instance. Remount the grid if you need the new value to take effect.'
+	);
+}
+
 export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	const {
-		mode,
+		rowModelType,
 		onGridReady,
 		detailRowHeight,
 		columns,
 		columnTypes,
 		styleRules,
-		rowValidator,
+		dataIntegrity,
+		capabilities,
 		getRowId,
 		initialState,
 		persistence,
+		workspace,
 		rowOverscanPx,
 		colBuffer,
 		overscanAdaptive,
@@ -118,6 +150,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		showFilterChipBar,
 		showFloatingFilters,
 		rows,
+		getRowHeight,
 		datasource,
 		blockSize,
 		rowSelection,
@@ -126,17 +159,40 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		...viewProps
 	} = props as GridRootProps<TRowData> &
 		GridShellProps<TRowData> & {
+			rowModelType?: 'client' | 'infinite' | 'server';
 			rows?: TRowData[];
-			datasource?: GridDatasource<TRowData>;
+			getRowHeight?: (row: TRowData) => number | undefined;
+			datasource?: InfiniteDatasource<TRowData> | ServerDatasource<TRowData>;
 			blockSize?: number;
 			rowSelection?: RowSelectionMode | RowSelectionOptions;
 			rowDragMode?: 'managed' | 'unmanaged';
+			serverPagination?: ServerPaginationOptions;
 		};
 	const readyFiredRef = useRef(false);
 	const lastColumnsRef = useRef(columns);
 	const lastColumnTypesRef = useRef(columnTypes);
 	const didMountServerRef = useRef(false);
+	const warnedInitialOnlyPropsRef = useRef(new Set<string>());
 	const paginationConfig = useMemo(() => normalizePagination(pagination), [pagination]);
+	const initialOnlyPropsRef = useRef({
+		rowModelType,
+		getRowId,
+		initialState,
+		persistence,
+		workspace,
+		rowOverscanPx,
+		overscanAdaptive,
+		runtimeLimits,
+		dataIntegrity,
+		capabilities,
+		detailRowHeight,
+		pagination,
+		rowSelection,
+		showStatusBar,
+		rowDragMode,
+		blockSize,
+		getRowHeight,
+	});
 
 	const api = useMemo(() => {
 		// Normalize string persistence key to a GridPersistenceAdapter so core always receives the adapter type.
@@ -156,28 +212,50 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			},
 			{ detailRowHeight, pagination: paginationConfig, showStatusBar, showFilterChipBar, showFloatingFilters, rowDragMode }
 		);
-		if (mode === 'client') {
-			return createClientGrid({
-				rows: rows as TRowData[],
+
+		if (rowModelType === 'infinite') {
+			return createInfiniteGrid({
+				datasource: datasource as InfiniteDatasource<TRowData>,
 				columns: resolveColumnTypes(columns, columnTypes),
+				blockSize,
 				getRowId,
 				persistence: resolvedPersistence,
+				workspace,
 				rowSelection,
-				rowValidator,
+				dataIntegrity,
+				capabilities,
 				initialState: initial,
 			});
 		}
 
-		return createServerGrid({
-			datasource: datasource as GridDatasource<TRowData>,
+		if (rowModelType === 'server') {
+			const serverPagePagination = (props as GridServerPageProps<TRowData>).pagination;
+			return createServerPageGrid({
+				datasource: datasource as ServerDatasource<TRowData>,
+				columns: resolveColumnTypes(columns, columnTypes),
+				getRowId,
+				persistence: resolvedPersistence,
+				workspace,
+				rowSelection,
+				dataIntegrity,
+				capabilities,
+				initialState: initial,
+				pagination: serverPagePagination ?? { pageSize: paginationConfig?.pageSize ?? 100 },
+			});
+		}
+
+		// Default: client row model
+		return createClientGrid({
+			rows: rows as TRowData[],
 			columns: resolveColumnTypes(columns, columnTypes),
-			blockSize,
 			getRowId,
+			getRowHeight: getRowHeight ? (row) => getRowHeight(row as TRowData) : undefined,
 			persistence: resolvedPersistence,
+			workspace,
 			rowSelection,
-			rowValidator,
+			dataIntegrity,
+			capabilities,
 			initialState: initial,
-			pagination: paginationConfig ? { pageSize: paginationConfig.pageSize, initialPage: paginationConfig.initialPage } : undefined,
 		});
 		// The grid instance is intentionally created once; live changes are handled by the dedicated hooks below.
 	}, []);
@@ -187,18 +265,35 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	}, [api, styleRules]);
 
 	useEffect(() => {
-		if (mode !== 'client') return;
-		api.setRows(rows as TRowData[]);
-	}, [api, mode, rows]);
+		api.setShowFloatingFilters(!!showFloatingFilters);
+	}, [api, showFloatingFilters]);
 
 	useEffect(() => {
-		if (mode !== 'server') return;
+		api.setShowFilterChipBar(!!showFilterChipBar);
+	}, [api, showFilterChipBar]);
+
+	useEffect(() => {
+		if (rowModelType !== 'client' && rowModelType !== undefined) return;
+		api.setRows(rows as TRowData[]);
+	}, [api, rowModelType, rows]);
+
+	useEffect(() => {
+		if (rowModelType !== 'infinite') return;
 		if (!didMountServerRef.current) {
 			didMountServerRef.current = true;
 			return;
 		}
-		api.setServerDatasource(datasource as GridDatasource<TRowData>, blockSize);
-	}, [api, mode, datasource, blockSize]);
+		api.setInfiniteDatasource(datasource as InfiniteDatasource<TRowData>, blockSize);
+	}, [api, rowModelType, datasource, blockSize]);
+
+	useEffect(() => {
+		if (rowModelType !== 'server') return;
+		if (!didMountServerRef.current) {
+			didMountServerRef.current = true;
+			return;
+		}
+		api.setServerPageDatasource(datasource as ServerDatasource<TRowData>);
+	}, [api, rowModelType, datasource]);
 
 	useEffect(() => {
 		if (columns === lastColumnsRef.current && columnTypes === lastColumnTypesRef.current) return;
@@ -210,8 +305,56 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 	useEffect(() => {
 		if (readyFiredRef.current) return;
 		readyFiredRef.current = true;
-		onGridReady?.({ api, mode });
-	}, [api, mode, onGridReady]);
+		const resolvedRowModelType = rowModelType ?? 'client';
+		onGridReady?.({ api, rowModelType: resolvedRowModelType });
+	}, [api, rowModelType, onGridReady]);
+
+	useEffect(() => {
+		const initialOnlyProps = initialOnlyPropsRef.current;
+		const checks: Array<[string, unknown, unknown]> = [
+			['rowModelType', initialOnlyProps.rowModelType, rowModelType],
+			['getRowId', initialOnlyProps.getRowId, getRowId],
+			['initialState', initialOnlyProps.initialState, initialState],
+			['persistence', initialOnlyProps.persistence, persistence],
+			['workspace', initialOnlyProps.workspace, workspace],
+			['rowOverscanPx', initialOnlyProps.rowOverscanPx, rowOverscanPx],
+			['overscanAdaptive', initialOnlyProps.overscanAdaptive, overscanAdaptive],
+			['runtimeLimits', initialOnlyProps.runtimeLimits, runtimeLimits],
+			['dataIntegrity', initialOnlyProps.dataIntegrity, dataIntegrity],
+			['capabilities', initialOnlyProps.capabilities, capabilities],
+			['detailRowHeight', initialOnlyProps.detailRowHeight, detailRowHeight],
+			['pagination', initialOnlyProps.pagination, pagination],
+			['rowSelection', initialOnlyProps.rowSelection, rowSelection],
+			['showStatusBar', initialOnlyProps.showStatusBar, showStatusBar],
+			['rowDragMode', initialOnlyProps.rowDragMode, rowDragMode],
+			['blockSize', initialOnlyProps.blockSize, blockSize],
+			['getRowHeight', initialOnlyProps.getRowHeight, getRowHeight],
+		];
+
+		for (const [propName, initialValue, currentValue] of checks) {
+			if (Object.is(initialValue, currentValue)) continue;
+			if (warnedInitialOnlyPropsRef.current.has(propName)) continue;
+			warnedInitialOnlyPropsRef.current.add(propName);
+			warnInitialOnlyGridProp(propName);
+		}
+	}, [
+		rowModelType,
+		getRowId,
+		initialState,
+		persistence,
+		workspace,
+		rowOverscanPx,
+		overscanAdaptive,
+		runtimeLimits,
+		dataIntegrity,
+		capabilities,
+		detailRowHeight,
+		pagination,
+		rowSelection,
+		showStatusBar,
+		rowDragMode,
+		blockSize,
+	]);
 
 	useInsertionEffect(() => {
 		return () => {

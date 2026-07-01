@@ -1,10 +1,36 @@
 import { flushSync } from 'react-dom';
 import type { ColumnDef, RowNode, VisualRow, CellRendererPhase } from '@open-grid/core';
-import type { PortalData, RowPortalData, MenuPortalData, CellPortalSnapshot, RowMenuPortalSnapshot, ImperativeUpdaterFn } from './gridPortalTypes.js';
+import type {
+	PortalData,
+	RowPortalData,
+	MenuPortalData,
+	CellPortalSnapshot,
+	RowMenuPortalSnapshot,
+	ImperativeUpdaterFn,
+	CellPortalPhysicalIdentity,
+} from './gridPortalTypes.js';
 
 export type ConcretePortalStore<TRowData> = ReturnType<typeof createPortalStore<TRowData>>;
 
+function isSamePhysicalIdentity(left: CellPortalPhysicalIdentity | undefined, right: CellPortalPhysicalIdentity | undefined): boolean {
+	return (
+		!!left &&
+		!!right &&
+		left.cellInstanceId === right.cellInstanceId &&
+		left.rowSlotId === right.rowSlotId &&
+		left.slotGeneration === right.slotGeneration &&
+		left.rowBindingGeneration === right.rowBindingGeneration &&
+		left.portalHostId === right.portalHostId
+	);
+}
+
 export function createPortalStore<TRowData = unknown>() {
+	const debugStats = {
+		cellStructuralPublishes: 0,
+		rowMenuStructuralPublishes: 0,
+		cellSnapshotRebuilds: 0,
+		rowMenuSnapshotRebuilds: 0,
+	};
 	// Mutable maps — source of truth
 	const portals = new Map<string, PortalData<TRowData>>();
 	const rowPortals = new Map<string, RowPortalData<TRowData>>();
@@ -41,15 +67,18 @@ export function createPortalStore<TRowData = unknown>() {
 
 	function rebuildCellSnapshot() {
 		cellSnapshotDirty = true;
+		debugStats.cellSnapshotRebuilds++;
 	}
 
 	function rebuildRowMenuSnapshot() {
 		rowMenuSnapshotDirty = true;
+		debugStats.rowMenuSnapshotRebuilds++;
 	}
 
 	// ── Notification helpers ───────────────────────────────────────────────────
 
 	function notifyCellStructural(sync = false) {
+		debugStats.cellStructuralPublishes++;
 		if (sync) {
 			flushSync(() => {
 				for (const l of cellStructuralListeners) l();
@@ -65,6 +94,7 @@ export function createPortalStore<TRowData = unknown>() {
 	}
 
 	function notifyRowMenuStructural() {
+		debugStats.rowMenuStructuralPublishes++;
 		if (rowMenuScheduled) return;
 		rowMenuScheduled = true;
 		queueMicrotask(() => {
@@ -82,6 +112,15 @@ export function createPortalStore<TRowData = unknown>() {
 	// ── Public API ─────────────────────────────────────────────────────────────
 
 	return {
+		getDebugStats() {
+			return { ...debugStats };
+		},
+		resetDebugStats() {
+			debugStats.cellStructuralPublishes = 0;
+			debugStats.rowMenuStructuralPublishes = 0;
+			debugStats.cellSnapshotRebuilds = 0;
+			debugStats.rowMenuSnapshotRebuilds = 0;
+		},
 		// Per-cell data subscription — PortalCellWrapper subscribes here for value/props updates
 		subscribeToCell(cellKey: string, listener: () => void) {
 			let list = cellDataListeners.get(cellKey);
@@ -155,14 +194,12 @@ export function createPortalStore<TRowData = unknown>() {
 			isScrolling: boolean | undefined,
 			isFocused: boolean | undefined,
 			isSelected: boolean | undefined,
-			slotGeneration?: number
+			physicalIdentity: CellPortalPhysicalIdentity
 		): boolean {
 			const fn = imperativeUpdaters.get(cellKey);
 			if (!fn) return false;
-			// Reject stale imperative updates: if the slot was rebound (generation changed)
-			// the stored renderer belongs to a different row — force a structural mount.
 			const existing = portals.get(cellKey);
-			if (slotGeneration !== undefined && existing?.slotGeneration !== undefined && existing.slotGeneration !== slotGeneration) {
+			if (!isSamePhysicalIdentity(existing?.physicalIdentity, physicalIdentity)) {
 				return false;
 			}
 			return fn(value, node, col, isEditing, isLoading, phase, isScrolling, isFocused, isSelected);
@@ -177,15 +214,18 @@ export function createPortalStore<TRowData = unknown>() {
 			col: ColumnDef<TRowData>,
 			isEditing: boolean,
 			isLoading: boolean,
-			phase?: CellRendererPhase,
-			isScrolling?: boolean,
-			isFocused?: boolean,
-			isSelected?: boolean,
-			slotGeneration?: number
+			phase: CellRendererPhase | undefined,
+			isScrolling: boolean | undefined,
+			isFocused: boolean | undefined,
+			isSelected: boolean | undefined,
+			physicalIdentity: CellPortalPhysicalIdentity
 		) {
 			const existing = portals.get(cellKey);
 
-			// Full equality check — skip everything when nothing changed
+			// Full equality check — skip everything when nothing changed.
+			// slotGeneration MUST be compared: a slot rebound to a new row advances the generation
+			// while the visible payload (value, node, etc.) may remain identical. Omitting this
+			// check allows stale portal ownership to persist across a slot rebind.
 			if (
 				existing &&
 				existing.container === container &&
@@ -197,7 +237,8 @@ export function createPortalStore<TRowData = unknown>() {
 				existing.phase === phase &&
 				existing.isScrolling === isScrolling &&
 				existing.isFocused === isFocused &&
-				existing.isSelected === isSelected
+				existing.isSelected === isSelected &&
+				isSamePhysicalIdentity(existing.physicalIdentity, physicalIdentity)
 			) {
 				cellPortalKeyByContainer.set(container, cellKey);
 				return;
@@ -228,7 +269,7 @@ export function createPortalStore<TRowData = unknown>() {
 				isScrolling,
 				isFocused,
 				isSelected,
-				slotGeneration,
+				physicalIdentity,
 			});
 			cellPortalKeyByContainer.set(container, cellKey);
 
@@ -242,9 +283,10 @@ export function createPortalStore<TRowData = unknown>() {
 			}
 		},
 
-		unmountCell(cellKey: string, container?: HTMLElement, sync = false) {
+		unmountCell(cellKey: string, container?: HTMLElement, sync = false, physicalIdentity?: CellPortalPhysicalIdentity) {
 			const existing = portals.get(cellKey);
 			if (!existing || (container && existing.container !== container)) return;
+			if (physicalIdentity && !isSamePhysicalIdentity(existing.physicalIdentity, physicalIdentity)) return;
 			portals.delete(cellKey);
 			if (cellPortalKeyByContainer.get(existing.container) === cellKey) {
 				cellPortalKeyByContainer.delete(existing.container);
@@ -307,18 +349,22 @@ export function createPortalStore<TRowData = unknown>() {
 			notifyRowMenuStructural();
 		},
 
-		clear() {
+		clear(silent = false) {
 			portals.clear();
 			rowPortals.clear();
 			menuPortals.clear();
 			cellPortalKeyByContainer.clear();
 			rowPortalKeyByContainer.clear();
 			cellDataListeners.clear();
+			cellStructuralListeners.clear();
+			rowMenuStructuralListeners.clear();
 			imperativeUpdaters.clear();
 			rebuildCellSnapshot();
 			rebuildRowMenuSnapshot();
-			notifyCellStructural();
-			notifyRowMenuStructural();
+			if (!silent) {
+				notifyCellStructural();
+				notifyRowMenuStructural();
+			}
 		},
 	};
 }

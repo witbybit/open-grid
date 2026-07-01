@@ -1,6 +1,15 @@
 import type { GridInvalidation, InvalidationFrame } from './invalidationManager.js';
 
 export interface RenderStats {
+	rowSlotAssigns?: number;
+	rowSlotMoves?: number;
+	rowSlotRebinds?: number;
+	cellSlotRebinds?: number;
+	fullCellBinds?: number;
+	geometryOnlyCellBinds?: number;
+	reactMounts?: number;
+	reactRefreshes?: number;
+	reactUnmounts?: number;
 	fullPaints: number;
 	runtimeLimitsClamped?: number;
 	rowPaints: number;
@@ -23,6 +32,15 @@ export interface RenderStats {
 	maxPortalOpsFlushedInOneChunk: number;
 	focusCallsDuringScroll: number;
 	rootTextContentWritesOnPortalCells: number;
+	cellTextWrites: number;
+	cellClassWrites: number;
+	cellTransformWrites: number;
+	cellWidthWrites: number;
+	cellLeftWrites: number;
+	cellDomReadsAvoided: number;
+	rowClassWrites: number;
+	rowTransformWrites: number;
+	rowHeightWrites: number;
 	cellsBoundDuringScroll: number;
 	rowsVisitedDuringScroll: number;
 	rowsReboundDuringScroll: number;
@@ -30,6 +48,12 @@ export interface RenderStats {
 	cellsWrittenDuringScroll: number;
 	portalOpsDuringScroll: number;
 	cellsDecoratedAfterScroll: number;
+	postScrollMotionChunks?: number;
+	maxMotionCellsDecoratedInOneChunk?: number;
+	motionCellsDecoratedAfterScroll?: number;
+	postScrollFidelityChunks?: number;
+	maxFidelityCellsDecoratedInOneChunk?: number;
+	fidelityCellsDecoratedAfterScroll?: number;
 	rowsEnteredDuringScroll: number;
 	rowsExitedDuringScroll: number;
 	rowsStayedDuringScroll: number;
@@ -60,11 +84,23 @@ export interface RenderStats {
 	customRendererHydrationChunks?: number;
 	customRendererWarmHits?: number;
 	customRendererWarmMisses?: number;
+	prewarmedDisplayValues?: number;
+	prewarmPasses?: number;
+	prewarmedCellSnapshots?: number;
 }
 
 /** Returns a zero-value RenderStats object. Used by GridStore.getRenderStats() when no render engine is mounted. */
 export function createEmptyRenderStats(): RenderStats {
 	return {
+		rowSlotAssigns: 0,
+		rowSlotMoves: 0,
+		rowSlotRebinds: 0,
+		cellSlotRebinds: 0,
+		fullCellBinds: 0,
+		geometryOnlyCellBinds: 0,
+		reactMounts: 0,
+		reactRefreshes: 0,
+		reactUnmounts: 0,
 		fullPaints: 0,
 		rowPaints: 0,
 		cellPaints: 0,
@@ -86,6 +122,15 @@ export function createEmptyRenderStats(): RenderStats {
 		maxPortalOpsFlushedInOneChunk: 0,
 		focusCallsDuringScroll: 0,
 		rootTextContentWritesOnPortalCells: 0,
+		cellTextWrites: 0,
+		cellClassWrites: 0,
+		cellTransformWrites: 0,
+		cellWidthWrites: 0,
+		cellLeftWrites: 0,
+		cellDomReadsAvoided: 0,
+		rowClassWrites: 0,
+		rowTransformWrites: 0,
+		rowHeightWrites: 0,
 		cellsBoundDuringScroll: 0,
 		rowsVisitedDuringScroll: 0,
 		rowsReboundDuringScroll: 0,
@@ -93,6 +138,12 @@ export function createEmptyRenderStats(): RenderStats {
 		cellsWrittenDuringScroll: 0,
 		portalOpsDuringScroll: 0,
 		cellsDecoratedAfterScroll: 0,
+		postScrollMotionChunks: 0,
+		maxMotionCellsDecoratedInOneChunk: 0,
+		motionCellsDecoratedAfterScroll: 0,
+		postScrollFidelityChunks: 0,
+		maxFidelityCellsDecoratedInOneChunk: 0,
+		fidelityCellsDecoratedAfterScroll: 0,
 		rowsEnteredDuringScroll: 0,
 		rowsExitedDuringScroll: 0,
 		rowsStayedDuringScroll: 0,
@@ -117,6 +168,9 @@ export function createEmptyRenderStats(): RenderStats {
 		customRendererHydrationChunks: 0,
 		customRendererWarmHits: 0,
 		customRendererWarmMisses: 0,
+		prewarmedDisplayValues: 0,
+		prewarmPasses: 0,
+		prewarmedCellSnapshots: 0,
 		cellAccessReadsDuringScroll: 0,
 		cellClassComputesDuringScroll: 0,
 		dirtyCellsMarkedDuringScroll: 0,
@@ -139,6 +193,15 @@ export interface RenderOrchestratorTargets {
 export class RenderOrchestrator {
 	private readonly targets: RenderOrchestratorTargets;
 	private readonly stats: RenderStats = {
+		rowSlotAssigns: 0,
+		rowSlotMoves: 0,
+		rowSlotRebinds: 0,
+		cellSlotRebinds: 0,
+		fullCellBinds: 0,
+		geometryOnlyCellBinds: 0,
+		reactMounts: 0,
+		reactRefreshes: 0,
+		reactUnmounts: 0,
 		fullPaints: 0,
 		runtimeLimitsClamped: 0,
 		rowPaints: 0,
@@ -161,6 +224,15 @@ export class RenderOrchestrator {
 		maxPortalOpsFlushedInOneChunk: 0,
 		focusCallsDuringScroll: 0,
 		rootTextContentWritesOnPortalCells: 0,
+		cellTextWrites: 0,
+		cellClassWrites: 0,
+		cellTransformWrites: 0,
+		cellWidthWrites: 0,
+		cellLeftWrites: 0,
+		cellDomReadsAvoided: 0,
+		rowClassWrites: 0,
+		rowTransformWrites: 0,
+		rowHeightWrites: 0,
 		cellsBoundDuringScroll: 0,
 		rowsVisitedDuringScroll: 0,
 		rowsReboundDuringScroll: 0,
@@ -168,6 +240,12 @@ export class RenderOrchestrator {
 		cellsWrittenDuringScroll: 0,
 		portalOpsDuringScroll: 0,
 		cellsDecoratedAfterScroll: 0,
+		postScrollMotionChunks: 0,
+		maxMotionCellsDecoratedInOneChunk: 0,
+		motionCellsDecoratedAfterScroll: 0,
+		postScrollFidelityChunks: 0,
+		maxFidelityCellsDecoratedInOneChunk: 0,
+		fidelityCellsDecoratedAfterScroll: 0,
 		rowsEnteredDuringScroll: 0,
 		rowsExitedDuringScroll: 0,
 		rowsStayedDuringScroll: 0,
@@ -205,12 +283,15 @@ export class RenderOrchestrator {
 			return;
 		}
 
+		const rowRangeCount = this.countRowRanges(frame.rowRanges);
+		const hasStructuralViewportWork = frame.rowRanges.length > 0 || frame.groups.size > 0;
+
 		if (frame.geometry) {
 			this.stats.geometryRecomputes++;
 			this.targets.recomputeGeometry();
 		}
 
-		if (frame.viewport) {
+		if (frame.viewport || hasStructuralViewportWork) {
 			this.stats.viewportPaints++;
 			this.targets.syncViewport(frame);
 		}
@@ -218,6 +299,8 @@ export class RenderOrchestrator {
 		if (frame.rows.size > 0) {
 			this.stats.rowPaints += frame.rows.size;
 			this.targets.syncRows(frame);
+		} else if (rowRangeCount > 0) {
+			this.stats.rowPaints += rowRangeCount;
 		}
 
 		const cellCount = this.countCells(frame.cellsByRowId);
@@ -231,7 +314,7 @@ export class RenderOrchestrator {
 			this.targets.syncHeaders(frame);
 		}
 
-		if (frame.overlay || cellCount > 0 || frame.rows.size > 0) {
+		if (frame.overlay || frame.viewport || hasStructuralViewportWork || cellCount > 0 || frame.rows.size > 0) {
 			this.stats.overlayPaints++;
 			this.targets.syncOverlay(frame);
 		}
@@ -241,6 +324,14 @@ export class RenderOrchestrator {
 		let count = 0;
 		for (const colIds of cellsByRowId.values()) {
 			count += colIds.size;
+		}
+		return count;
+	}
+
+	private countRowRanges(rowRanges: readonly { startIndex: number; endIndex: number }[]): number {
+		let count = 0;
+		for (const range of rowRanges) {
+			count += Math.max(0, range.endIndex - range.startIndex + 1);
 		}
 		return count;
 	}
@@ -284,6 +375,12 @@ export class RenderOrchestrator {
 		this.stats.cellsWrittenDuringScroll = 0;
 		this.stats.portalOpsDuringScroll = 0;
 		this.stats.cellsDecoratedAfterScroll = 0;
+		this.stats.postScrollMotionChunks = 0;
+		this.stats.maxMotionCellsDecoratedInOneChunk = 0;
+		this.stats.motionCellsDecoratedAfterScroll = 0;
+		this.stats.postScrollFidelityChunks = 0;
+		this.stats.maxFidelityCellsDecoratedInOneChunk = 0;
+		this.stats.fidelityCellsDecoratedAfterScroll = 0;
 		this.stats.rowsEnteredDuringScroll = 0;
 		this.stats.rowsExitedDuringScroll = 0;
 		this.stats.rowsStayedDuringScroll = 0;

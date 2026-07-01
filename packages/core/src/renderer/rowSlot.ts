@@ -1,5 +1,17 @@
 import { CellSlot, toPx } from './cellSlot.js';
 
+export const rowSlotWriteStats = {
+	rowClassWrites: 0,
+	rowTransformWrites: 0,
+	rowHeightWrites: 0,
+};
+
+export function resetRowSlotWriteStats(): void {
+	rowSlotWriteStats.rowClassWrites = 0;
+	rowSlotWriteStats.rowTransformWrites = 0;
+	rowSlotWriteStats.rowHeightWrites = 0;
+}
+
 export class RowSlot<TRowData = unknown> {
 	public readonly id: string;
 	public readonly element: HTMLDivElement;
@@ -31,13 +43,16 @@ export class RowSlot<TRowData = unknown> {
 	public pinRightContainer: HTMLDivElement | null = null;
 	public pinLeftContainerWidth = -1;
 	public pinRightContainerWidth = -1;
-	public pinLeftContainerTransform = '';
-	public pinRightContainerLeft = -1;
-	public pinRightContainerTransform = '';
 
-	// ── Lane-based cell slots ───────────────────────────────────────────────────────
-	// Three fixed-length arrays — one per pin lane. During normal scroll none of these
-	// change length, so zero cell DOM append/remove occurs.
+	// ── Stable cell ownership — keyed by column field ───────────────────────────────
+	// This map is the lifecycle owner for all cell slots in this row slot.
+	// Lane arrays below are derived placement views rebuilt each frame by reconcileTopology.
+	// A column moving between lanes relocates its CellSlot — it does not destroy and recreate it.
+	public readonly cellsByColumnId: Map<string, CellSlot<TRowData>> = new Map();
+
+	// ── Lane-based cell slots (derived from cellsByColumnId) ─────────────────────────
+	// Three ordered arrays — one per pin lane. Rebuilt each frame by reconcileTopology.
+	// During normal scroll none of these change length, so zero cell DOM append/remove occurs.
 	//
 	// Indices:
 	//   leftCells[i]   ↔  columns[i]                   (i in 0..pinLeftCount-1)
@@ -57,6 +72,7 @@ export class RowSlot<TRowData = unknown> {
 		this.id = id;
 		this.element = element;
 		if (element.getAttribute('role') !== 'row') element.setAttribute('role', 'row');
+		element.dataset.rowSlotId = id;
 	}
 
 	// ── Lookup ───────────────────────────────────────────────────────────────────────
@@ -77,75 +93,6 @@ export class RowSlot<TRowData = unknown> {
 	}
 
 	// ── Lane resize helpers ──────────────────────────────────────────────────────────
-
-	/**
-	 * Ensure the left lane has exactly n CellSlots, all children of `container`.
-	 * `initFn` is called on each newly created element.
-	 * `releaseFn` is called before removing any existing slot (portal cleanup etc.).
-	 */
-	public ensureLeftCells(
-		n: number,
-		container: HTMLDivElement | null,
-		initFn: (el: HTMLDivElement) => void,
-		releaseFn: (cell: CellSlot<TRowData>) => void
-	): void {
-		if (!container) {
-			n = 0; // no container → no left cells
-		}
-		while (this.leftCells.length < n) {
-			const el = document.createElement('div');
-			initFn(el);
-			container!.appendChild(el);
-			this.leftCells.push(CellSlot.fromElement<TRowData>(el));
-		}
-		while (this.leftCells.length > n) {
-			const cell = this.leftCells.pop()!;
-			releaseFn(cell);
-			if (cell.element.parentNode) cell.element.remove();
-		}
-	}
-
-	/**
-	 * Ensure the center lane has exactly n CellSlots, all direct children of `element`.
-	 */
-	public ensureCenterCells(n: number, initFn: (el: HTMLDivElement) => void, releaseFn: (cell: CellSlot<TRowData>) => void): void {
-		while (this.centerCells.length < n) {
-			const el = document.createElement('div');
-			initFn(el);
-			this.element.appendChild(el);
-			this.centerCells.push(CellSlot.fromElement<TRowData>(el));
-		}
-		while (this.centerCells.length > n) {
-			const cell = this.centerCells.pop()!;
-			releaseFn(cell);
-			if (cell.element.parentNode) cell.element.remove();
-		}
-	}
-
-	/**
-	 * Ensure the right lane has exactly n CellSlots, all children of `container`.
-	 */
-	public ensureRightCells(
-		n: number,
-		container: HTMLDivElement | null,
-		initFn: (el: HTMLDivElement) => void,
-		releaseFn: (cell: CellSlot<TRowData>) => void
-	): void {
-		if (!container) {
-			n = 0;
-		}
-		while (this.rightCells.length < n) {
-			const el = document.createElement('div');
-			initFn(el);
-			container!.appendChild(el);
-			this.rightCells.push(CellSlot.fromElement<TRowData>(el));
-		}
-		while (this.rightCells.length > n) {
-			const cell = this.rightCells.pop()!;
-			releaseFn(cell);
-			if (cell.element.parentNode) cell.element.remove();
-		}
-	}
 
 	/** Iterate every CellSlot across all three lanes. */
 	public forEachCell(fn: (cell: CellSlot<TRowData>) => void): void {
@@ -182,11 +129,13 @@ export class RowSlot<TRowData = unknown> {
 			// translateY (not top): moving a row must never invalidate layout — transform
 			// changes are paint/composite-only. Rows sit at top:0 and are offset here.
 			this.element.style.transform = `translateY(${rowTop}px)`;
+			rowSlotWriteStats.rowTransformWrites++;
 			domUpdated = true;
 		}
 		if (this.lastHeight !== rowHeight) {
 			this.lastHeight = rowHeight;
 			this.element.style.height = toPx(rowHeight);
+			rowSlotWriteStats.rowHeightWrites++;
 			domUpdated = true;
 		}
 
@@ -205,6 +154,7 @@ export class RowSlot<TRowData = unknown> {
 		if (this.lastClassName !== className) {
 			this.lastClassName = className;
 			this.element.className = className;
+			rowSlotWriteStats.rowClassWrites++;
 			domUpdated = true;
 		}
 
@@ -216,6 +166,7 @@ export class RowSlot<TRowData = unknown> {
 		if (this.lastTop !== rowTop) {
 			this.lastTop = rowTop;
 			this.element.style.transform = `translateY(${rowTop}px)`;
+			rowSlotWriteStats.rowTransformWrites++;
 		}
 	}
 
@@ -232,7 +183,9 @@ export class RowSlot<TRowData = unknown> {
 		this.rowHeight = -1;
 		this.keepAlive = false;
 		this.lastPortalRowKey = undefined;
-		// Cell slots remain mounted — they will be rebound on next renderViewport.
+		this.element.style.visibility = 'hidden';
+		// Keep dataset/ARIA mirrors warm as well as the DOM subtree. A rebound to the same
+		// visual row should not need to rewrite debug mirrors we just tore down.
 	}
 
 	/**
@@ -254,12 +207,17 @@ export class RowSlot<TRowData = unknown> {
 		this.pinLeftCount = 0;
 		this.pinRightStart = Number.MAX_SAFE_INTEGER;
 
-		// Unbind all cell slots (element will be removed by pool)
-		for (const cell of this.leftCells) cell.unbindCold();
+		// Unbind all cell slots. cellsByColumnId is authoritative, but lane arrays are
+		// unioned defensively in case external callers have pushed to them directly.
+		const allCells = new Set<CellSlot<TRowData>>();
+		for (const cell of this.cellsByColumnId.values()) allCells.add(cell);
+		for (const cell of this.leftCells) allCells.add(cell);
+		for (const cell of this.centerCells) allCells.add(cell);
+		for (const cell of this.rightCells) allCells.add(cell);
+		for (const cell of allCells) cell.unbindCold();
+		this.cellsByColumnId.clear();
 		this.leftCells.length = 0;
-		for (const cell of this.centerCells) cell.unbindCold();
 		this.centerCells.length = 0;
-		for (const cell of this.rightCells) cell.unbindCold();
 		this.rightCells.length = 0;
 
 		this.element.className = '';
@@ -272,8 +230,5 @@ export class RowSlot<TRowData = unknown> {
 		this.pinRightContainer = null;
 		this.pinLeftContainerWidth = -1;
 		this.pinRightContainerWidth = -1;
-		this.pinLeftContainerTransform = '';
-		this.pinRightContainerLeft = -1;
-		this.pinRightContainerTransform = '';
 	}
 }

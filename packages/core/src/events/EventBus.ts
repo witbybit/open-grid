@@ -1,5 +1,4 @@
-import type { GridEvent, GridEventListener, GridEventPayloadMap } from '../store.js';
-import { GridEventName } from '../api/GridEvents.js';
+import { GridEventName, type GridEvent, type GridEventListener, type GridEventPayloadMap } from '../api/GridEvents.js';
 import type { RuntimeFaultReporter } from '../diagnostics/RuntimeFaultReporter.js';
 
 export class EventBus<TRowData = unknown> {

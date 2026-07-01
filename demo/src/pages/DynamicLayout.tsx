@@ -8,7 +8,7 @@ interface DynamicLayoutProps {
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	rowHeightsMap: Record<string, number>;
-	onCellValueChanged: (rowId: string, colField: string, val: unknown) => void;
+	onCellValueChanged: (event: { rowId: string; colField: string; oldValue: unknown; newValue: unknown }) => void;
 	onGridReady?: (event: GridReadyEvent<PerformanceRow>) => void;
 	compactLayout: 'compact' | 'normal' | 'spacious';
 	visibleColumns?: Record<string, boolean>;
@@ -37,7 +37,7 @@ export default function DynamicLayout({
 
 	useEffect(() => {
 		if (!api) return;
-		const update = () => setFocusedCell(api.getState().selection.focus);
+		const update = () => setFocusedCell(api.getStateSnapshot().selection.focus);
 		update();
 		return api.subscribeToKey('selection', update);
 	}, [api]);
@@ -66,14 +66,15 @@ export default function DynamicLayout({
 				</div>
 				<div className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						mode='client'
+						rowModelType='client'
 						rows={rows}
 						columns={columns}
 						initialState={{ rowHeight: rowHeightsMap[compactLayout] } as any}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						enableNavigation
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged }}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
+						onCellValueChanged={onCellValueChanged}
 						onGridReady={(event) => {
 							setApi(event.api);
 							onGridReady?.(event);

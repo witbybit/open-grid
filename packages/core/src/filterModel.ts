@@ -1,3 +1,5 @@
+import { computeDistinctValueSummary, type DistinctValueComputationOptions } from './distinctValues.js';
+
 // V2 discriminated-union filter model.
 
 export type TextFilterOperator = 'contains' | 'notContains' | 'equals' | 'notEquals' | 'startsWith' | 'endsWith' | 'blank' | 'notBlank';
@@ -39,7 +41,28 @@ export interface SetFilterCondition {
 	values: (string | number | null)[];
 }
 
-export type FilterCondition = TextFilterCondition | NumberFilterCondition | DateFilterCondition | SetFilterCondition;
+/**
+ * Used by all new select filter types (multi-select, single-select, async-*, infinite-*).
+ * Supersedes SetFilterCondition for new filter definitions while remaining backwards-compatible.
+ */
+export interface SelectFilterCondition {
+	type: 'select';
+	/** Selected option values. Length 1 for single-select, N for multi-select. */
+	values: (string | number | null)[];
+	/**
+	 * Display labels parallel to values — stored so chip bar can show readable text
+	 * without re-fetching option lists on every render.
+	 */
+	labels?: string[];
+	/**
+	 * 'any' (default): row matches if cell value equals ANY selected value (OR logic).
+	 * 'all': row matches only if cell value equals ALL selected values (unusual — useful
+	 *         for array-valued cells or tag matching).
+	 */
+	matchMode?: 'any' | 'all';
+}
+
+export type FilterCondition = TextFilterCondition | NumberFilterCondition | DateFilterCondition | SetFilterCondition | SelectFilterCondition;
 
 export interface CompoundFilterCondition {
 	type: 'compound';
@@ -58,29 +81,8 @@ export type FilterModel = Record<string, ColumnFilter>;
  */
 export function computeDistinctValues(
 	nodes: Array<{ getCellValue(field: string, getter: (d: unknown) => unknown): unknown }>,
-	colField: string
+	colField: string,
+	options?: DistinctValueComputationOptions
 ): (string | number | null)[] {
-	const seen = new Set<string>();
-	const result: (string | number | null)[] = [];
-	for (const node of nodes) {
-		const raw = node.getCellValue(colField, (d: unknown) => (d as Record<string, unknown>)[colField]);
-		if (raw == null || raw === '') {
-			if (!seen.has('\0null')) {
-				seen.add('\0null');
-				result.push(null);
-			}
-		} else {
-			const key = String(raw);
-			if (!seen.has(key)) {
-				seen.add(key);
-				result.push(typeof raw === 'number' ? raw : key);
-			}
-		}
-	}
-	return result.sort((a, b) => {
-		if (a === null) return -1;
-		if (b === null) return 1;
-		if (typeof a === 'number' && typeof b === 'number') return a - b;
-		return String(a).localeCompare(String(b));
-	});
+	return [...computeDistinctValueSummary(nodes as never, colField, options).values];
 }

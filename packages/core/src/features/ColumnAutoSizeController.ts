@@ -3,7 +3,7 @@ import type { DataModel } from '../models/DataModel.js';
 import type { ColumnModel } from '../models/ColumnModel.js';
 import type { RowModel } from '../rowModel.js';
 import type { ColumnFeatureController } from './ColumnFeatureController.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 
 export interface AutoSizeColumnOptions {
 	/** Include the header label in the measurement. Default: true */
@@ -20,7 +20,7 @@ export interface AutoSizeAllColumnsOptions extends AutoSizeColumnOptions {
 }
 
 interface AutoSizeContext<TRowData> {
-	getState(): GridState<TRowData>;
+	getState(): InternalGridState<TRowData>;
 	columns: ColumnModel<TRowData>;
 	data: DataModel<TRowData>;
 	columnFeature: ColumnFeatureController<TRowData>;

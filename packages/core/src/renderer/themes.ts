@@ -113,7 +113,7 @@ export interface ThemeTokens {
 	filterChipColor?: string;
 
 	/* ─────────────────────────────────────────────────────────────────────
-     Floating Filter Row (Plan 060)
+     Floating Filter Row
      ───────────────────────────────────────────────────────────────────── */
 	/** Background of the floating filter row. Defaults to headerBg when unset. */
 	floatingFilterBg?: string;
@@ -200,11 +200,6 @@ export const LIGHT_THEME: ThemeTokens = {
 	readonlyCellBg: 'rgba(0, 0, 0, 0.02)',
 	readonlyCellOpacity: '0.55',
 
-	filterChipBarBg: 'rgba(248, 250, 252, 0.98)',
-	filterChipBg: 'rgba(59, 130, 246, 0.08)',
-	filterChipBorder: 'rgba(59, 130, 246, 0.25)',
-	filterChipColor: '#2563eb',
-
 	floatingFilterBg: '#f1f5f9',
 	floatingFilterInputBg: '#ffffff',
 	floatingFilterInputBorder: '#e2e8f0',
@@ -279,11 +274,6 @@ export const DARK_THEME: ThemeTokens = {
 
 	readonlyCellBg: 'rgba(255, 255, 255, 0.02)',
 	readonlyCellOpacity: '0.65',
-
-	filterChipBarBg: 'rgba(15, 23, 42, 0.92)',
-	filterChipBg: 'rgba(59, 130, 246, 0.18)',
-	filterChipBorder: 'rgba(59, 130, 246, 0.35)',
-	filterChipColor: '#93c5fd',
 
 	floatingFilterBg: '#0c0e13',
 	floatingFilterInputBg: 'rgba(30, 41, 59, 0.6)',

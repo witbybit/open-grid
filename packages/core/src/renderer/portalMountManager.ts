@@ -13,13 +13,17 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { CustomRendererManager, type ReleaseReason } from './customRendererManager.js';
 import { DomCellRendererManager } from './domCellRendererManager.js';
+import { reportRendererFault } from './rendererFaults.js';
 import {
 	createEditRendererKey,
 	createSlotRendererKey,
 	createIndexRendererKey,
 	createDomSlotRendererKey,
 	createDomIndexRendererKey,
+	createCellInstanceRendererKey,
 } from './identityKeys.js';
+import { GridMetric } from '../diagnostics/GridInstrumentation.js';
+import type { RenderRuntimeStats } from './renderTelemetry.js';
 
 function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: VisualRow<TRowData> | undefined): boolean {
 	if (a === b) return true;
@@ -61,6 +65,15 @@ export interface DeferredPortalFlushOptions {
 export interface DeferredPortalFlushResult {
 	processed: number;
 	remaining: number;
+}
+
+/** Full physical identity record for a mounted cell portal. Stored in activeIdentityByKey. */
+interface CellPortalPhysicalIdentity {
+	cellInstanceId: string;
+	portalHostId: string;
+	rowSlotId: string;
+	slotGeneration: number;
+	cellRowBindingGeneration: number;
 }
 
 export class PortalMountManager<TRowData = unknown> {
@@ -106,8 +119,8 @@ export class PortalMountManager<TRowData = unknown> {
 	private pendingCellReleases = new Map<string, GridCellContentUnmount>();
 	private deferredCellMounts = new Map<string, GridCellContentMount<TRowData>>();
 	private deferredCellReleases = new Map<string, GridCellContentUnmount>();
-	/** Tracks the current slotGeneration for each mounted cellKey. */
-	private activeGenerationByKey = new Map<string, number>();
+	/** Tracks the current physical identity for each mounted cellKey. */
+	private activeIdentityByKey = new Map<string, CellPortalPhysicalIdentity>();
 	private deferredNewCellMounts = new Set<string>();
 	private deferredRowMounts = new Map<string, GridRowContentMount<TRowData>>();
 	private deferredRowReleases = new Map<string, GridRowContentUnmount>();
@@ -115,6 +128,10 @@ export class PortalMountManager<TRowData = unknown> {
 
 	public setRuntimeState(state: RenderRuntimeState): void {
 		this.runtimeState = state;
+	}
+
+	public setRuntimeStats(stats: RenderRuntimeStats): void {
+		this.customRendererManager.setRuntimeStats(stats);
 	}
 
 	private get scrolling(): boolean {
@@ -129,12 +146,44 @@ export class PortalMountManager<TRowData = unknown> {
 		maxOpsFlushedInOneChunk: 0,
 	};
 
+	/** Returns the active slot generation for a cell key, or undefined if not mounted. */
+	public getActiveGeneration(cellKey: string): number | undefined {
+		return this.activeIdentityByKey.get(cellKey)?.slotGeneration;
+	}
+
+	public getActiveIdentity(cellKey: string): CellPortalPhysicalIdentity | undefined {
+		return this.activeIdentityByKey.get(cellKey);
+	}
+
+	private reportMissingPooledIdentity(operation: string, cellKey: string): void {
+		if (!this.engine) return;
+		reportRendererFault(this.engine, operation, new Error(`Missing pooled portal identity for ${cellKey}`), { cellKey });
+	}
+
+	private isSamePhysicalIdentity(
+		active: CellPortalPhysicalIdentity,
+		op: { cellInstanceId?: string; portalHostId?: string; rowSlotId: string; slotGeneration: number; cellRowBindingGeneration?: number }
+	): boolean {
+		if (active.rowSlotId !== op.rowSlotId) return false;
+		if (active.slotGeneration !== op.slotGeneration) return false;
+		if (op.cellRowBindingGeneration !== undefined && active.cellRowBindingGeneration !== op.cellRowBindingGeneration) return false;
+		if (op.cellInstanceId !== undefined && active.cellInstanceId !== op.cellInstanceId) return false;
+		if (op.portalHostId !== undefined && op.portalHostId !== '' && active.portalHostId !== op.portalHostId) return false;
+		return true;
+	}
+
 	private mountCellReal(mount: GridCellContentMount<TRowData>): void {
-		if (mount.slotGeneration !== undefined) {
-			this.activeGenerationByKey.set(mount.cellKey, mount.slotGeneration);
-		}
+		this.activeIdentityByKey.set(mount.cellKey, {
+			cellInstanceId: mount.cellInstanceId ?? '',
+			portalHostId: mount.portalHostId ?? '',
+			rowSlotId: mount.rowSlotId,
+			slotGeneration: mount.slotGeneration,
+			cellRowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
+		});
 		const col = mount.col as InternalColumnDef<TRowData>;
 		const isCustom = !!(col.cellRenderer || mount.isEditing);
+
+		this.engine?.instrumentation.increment(GridMetric.CELL_RENDERER_MOUNTED);
 
 		if (!isCustom) {
 			this.onMountCellContent?.(mount);
@@ -170,13 +219,19 @@ export class PortalMountManager<TRowData = unknown> {
 		// React renderer — goes through portal store
 		const rendererKey = mount.isEditing
 			? createEditRendererKey(node.id, col.field)
-			: rowSlotId
-				? createSlotRendererKey(rowSlotId, col.field)
-				: this.customRendererManager.getRendererKey(col, node.id, rowIndex, colIndex, mount.isEditing);
+			: mount.cellInstanceId
+				? createCellInstanceRendererKey(mount.cellInstanceId, col.field)
+				: rowSlotId
+					? createSlotRendererKey(rowSlotId, col.field)
+					: this.customRendererManager.getRendererKey(col, node.id, rowIndex, colIndex, mount.isEditing);
 
 		this.customRendererManager.acquire({
 			rendererKey,
 			cellKey: mount.cellKey,
+			rowSlotId: mount.rowSlotId,
+			slotGeneration: mount.slotGeneration,
+			cellRowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
+			cellInstanceId: mount.cellInstanceId,
 			parentContainer: mount.container,
 			value: mount.value,
 			node: mount.node,
@@ -191,7 +246,8 @@ export class PortalMountManager<TRowData = unknown> {
 	}
 
 	private releaseCellReal(cellKey: string, reason: ReleaseReason, originalUnmount?: GridCellContentUnmount): void {
-		this.activeGenerationByKey.delete(cellKey);
+		const activeIdentity = this.activeIdentityByKey.get(cellKey);
+		this.activeIdentityByKey.delete(cellKey);
 		// DOM renderer path — no portal/React involved
 		if (this.domCellRendererManager.releaseByCellKey(cellKey, reason)) return;
 
@@ -200,8 +256,19 @@ export class PortalMountManager<TRowData = unknown> {
 			if (originalUnmount) {
 				this.onUnmountCellContent?.(originalUnmount);
 			} else {
+				if (!activeIdentity) {
+					this.reportMissingPooledIdentity('portal-unmount-without-identity', cellKey);
+					return;
+				}
 				const container = this.mountedCells.get(cellKey);
-				this.onUnmountCellContent?.({ cellKey, container, flushSync: false });
+				this.onUnmountCellContent?.({
+					cellKey,
+					container,
+					flushSync: false,
+					rowSlotId: activeIdentity.rowSlotId,
+					slotGeneration: activeIdentity.slotGeneration,
+					cellRowBindingGeneration: activeIdentity.cellRowBindingGeneration,
+				});
 			}
 		}
 	}
@@ -391,11 +458,10 @@ export class PortalMountManager<TRowData = unknown> {
 		// avoids an O(remaining) Array.from copy per chunk (O(N²/budget) over the drain).
 		for (const [cellKey, unmount] of this.deferredCellReleases) {
 			if (outOfBudget()) break;
-			// Reject stale releases: a later mount for the same key with a higher
-			// generation means this release was superseded by a slot rebind.
-			const activeGen = this.activeGenerationByKey.get(cellKey);
-			if (unmount.slotGeneration !== undefined && activeGen !== undefined && activeGen > unmount.slotGeneration) {
+			const activeIdentity = this.activeIdentityByKey.get(cellKey);
+			if (activeIdentity !== undefined && !this.isSamePhysicalIdentity(activeIdentity, unmount)) {
 				this.deferredCellReleases.delete(cellKey);
+				this.engine?.instrumentation.increment(GridMetric.STALE_CELL_OPERATION_REJECTED);
 				continue;
 			}
 			this.releaseCellReal(unmount.cellKey, 'scrolled-out', unmount);
@@ -422,6 +488,13 @@ export class PortalMountManager<TRowData = unknown> {
 			for (let i = 0; i < bucket.length && !outOfBudget(); i++) {
 				const mount = bucket[i];
 				const isColdMount = this.deferredNewCellMounts.has(mount.cellKey);
+				const activeIdentity = this.activeIdentityByKey.get(mount.cellKey);
+				if (activeIdentity !== undefined && !this.isSamePhysicalIdentity(activeIdentity, mount)) {
+					this.deferredCellMounts.delete(mount.cellKey);
+					this.deferredNewCellMounts.delete(mount.cellKey);
+					this.engine?.instrumentation.increment(GridMetric.STALE_CELL_OPERATION_REJECTED);
+					continue;
+				}
 				this.mountCellReal(mount);
 				this.deferredCellMounts.delete(mount.cellKey);
 				this.deferredNewCellMounts.delete(mount.cellKey);
@@ -450,7 +523,7 @@ export class PortalMountManager<TRowData = unknown> {
 			this.stats.flushChunks++;
 			this.stats.maxOpsFlushedInOneChunk = Math.max(this.stats.maxOpsFlushedInOneChunk, processed);
 		}
-		// Phase 7: delegate warm DOM move budget to CustomRendererManager (it owns hydration policy)
+		// Delegate warm DOM move budget to CustomRendererManager (it owns hydration policy).
 		if (processed > 0 || this.customRendererManager['pendingWarmMoves'].length > 0) {
 			this.customRendererManager.flushWarmMoveBudget({
 				maxItems: maxItems === Number.POSITIVE_INFINITY ? 16 : Math.max(1, Math.floor(maxItems / 2)),
@@ -538,6 +611,7 @@ export class PortalMountManager<TRowData = unknown> {
 		this.mountedRows.clear();
 		this.mountedRowVisualRows.clear();
 		this.mountedMenus.clear();
+		this.activeIdentityByKey.clear();
 	}
 
 	public isCellMounted(cellKey: string): boolean {

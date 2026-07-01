@@ -3,10 +3,14 @@ import type { RowNode } from '../rowNode.js';
 import type { GridCellContentMount, GridCellContentUnmount, RendererLifecycleOperation } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { createEditRendererKey, createSlotRendererKey, createIndexRendererKey } from './identityKeys.js';
+import type { RenderRuntimeStats } from './renderTelemetry.js';
 
 export interface RendererInstance<TRowData = unknown> {
 	rendererKey: string;
 	cellKey: string;
+	rowSlotId: string;
+	slotGeneration: number;
+	cellRowBindingGeneration: number;
 	container: HTMLDivElement;
 	value: unknown;
 	node: RowNode<TRowData>;
@@ -23,6 +27,10 @@ export interface RendererInstance<TRowData = unknown> {
 export interface AcquireRendererParams<TRowData = unknown> {
 	rendererKey: string;
 	cellKey: string;
+	rowSlotId: string;
+	slotGeneration: number;
+	cellRowBindingGeneration: number;
+	cellInstanceId?: string;
 	parentContainer: HTMLElement;
 	value: unknown;
 	node: RowNode<TRowData>;
@@ -44,10 +52,10 @@ export interface CustomRendererStats {
 	warmHits: number;
 	warmMisses: number;
 	evictions: number;
-	// Phase 7: hydration budget tracking
+	// hydration budget tracking
 	hydrationChunks: number;
 	maxHydratedInOneChunk: number;
-	// Phase 8: warm DOM move tracking
+	// warm DOM move tracking
 	warmMovesDeferred: number;
 	warmMovesFlushed: number;
 }
@@ -81,12 +89,17 @@ export class CustomRendererManager<TRowData = unknown> {
 		warmMovesFlushed: 0,
 	};
 
-	// Phase 8: pending warm DOM moves deferred during scroll
+	// Warm DOM moves deferred during scroll — flushed in budgeted chunks after scroll idle.
 	private pendingWarmMoves: RendererInstance<TRowData>[] = [];
+	private runtimeStats: RenderRuntimeStats | null = null;
 
 	private hiddenContainer: HTMLDivElement | null = null;
 
 	constructor(private engine?: GridEngine<TRowData>) {}
+
+	public setRuntimeStats(stats: RenderRuntimeStats): void {
+		this.runtimeStats = stats;
+	}
 
 	private ensureHiddenContainer(): HTMLDivElement | null {
 		if (!this.hiddenContainer && typeof document !== 'undefined') {
@@ -185,6 +198,9 @@ export class CustomRendererManager<TRowData = unknown> {
 		const newInstance: RendererInstance<TRowData> = {
 			rendererKey: params.rendererKey,
 			cellKey: params.cellKey,
+			rowSlotId: params.rowSlotId,
+			slotGeneration: params.slotGeneration,
+			cellRowBindingGeneration: params.cellRowBindingGeneration,
 			container,
 			value: params.value,
 			node: params.node,
@@ -200,9 +216,16 @@ export class CustomRendererManager<TRowData = unknown> {
 
 		this.removeSiblingContainers(newInstance.rendererKey, params.parentContainer, newInstance.container);
 		this.registerActive(newInstance);
+		if (this.runtimeStats) {
+			this.runtimeStats.reactMounts++;
+		}
 
 		this.onMountCellContent?.({
 			cellKey: params.cellKey,
+			rowSlotId: params.rowSlotId,
+			slotGeneration: params.slotGeneration,
+			cellRowBindingGeneration: params.cellRowBindingGeneration,
+			cellInstanceId: params.cellInstanceId,
 			container,
 			value: params.value,
 			node: params.node,
@@ -263,14 +286,16 @@ export class CustomRendererManager<TRowData = unknown> {
 		}
 
 		// Otherwise, destroy immediately
+		if (this.runtimeStats) {
+			this.runtimeStats.reactUnmounts++;
+		}
 		this.destroyInstance(instance);
 		return true;
 	}
 
 	/**
-	 * Phase 8: Flush deferred warm DOM moves in budgeted chunks after scroll idle.
-	 * This is where the actual DOM move to hiddenContainer happens for scroll-deferred
-	 * warm cache entries. Returns the number of moves performed.
+	 * Flush deferred warm DOM moves in budgeted chunks after scroll idle.
+	 * Returns the number of moves performed.
 	 */
 	public flushPendingWarmMoves(maxItems = 16): number {
 		// Containers were already moved to hiddenContainer in releaseInstance.
@@ -286,9 +311,8 @@ export class CustomRendererManager<TRowData = unknown> {
 	}
 
 	/**
-	 * Phase 8: Flush warm move budget — move deferred scroll-out containers to the hidden
-	 * container in budgeted chunks. This is the correct name; flushHydrationBudget is kept
-	 * as a compat alias for existing callers until they are updated.
+	 * Flush warm move budget — move deferred scroll-out containers to the hidden
+	 * container in budgeted chunks.
 	 */
 	public flushWarmMoveBudget(options: { maxItems?: number; deadlineMs?: number } = {}): { warmMovesFlushed: number } {
 		const maxItems = options.maxItems ?? 16;
@@ -359,11 +383,15 @@ export class CustomRendererManager<TRowData = unknown> {
 			instance.phase !== params.phase ||
 			instance.isScrolling !== params.isScrolling ||
 			instance.rendererKey !== params.rendererKey ||
-			instance.cellKey !== params.cellKey;
+			instance.cellKey !== params.cellKey ||
+			instance.cellRowBindingGeneration !== params.cellRowBindingGeneration;
 
 		this.unregisterActive(instance);
 		instance.rendererKey = params.rendererKey;
 		instance.cellKey = params.cellKey;
+		instance.rowSlotId = params.rowSlotId;
+		instance.slotGeneration = params.slotGeneration;
+		instance.cellRowBindingGeneration = params.cellRowBindingGeneration;
 		instance.value = params.value;
 		instance.node = params.node;
 		instance.col = params.col;
@@ -384,8 +412,13 @@ export class CustomRendererManager<TRowData = unknown> {
 		this.registerActive(instance);
 
 		if (needsUpdate) {
+			if (this.runtimeStats) {
+				this.runtimeStats.reactRefreshes++;
+			}
 			this.onMountCellContent?.({
 				cellKey: params.cellKey,
+				rowSlotId: params.rowSlotId,
+				slotGeneration: params.slotGeneration,
 				container: instance.container,
 				value: params.value,
 				node: params.node,
@@ -433,6 +466,8 @@ export class CustomRendererManager<TRowData = unknown> {
 				cellKey: instance.cellKey,
 				container: instance.container,
 				flushSync: false,
+				rowSlotId: instance.rowSlotId,
+				slotGeneration: instance.slotGeneration,
 			});
 		}
 		delete instance.container.dataset.rendererKey;

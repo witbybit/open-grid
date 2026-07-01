@@ -1,27 +1,40 @@
 import type { InvalidationFrame } from './invalidationManager.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import { asSelectableDataRowModel } from '../rowModel.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
-import { computeGridLayoutPlan, getRightPinnedLaneScreenLeft, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
+import { computeGridLayoutPlan, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { compileStyleRules, evaluateHeaderCellStyleRules } from '../styling/styleRules.js';
+import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 
 export class HeaderRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
 	private readonly columnInteractionsGetter: () => ColumnInteractionController<TRowData>;
 	private readonly showHeaderMenu: (cell: HTMLElement, colField: string) => void;
 
-	// Keyed by "${depth}:${colStart}" to support multi-band group headers
+	// Keyed by cell.id — leaf: column field; group: "grp:depth:firstField:lastField".
+	// Stable across pin/unpin so the DOM element is relocated rather than destroyed+recreated.
 	private headerCells = new Map<string, HTMLDivElement>();
 	private headerLayer: HTMLDivElement | null = null;
 	private headerLeftLayer: HTMLDivElement | null = null;
 	private headerRightLayer: HTMLDivElement | null = null;
 
-	public lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
-	private lastHeaderScrollLeft = 0;
-	private lastSyncedViewportWidth = -1;
-	private lastHeaderLeftTransform = '';
-	private lastHeaderRightLeft = -1;
-	private lastHeaderRightTransform = '';
+	private getSelectableDataRowIds(scope: import('../api/GridApi.js').RowSelectionScope): string[] {
+		const rowModel = this.engine.getRowModel();
+		if (!rowModel) return [];
+		const selectableRowModel = asSelectableDataRowModel(rowModel);
+		if (selectableRowModel) return selectableRowModel.getSelectableDataRowIds(scope);
+		const ids: string[] = [];
+		const vCount = rowModel.getVisualRowCount();
+		for (let i = 0; i < vCount; i++) {
+			const row = rowModel.getVisualRow(i);
+			if (row?.kind === 'data') ids.push(row.rowId);
+		}
+		return ids;
+	}
+
+	public lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1, topologyVersion: -1 };
+	private lastTopologyVersion = -1;
 	private readonly renderedHeaderScratch = new Set<string>();
 
 	constructor(
@@ -53,12 +66,8 @@ export class HeaderRenderer<TRowData = unknown> {
 			cell.remove();
 		}
 		this.headerCells.clear();
-		this.lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1 };
-		this.lastSyncedViewportWidth = -1;
-		this.lastHeaderScrollLeft = 0;
-		this.lastHeaderLeftTransform = '';
-		this.lastHeaderRightLeft = -1;
-		this.lastHeaderRightTransform = '';
+		this.lastHeaderVisibleRange = { startIdx: -1, endIdx: -1, pinLeft: -1, pinRight: -1, colCount: -1, topologyVersion: -1 };
+		this.lastTopologyVersion = -1;
 	}
 
 	public sync(_frame: InvalidationFrame): void {
@@ -69,58 +78,21 @@ export class HeaderRenderer<TRowData = unknown> {
 		this.syncVisibleHeaders(true, layoutPlan ?? computeGridLayoutPlan(this.engine));
 	}
 
-	public syncScrollLeft(layoutPlan: GridLayoutPlan): void {
-		const scrollLeft = layoutPlan.viewport.scrollLeft;
-		const viewportClientWidth = layoutPlan.viewport.clientWidth;
-		if (scrollLeft === this.lastHeaderScrollLeft && viewportClientWidth === this.lastSyncedViewportWidth) {
-			return;
-		}
-		this.lastHeaderScrollLeft = scrollLeft;
-		this.lastSyncedViewportWidth = viewportClientWidth;
-		this.syncPinnedLayerPositions(layoutPlan);
-	}
-
-	private syncPinnedLayerPositions(layoutPlan: GridLayoutPlan): void {
-		const { pinLeftCount, pinRightCount } = layoutPlan.columns;
-		const scrollLeft = layoutPlan.viewport.scrollLeft;
-		// Single source of truth for the right-lane origin (Plan 039 Phase 4).
-		const pinRightBaseLeft = layoutPlan.columns.lanes.right.baseLeft;
-
-		if (this.headerLeftLayer) {
-			const transform = pinLeftCount > 0 ? `translate3d(${scrollLeft}px, 0, 0)` : '';
-			if (this.lastHeaderLeftTransform !== transform) {
-				this.lastHeaderLeftTransform = transform;
-				this.headerLeftLayer.style.transform = transform;
-			}
-		}
-
-		if (this.headerRightLayer && pinRightCount > 0) {
-			if (this.lastHeaderRightLeft !== pinRightBaseLeft) {
-				this.lastHeaderRightLeft = pinRightBaseLeft;
-				this.headerRightLayer.style.left = `${pinRightBaseLeft}px`;
-			}
-			const rightScreenLeft = getRightPinnedLaneScreenLeft(layoutPlan);
-			const transform = `translate3d(${scrollLeft + rightScreenLeft - pinRightBaseLeft}px, 0, 0)`;
-			if (this.lastHeaderRightTransform !== transform) {
-				this.lastHeaderRightTransform = transform;
-				this.headerRightLayer.style.transform = transform;
-			}
-		}
-	}
-
 	public syncVisibleColumnRange(layoutPlan: GridLayoutPlan, range?: { startIdx: number; endIdx: number }): boolean {
 		const band = layoutPlan.headerBands[0];
 		const colCount = band?.cells.length ?? 0;
 		const { pinLeftCount: pinLeft, pinRightCount: pinRight } = layoutPlan.columns;
 		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
 		const colEnd = range?.endIdx ?? layoutPlan.columns.colEnd;
+		const topologyVersion = layoutPlan.columnTopology.version;
 
 		if (
 			colStart === this.lastHeaderVisibleRange.startIdx &&
 			colEnd === this.lastHeaderVisibleRange.endIdx &&
 			pinLeft === this.lastHeaderVisibleRange.pinLeft &&
 			pinRight === this.lastHeaderVisibleRange.pinRight &&
-			colCount === this.lastHeaderVisibleRange.colCount
+			colCount === this.lastHeaderVisibleRange.colCount &&
+			topologyVersion === this.lastTopologyVersion
 		) {
 			return false;
 		}
@@ -157,9 +129,6 @@ export class HeaderRenderer<TRowData = unknown> {
 		const colCount = leafBand.cells.length;
 		const colStart = range?.startIdx ?? layoutPlan.columns.colStart;
 		const colEnd = range?.endIdx ?? layoutPlan.columns.colEnd;
-		const pinRightBaseLeft = layoutPlan.columns.lanes.right.baseLeft;
-
-		this.syncPinnedLayerPositions(layoutPlan);
 
 		if (
 			!forceRepaint &&
@@ -167,7 +136,8 @@ export class HeaderRenderer<TRowData = unknown> {
 			colEnd === this.lastHeaderVisibleRange.endIdx &&
 			pinLeftCount === this.lastHeaderVisibleRange.pinLeft &&
 			pinRightCount === this.lastHeaderVisibleRange.pinRight &&
-			colCount === this.lastHeaderVisibleRange.colCount
+			colCount === this.lastHeaderVisibleRange.colCount &&
+			layoutPlan.columnTopology.version === this.lastHeaderVisibleRange.topologyVersion
 		) {
 			return;
 		}
@@ -176,7 +146,9 @@ export class HeaderRenderer<TRowData = unknown> {
 		rendered.clear();
 
 		const renderCell = (cell: HeaderCellLayout) => {
-			const cellKey = `${cell.depth}:${cell.colStart}`;
+			// cell.id is stable across pin/unpin: column field for leaves,
+			// "grp:depth:firstField:lastField" for group spans.
+			const cellKey = cell.id;
 
 			let headerCell = this.headerCells.get(cellKey);
 			if (!headerCell) {
@@ -185,8 +157,9 @@ export class HeaderRenderer<TRowData = unknown> {
 			}
 			rendered.add(cellKey);
 
+			// cell.left is lane-relative for all three lanes (WS10). No per-lane subtraction needed.
 			let className = cell.isLeaf ? 'og-header-cell' : 'og-header-cell og-header-group-cell';
-			let cellLeft = cell.left;
+			const cellLeft = cell.left;
 			let targetLayer = this.headerLayer;
 
 			if (cell.pinned === 'left') {
@@ -194,7 +167,6 @@ export class HeaderRenderer<TRowData = unknown> {
 				targetLayer = this.headerLeftLayer;
 			} else if (cell.pinned === 'right') {
 				className += ' og-header-cell-pinned-right';
-				cellLeft = cell.left - pinRightBaseLeft;
 				targetLayer = this.headerRightLayer;
 			}
 
@@ -219,8 +191,8 @@ export class HeaderRenderer<TRowData = unknown> {
 					className += ' og-header-cell-col-focus';
 
 				if (headerCell.className !== className) headerCell.className = className;
-				// Live column-reorder preview (Plan 047): slide this header to its previewed
-				// post-drop position. Folded into the positioning transform; the existing
+				// Live column-reorder preview: slide this header to its previewed post-drop
+				// position. Folded into the positioning transform; the existing
 				// `.og-header-cell-movable { transition: transform }` makes it glide + settle.
 				const shiftedLeft = cellLeft + columnInteractions.getColumnShift(cell.colStart);
 				const nextTransform = isDraggingThis ? `translate3d(${shiftedLeft}px, -2px, 0) scale(1.035)` : `translate3d(${shiftedLeft}px, 0, 0)`;
@@ -274,7 +246,7 @@ export class HeaderRenderer<TRowData = unknown> {
 							if ((e.target as HTMLInputElement).checked) {
 								this.engine.selectAllDataRows('headerCheckbox', scope);
 							} else {
-								const ids = this.engine.getRowModel()?.getSelectableDataRowIds?.(scope) ?? [];
+								const ids = this.getSelectableDataRowIds(scope);
 								if (ids.length > 0) this.engine.deselectRowIds(ids, 'headerCheckbox');
 								else this.engine.clearRowSelection('headerCheckbox');
 							}
@@ -282,20 +254,8 @@ export class HeaderRenderer<TRowData = unknown> {
 						if (textSpan) textSpan.textContent = '';
 						headerCell.insertBefore(checkbox, textSpan);
 					}
-					const rowModel = this.engine.getRowModel();
 					const scope = state.rowSelection?.selectAllScope ?? 'page';
-					const scopedIds =
-						rowModel?.getSelectableDataRowIds?.(scope) ??
-						(() => {
-							const ids: string[] = [];
-							if (!rowModel) return ids;
-							const vCount = rowModel.getVisualRowCount();
-							for (let i = 0; i < vCount; i++) {
-								const row = rowModel.getVisualRow(i);
-								if (row?.kind === 'data') ids.push(row.rowId);
-							}
-							return ids;
-						})();
+					const scopedIds = this.getSelectableDataRowIds(scope);
 					const totalDataRows = scopedIds.length;
 					const scopedSet = new Set(scopedIds);
 					const selectedCount = state.selectedRowIds.filter((rowId) => scopedSet.has(rowId)).length;
@@ -356,6 +316,7 @@ export class HeaderRenderer<TRowData = unknown> {
 
 			if (headerCell.parentNode !== targetLayer) {
 				targetLayer!.appendChild(headerCell);
+				this.engine.instrumentation.increment(GridMetric.HEADER_VIEW_RELOCATED);
 			}
 		};
 
@@ -393,14 +354,17 @@ export class HeaderRenderer<TRowData = unknown> {
 			}
 		}
 
-		this.lastHeaderScrollLeft = layoutPlan.viewport.scrollLeft;
-		this.lastSyncedViewportWidth = layoutPlan.viewport.clientWidth;
+		if (layoutPlan.columnTopology.version !== this.lastTopologyVersion) {
+			this.engine.instrumentation.increment(GridMetric.TOPOLOGY_VERSION_CHANGED);
+		}
+		this.lastTopologyVersion = layoutPlan.columnTopology.version;
 		this.lastHeaderVisibleRange = {
 			startIdx: colStart,
 			endIdx: colEnd,
 			pinLeft: pinLeftCount,
 			pinRight: pinRightCount,
 			colCount,
+			topologyVersion: layoutPlan.columnTopology.version,
 		};
 	}
 

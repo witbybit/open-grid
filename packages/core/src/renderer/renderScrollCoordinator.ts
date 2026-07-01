@@ -1,6 +1,13 @@
-import { defaultGridScheduler } from './gridScheduler.js';
-import { applyRenderWindowRuntimeLimits, computeRenderWindowInto, sameRenderedWindow, type RenderWindow } from './renderWindow.js';
+import { type GridScheduler } from './gridScheduler.js';
+import {
+	applyRenderWindowRuntimeLimits,
+	computeRenderWindowInto,
+	sameRenderedWindow,
+	sameVisibleContentWindow,
+	type RenderWindow,
+} from './renderWindow.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import type { OverlayRenderer } from './overlayRenderer.js';
 import type { PortalMountManager } from './portalMountManager.js';
@@ -13,19 +20,42 @@ import type { FloatingFilterRenderer } from './floatingFilterRenderer.js';
 import type { StickyGroupRenderer } from './stickyGroupRenderer.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
-import { compileStyleRules } from '../styling/styleRules.js';
+import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
+import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
+import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
+import type { InternalColumnDef } from '../columnDef.js';
+import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
+
+function isCellSelected(rowIndex: number, colIndex: number, selectionBounds: GridCellRangeBounds | null | undefined): boolean {
+	return (
+		!!selectionBounds &&
+		rowIndex >= selectionBounds.minRow &&
+		rowIndex <= selectionBounds.maxRow &&
+		colIndex >= selectionBounds.minCol &&
+		colIndex <= selectionBounds.maxCol
+	);
+}
+
+function isCellFocused(rowId: string, colField: string, focusedCell: GridCellPointer | null | undefined): boolean {
+	return focusedCell?.rowId === rowId && focusedCell?.colField === colField;
+}
 
 export interface RenderScrollCoordinatorState<TRowData = unknown> {
-	scrollEndRafId: number | null;
-	scrollEndQuietFrames: number;
-	scrollEndTickerActive: boolean;
 	viewportDirtyAfterScroll: boolean;
 	flushPendingAfterScroll: boolean;
 	needsPostScrollPortalFlush: boolean;
 	portalFlushScheduled: boolean;
+	prewarmScheduled: boolean;
+	prewarmTimer: number | null;
+	prewarmRequest: { visibleRowStart: number; visibleRowEnd: number; visibleColStart: number; visibleColEnd: number } | null;
+	lastPrewarmRequest: { visibleRowStart: number; visibleRowEnd: number; visibleColStart: number; visibleColEnd: number } | null;
 	postScrollDecorationScheduled: boolean;
 	postScrollDecorationTimer: number | null;
+	postScrollFidelityScheduled: boolean;
+	postScrollFidelityTimer: number | null;
+	/** scrollEpoch captured when scheduleBudgetedFidelityDecoration was last called. */
+	fidelityEpoch: number;
 	cachedMaxScrollLeft: number;
 	cachedTotalWidth: number;
 	cachedTotalHeight: number;
@@ -36,6 +66,10 @@ export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	activeRenderWindowBufIdx: number;
 	portalFlushBudget: number;
 	postScrollDecorationBudget: number;
+	postScrollFidelityBudget: number;
+	scrollPrewarmBudget: number;
+	scrollPrewarmRowPadding: number;
+	scrollPrewarmColPadding: number;
 }
 
 export interface RenderScrollCoordinatorDeps<TRowData = unknown> {
@@ -48,6 +82,7 @@ export interface RenderScrollCoordinatorDeps<TRowData = unknown> {
 	stickyGroupRenderer: StickyGroupRenderer<TRowData>;
 	portalMountManager: PortalMountManager<TRowData>;
 	frameCoordinator: FrameCoordinator;
+	gridScheduler: GridScheduler;
 	requestScrollFrame: () => void;
 	layoutTransition: LayoutTransitionController<TRowData>;
 	renderStats: RenderRuntimeStats;
@@ -87,7 +122,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		if (!changed) return;
 		this.markScrolling();
 		this.deps.requestScrollFrame();
-		this.scheduleScrollEnd();
+		// Scroll-end detection is now owned by FrameCoordinator (single RAF loop).
 	};
 
 	public updateCachedGeometryBoundsFromState(defaultColWidth: number, defaultRowHeight: number): void {
@@ -113,9 +148,14 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const nextWindow = applyRenderWindowRuntimeLimits(candidateBuf, state.runtimeLimits);
 		const layoutPlan = this.deps.syncLayoutPlan(nextWindow);
 
-		if (sameRenderedWindow(this.deps.rowRenderer.currentWindow, nextWindow)) {
+		if (
+			sameRenderedWindow(this.deps.rowRenderer.currentWindow, nextWindow) &&
+			sameVisibleContentWindow(this.deps.rowRenderer.currentWindow, nextWindow)
+		) {
 			this.deps.renderStats.scrollFrames++;
 			this.deps.renderStats.sameWindowBailouts = (this.deps.renderStats.sameWindowBailouts || 0) + 1;
+			// Phase is already scroll-frame (set by FrameCoordinator before calling this callback).
+			// FrameCoordinator will transition to post-scroll in the finally block after we return.
 			this.syncCheapScrollOnly(layoutPlan);
 			return;
 		}
@@ -124,7 +164,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.state.activeRenderWindowBufIdx = candidateIdx;
 		}
 
-		this.deps.runtimeState.transitionTo('scroll-frame');
+		// Phase is already scroll-frame (set by FrameCoordinator before calling this callback).
 		this.deps.rowRenderer.currentScrollCellsPatched = 0;
 		this.deps.rowRenderer.currentScrollRowsRecycled = 0;
 		this.deps.rowRenderer.currentScrollRowsVisited = 0;
@@ -133,29 +173,38 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.deps.rowRenderer.currentScrollCellsWritten = 0;
 		this.deps.rowRenderer.currentScrollPortalOps = 0;
 		this.deps.renderStats.scrollFrames++;
-		const startStateReads = this.deps.engine.stateManager.debugGetStateCount;
+		const startStateReads = this.deps.engine.instrumentation.get(GridMetric.STATE_READS);
 		try {
 			const plan = this.deps.engine.columns.getCompiledPlan();
 			const scrollCtx = this.state.scrollCtx;
 			scrollCtx.state = state;
 			scrollCtx.rowVersions = this.deps.engine.rowVersions;
 			scrollCtx.globalVersion = state.globalVersion;
+			scrollCtx.insightVersion = this.deps.engine.insights.getVersion();
 			scrollCtx.styleVersion = this.deps.rowRenderer.styleVersion;
 			scrollCtx.loadingVersion = this.deps.rowRenderer.loadingVersion;
+			scrollCtx.selectionVersion = this.deps.engine.selectionVersion;
+			scrollCtx.styleChangedDuringScroll = this.deps.rowRenderer.styleVersion !== this.deps.rowRenderer.scrollStartStyleVersion;
+			scrollCtx.loadingChangedDuringScroll = this.deps.rowRenderer.loadingVersion !== this.deps.rowRenderer.scrollStartLoadingVersion;
+			scrollCtx.selectionChangedDuringScroll = this.deps.engine.selectionVersion !== this.deps.rowRenderer.scrollStartSelectionVersion;
+			scrollCtx.globalChangedDuringScroll = state.globalVersion !== this.deps.rowRenderer.scrollStartGlobalVersion;
 			scrollCtx.activeEdit = state.activeEdit;
 			scrollCtx.hasDeferredCellStyleRules = compileStyleRules(state.styleRules).hasCellRules;
 			scrollCtx.hasCustomRenderers = plan.hasCustomRenderers;
+			scrollCtx.hasInsightDecorations = this.deps.engine.insights.size > 0;
 			scrollCtx.plan = plan;
-			scrollCtx.visibleColRange.startIdx = nextWindow.colStart;
-			scrollCtx.visibleColRange.endIdx = nextWindow.colEnd;
+			scrollCtx.visibleRowRange.startIdx = nextWindow.visibleRowStart ?? nextWindow.rowStart;
+			scrollCtx.visibleRowRange.endIdx = nextWindow.visibleRowEnd ?? nextWindow.rowEnd;
+			scrollCtx.visibleColRange.startIdx = nextWindow.visibleColStart ?? nextWindow.colStart;
+			scrollCtx.visibleColRange.endIdx = nextWindow.visibleColEnd ?? nextWindow.colEnd;
 			const visibleColRange = scrollCtx.visibleColRange;
 			scrollCtx.focusedCell = state.selection.focus;
 			scrollCtx.selectionBounds = state.selection.bounds ?? undefined;
 
 			this.deps.recycleViewport(true, scrollCtx, nextWindow);
+			this.scheduleApproachBandPrewarm(nextWindow);
 			this.deps.stickyGroupRenderer.sync(layoutPlan);
 
-			this.deps.headerRenderer.syncScrollLeft(layoutPlan);
 			this.deps.floatingFilterRenderer.syncScrollLeft(layoutPlan);
 			const didSyncRange = this.deps.headerRenderer.syncVisibleColumnRange(layoutPlan, visibleColRange);
 			if (didSyncRange) {
@@ -164,7 +213,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.deps.renderStats.overlayCheapSyncsDuringScroll++;
 			this.deps.overlayRenderer.syncScrollPosition(this.state.cachedHasSelectionOverlay);
 		} finally {
-			const stateReadsInFrame = this.deps.engine.stateManager.debugGetStateCount - startStateReads;
+			const stateReadsInFrame = this.deps.engine.instrumentation.get(GridMetric.STATE_READS) - startStateReads;
 			this.deps.renderStats.stateReadsDuringScroll += stateReadsInFrame;
 			if (this.deps.renderStats.cellsPatchedPerScrollFrame.length >= 1024) {
 				this.deps.renderStats.cellsPatchedPerScrollFrame.length = 0;
@@ -174,7 +223,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			}
 			this.deps.renderStats.cellsPatchedPerScrollFrame.push(this.deps.rowRenderer.currentScrollCellsPatched);
 			this.deps.renderStats.rowsRecycledPerScrollFrame.push(this.deps.rowRenderer.currentScrollRowsRecycled);
-			this.deps.runtimeState.transitionTo('post-scroll');
+			// FrameCoordinator transitions to post-scroll in its finally block after this callback returns.
 		}
 	};
 
@@ -182,10 +231,20 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const wasScrolling = this.deps.runtimeState.isScrolling();
 		const phase = this.deps.runtimeState.phase;
 		if (!wasScrolling) {
+			const state = this.deps.engine.stateManager.getState();
+			this.deps.rowRenderer.scrollStartStyleVersion = this.deps.rowRenderer.styleVersion;
+			this.deps.rowRenderer.scrollStartLoadingVersion = this.deps.rowRenderer.loadingVersion;
+			this.deps.rowRenderer.scrollStartSelectionVersion = this.deps.engine.selectionVersion;
+			this.deps.rowRenderer.scrollStartGlobalVersion = state.globalVersion;
 			this.deps.viewportRenderer.setScrollingClass(true);
 			this.deps.runtimeState.transitionTo('scroll-pending');
 		} else if (phase === 'post-scroll') {
 			// New scroll event during post-scroll window: re-enter scroll-pending (increments scrollEpoch).
+			const state = this.deps.engine.stateManager.getState();
+			this.deps.rowRenderer.scrollStartStyleVersion = this.deps.rowRenderer.styleVersion;
+			this.deps.rowRenderer.scrollStartLoadingVersion = this.deps.rowRenderer.loadingVersion;
+			this.deps.rowRenderer.scrollStartSelectionVersion = this.deps.engine.selectionVersion;
+			this.deps.rowRenderer.scrollStartGlobalVersion = state.globalVersion;
 			this.deps.runtimeState.transitionTo('scroll-pending');
 		}
 		this.clearPostScrollDecorationTimer();
@@ -194,11 +253,9 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	}
 
 	public finishScrolling(): void {
-		this.clearScrollEndTimer();
+		// FrameCoordinator has already transitioned to idle before calling this.
 		this.deps.viewportRenderer.setScrollingClass(false);
-		this.deps.runtimeState.transitionTo('idle');
 		this.deps.rowRenderer.programmaticScrollCell = null;
-		this.flushPendingPortalReleasesAfterScroll();
 		this.state.needsPostScrollPortalFlush = this.state.needsPostScrollPortalFlush || this.deps.portalMountManager.getDeferredCount() > 0;
 		if (this.state.needsPostScrollPortalFlush) {
 			this.scheduleBudgetedPortalFlush();
@@ -222,34 +279,10 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		}
 	}
 
-	public clearScrollEndTimer(): void {
-		this.state.scrollEndTickerActive = false;
-		if (this.state.scrollEndRafId !== null) {
-			defaultGridScheduler.cancelRaf(this.state.scrollEndRafId);
-			this.state.scrollEndRafId = null;
-		}
-	}
-
-	public scheduleScrollEnd(): void {
-		this.state.scrollEndQuietFrames = 0;
-		if (!this.state.scrollEndTickerActive) {
-			this.state.scrollEndTickerActive = true;
-			this.state.scrollEndRafId = defaultGridScheduler.raf(this.scrollEndTick);
-		}
-	}
-
-	public flushPendingPortalReleasesAfterScroll(): void {
-		if (this.deps.rowRenderer.pendingPortalReleasesAfterScroll.size === 0) return;
-		const pending = Array.from(this.deps.rowRenderer.pendingPortalReleasesAfterScroll.values());
-		this.deps.rowRenderer.pendingPortalReleasesAfterScroll.clear();
-		this.deps.portalMountManager.releaseCells(pending, false);
-		this.state.needsPostScrollPortalFlush = true;
-	}
-
 	public scheduleBudgetedPortalFlush(): void {
 		if (this.state.portalFlushScheduled) return;
 		this.state.portalFlushScheduled = true;
-		defaultGridScheduler.idle((deadline) => {
+		this.deps.gridScheduler.idle((deadline) => {
 			this.state.portalFlushScheduled = false;
 			if (this.deps.runtimeState.isScrolling()) {
 				this.state.needsPostScrollPortalFlush = true;
@@ -270,35 +303,483 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 
 	public clearPostScrollDecorationTimer(): void {
 		if (this.state.postScrollDecorationTimer !== null) {
-			defaultGridScheduler.cancelIdle(this.state.postScrollDecorationTimer);
+			this.deps.gridScheduler.cancelIdle(this.state.postScrollDecorationTimer);
 			this.state.postScrollDecorationTimer = null;
 		}
 		this.state.postScrollDecorationScheduled = false;
+		if (this.state.postScrollFidelityTimer !== null) {
+			this.deps.gridScheduler.cancelIdle(this.state.postScrollFidelityTimer);
+			this.state.postScrollFidelityTimer = null;
+		}
+		this.state.postScrollFidelityScheduled = false;
+	}
+
+	private scheduleApproachBandPrewarm(nextWindow: RenderWindow): void {
+		if (!this.deps.gridScheduler.supportsIdle()) return;
+		this.state.prewarmRequest = {
+			visibleRowStart: nextWindow.visibleRowStart ?? nextWindow.rowStart,
+			visibleRowEnd: nextWindow.visibleRowEnd ?? nextWindow.rowEnd,
+			visibleColStart: nextWindow.visibleColStart ?? nextWindow.colStart,
+			visibleColEnd: nextWindow.visibleColEnd ?? nextWindow.colEnd,
+		};
+		if (this.state.prewarmScheduled) return;
+		this.state.prewarmScheduled = true;
+		this.state.prewarmTimer = this.deps.gridScheduler.idle((deadline) => {
+			this.state.prewarmTimer = null;
+			this.state.prewarmScheduled = false;
+			this.deps.renderStats.prewarmPasses++;
+			this.runApproachBandPrewarm(deadline);
+		});
+	}
+
+	private runApproachBandPrewarm(deadline?: { timeRemaining(): number }): void {
+		const request = this.state.prewarmRequest;
+		if (!request) return;
+		const rowModel = this.deps.engine.getVisualRowModel();
+		if (!rowModel) return;
+		const state = this.deps.engine.stateManager.getState();
+		const compiledPlan = this.deps.engine.columns.getCompiledPlan();
+		const focusedCell = state.selection.focus;
+		const selectionBounds = state.selection.bounds;
+		const compiledStyleRules = compileStyleRules(state.styleRules);
+
+		const columns = this.deps.engine.columns.getDisplayedColumns();
+		const rowCount = rowModel.getVisualRowCount();
+		const colCount = columns.length;
+		if (rowCount === 0 || colCount === 0) return;
+
+		// Bias the prewarm ring toward the direction of travel so fast scroll arrives at
+		// prewarmed snapshots. The leading edge gets 2× the base padding; the trailing edge gets 1×.
+		const base = this.state.scrollPrewarmRowPadding;
+		const baseCol = this.state.scrollPrewarmColPadding;
+		const prev = this.state.lastPrewarmRequest;
+		const rowDelta = prev ? request.visibleRowStart - prev.visibleRowStart : 0;
+		const colDelta = prev ? request.visibleColStart - prev.visibleColStart : 0;
+		const rowBefore = rowDelta > 0 ? base : rowDelta < 0 ? base * 2 : base;
+		const rowAfter = rowDelta > 0 ? base * 2 : rowDelta < 0 ? base : base;
+		const colBefore = colDelta > 0 ? baseCol : colDelta < 0 ? baseCol * 2 : baseCol;
+		const colAfter = colDelta > 0 ? baseCol * 2 : colDelta < 0 ? baseCol : baseCol;
+		this.state.lastPrewarmRequest = { ...request };
+
+		const leftColStart = Math.max(0, request.visibleColStart - colBefore);
+		const leftColEnd = Math.max(-1, request.visibleColStart - 1);
+		const rightColStart = Math.min(colCount, request.visibleColEnd + 1);
+		const rightColEnd = Math.min(colCount - 1, request.visibleColEnd + colAfter);
+		const topRowStart = Math.max(0, request.visibleRowStart - rowBefore);
+		const topRowEnd = Math.max(-1, request.visibleRowStart - 1);
+		const bottomRowStart = Math.min(rowCount, request.visibleRowEnd + 1);
+		const bottomRowEnd = Math.min(rowCount - 1, request.visibleRowEnd + rowAfter);
+
+		let workDone = 0;
+		const budget = this.state.scrollPrewarmBudget;
+		const canContinue = (): boolean => {
+			if (workDone >= budget) return false;
+			if (!deadline) return true;
+			return workDone === 0 || deadline.timeRemaining() > 1;
+		};
+		const recordWork = (): void => {
+			workDone++;
+		};
+		const hasFreshSnapshot = (rowId: string, colField: string): boolean => {
+			const snapshot = this.deps.engine.getCellDisplaySnapshot(rowId, colField);
+			if (!snapshot) return false;
+			return (
+				snapshot.rowVersion === (this.deps.engine.rowVersions.get(rowId) ?? -1) &&
+				snapshot.globalVersion === state.globalVersion &&
+				snapshot.insightVersion === this.deps.engine.insights.getVersion() &&
+				snapshot.styleVersion === this.deps.rowRenderer.styleVersion &&
+				snapshot.loadingVersion === this.deps.rowRenderer.loadingVersion &&
+				snapshot.selectionVersion === this.deps.engine.selectionVersion
+			);
+		};
+		const visitApproachBand = (visit: (rowIndex: number, colIndex: number) => boolean): void => {
+			for (let row = request.visibleRowStart; row <= request.visibleRowEnd && canContinue(); row++) {
+				for (let col = leftColStart; col <= leftColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+				for (let col = rightColStart; col <= rightColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+			}
+
+			for (let row = topRowStart; row <= topRowEnd && canContinue(); row++) {
+				for (let col = request.visibleColStart; col <= request.visibleColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+			}
+
+			for (let row = bottomRowStart; row <= bottomRowEnd && canContinue(); row++) {
+				for (let col = request.visibleColStart; col <= request.visibleColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+			}
+
+			// Corner cells: approach rows × approach columns — needed for diagonal scroll entry.
+			for (let row = topRowStart; row <= topRowEnd && canContinue(); row++) {
+				for (let col = leftColStart; col <= leftColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+				for (let col = rightColStart; col <= rightColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+			}
+			for (let row = bottomRowStart; row <= bottomRowEnd && canContinue(); row++) {
+				for (let col = leftColStart; col <= leftColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+				for (let col = rightColStart; col <= rightColEnd && canContinue(); col++) {
+					if (!visit(row, col)) return;
+				}
+			}
+		};
+
+		visitApproachBand((rowIndex, colIndex) => {
+			if (!canContinue()) return false;
+			const visualRow = rowModel.getVisualRow(rowIndex);
+			if (visualRow?.kind !== 'data') return true;
+			const col = columns[colIndex];
+			if (!col) return true;
+			const isCustomLive = compiledPlan.columnPlans[colIndex]?.mode === 'custom-live';
+			const rowId = visualRow.node.id;
+			// Carry frozenHtml across prewarm writes — drop it if row data changed.
+			const prewarmRowVersion = this.deps.engine.rowVersions.get(rowId) ?? -1;
+			const prewarmFrozenHtml =
+				(col as InternalColumnDef).cellRendererCapabilities?.scrollSnapshot === 'html'
+					? (() => {
+							const prev = this.deps.engine.cellDisplaySnapshots.get(rowId, col.field);
+							return prev?.rowVersion === prewarmRowVersion ? prev.frozenHtml : undefined;
+						})()
+					: undefined;
+			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
+			const shouldPrimeFormula = typeof rawValue === 'string' && rawValue.startsWith('=');
+			const hasRegisteredFormula = this.deps.engine.hasFormula(rowId, col.field);
+			const shouldPrimeDisplayValue = col.valueGetter || shouldPrimeFormula || hasRegisteredFormula || isCustomLive;
+			if (!shouldPrimeDisplayValue) return true;
+			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
+			const hasInsightDecorations = cellDecorations.length > 0;
+			const isFocused = isCellFocused(rowId, col.field, focusedCell);
+			const isSelected = isCellSelected(rowIndex, colIndex, selectionBounds);
+			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
+			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
+			const needsStyleSnapshot = compiledStyleRules.hasCellRules && visualRow.node.data !== null;
+			const cachedValue = this.deps.engine.getCachedDisplayValue(rowId, col.field);
+			const plainSnapshotEligible =
+				!hasInsightDecorations && !isFocused && !isSelected && !needsReadonlyEvaluation && !needsTooltipSnapshot && !needsStyleSnapshot;
+			const displayValue =
+				(col.valueGetter || hasRegisteredFormula) && cachedValue !== undefined
+					? cachedValue
+					: this.deps.engine.primeDisplayValue(rowId, col.field);
+			if (displayValue !== undefined) {
+				recordWork();
+				this.deps.renderStats.prewarmedDisplayValues++;
+				if (plainSnapshotEligible) {
+					const snapshotContentKind = isCustomLive && displayValue !== '' ? 'impostor' : displayValue !== '' ? 'text' : 'empty';
+					const snapshotContentMode = isCustomLive && displayValue !== '' ? 'fallback' : displayValue !== '' ? 'text' : 'empty';
+					this.deps.engine.cellDisplaySnapshots.set(
+						createCellDisplaySnapshot({
+							rowId,
+							colField: col.field,
+							rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
+							globalVersion: state.globalVersion,
+							insightVersion: this.deps.engine.insights.getVersion(),
+							styleVersion: this.deps.rowRenderer.styleVersion,
+							loadingVersion: this.deps.rowRenderer.loadingVersion,
+							selectionVersion: this.deps.engine.selectionVersion,
+							baseClassName: 'og-cell',
+							contentKind: snapshotContentKind,
+							contentMode: snapshotContentMode,
+							formattedValue: displayValue,
+							title: '',
+							frozenHtml: prewarmFrozenHtml,
+						})
+					);
+					this.deps.renderStats.prewarmedCellSnapshots++;
+				} else {
+					const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
+					let stateClassName = '';
+					if (isFocused) {
+						stateClassName += stateClassName ? ' og-cell-focused' : 'og-cell-focused';
+					}
+					if (isSelected) {
+						stateClassName += stateClassName ? ' og-cell-selected' : 'og-cell-selected';
+					}
+					if (needsReadonlyEvaluation) {
+						const isEditable = normalizeCapabilityResult(
+							col.canEdit!({ action: 'edit', row: visualRow.node.data, rowId, colField: col.field })
+						).allowed;
+						if (!isEditable) {
+							stateClassName += stateClassName ? ' og-cell-readonly' : 'og-cell-readonly';
+						}
+					}
+					if (needsStyleSnapshot) {
+						const styleScratch = this.deps.rowRenderer.cellClassScratch;
+						styleScratch.row = visualRow.node.data;
+						styleScratch.rowId = rowId;
+						styleScratch.rowIndex = rowIndex;
+						styleScratch.col = col;
+						styleScratch.colField = col.field;
+						styleScratch.colIndex = colIndex;
+						styleScratch.isFocused = isFocused;
+						styleScratch.isRowFocused = focusedCell?.rowId === rowId;
+						styleScratch.isRowSelected = isSelected;
+						styleScratch.isSelected = isSelected;
+						styleScratch.isEditing = false;
+						styleScratch.value = displayValue;
+						styleScratch.rawValue = rawValue ?? displayValue;
+						styleScratch.isLoading = false;
+						styleScratch.selection = state.selection;
+						const customCellClass = evaluateCellStyleRules(compiledStyleRules, col, visualRow.node.data, styleScratch);
+						if (customCellClass) stateClassName += stateClassName ? ` ${customCellClass}` : customCellClass;
+					}
+					const tooltipText =
+						col.tooltip !== undefined && visualRow.node.data !== null
+							? typeof col.tooltip === 'string'
+								? col.tooltip
+								: col.tooltip({
+										row: visualRow.node.data,
+										rowId,
+										colField: col.field,
+										value: rawValue ?? displayValue,
+									})
+							: null;
+					const snapshotContentKind = isCustomLive && displayValue !== '' ? 'impostor' : displayValue !== '' ? 'text' : 'empty';
+					const snapshotContentMode = isCustomLive && displayValue !== '' ? 'fallback' : displayValue !== '' ? 'text' : 'empty';
+					this.deps.engine.cellDisplaySnapshots.set(
+						createCellDisplaySnapshot({
+							rowId,
+							colField: col.field,
+							rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
+							globalVersion: state.globalVersion,
+							insightVersion: this.deps.engine.insights.getVersion(),
+							styleVersion: this.deps.rowRenderer.styleVersion,
+							loadingVersion: this.deps.rowRenderer.loadingVersion,
+							selectionVersion: this.deps.engine.selectionVersion,
+							baseClassName: 'og-cell',
+							stateClassName,
+							decorationClassName: decorationMetadata.classNameSuffix,
+							contentKind: snapshotContentKind,
+							contentMode: snapshotContentMode,
+							formattedValue: displayValue,
+							title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
+							validationError: decorationMetadata.validationError,
+							frozenHtml: prewarmFrozenHtml,
+						})
+					);
+					this.deps.renderStats.prewarmedCellSnapshots++;
+				}
+			}
+			return canContinue();
+		});
+
+		visitApproachBand((rowIndex, colIndex) => {
+			if (!canContinue()) return false;
+			const visualRow = rowModel.getVisualRow(rowIndex);
+			if (visualRow?.kind !== 'data') return true;
+			const col = columns[colIndex];
+			if (!col) return true;
+			const isCustomLive = compiledPlan.columnPlans[colIndex]?.mode === 'custom-live';
+			const rowId = visualRow.node.id;
+			if (hasFreshSnapshot(rowId, col.field)) return true;
+			// Carry frozenHtml across prewarm writes — drop it if row data changed.
+			const prewarmRowVersion = this.deps.engine.rowVersions.get(rowId) ?? -1;
+			const prewarmFrozenHtml =
+				(col as InternalColumnDef).cellRendererCapabilities?.scrollSnapshot === 'html'
+					? (() => {
+							const prev = this.deps.engine.cellDisplaySnapshots.get(rowId, col.field);
+							return prev?.rowVersion === prewarmRowVersion ? prev.frozenHtml : undefined;
+						})()
+					: undefined;
+			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
+			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
+			const hasInsightDecorations = cellDecorations.length > 0;
+			const isFocused = isCellFocused(rowId, col.field, focusedCell);
+			const isSelected = isCellSelected(rowIndex, colIndex, selectionBounds);
+			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
+			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
+			const needsStyleSnapshot = compiledStyleRules.hasCellRules && visualRow.node.data !== null;
+			const primedValue = this.deps.engine.getCachedDisplayValue(rowId, col.field);
+			const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
+			let stateClassName = '';
+			if (isFocused) {
+				stateClassName += stateClassName ? ' og-cell-focused' : 'og-cell-focused';
+			}
+			if (isSelected) {
+				stateClassName += stateClassName ? ' og-cell-selected' : 'og-cell-selected';
+			}
+			if (needsReadonlyEvaluation) {
+				const isEditable = normalizeCapabilityResult(
+					col.canEdit!({ action: 'edit', row: visualRow.node.data, rowId, colField: col.field })
+				).allowed;
+				if (!isEditable) {
+					stateClassName += stateClassName ? ' og-cell-readonly' : 'og-cell-readonly';
+				}
+			}
+			if (needsStyleSnapshot) {
+				const styleScratch = this.deps.rowRenderer.cellClassScratch;
+				styleScratch.row = visualRow.node.data;
+				styleScratch.rowId = rowId;
+				styleScratch.rowIndex = rowIndex;
+				styleScratch.col = col;
+				styleScratch.colField = col.field;
+				styleScratch.colIndex = colIndex;
+				styleScratch.isFocused = isFocused;
+				styleScratch.isRowFocused = focusedCell?.rowId === rowId;
+				styleScratch.isRowSelected = isSelected;
+				styleScratch.isSelected = isSelected;
+				styleScratch.isEditing = false;
+				styleScratch.value = primedValue;
+				styleScratch.rawValue = rawValue ?? primedValue;
+				styleScratch.isLoading = false;
+				styleScratch.selection = state.selection;
+				const customCellClass = evaluateCellStyleRules(compiledStyleRules, col, visualRow.node.data, styleScratch);
+				if (customCellClass) stateClassName += stateClassName ? ` ${customCellClass}` : customCellClass;
+			}
+			const tooltipText =
+				col.tooltip !== undefined && visualRow.node.data !== null
+					? typeof col.tooltip === 'string'
+						? col.tooltip
+						: col.tooltip({
+								row: visualRow.node.data,
+								rowId,
+								colField: col.field,
+								value: rawValue ?? primedValue,
+							})
+					: null;
+			recordWork();
+			const snapshotFormattedValue = primedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field);
+			const snapshotContentKind = isCustomLive && snapshotFormattedValue !== '' ? 'impostor' : snapshotFormattedValue !== '' ? 'text' : 'empty';
+			const snapshotContentMode = isCustomLive && snapshotFormattedValue !== '' ? 'fallback' : snapshotFormattedValue !== '' ? 'text' : 'empty';
+			this.deps.engine.cellDisplaySnapshots.set(
+				createCellDisplaySnapshot({
+					rowId,
+					colField: col.field,
+					rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
+					globalVersion: state.globalVersion,
+					insightVersion: this.deps.engine.insights.getVersion(),
+					styleVersion: this.deps.rowRenderer.styleVersion,
+					loadingVersion: this.deps.rowRenderer.loadingVersion,
+					selectionVersion: this.deps.engine.selectionVersion,
+					baseClassName: 'og-cell',
+					stateClassName,
+					decorationClassName: decorationMetadata.classNameSuffix,
+					contentKind: snapshotContentKind,
+					contentMode: snapshotContentMode,
+					formattedValue: snapshotFormattedValue,
+					title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
+					validationError: decorationMetadata.validationError,
+					frozenHtml: prewarmFrozenHtml,
+				})
+			);
+			this.deps.renderStats.prewarmedCellSnapshots++;
+			return canContinue();
+		});
+
+		if (workDone >= budget && !this.state.prewarmScheduled && this.deps.gridScheduler.supportsIdle()) {
+			this.state.prewarmScheduled = true;
+			this.state.prewarmTimer = this.deps.gridScheduler.idle((nextDeadline) => {
+				this.state.prewarmTimer = null;
+				this.state.prewarmScheduled = false;
+				this.deps.renderStats.prewarmPasses++;
+				this.runApproachBandPrewarm(nextDeadline);
+			});
+		}
 	}
 
 	public scheduleBudgetedDecoration(): void {
 		if (this.state.postScrollDecorationScheduled) return;
 		this.state.postScrollDecorationScheduled = true;
-		this.state.postScrollDecorationTimer = defaultGridScheduler.idle(() => {
+		this.state.postScrollDecorationTimer = this.deps.gridScheduler.idle(() => {
 			this.state.postScrollDecorationTimer = null;
 			this.state.postScrollDecorationScheduled = false;
 			if (this.deps.runtimeState.isScrolling()) {
 				return;
 			}
 			this.deps.renderStats.postScrollDecorationChunks++;
+			this.deps.renderStats.postScrollMotionChunks++;
 			this.deps.portalMountManager.beginCellReleaseTransaction();
 			let result;
 			try {
-				result = this.deps.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: this.state.postScrollDecorationBudget });
+				result = this.deps.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: this.state.postScrollDecorationBudget, lane: 'motion' });
 			} finally {
 				this.deps.portalMountManager.endCellReleaseTransaction();
 			}
 			if (result.processed > this.deps.renderStats.maxCellsDecoratedInOneChunk) {
 				this.deps.renderStats.maxCellsDecoratedInOneChunk = result.processed;
 			}
+			if (result.processed > this.deps.renderStats.maxMotionCellsDecoratedInOneChunk) {
+				this.deps.renderStats.maxMotionCellsDecoratedInOneChunk = result.processed;
+			}
 			this.deps.renderStats.cellsDecoratedAfterScroll += result.processed;
-			if (result.remaining > 0) {
+			this.deps.renderStats.motionCellsDecoratedAfterScroll += result.processed;
+			if (result.remainingMotion > 0) {
 				this.scheduleBudgetedDecoration();
+				return;
+			}
+			if (result.remainingFidelity > 0) {
+				// Run the first fidelity batch in this same idle slice so visible rich cells
+				// do not remain as impostors for an extra idle-to-idle gap.
+				this.deps.renderStats.postScrollDecorationChunks++;
+				this.deps.renderStats.postScrollFidelityChunks++;
+				this.deps.portalMountManager.beginCellReleaseTransaction();
+				let fidelityResult;
+				try {
+					fidelityResult = this.deps.rowRenderer.decorateDirtyCellsAfterScroll({
+						maxCells: this.state.postScrollFidelityBudget,
+						lane: 'fidelity',
+					});
+				} finally {
+					this.deps.portalMountManager.endCellReleaseTransaction();
+				}
+				if (fidelityResult.processed > this.deps.renderStats.maxCellsDecoratedInOneChunk) {
+					this.deps.renderStats.maxCellsDecoratedInOneChunk = fidelityResult.processed;
+				}
+				if (fidelityResult.processed > this.deps.renderStats.maxFidelityCellsDecoratedInOneChunk) {
+					this.deps.renderStats.maxFidelityCellsDecoratedInOneChunk = fidelityResult.processed;
+				}
+				this.deps.renderStats.cellsDecoratedAfterScroll += fidelityResult.processed;
+				this.deps.renderStats.fidelityCellsDecoratedAfterScroll += fidelityResult.processed;
+				if (fidelityResult.remainingFidelity > 0) {
+					this.scheduleBudgetedFidelityDecoration();
+				}
+			}
+		});
+	}
+
+	public scheduleBudgetedFidelityDecoration(): void {
+		if (this.state.postScrollFidelityScheduled) return;
+		this.state.postScrollFidelityScheduled = true;
+		this.state.fidelityEpoch = this.deps.runtimeState.scrollEpoch;
+		this.state.postScrollFidelityTimer = this.deps.gridScheduler.idle(() => {
+			this.state.postScrollFidelityTimer = null;
+			this.state.postScrollFidelityScheduled = false;
+			if (this.deps.runtimeState.isScrolling()) {
+				// A new scroll is active — reschedule so this work fires after it ends
+				// rather than silently dropping the remaining queue.
+				this.scheduleBudgetedFidelityDecoration();
+				return;
+			}
+			// If a new scroll epoch has completed since we were scheduled, the motion
+			// lane already ran a fresh decoration pass. Re-run under the current epoch.
+			this.state.fidelityEpoch = this.deps.runtimeState.scrollEpoch;
+			this.deps.renderStats.postScrollDecorationChunks++;
+			this.deps.renderStats.postScrollFidelityChunks++;
+			this.deps.portalMountManager.beginCellReleaseTransaction();
+			let result;
+			try {
+				result = this.deps.rowRenderer.decorateDirtyCellsAfterScroll({ maxCells: this.state.postScrollFidelityBudget, lane: 'fidelity' });
+			} finally {
+				this.deps.portalMountManager.endCellReleaseTransaction();
+			}
+			if (result.processed > this.deps.renderStats.maxCellsDecoratedInOneChunk) {
+				this.deps.renderStats.maxCellsDecoratedInOneChunk = result.processed;
+			}
+			if (result.processed > this.deps.renderStats.maxFidelityCellsDecoratedInOneChunk) {
+				this.deps.renderStats.maxFidelityCellsDecoratedInOneChunk = result.processed;
+			}
+			this.deps.renderStats.cellsDecoratedAfterScroll += result.processed;
+			this.deps.renderStats.fidelityCellsDecoratedAfterScroll += result.processed;
+			if (result.remainingFidelity > 0) {
+				this.scheduleBudgetedFidelityDecoration();
 			}
 		});
 	}
@@ -315,7 +796,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const scrollTop = layoutPlan.viewport.scrollTop;
 		const scrollLeft = layoutPlan.viewport.scrollLeft;
 
-		this.deps.headerRenderer.syncScrollLeft(layoutPlan);
 		this.deps.floatingFilterRenderer.syncScrollLeft(layoutPlan);
 		this.deps.renderStats.overlayCheapSyncsDuringScroll++;
 		this.deps.overlayRenderer.syncScrollPosition(this.state.cachedHasSelectionOverlay);
@@ -350,20 +830,4 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.deps.rowRenderer.currentWindow.scrollLeft = scrollLeft;
 		}
 	}
-
-	private readonly scrollEndTick = (): void => {
-		if (!this.deps.runtimeState.isScrolling()) {
-			this.state.scrollEndTickerActive = false;
-			this.state.scrollEndRafId = null;
-			return;
-		}
-		if (this.state.scrollEndQuietFrames >= 3) {
-			this.state.scrollEndTickerActive = false;
-			this.state.scrollEndRafId = null;
-			this.finishScrolling();
-			return;
-		}
-		this.state.scrollEndQuietFrames++;
-		this.state.scrollEndRafId = defaultGridScheduler.raf(this.scrollEndTick);
-	};
 }

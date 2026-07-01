@@ -19,7 +19,7 @@ describe('DefaultGridScheduler', () => {
 		const cb = vi.fn();
 		scheduler.microtask(cb);
 		expect(cb).not.toHaveBeenCalled();
-		await Promise.resolve(); // drain microtask queue
+		await Promise.resolve();
 		expect(cb).toHaveBeenCalledTimes(1);
 	});
 
@@ -29,7 +29,6 @@ describe('DefaultGridScheduler', () => {
 		delete globalThis.requestAnimationFrame;
 		const cb = vi.fn();
 		scheduler.raf(cb);
-		// Must NOT fire synchronously — a synchronous fallback breaks render batching.
 		expect(cb).not.toHaveBeenCalled();
 		vi.advanceTimersByTime(16);
 		expect(cb).toHaveBeenCalledTimes(1);
@@ -44,8 +43,6 @@ describe('DefaultGridScheduler', () => {
 			return 0;
 		});
 
-		// In the Node test environment window.requestIdleCallback doesn't exist —
-		// the scheduler must fall through to raf().
 		const idleCb = vi.fn();
 		scheduler.idle(idleCb);
 
@@ -89,51 +86,65 @@ describe('DefaultGridScheduler', () => {
 });
 
 describe('DefaultFrameCoordinator with GridScheduler', () => {
-	beforeEach(() => {
-		vi.useFakeTimers();
-	});
-
 	afterEach(() => {
-		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
 
-	it('multiple requestPaintFrame calls before microtask drains coalesce into one paint', async () => {
+	it('multiple requestPaintFrame calls before RAF flush coalesce into one paint', async () => {
 		const onPaintFrame = vi.fn();
 		const mockScheduler = new DefaultGridScheduler();
+		let capturedRaf: (() => void) | null = null;
 		vi.spyOn(mockScheduler, 'raf').mockImplementation((cb) => {
-			cb();
+			capturedRaf = cb;
 			return 0;
 		});
 
-		const coordinator = new DefaultFrameCoordinator({ onScrollFrame: vi.fn(), onPaintFrame, gridScheduler: mockScheduler });
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame,
+			onPostScrollWork: vi.fn(),
+			gridScheduler: mockScheduler,
+		});
 		coordinator.requestPaintFrame();
 		coordinator.requestPaintFrame();
 		coordinator.requestPaintFrame();
 
-		await Promise.resolve(); // drain microtask
+		expect(onPaintFrame).not.toHaveBeenCalled();
+		// Microtask coalescence: all three requests schedule one microtask batch
+		await Promise.resolve();
+		capturedRaf?.();
 		expect(onPaintFrame).toHaveBeenCalledTimes(1);
 	});
 
-	it('does not paint after destroy()', async () => {
+	it('does not paint after destroy() when the pending RAF never flushes', () => {
 		const onPaintFrame = vi.fn();
 		const mockScheduler = new DefaultGridScheduler();
+		const capturedRafs: Array<() => void> = [];
 		vi.spyOn(mockScheduler, 'raf').mockImplementation((cb) => {
-			cb();
-			return 0;
+			capturedRafs.push(cb);
+			return capturedRafs.length;
 		});
 
-		const coordinator = new DefaultFrameCoordinator({ onScrollFrame: vi.fn(), onPaintFrame, gridScheduler: mockScheduler });
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame,
+			onPostScrollWork: vi.fn(),
+			gridScheduler: mockScheduler,
+		});
 		coordinator.requestPaintFrame();
 		coordinator.destroy();
 
-		await Promise.resolve();
+		capturedRafs[0]?.();
 		expect(onPaintFrame).not.toHaveBeenCalled();
 	});
 
 	it('flushNowForTests() calls paint immediately without waiting for RAF', () => {
 		const onPaintFrame = vi.fn();
-		const coordinator = new DefaultFrameCoordinator({ onScrollFrame: vi.fn(), onPaintFrame });
+		const coordinator = new DefaultFrameCoordinator({
+			onScrollFrame: vi.fn(),
+			onPaintFrame,
+			onPostScrollWork: vi.fn(),
+		});
 		coordinator.flushNowForTests();
 		expect(onPaintFrame).toHaveBeenCalledTimes(1);
 	});

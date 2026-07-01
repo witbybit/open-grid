@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { GridStore, isEditableVisualRow, isFullWidthVisualRow } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { RowDataStore } from './rows/RowDataStore.js';
 import { RowPipeline } from './rows/RowPipeline.js';
 import { toDataVisualRowId, toDetailVisualRowId } from './rows/visualRowIds.js';
+import { RecordingGridInstrumentation, GridMetric } from './diagnostics/GridInstrumentation.js';
 
 interface TestRow {
 	id: string;
@@ -19,6 +20,22 @@ interface TestRow {
 function getRowNode<TData>(controller: ClientRowModelController<TData>, index: number) {
 	const vr = controller.getVisualRow(index);
 	return vr?.kind === 'data' ? vr.node : null;
+}
+
+function doUpdateRows<T>(ctrl: ClientRowModelController<T>, updater: (rows: T[]) => T[]): void {
+	const wr = ctrl.updateRowsStructurally(updater);
+	const allFields = new Set<string>();
+	if (wr.changedFieldsByRow) {
+		for (const fields of wr.changedFieldsByRow.values()) {
+			for (const f of fields) allFields.add(f);
+		}
+	}
+	ctrl.reconcileAfterDataWrite(wr, allFields.size > 0 ? ctrl.classifyFieldMutation(allFields) : 'value-only');
+}
+
+function doSetCellValue<T>(ctrl: ClientRowModelController<T>, rowId: string, field: string, value: unknown): void {
+	const wr = ctrl.writeCellValueStructurally(rowId, field, value);
+	ctrl.reconcileAfterDataWrite(wr, ctrl.classifyFieldMutation(new Set([field])));
 }
 
 describe('ClientRowModelController', () => {
@@ -39,8 +56,8 @@ describe('ClientRowModelController', () => {
 		});
 
 		expect(controller.getVisualRowCount()).toBe(2);
-		expect(controller.getVisualRowIndexById(toDataVisualRowId('1'))).toBe(0);
-		expect(controller.getVisualRowIndexById(toDataVisualRowId('2'))).toBe(1);
+		expect(controller.getVisualIndexById(toDataVisualRowId('1'))).toBe(0);
+		expect(controller.getVisualIndexById(toDataVisualRowId('2'))).toBe(1);
 
 		const visualRow1 = controller.getVisualRow(0);
 		expect(visualRow1?.kind).toBe('data');
@@ -63,7 +80,7 @@ describe('ClientRowModelController', () => {
 			columns: store.getState().columns,
 		});
 
-		controller.setCellValue('1', 'name', 'Alicia');
+		doSetCellValue(controller, '1', 'name', 'Alicia');
 		const node = controller.getRowNodeById('1');
 		expect(node?.data.name).toBe('Alicia');
 	});
@@ -83,7 +100,7 @@ describe('ClientRowModelController', () => {
 			columns: store.getState().columns,
 		});
 
-		controller.updateRows((rows) => rows.map((row) => (row.id === '2' ? { ...row, user: { name: 'Aaron' } } : row)));
+		doUpdateRows(controller, (rows) => rows.map((row) => (row.id === '2' ? { ...row, user: { name: 'Aaron' } } : row)));
 
 		expect(getRowNode(controller, 0)?.id).toBe('2');
 	});
@@ -110,7 +127,7 @@ describe('ClientRowModelController', () => {
 		expect(getRowNode(controller, 2)?.id).toBe('2'); // Charlie
 
 		// Edit Charlie to Aaron. The sort order should automatically update to Aaron (2), Alice (3), Bob (1)
-		controller.setCellValue('2', 'name', 'Aaron');
+		doSetCellValue(controller, '2', 'name', 'Aaron');
 
 		expect(getRowNode(controller, 0)?.id).toBe('2'); // Aaron (formerly Charlie)
 		expect(getRowNode(controller, 1)?.id).toBe('3'); // Alice
@@ -421,10 +438,48 @@ describe('ClientRowModelController', () => {
 		expect(controller.getVisualRowCount()).toBe(1);
 		expect(controller.getVisualRow(0)?.id).toBe('row:p');
 
-		store.setState({ expansion: { ...store.getState().expansion, treeRows: { p: true } } });
+		store.engine.stateManager.setState({ expansion: { ...store.getState().expansion, treeRows: { p: true } } });
 		controller.refresh('expansion');
 		expect(controller.getVisualRowCount()).toBe(2);
 		expect(controller.getVisualRow(1)?.id).toBe('row:c');
+	});
+
+	it('expandAllGroups expands tree parents in a single refresh result', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+			rowModelConfig: {
+				type: 'client',
+				treeData: {
+					enabled: true,
+					getParentId: (row) => row.parentId,
+					defaultExpanded: false,
+				},
+			},
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'root', name: 'Root', parentId: null },
+				{ id: 'child-a', name: 'Child A', parentId: 'root' },
+				{ id: 'child-b', name: 'Child B', parentId: 'root' },
+				{ id: 'grandchild', name: 'Grandchild', parentId: 'child-a' },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(controller.getVisualRowCount()).toBe(1);
+
+		const refresh = controller.expandAllGroups();
+		expect(refresh.changed).toBe(true);
+		expect(refresh.reason).toBe('expansion');
+		expect(refresh.previousRowCount).toBe(1);
+		expect(refresh.nextRowCount).toBe(4);
+		expect(store.getState().expansion.treeRows).toEqual({ root: true, 'child-a': true });
+		expect(controller.getVisualRowCount()).toBe(4);
+
+		controller.dispose();
+		store.destroy();
 	});
 
 	it('injects detail rows without changing rowIdToVisualIndex', () => {
@@ -449,6 +504,107 @@ describe('ClientRowModelController', () => {
 		expect(isEditableVisualRow(detail)).toBe(false);
 		expect(controller.getVisualIndexByRowId('1')).toBe(0);
 		expect(controller.getVisualIndexById('detail:1')).toBe(1);
+	});
+
+	it('assigns heights from getRowHeight callback to data visual rows on init', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', amount: 80 },
+				{ id: '2', name: 'Bob', amount: 120 },
+				{ id: '3', name: 'Charlie', amount: 60 },
+			],
+			columns: store.getState().columns,
+			getRowHeight: (row) => row.amount,
+		});
+
+		const vr0 = controller.getVisualRow(0);
+		const vr1 = controller.getVisualRow(1);
+		const vr2 = controller.getVisualRow(2);
+
+		expect(vr0?.kind === 'data' ? vr0.height : undefined).toBe(80);
+		expect(vr1?.kind === 'data' ? vr1.height : undefined).toBe(120);
+		expect(vr2?.kind === 'data' ? vr2.height : undefined).toBe(60);
+	});
+
+	it('preserves getRowHeight assignments after sort triggers a full refresh', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+			sortModel: [{ colId: 'name', sort: 'asc' }],
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Zara', amount: 60 },
+				{ id: '2', name: 'Ada', amount: 100 },
+			],
+			columns: store.getState().columns,
+			getRowHeight: (row) => row.amount,
+		});
+
+		// After sort asc: Ada (id:2) at index 0, Zara (id:1) at index 1
+		const vr0 = controller.getVisualRow(0);
+		const vr1 = controller.getVisualRow(1);
+
+		expect(vr0?.kind === 'data' ? vr0.rowId : null).toBe('2');
+		expect(vr0?.kind === 'data' ? vr0.height : undefined).toBe(100);
+		expect(vr1?.kind === 'data' ? vr1.rowId : null).toBe('1');
+		expect(vr1?.kind === 'data' ? vr1.height : undefined).toBe(60);
+	});
+
+	it('preserves getRowHeight assignments after filter triggers a full refresh', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+			filterModel: { name: { type: 'text', operator: 'contains', value: 'a' } },
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Ada', amount: 80 },
+				{ id: '2', name: 'Bob', amount: 50 },
+				{ id: '3', name: 'Clara', amount: 110 },
+			],
+			columns: store.getState().columns,
+			getRowHeight: (row) => row.amount,
+		});
+
+		// Filter keeps Ada and Clara (contain 'a')
+		expect(controller.getVisualRowCount()).toBe(2);
+		const vr0 = controller.getVisualRow(0);
+		const vr1 = controller.getVisualRow(1);
+
+		expect(vr0?.kind === 'data' ? vr0.height : undefined).toBe(80);
+		expect(vr1?.kind === 'data' ? vr1.height : undefined).toBe(110);
+	});
+
+	it('falls back to defaultRowHeight when getRowHeight returns undefined for a row', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+			defaultRowHeight: 32,
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice', amount: 50 },
+				{ id: '2', name: 'Bob' }, // no amount — getRowHeight returns undefined
+			],
+			columns: store.getState().columns,
+			getRowHeight: (row) => row.amount,
+		});
+
+		const vr0 = controller.getVisualRow(0);
+		const vr1 = controller.getVisualRow(1);
+
+		expect(vr0?.kind === 'data' ? vr0.height : undefined).toBe(50);
+		// When getRowHeight returns undefined, the pipeline falls back to defaultRowHeight
+		expect(vr1?.kind === 'data' ? vr1.height : undefined).toBe(32);
 	});
 });
 
@@ -502,7 +658,7 @@ describe('GroupRowMeta', () => {
 			columns: store.getState().columns,
 		});
 		const groupId = groupIdAt(ctrl, 0);
-		store.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 
 		const meta = ctrl.getGroupMeta(groupId);
@@ -521,7 +677,7 @@ describe('GroupRowMeta', () => {
 			columns: store.getState().columns,
 		});
 		const groupId = groupIdAt(ctrl, 0);
-		store.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 
 		const byId = ctrl.getGroupMeta(groupId);
@@ -541,7 +697,7 @@ describe('GroupRowMeta', () => {
 		});
 		const idA = groupIdAt(ctrl, 0);
 		const idB = groupIdAt(ctrl, 1);
-		store.setState({ expansion: { groups: { [idA]: true, [idB]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [idA]: true, [idB]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 
 		expect(ctrl.getGroupMeta(idA)!.visibleDescendantRowIds).toEqual(['1']);
@@ -570,10 +726,10 @@ describe('GroupRowMeta', () => {
 		});
 		// Expand outer first to reveal the inner group at index 1
 		const outer = groupIdAt(ctrl, 0);
-		store.setState({ expansion: { groups: { [outer]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [outer]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 		const inner = groupIdAt(ctrl, 1);
-		store.setState({ expansion: { groups: { [outer]: true, [inner]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [outer]: true, [inner]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 
 		const outerMeta = ctrl.getGroupMeta(outer);
@@ -599,7 +755,7 @@ describe('GroupRowMeta', () => {
 			columns: store.getState().columns,
 		});
 		const groupId = groupIdAt(ctrl, 0);
-		store.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
+		store.engine.stateManager.setState({ expansion: { groups: { [groupId]: true }, treeRows: {}, details: {} } });
 		ctrl.refresh();
 
 		const meta = ctrl.getGroupMeta(groupId);
@@ -644,7 +800,7 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 
 		// Update `status` on row 1 to a different value that still matches the filter
 		// (same value 'active' → still passes; membership unchanged)
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 99 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 99 } : r)));
 
 		// Row count unchanged, row still visible, value updated
 		expect(ctrl.getVisualRowCount()).toBe(1);
@@ -664,7 +820,7 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 		expect(ctrl.getVisualRowCount()).toBe(1);
 
 		// Row 2 was hidden; now update its status so it passes the filter
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '2' ? { ...r, status: 'active' } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '2' ? { ...r, status: 'active' } : r)));
 
 		expect(ctrl.getVisualRowCount()).toBe(2);
 	});
@@ -682,7 +838,7 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 		expect(ctrl.getVisualRowCount()).toBe(1);
 
 		// Row 1 is visible; now make it fail the filter
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, status: 'inactive' } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, status: 'inactive' } : r)));
 
 		expect(ctrl.getVisualRowCount()).toBe(0);
 	});
@@ -712,7 +868,7 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 		expect(ctrl.getVisualRowCount()).toBe(2);
 
 		// Update a status field on the visible row; full rebuild runs (group may need updating)
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, status: 'inactive' } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, status: 'inactive' } : r)));
 
 		// Active group should disappear; inactive group was previously filtered
 		expect(ctrl.getVisualRowCount()).toBe(0);
@@ -734,7 +890,7 @@ describe('Phase 068 — filter membership shortcut in updateRows()', () => {
 		expect(getRowNode(ctrl, 1)?.id).toBe('2');
 
 		// Change price (not a filter key) and status (still 'active') — neither changes membership
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 999 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 999 } : r)));
 
 		expect(ctrl.getVisualRowCount()).toBe(2);
 		expect(getRowNode(ctrl, 0)?.id).toBe('1');
@@ -778,7 +934,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 		expect(getRowNode(ctrl, 2)?.id).toBe('3');
 
 		// Raise row 1's price to 25 — should move between 2 and 3
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 25 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 25 } : r)));
 
 		expect(ctrl.getVisualRowCount()).toBe(3);
 		expect(getRowNode(ctrl, 0)?.id).toBe('2'); // 20
@@ -801,7 +957,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 		expect(getRowNode(ctrl, 0)?.id).toBe('1');
 
 		// Drop row 1's price below everyone else
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 5 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 5 } : r)));
 
 		expect(getRowNode(ctrl, 0)?.id).toBe('2');
 		expect(getRowNode(ctrl, 1)?.id).toBe('3');
@@ -820,7 +976,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 		});
 
 		// 'Bob' → 'Aaron' should move to first
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '2' ? { ...r, name: 'Aaron' } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '2' ? { ...r, name: 'Aaron' } : r)));
 
 		expect(ctrl.getVisualIndexByRowId('2')).toBe(0);
 		expect(ctrl.getVisualIndexByRowId('1')).toBe(1);
@@ -849,7 +1005,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 		});
 
 		// Full rebuild should correctly update group structure even with sort change
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 30 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 30 } : r)));
 
 		// Verify rows are still present and correctly structured
 		expect(ctrl.getVisualRowCount()).toBeGreaterThan(0);
@@ -869,7 +1025,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 
 		// Update price but keep relative order (15 stays between 10 and 20 → no, 15 > 10 and < 20, so '1' stays at 0)
 		// Actually 15 > 10 (original) so row 1 stays first if it was at 10. 15 < 20, so still at index 0.
-		ctrl.updateRows((rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 15 } : r)));
+		doUpdateRows(ctrl, (rows) => rows.map((r) => (r.id === '1' ? { ...r, price: 15 } : r)));
 
 		expect(getRowNode(ctrl, 0)?.id).toBe('1'); // still first (15 < 20 < 30)
 		expect(ctrl.getRowNodeById('1')?.data.price).toBe(15);
@@ -887,7 +1043,7 @@ describe('Phase 068 — sort relocation in updateRows()', () => {
 		});
 
 		// Swap prices of row 1 and row 3
-		ctrl.updateRows((rows) =>
+		doUpdateRows(ctrl, (rows) =>
 			rows.map((r) => {
 				if (r.id === '1') return { ...r, price: 30 };
 				if (r.id === '3') return { ...r, price: 10 };
@@ -1044,6 +1200,79 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 	});
 });
 
+describe('row-transaction rollback restores full client row-model identity', () => {
+	it('restores removed row identities, deep row data, added-node removal, source order, and grouped output after a failed mixed commit', () => {
+		type RollbackRow = {
+			id: string;
+			category: string;
+			profile: { name: string; stats: { score: number } };
+		};
+
+		const store = new GridStore<RollbackRow>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'category', header: 'Category' },
+				{ field: 'profile.name', header: 'Name' },
+			],
+			rowModelConfig: {
+				type: 'client',
+				grouping: { model: [{ colId: 'category' }], defaultExpanded: true },
+			},
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'row-1', category: 'A', profile: { name: 'Alice', stats: { score: 1 } } },
+				{ id: 'row-2', category: 'B', profile: { name: 'Bob', stats: { score: 2 } } },
+			],
+			columns: store.getState().columns,
+		});
+
+		const originalNode1 = store.getRowNodeById('row-1');
+		const originalNode2 = store.getRowNodeById('row-2');
+		const originalVisualIds = Array.from({ length: store.getVisualRowCount() }, (_, index) => store.getVisualRow(index)?.id);
+		const originalRowOrder = store.getRowOrder();
+
+		const originalCommitState = store.engine.stateManager.commitState;
+		store.engine.stateManager.commitState = vi.fn(() => {
+			throw new Error('forced mixed-commit failure');
+		}) as typeof originalCommitState;
+
+		const result = store.engine.changeApplier.commit({
+			reason: 'rows:apply-transaction',
+			domainMutations: [
+				{
+					kind: 'row-transaction',
+					transaction: {
+						remove: [{ id: 'row-1', category: 'A', profile: { name: 'Alice', stats: { score: 1 } } }],
+						update: [{ id: 'row-2', category: 'C', profile: { name: 'Bobby', stats: { score: 20 } } }],
+						add: [{ id: 'row-3', category: 'D', profile: { name: 'Cara', stats: { score: 3 } } }],
+						addIndex: 0,
+					},
+				},
+			],
+			state: { columnWidths: { category: 222 } },
+		});
+
+		store.engine.stateManager.commitState = originalCommitState;
+
+		expect(result.status).toBe('failed-before-commit');
+		expect(store.getRowNodeById('row-1')).toBe(originalNode1);
+		expect(store.getRowNodeById('row-2')).toBe(originalNode2);
+		expect(store.getRowNodeById('row-3')).toBeNull();
+		expect(store.getRowOrder()).toEqual(originalRowOrder);
+		expect(store.getRowNodeById('row-1')!.data.profile.name).toBe('Alice');
+		expect(store.getRowNodeById('row-1')!.data.profile.stats.score).toBe(1);
+		expect(store.getRowNodeById('row-2')!.data.category).toBe('B');
+		expect(store.getRowNodeById('row-2')!.data.profile.name).toBe('Bob');
+		expect(store.getRowNodeById('row-2')!.data.profile.stats.score).toBe(2);
+
+		const restoredVisualIds = Array.from({ length: store.getVisualRowCount() }, (_, index) => store.getVisualRow(index)?.id);
+		expect(restoredVisualIds).toEqual(originalVisualIds);
+
+		controller.dispose();
+	});
+});
+
 describe('Numeric Filter Null Safety', () => {
 	interface NumericRow {
 		id: string;
@@ -1068,7 +1297,7 @@ describe('Numeric Filter Null Safety', () => {
 		});
 
 		// 1. Filter: value < 5
-		store.setState({
+		store.engine.stateManager.setState({
 			filterModel: { value: { type: 'number', operator: 'lt', value: 5 } },
 		});
 		controller.refresh();
@@ -1077,7 +1306,7 @@ describe('Numeric Filter Null Safety', () => {
 		expect(controller.getVisualRow(0)?.rowId).toBe('5');
 
 		// 2. Filter: value >= 0
-		store.setState({
+		store.engine.stateManager.setState({
 			filterModel: { value: { type: 'number', operator: 'gte', value: 0 } },
 		});
 		controller.refresh();
@@ -1086,5 +1315,416 @@ describe('Numeric Filter Null Safety', () => {
 		const matchedIds = [controller.getVisualRow(0)?.rowId, controller.getVisualRow(1)?.rowId];
 		expect(matchedIds).toContain('1');
 		expect(matchedIds).toContain('5');
+	});
+});
+
+describe('Plan 083 — incremental index maintenance', () => {
+	interface SimpleRow {
+		id: string;
+		value: number;
+	}
+
+	function makeCtrl(rows: SimpleRow[], opts: { sorted?: boolean } = {}) {
+		const store = new GridStore<SimpleRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'value', header: 'Value' }],
+			...(opts.sorted ? { sortModel: [{ colId: 'value', sort: 'asc' }] } : {}),
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows,
+			columns: store.getState().columns,
+		});
+		return ctrl;
+	}
+
+	it('preserves correct indices after removal at the beginning of an unsorted grid', () => {
+		const ctrl = makeCtrl([
+			{ id: '1', value: 10 },
+			{ id: '2', value: 20 },
+			{ id: '3', value: 30 },
+			{ id: '4', value: 40 },
+		]);
+
+		ctrl.applyTransaction({ remove: [{ id: '1', value: 10 }] });
+
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(-1);
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(0);
+		expect(ctrl.getVisualIndexByRowId('3')).toBe(1);
+		expect(ctrl.getVisualIndexByRowId('4')).toBe(2);
+	});
+
+	it('preserves correct indices after insertion at the beginning of a sorted grid', () => {
+		const ctrl = makeCtrl(
+			[
+				{ id: '2', value: 20 },
+				{ id: '3', value: 30 },
+				{ id: '4', value: 40 },
+			],
+			{ sorted: true }
+		);
+
+		ctrl.applyTransaction({ add: [{ id: '1', value: 5 }] });
+
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(0);
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(1);
+		expect(ctrl.getVisualIndexByRowId('3')).toBe(2);
+		expect(ctrl.getVisualIndexByRowId('4')).toBe(3);
+	});
+
+	it('preserves correct indices after sort relocation to an earlier position', () => {
+		const store = new GridStore<SimpleRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'value', header: 'Value' }],
+			sortModel: [{ colId: 'value', sort: 'asc' }],
+		});
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', value: 10 },
+				{ id: '2', value: 20 },
+				{ id: '3', value: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		// updateRowsStructurally + reconcileAfterDataWrite triggers the sort-key mutation path
+		const writeResult = ctrl.updateRowsStructurally((rows) => rows.map((r) => (r.id === '3' ? { ...r, value: 5 } : r)));
+		const impact = ctrl.classifyFieldMutation(new Set(['value']));
+		ctrl.reconcileAfterDataWrite(writeResult, impact);
+
+		expect(ctrl.getVisualIndexByRowId('3')).toBe(0);
+		expect(ctrl.getVisualIndexByRowId('1')).toBe(1);
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(2);
+	});
+
+	it('handles add+remove in same transaction and produces correct indices', () => {
+		const ctrl = makeCtrl([
+			{ id: '1', value: 10 },
+			{ id: '2', value: 20 },
+			{ id: '3', value: 30 },
+		]);
+
+		ctrl.applyTransaction({
+			add: [{ id: '4', value: 40 }],
+			remove: [{ id: '2', value: 20 }],
+		});
+
+		expect(ctrl.getVisualRowCount()).toBe(3);
+		expect(ctrl.getVisualIndexByRowId('2')).toBe(-1);
+		expect(ctrl.getVisualIndexByRowId('4')).toBe(2);
+	});
+});
+
+// ── Plan 092: aggregation input mutation correctness ──────────────────────────
+
+describe('Aggregation input mutation correctness (Plan 092)', () => {
+	interface AggRow {
+		id: string;
+		name: string;
+		category: string;
+		salary: number;
+		bonus: number;
+	}
+
+	function makeAggStore(rows: AggRow[], expanded = true) {
+		const store = new GridStore<AggRow>({
+			getRowId: (r) => r.id,
+			columns: [
+				{ field: 'category', header: 'Category' },
+				{ field: 'name', header: 'Name' },
+				{ field: 'salary', header: 'Salary' },
+				{ field: 'bonus', header: 'Bonus' },
+			],
+			rowModelConfig: {
+				type: 'client',
+				grouping: { model: [{ colId: 'category' }], defaultExpanded: expanded },
+			},
+		});
+		// aggDefs must be applied via setAggDefs — GridStore constructor does not forward aggDefs to GridEngine
+		store.setAggDefs([
+			{ field: 'salary', aggFunc: 'sum' },
+			{ field: 'bonus', aggFunc: 'avg' },
+		]);
+		const controller = new ClientRowModelController<AggRow>(store.getClientRowModelRuntime(), {
+			rows,
+			columns: store.getState().columns,
+		});
+		return { store, controller };
+	}
+
+	function getGroupAggregates(controller: ClientRowModelController<AggRow>, groupId: string) {
+		const count = controller.getVisualRowCount();
+		for (let i = 0; i < count; i++) {
+			const row = controller.getVisualRow(i);
+			if (row?.kind === 'group' && row.id === groupId) {
+				return row.aggregateValues ?? {};
+			}
+		}
+		return null;
+	}
+
+	it('group sum stays consistent after leaf salary update via applyTransaction', () => {
+		const rows: AggRow[] = [
+			{ id: '1', name: 'Alice', category: 'Eng', salary: 100, bonus: 10 },
+			{ id: '2', name: 'Bob', category: 'Eng', salary: 200, bonus: 20 },
+		];
+		const { store, controller } = makeAggStore(rows);
+
+		const before = getGroupAggregates(controller, 'group:category=Eng');
+		expect(before?.salary).toBe(300); // 100 + 200
+
+		store.applyTransaction({ update: [{ id: '1', name: 'Alice', category: 'Eng', salary: 150, bonus: 10 }] });
+
+		const after = getGroupAggregates(controller, 'group:category=Eng');
+		expect(after?.salary).toBe(350); // 150 + 200 — was stale (300) before Plan 092 fix
+	});
+
+	it('group average stays consistent after leaf bonus update via applyTransaction', () => {
+		const rows: AggRow[] = [
+			{ id: '1', name: 'Alice', category: 'Eng', salary: 100, bonus: 20 },
+			{ id: '2', name: 'Bob', category: 'Eng', salary: 200, bonus: 40 },
+		];
+		const { store, controller } = makeAggStore(rows);
+
+		const before = getGroupAggregates(controller, 'group:category=Eng');
+		expect(before?.bonus).toBe(30); // avg(20, 40) = 30
+
+		store.applyTransaction({ update: [{ id: '2', name: 'Bob', category: 'Eng', salary: 200, bonus: 60 }] });
+
+		const after = getGroupAggregates(controller, 'group:category=Eng');
+		expect(after?.bonus).toBe(40); // avg(20, 60) = 40 — was stale (30) before Plan 092 fix
+	});
+
+	it('multiple groups each update their own aggregate independently', () => {
+		const rows: AggRow[] = [
+			{ id: '1', name: 'Alice', category: 'Eng', salary: 100, bonus: 10 },
+			{ id: '2', name: 'Bob', category: 'Mkt', salary: 90, bonus: 5 },
+		];
+		const { store, controller } = makeAggStore(rows);
+
+		store.applyTransaction({ update: [{ id: '1', name: 'Alice', category: 'Eng', salary: 200, bonus: 10 }] });
+
+		expect(getGroupAggregates(controller, 'group:category=Eng')?.salary).toBe(200);
+		// Mkt group must be unchanged
+		expect(getGroupAggregates(controller, 'group:category=Mkt')?.salary).toBe(90);
+	});
+
+	it('name update (non-aggregation field) does NOT trigger full rebuild', () => {
+		const rows: AggRow[] = [
+			{ id: '1', name: 'Alice', category: 'Eng', salary: 100, bonus: 10 },
+			{ id: '2', name: 'Bob', category: 'Eng', salary: 200, bonus: 20 },
+		];
+		const inst = new RecordingGridInstrumentation();
+		const { store, controller } = makeAggStore(rows);
+		store.setInstrumentation(inst);
+		inst.reset();
+
+		store.applyTransaction({ update: [{ id: '1', name: 'Alice Renamed', category: 'Eng', salary: 100, bonus: 10 }] });
+
+		const full = inst.get(GridMetric.ROW_MUTATION_FULL_REBUILD);
+		// A non-aggregation, non-sort, non-filter, non-group field update must NOT trigger a full rebuild.
+		expect(full).toBe(0);
+		controller.dispose();
+	});
+});
+
+// ── Plan 099: Differential correctness tests ─────────────────────────────────
+//
+// Invariant: incremental and full-rebuild paths must produce identical visual
+// output for any supported mutation sequence. Each test applies mutations
+// incrementally to one controller and compares the visual row sequence to a
+// controller rebuilt from scratch with the final row state.
+
+function snapshotVisualRows<TData>(controller: ClientRowModelController<TData>): string[] {
+	const result: string[] = [];
+	for (let i = 0; i < controller.getVisualRowCount(); i++) {
+		const vr = controller.getVisualRow(i);
+		result.push(vr ? vr.id : `null:${i}`);
+	}
+	return result;
+}
+
+describe('ClientRowModelController – differential correctness (Plan 099)', () => {
+	it('incremental add produces same order as full rebuild', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+		];
+		const added = { id: '3', name: 'Charlie' };
+
+		// Incremental path: start with initial, then add.
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+		incr.applyTransaction!({ add: [added] });
+
+		// Full rebuild: construct from scratch with all three rows.
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial, added],
+			columns: store.getState().columns,
+		});
+
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('incremental remove produces same order as full rebuild', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Charlie' },
+		];
+
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+		incr.applyTransaction!({ remove: [initial[1]] }); // remove by row object (matched by row ID)
+
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [initial[0], initial[2]],
+			columns: store.getState().columns,
+		});
+
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('incremental update produces same order as full rebuild', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+		];
+
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+		incr.applyTransaction!({ update: [{ id: '1', name: 'Alicia' }] });
+
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Alicia' }, initial[1]],
+			columns: store.getState().columns,
+		});
+
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		// Raw data must match too.
+		expect(incr.getRawRowById('1')).toEqual({ id: '1', name: 'Alicia' });
+		expect(full.getRawRowById('1')).toEqual({ id: '1', name: 'Alicia' });
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('incremental add+remove sequence produces same order as full rebuild', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Charlie' },
+		];
+
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+		// Remove Bob, add Dave (remove takes row objects matched by ID).
+		incr.applyTransaction!({ remove: [initial[1]], add: [{ id: '4', name: 'Dave' }] });
+
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [initial[0], initial[2], { id: '4', name: 'Dave' }],
+			columns: store.getState().columns,
+		});
+
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('setRows produces same order as equivalent full rebuild', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [{ id: '1', name: 'Alice' }];
+		const replacement = [
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Charlie' },
+		];
+
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: initial,
+			columns: store.getState().columns,
+		});
+		const replaceResult = incr.replaceRowsStructurally(replacement);
+		incr.reconcileAfterDataWrite(replaceResult, 'value-only');
+
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: replacement,
+			columns: store.getState().columns,
+		});
+
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('sort: incremental re-sort matches full rebuild with same sort model', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (r) => r.id,
+			columns: [{ field: 'name' }],
+			sortModel: [{ colId: 'name', sort: 'asc' }],
+		});
+		const initial = [
+			{ id: '1', name: 'Charlie' },
+			{ id: '2', name: 'Alice' },
+			{ id: '3', name: 'Bob' },
+		];
+
+		const incr = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+
+		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+
+		// Both should produce same ascending-name order.
+		expect(snapshotVisualRows(incr)).toEqual(snapshotVisualRows(full));
+		// Verify sorted: Alice (id:2), Bob (id:3), Charlie (id:1)
+		expect(incr.getVisualRow(0)?.id).toBe(toDataVisualRowId('2'));
+		expect(incr.getVisualRow(1)?.id).toBe(toDataVisualRowId('3'));
+		expect(incr.getVisualRow(2)?.id).toBe(toDataVisualRowId('1'));
+		incr.dispose();
+		full.dispose();
+	});
+
+	it('lookup consistency: getVisualIndexByRowId inverse of getVisualRow after mutations', () => {
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: [{ field: 'name' }] });
+		const initial = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Charlie' },
+		];
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [...initial],
+			columns: store.getState().columns,
+		});
+		controller.applyTransaction!({ remove: [initial[1]], add: [{ id: '4', name: 'Dave' }] });
+
+		// After mutation: verify lookup consistency for all remaining rows.
+		for (let i = 0; i < controller.getVisualRowCount(); i++) {
+			const vr = controller.getVisualRow(i);
+			if (vr?.kind !== 'data') continue;
+			const idx = controller.getVisualIndexByRowId(vr.rowId);
+			expect(idx).toBe(i);
+		}
+		// Removed row must not be found.
+		expect(controller.getVisualIndexByRowId('2')).toBe(-1);
+		controller.dispose();
 	});
 });

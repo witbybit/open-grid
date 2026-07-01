@@ -136,14 +136,13 @@ const PriceRenderer = ({ value }: CellRendererProps<HoldingRow>) => (
 // ── Column definitions ────────────────────────────────────────────────────────
 
 const COLUMNS: ColumnDef<HoldingRow>[] = [
-	{ field: 'symbol', header: 'Symbol', width: 90, sortable: true, movable: true },
-	{ field: 'name', header: 'Name', width: 180, sortable: true, movable: true },
+	{ field: 'symbol', header: 'Symbol', width: 90, sortable: true },
+	{ field: 'name', header: 'Name', width: 180, sortable: true },
 	{
 		field: 'price',
 		header: 'Price',
 		width: 100,
 		sortable: true,
-		movable: true,
 		renderer: { kind: 'react', component: PriceRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
 	{
@@ -151,7 +150,6 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		header: 'Change $',
 		width: 100,
 		sortable: true,
-		movable: true,
 		renderer: { kind: 'react', component: ChangeRenderer, capabilities: { scrollBehavior: 'live' } },
 	},
 	{
@@ -159,21 +157,23 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		header: 'Change %',
 		width: 105,
 		sortable: true,
-		movable: true,
-		renderer: { kind: 'react', component: ChangePctRenderer, capabilities: { scrollBehavior: 'live' } },
+		// scrollSnapshot: 'html' — the ▲/▼ badge with its green/red tinted background and border
+		// is captured after each fidelity render and replayed as a static clone during scroll.
+		renderer: { kind: 'react', component: ChangePctRenderer, capabilities: { scrollBehavior: 'live', scrollSnapshot: 'html' } },
 	},
-	{ field: 'marketCap', header: 'Mkt Cap', width: 100, sortable: true, movable: true },
-	{ field: 'volume', header: 'Volume', width: 110, sortable: true, movable: true },
-	{ field: 'sector', header: 'Sector', width: 130, sortable: true, movable: true },
-	{ field: 'region', header: 'Region', width: 90, sortable: true, movable: true },
-	{ field: 'pe', header: 'P/E', width: 70, sortable: true, movable: true },
+	{ field: 'marketCap', header: 'Mkt Cap', width: 100, sortable: true },
+	{ field: 'volume', header: 'Volume', width: 110, sortable: true },
+	{ field: 'sector', header: 'Sector', width: 130, sortable: true },
+	{ field: 'region', header: 'Region', width: 90, sortable: true },
+	{ field: 'pe', header: 'P/E', width: 70, sortable: true },
 	{
 		field: 'status',
 		header: 'Status',
 		width: 90,
 		sortable: true,
-		movable: true,
-		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live' } },
+		// scrollSnapshot: 'html' — Active/Watch/Closed colored status chips are captured as static
+		// HTML after fidelity render, so the portfolio status column looks settled while scrolling.
+		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live', scrollSnapshot: 'html' } },
 	},
 ];
 
@@ -204,7 +204,7 @@ export default function SidebarPanelsDemo({ onGridReady }: SidebarPanelsDemoProp
 			{/* Grid with integrated sidebar — api.openPanel() / closePanel() / getOpenPanel() */}
 			<div className='flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-800 shadow-2xl'>
 				<Grid<HoldingRow>
-					mode='client'
+					rowModelType='client'
 					columns={COLUMNS}
 					rows={ROWS}
 					pinLeftColumns={1}

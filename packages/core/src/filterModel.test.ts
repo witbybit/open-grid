@@ -300,4 +300,26 @@ describe('getColumnDistinctValues', () => {
 		expect(vals).toEqual([10, 30, 50, 80, 120]);
 		controller.dispose();
 	});
+
+	it('bounds large distinct-value scans through the summary API', () => {
+		const store = new GridStore<{ id: string; status: string }>({
+			columns: [{ field: 'id' }, { field: 'status', filterType: 'set' }],
+			runtimeLimits: { maxFilterDistinctValues: 2 },
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', status: 'Zulu' },
+				{ id: '2', status: 'Alpha' },
+				{ id: '3', status: 'Beta' },
+			],
+			columns: store.getState().columns,
+		});
+
+		const summary = store.getColumnDistinctValueSummary('status');
+		expect(summary.values).toHaveLength(2);
+		expect(summary.truncated).toBe(true);
+		expect(summary.limit).toBe(2);
+
+		controller.dispose();
+	});
 });

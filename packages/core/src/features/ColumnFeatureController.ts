@@ -1,4 +1,6 @@
-import { GridEventName, type ColumnDef, type ColumnState } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
+import type { ColumnDef } from '../columnDef.js';
+import type { ColumnState } from '../state/GridState.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
 
 export class ColumnFeatureController<TRowData = unknown> {
@@ -14,7 +16,8 @@ export class ColumnFeatureController<TRowData = unknown> {
 			reason: 'columns:order',
 			state: { columns },
 			invalidations: [{ kind: 'full' }],
-			events: [{ type: GridEventName.columnOrderChanged, payload: { columns, columnFields: nextFields } as never }],
+			domains: ['columns', 'geometry'],
+			events: [{ type: GridEventName.columnOrderChanged, payload: { columns, columnFields: nextFields } }],
 		});
 	}
 
@@ -36,21 +39,26 @@ export class ColumnFeatureController<TRowData = unknown> {
 		this.ctx.applyChange({
 			reason: 'columns:resize',
 			state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: width } }),
-			invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
-			events: [{ type: GridEventName.columnResized, payload: { colField, width } as never }],
+			invalidations: [{ kind: 'geometry' }, { kind: 'viewport' }, { kind: 'headers' }],
+			domains: ['columns', 'geometry'],
+			events: [{ type: GridEventName.columnResized, payload: { colField, width } }],
 			...(undoable
 				? {
-						undo: {
-							reason: 'columns:resize',
-							state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: oldWidth } }),
-							invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
-							events: [{ type: GridEventName.columnResized, payload: { colField, width: oldWidth } as never }],
-						},
-						redo: {
-							reason: 'columns:resize',
-							state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: width } }),
-							invalidations: [{ kind: 'geometry' }, { kind: 'column', colId: colField }, { kind: 'headers' }],
-							events: [{ type: GridEventName.columnResized, payload: { colField, width } as never }],
+						history: {
+							undo: {
+								reason: 'columns:resize',
+								state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: oldWidth } }),
+								invalidations: [{ kind: 'geometry' }, { kind: 'viewport' }, { kind: 'headers' }],
+								domains: ['columns', 'geometry'],
+								events: [{ type: GridEventName.columnResized, payload: { colField, width: oldWidth } }],
+							},
+							redo: {
+								reason: 'columns:resize',
+								state: (currState) => ({ columnWidths: { ...currState.columnWidths, [colField]: width } }),
+								invalidations: [{ kind: 'geometry' }, { kind: 'viewport' }, { kind: 'headers' }],
+								domains: ['columns', 'geometry'],
+								events: [{ type: GridEventName.columnResized, payload: { colField, width } }],
+							},
 						},
 					}
 				: {}),
@@ -96,7 +104,7 @@ export class ColumnFeatureController<TRowData = unknown> {
 			reason: 'columns:reorder-toggle',
 			state: { enableColumnReorder: enabled },
 			invalidations: [{ kind: 'headers' }],
-			events: [{ type: GridEventName.columnReorderToggled, payload: { enabled } as never }],
+			events: [{ type: GridEventName.columnReorderToggled, payload: { enabled } }],
 		});
 	}
 
@@ -119,20 +127,25 @@ export class ColumnFeatureController<TRowData = unknown> {
 			reason: 'columns:set',
 			state: { columns, columnWidths: nextWidths },
 			invalidations: [{ kind: 'full' }],
-			events: [{ type: GridEventName.columnsChanged, payload: { columns, columnFields: columns.map((c) => c.field) } as never }],
+			domains: ['columns', 'geometry'],
+			events: [{ type: GridEventName.columnsChanged, payload: { columns, columnFields: columns.map((c) => c.field) } }],
 			...(undoable
 				? {
-						undo: {
-							reason: 'columns:set',
-							state: { columns: prevColumns, columnWidths: prevWidths },
-							invalidations: [{ kind: 'full' }],
-							requestRender: true,
-						},
-						redo: {
-							reason: 'columns:set',
-							state: { columns, columnWidths: nextWidths },
-							invalidations: [{ kind: 'full' }],
-							requestRender: true,
+						history: {
+							undo: {
+								reason: 'columns:set',
+								state: { columns: prevColumns, columnWidths: prevWidths },
+								invalidations: [{ kind: 'full' }],
+								domains: ['columns', 'geometry'],
+								requestRender: true,
+							},
+							redo: {
+								reason: 'columns:set',
+								state: { columns, columnWidths: nextWidths },
+								invalidations: [{ kind: 'full' }],
+								domains: ['columns', 'geometry'],
+								requestRender: true,
+							},
 						},
 					}
 				: {}),

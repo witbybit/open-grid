@@ -13,6 +13,10 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
+		},
+		"./experimental": {
+			"types": "./dist/experimental.d.ts",
+			"import": "./dist/experimental.js"
 		}
 	},
 	"files": [
@@ -30,7 +34,7 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@open-grid/core": "workspace:*"
+		"@open-grid/core": "0.1.0-alpha.0"
 	},
 	"peerDependencies": {
 		"react": "^18.0.0 || ^19.0.0",
@@ -50,5 +54,5 @@
 		"performance"
 	],
 	"author": "Rishikesh Kumar",
-	"license": "MIT"
+	"license": "UNLICENSED"
 }

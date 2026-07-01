@@ -1,41 +1,56 @@
-import { canEditCell, GridEventName } from '../store.js';
-import type { RowModel } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
+import { getValueByPath } from '../columnDef.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
 import type { DataModel } from '../models/DataModel.js';
+import type { RowModel } from '../rowModel.js';
+import { canEditCell } from '../visualRow.js';
+import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
+import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
+import type { GridEventPayloadMap } from '../api/GridEvents.js';
+import { dispatchWriteBlockedEvent } from './writeBlockedEvent.js';
 
 export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	data: DataModel<TRowData>;
-	notifyCellChange: (rowId: string, colField: string) => void;
-	setCellValue: (rowId: string, colField: string, value: unknown, undoable?: boolean) => void;
-	/** Called when an edit commits successfully — removes any persistent validation error for the cell. */
-	clearValidationError?: (rowId: string, colField: string) => void;
-	/** Called when an edit fails validation — persists the error indicator even after the editor closes. */
-	setValidationError?: (rowId: string, colField: string, error: string) => void;
-	/** Runs full validation (column + row) after the new value has been written to the data model. */
-	validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
+	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
+	validateCommittedCells?: (
+		cells: readonly { rowId: string; colField: string }[],
+		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
+	) => Promise<void>;
+	validateWriteProposal?: (
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
+	) => Promise<readonly GridIntegrityIssue[]>;
+	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
+	dispatchEvent: <K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]) => void;
 }
 
 export class EditingFeatureController<TRowData = unknown> {
 	private readonly ctx: GridFeatureContext<TRowData>;
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly data: DataModel<TRowData>;
-	private readonly notifyCellChange: (rowId: string, colField: string) => void;
-	private readonly setCellValue: (rowId: string, colField: string, value: unknown, undoable?: boolean) => void;
-	private readonly clearValidationError?: (rowId: string, colField: string) => void;
-	private readonly setValidationError?: (rowId: string, colField: string, error: string) => void;
-	private readonly validateCellPostCommit?: (rowId: string, colField: string) => Promise<void>;
+	private readonly notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
+	private readonly validateCommittedCells?: (
+		cells: readonly { rowId: string; colField: string }[],
+		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
+	) => Promise<void>;
+	private readonly validateWriteProposal?: (
+		updates: readonly { rowId: string; colField: string; proposedValue: unknown }[],
+		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
+	) => Promise<readonly GridIntegrityIssue[]>;
+	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
+	private readonly dispatchEvent: EditingFeatureControllerDeps<TRowData>['dispatchEvent'];
 
 	constructor(deps: EditingFeatureControllerDeps<TRowData>) {
 		this.ctx = deps.ctx;
 		this.getRowModel = deps.getRowModel;
 		this.data = deps.data;
 		this.notifyCellChange = deps.notifyCellChange;
-		this.setCellValue = deps.setCellValue;
-		this.clearValidationError = deps.clearValidationError;
-		this.setValidationError = deps.setValidationError;
-		this.validateCellPostCommit = deps.validateCellPostCommit;
+		this.validateCommittedCells = deps.validateCommittedCells;
+		this.validateWriteProposal = deps.validateWriteProposal;
+		this.checkCapability = deps.checkCapability;
+		this.dispatchEvent = deps.dispatchEvent;
 	}
 
 	private canEditCell(rowId: string, colField: string): boolean {
@@ -47,6 +62,10 @@ export class EditingFeatureController<TRowData = unknown> {
 
 	public startEdit(rowId: string, colField: string): void {
 		if (!this.canEditCell(rowId, colField)) return;
+		if (this.checkCapability) {
+			const result = this.checkCapability('edit', { rowId, colField, source: 'api' });
+			if (!result.allowed) return;
+		}
 		this.ctx.applyChange({
 			reason: 'editing:start',
 			state: { activeEdit: { rowId, colField } },
@@ -54,9 +73,10 @@ export class EditingFeatureController<TRowData = unknown> {
 				{ kind: 'cell', rowId, colId: colField, reason: 'edit started' },
 				{ kind: 'overlay', reason: 'edit started' },
 			],
-			events: [{ type: GridEventName.editStarted, payload: { rowId, colField } as never }],
+			domains: ['editing'],
+			events: [{ type: GridEventName.editStarted, payload: { rowId, colField } }],
 		});
-		this.notifyCellChange(rowId, colField);
+		this.notifyCellChange(rowId, colField, false);
 	}
 
 	public stopEdit(cancel = false): void {
@@ -71,41 +91,34 @@ export class EditingFeatureController<TRowData = unknown> {
 				{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
 				{ kind: 'overlay', reason: 'edit stopped' },
 			],
-			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel } as never }],
+			domains: ['editing'],
+			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel } }],
 		});
-		this.notifyCellChange(rowId, colField);
+		this.notifyCellChange(rowId, colField, false);
 	}
 
 	public async commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean> {
-		const col = this.ctx.columns.getColumnDef(colField);
-		const oldValue = this.data.getRawCellValue(rowId, colField);
-		const node = this.getRowModel()?.getRowNodeById(rowId);
-		const row = node?.data ?? ({} as TRowData);
-
-		if (col?.valueValidator) {
-			let error: string | null = null;
-			try {
-				error = await col.valueValidator({ value, oldValue, row, colField });
-			} catch {
-				error = 'Validation failed';
-			}
-			if (error) {
-				const activeEdit = this.ctx.getState().activeEdit;
-				if (activeEdit?.rowId === rowId && activeEdit?.colField === colField) {
-					this.ctx.applyChange({
-						reason: 'editing:validation',
-						state: { activeEdit: { ...activeEdit, validationError: error } },
-						requestRender: false,
-					});
-					this.notifyCellChange(rowId, colField);
-				}
-				// Persist the error so the red-border indicator survives after the editor closes
-				this.setValidationError?.(rowId, colField, error);
+		if (this.checkCapability) {
+			const result = this.checkCapability('edit', { rowId, colField });
+			if (!result.allowed) {
+				dispatchWriteBlockedEvent(
+					this.dispatchEvent,
+					'edit',
+					{ status: 'capabilityDenied', reason: result.reason ?? 'edit blocked by capability policy' },
+					[{ rowId, colField }]
+				);
 				return false;
 			}
 		}
+		const col = this.ctx.columns.getColumnDef(colField);
+		if (!col) return false;
+		const oldValue = this.data.getRawCellValue(rowId, colField);
+		const node = this.getRowModel()?.getRowNodeById(rowId);
+		if (!node) return false;
+		const row = node.data;
 
-		this.setCellValue(rowId, colField, value);
+		let committedValue = value;
+		let bypassValueSetter = false;
 
 		if (col?.valueSetter) {
 			let didAbort = false;
@@ -113,33 +126,62 @@ export class EditingFeatureController<TRowData = unknown> {
 				didAbort = true;
 			};
 			let success = true;
+			const draftRow = { ...(row as Record<string, unknown>) } as TRowData;
 			try {
-				success = await col.valueSetter({ value, oldValue, row, colField, abort });
+				success = await col.valueSetter({ value, oldValue, row: draftRow, colField, abort });
 			} catch {
 				success = false;
 			}
 			if (!success || didAbort) {
-				this.setCellValue(rowId, colField, oldValue, false);
-				const activeEdit = this.ctx.getState().activeEdit;
-				if (activeEdit?.rowId === rowId && activeEdit?.colField === colField) {
-					this.ctx.applyChange({
-						reason: 'editing:save-failed',
-						state: { activeEdit: { ...activeEdit, validationError: 'Save failed' } },
-						requestRender: false,
-					});
-					this.notifyCellChange(rowId, colField);
-				}
 				return false;
 			}
+			committedValue = getValueByPath(draftRow, colField);
+			bypassValueSetter = true;
 		}
 
-		this.stopEdit(false);
-		// Run full validation (column + row) against the committed value, or just clear if no validator.
-		if (this.validateCellPostCommit) {
-			await this.validateCellPostCommit(rowId, colField);
-		} else {
-			this.clearValidationError?.(rowId, colField);
+		const proposalIssues = await this.validateWriteProposal?.([{ rowId, colField, proposedValue: committedValue }], 'edit');
+		if ((proposalIssues?.length ?? 0) > 0) {
+			dispatchWriteBlockedEvent(
+				this.dispatchEvent,
+				'edit',
+				{ status: 'validationFailed', reason: proposalIssues![0]?.message ?? 'blocking validation failed', issues: proposalIssues! },
+				[{ rowId, colField }]
+			);
+			return false;
 		}
+
+		const result = this.ctx.applyChange({
+			reason: 'data:set-cell-value',
+			state: { activeEdit: null },
+			domainMutations: [
+				{
+					kind: 'cell-value',
+					rowId,
+					colField,
+					value: committedValue,
+					source: 'edit',
+					bypassValueSetter,
+				},
+			],
+			invalidations: [
+				{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
+				{ kind: 'overlay', reason: 'edit stopped' },
+			],
+			domains: ['editing'],
+			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel: false } }],
+		});
+
+		if (result.status === 'rejected') {
+			dispatchWriteBlockedEvent(this.dispatchEvent, 'edit', { status: 'rejected', reason: result.reason }, [{ rowId, colField }]);
+			return false;
+		}
+
+		if (result.status !== 'committed' && result.status !== 'noop') {
+			return false;
+		}
+
+		this.notifyCellChange(rowId, colField, false);
+		await this.validateCommittedCells?.([{ rowId, colField }], 'edit');
 		return true;
 	}
 }

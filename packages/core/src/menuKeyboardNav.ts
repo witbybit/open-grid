@@ -1,5 +1,5 @@
 /**
- * Keyboard navigation for the grid's popup menus (Plan 046 follow-up).
+ * Keyboard navigation for the grid's popup menus.
  *
  * `attachRovingMenuKeyboard` implements the ARIA vertical-menu keyboard pattern over a
  * static list of item elements: Arrow Up/Down move (and wrap), Home/End jump to the

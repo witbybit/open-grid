@@ -1,5 +1,20 @@
 export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallback' | 'pending' | 'custom';
 
+import type { CellRendererHandle, CellPlacement } from './cellRendererHandle.js';
+
+export interface CellSlotMountedVisualVersions {
+	insightVersion: number;
+	styleVersion: number;
+	loadingVersion: number;
+	selectionVersion: number;
+}
+
+// Monotonic counter — advances once per CellSlot construction.
+// A cell that is destroyed and recreated at the same position gets a strictly
+// larger id, so stale portal keys from the destroyed instance never match the
+// new instance's keys.
+let _cellInstanceCounter = 0;
+
 /**
  * Authoritative identity record for a bound cell slot.
  * Logic must read identity from CellSlot.binding, not from element.dataset.
@@ -20,7 +35,7 @@ export interface CellBinding {
 const _PX = Array.from({ length: 2001 }, (_, i) => `${i}px`);
 export const toPx = (n: number): string => (n >= 0 && n < _PX.length ? _PX[n] : `${n}px`);
 
-// Debug stats for DOM write tracking (Phase 4). Shared across all CellSlot instances.
+// DOM write stats shared across all CellSlot instances for performance instrumentation.
 export const cellSlotWriteStats = {
 	cellTextWrites: 0,
 	cellClassWrites: 0,
@@ -30,14 +45,91 @@ export const cellSlotWriteStats = {
 	cellDomReadsAvoided: 0,
 };
 
+export function resetCellSlotWriteStats(): void {
+	cellSlotWriteStats.cellTextWrites = 0;
+	cellSlotWriteStats.cellClassWrites = 0;
+	cellSlotWriteStats.cellTransformWrites = 0;
+	cellSlotWriteStats.cellWidthWrites = 0;
+	cellSlotWriteStats.cellLeftWrites = 0;
+	cellSlotWriteStats.cellDomReadsAvoided = 0;
+}
+
+export function recordCellSlotMountedVisualVersions(cellSlot: CellSlot, versions: CellSlotMountedVisualVersions): void {
+	cellSlot.lastMountedInsightVersion = versions.insightVersion;
+	cellSlot.lastMountedStyleVersion = versions.styleVersion;
+	cellSlot.lastMountedLoadingVersion = versions.loadingVersion;
+	cellSlot.lastMountedSelectionVersion = versions.selectionVersion;
+}
+
+export function matchesCellSlotMountedVisualVersions(cellSlot: CellSlot, versions: CellSlotMountedVisualVersions): boolean {
+	return (
+		cellSlot.lastMountedInsightVersion === versions.insightVersion &&
+		cellSlot.lastMountedStyleVersion === versions.styleVersion &&
+		cellSlot.lastMountedLoadingVersion === versions.loadingVersion &&
+		cellSlot.lastMountedSelectionVersion === versions.selectionVersion
+	);
+}
+
+export function matchesCellSlotMountedFreshness(
+	cellSlot: CellSlot,
+	request: {
+		rowVersion: number;
+		globalVersion: number;
+		visualVersions: CellSlotMountedVisualVersions;
+	}
+): boolean {
+	return (
+		cellSlot.lastMountedRowVersion === request.rowVersion &&
+		cellSlot.lastMountedGlobalVersion === request.globalVersion &&
+		matchesCellSlotMountedVisualVersions(cellSlot, request.visualVersions)
+	);
+}
+
 export class CellSlot<TRowData = unknown> {
 	public readonly element: HTMLDivElement;
 	public readonly contentElement: HTMLDivElement;
+	/**
+	 * Unique identity for this physical CellSlot object. Assigned once at construction
+	 * and never changes — not even across row rebinds or lane relocations.
+	 * Used as the basis for portal cellKeys so that a stale deferred release keyed to a
+	 * destroyed cell can never affect a newly created cell at the same row/column position.
+	 */
+	public readonly cellInstanceId: string;
+	/**
+	 * Stable string identifier for the portal host of this cell. Derived from cellInstanceId —
+	 * never changes for the CellSlot's lifetime. Passed with every portal mount so the React
+	 * adapter can verify it is rendering into the correct physical host.
+	 */
+	public readonly portalHostId: string;
 	/**
 	 * Lazily created on first portal use (getOrCreatePortalHost). Plain-text columns —
 	 * the common case — never pay the extra DOM node (+50% viewport node count).
 	 */
 	public portalHostElement: HTMLDivElement | null = null;
+	/**
+	 * Incremented each time this cell is hot-unbound (recycled to a different logical row).
+	 * Consumers can capture this at mount time and compare later to detect stale deferred
+	 * operations against a cell that has since been rebound to another row.
+	 * Unlike slot.generation (which is per-slot), this is per-cell.
+	 */
+	public rowBindingGeneration = 0;
+	/**
+	 * Stable column association. Set once by reconcileTopology when the cell is first
+	 * created for a column. Never changes across row rebinds or lane relocations —
+	 * this cell is permanently associated with this column field for its lifetime.
+	 */
+	public columnId = '';
+	/**
+	 * Active renderer handle. Null when the cell is unbound or showing no content.
+	 * Set by the bind loop when content mode changes; destroy() is called on the
+	 * old handle before replacing it with a new one.
+	 */
+	public renderer: CellRendererHandle<TRowData> | null = null;
+	/**
+	 * Current lane placement. Set by the bind loop each frame and used by relocate-aware
+	 * code paths (e.g. DOM renderers that need to know their position context).
+	 */
+	public placement: CellPlacement | null = null;
 
 	/**
 	 * Authoritative identity for this bound slot.
@@ -58,7 +150,7 @@ export class CellSlot<TRowData = unknown> {
 	public lastLeft = -1; // absolute left px for center and pin-left cells
 	public lastRight = -1; // distance-from-right px for pin-right cells (-1 = not set)
 	public lastWidth = -1; // column width px
-	public lastShift = 0; // live column-reorder preview offset px (Plan 047); 0 = none
+	public lastShift = 0; // live column-reorder preview offset px; 0 = none
 	public lastAriaSelected: boolean | undefined = undefined; // ARIA selection state cache
 	public lastClassName = '';
 	public lastContentMode: CellContentMode = 'empty';
@@ -70,8 +162,14 @@ export class CellSlot<TRowData = unknown> {
 	// (only that row thaws); if globalVersion !== lastMountedGlobalVersion everything thaws.
 	public lastMountedRowVersion = -1;
 	public lastMountedGlobalVersion = -1;
+	public lastMountedInsightVersion = -1;
+	public lastMountedStyleVersion = -1;
+	public lastMountedLoadingVersion = -1;
+	public lastMountedSelectionVersion = -1;
 
 	constructor(element: HTMLDivElement) {
+		this.cellInstanceId = `ci${++_cellInstanceCounter}`;
+		this.portalHostId = `${this.cellInstanceId}-ph`;
 		this.element = element;
 		(element as any).__cellSlot = this;
 		// ARIA grid semantics — role is static per element; positional/state attrs are
@@ -132,6 +230,10 @@ export class CellSlot<TRowData = unknown> {
 		this.hasTabIndex = false;
 		this.lastMountedRowVersion = -1;
 		this.lastMountedGlobalVersion = -1;
+		this.lastMountedInsightVersion = -1;
+		this.lastMountedStyleVersion = -1;
+		this.lastMountedLoadingVersion = -1;
+		this.lastMountedSelectionVersion = -1;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;
@@ -195,6 +297,7 @@ export class CellSlot<TRowData = unknown> {
 			if (this.lastRight !== right) {
 				this.lastRight = right;
 				this.element.style.right = toPx(right);
+				cellSlotWriteStats.cellLeftWrites++;
 				domUpdated = true;
 			}
 			if (this.lastLeft !== -1) {
@@ -205,6 +308,7 @@ export class CellSlot<TRowData = unknown> {
 			if (this.lastLeft !== left) {
 				this.lastLeft = left;
 				this.element.style.left = toPx(left);
+				cellSlotWriteStats.cellLeftWrites++;
 				domUpdated = true;
 			}
 			if (this.lastRight !== -1) {
@@ -220,12 +324,13 @@ export class CellSlot<TRowData = unknown> {
 			domUpdated = true;
 		}
 
-		// Live column-reorder preview offset (Plan 047). Composes on top of the `left`/`right`
+		// Live column-reorder preview offset. Composes on top of the `left`/`right`
 		// positioning above. Guarded by lastShift so steady-state binds (shift 0) never touch
 		// transform — the per-cell hot path stays write-free outside an active header drag.
 		if (dragShift !== this.lastShift) {
 			this.lastShift = dragShift;
 			this.element.style.transform = dragShift !== 0 ? `translateX(${toPx(dragShift)})` : '';
+			cellSlotWriteStats.cellTransformWrites++;
 			domUpdated = true;
 		}
 
@@ -271,7 +376,10 @@ export class CellSlot<TRowData = unknown> {
 				} else {
 					cellSlotWriteStats.cellDomReadsAvoided++;
 				}
-			} else {
+			} else if (contentMode !== 'portal') {
+				// Portal mode leaves existing text in the DOM — CSS hides .og-cell-content via
+				// [data-content-mode="portal"] > .og-cell-content { display: none }.
+				// Text is cleared lazily when the cell transitions to empty/loading/pending.
 				if (this.lastFormattedValue !== '') {
 					this.lastFormattedValue = '';
 					this.contentElement.textContent = '';
@@ -291,6 +399,7 @@ export class CellSlot<TRowData = unknown> {
 		if (this.lastLeft !== left) {
 			this.lastLeft = left;
 			this.element.style.left = toPx(left);
+			cellSlotWriteStats.cellLeftWrites++;
 			domUpdated = true;
 		}
 		if (this.lastRight !== -1) {
@@ -319,17 +428,19 @@ export class CellSlot<TRowData = unknown> {
 	}
 
 	public unbindHot(): void {
+		this.rowBindingGeneration++;
 		this.binding = null;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;
 		this.rowId = '';
 		this.lastRawValue = undefined;
-		this.lastPortalKey = undefined;
 		this.lastMountedRowVersion = -1;
 		this.lastMountedGlobalVersion = -1;
-		delete this.element.dataset.cellKey;
-		delete this.element.dataset.contentMode;
+		this.lastMountedInsightVersion = -1;
+		this.lastMountedStyleVersion = -1;
+		this.lastMountedLoadingVersion = -1;
+		this.lastMountedSelectionVersion = -1;
 		// Use JS-side flag to skip DOM read in hot path.
 		if (this.hasTabIndex) {
 			this.element.removeAttribute('tabindex');
@@ -341,6 +452,11 @@ export class CellSlot<TRowData = unknown> {
 	}
 
 	public unbindCold(): void {
+		if (this.renderer !== null) {
+			this.renderer.destroy();
+			this.renderer = null;
+		}
+		this.placement = null;
 		this.binding = null;
 		this.lastRawValue = undefined;
 		this.lastFormattedValue = undefined;
@@ -361,6 +477,10 @@ export class CellSlot<TRowData = unknown> {
 		this.hasTabIndex = false;
 		this.lastMountedRowVersion = -1;
 		this.lastMountedGlobalVersion = -1;
+		this.lastMountedInsightVersion = -1;
+		this.lastMountedStyleVersion = -1;
+		this.lastMountedLoadingVersion = -1;
+		this.lastMountedSelectionVersion = -1;
 		this.colIndex = -1;
 		this.colField = '';
 		this.rowIndex = -1;

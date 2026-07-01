@@ -2,19 +2,21 @@
  * CRUD + Validation Demo
  *
  * Demonstrates the full validation lifecycle:
- *   - Per-column valueValidator (sync and async)
- *   - api.validateCell()  →  single-cell inline check
- *   - api.validateGrid()  →  full-form sweep before submit
- *   - Red border (og-cell-invalid) persists after the editor closes
- *   - Mock server response with simulated server-side rejection
- *   - api.clearValidationErrors() on a clean submit
- *   - api.getAllValidationErrors()  →  sync snapshot of current error state (no re-run)
  *   - Sidebar "Submission Log" panel showing errors or success payload as JSON
  */
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Grid } from '@open-grid/react';
-import type { ColumnDef, GridApi, GridReadyEvent, CellValidationError, SidebarPanelDef, RowValidator } from '@open-grid/react';
-import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plus, FileJson, Scan } from 'lucide-react';
+import type {
+	ColumnDef,
+	GridApi,
+	GridReadyEvent,
+	GridIntegrityIssue,
+	GridWriteBlockedEventPayload,
+	SidebarPanelDef,
+	GridCellIntegrityRule,
+	GridRowIntegrityRule,
+} from '@open-grid/react';
+import { ShieldCheck, Send, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Plus, FileJson, Scan, Navigation2 } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
 
@@ -114,32 +116,17 @@ const COLUMNS: ColumnDef<Employee>[] = [
 		minWidth: 100,
 		maxWidth: 300,
 		tooltip: ({ row }) => `ID: ${row.id}`,
-		valueValidator: async ({ value }) => {
-			const s = String(value ?? '').trim();
-			if (!s) return 'Name is required';
-			if (s.length < 2) return 'Name must be at least 2 characters';
-			return null;
-		},
 	},
 	{
 		field: 'email',
 		header: 'Email',
 		width: 200,
 		minWidth: 120,
-		valueValidator: async ({ value }) => {
-			const s = String(value ?? '').trim();
-			if (!s) return 'Email is required';
-			if (!isValidEmail(s)) return 'Invalid email format (user@domain.com)';
-			return null;
-		},
 	},
 	{
 		field: 'department',
 		header: 'Department',
 		width: 130,
-		valueValidator: ({ value }) => {
-			return DEPARTMENTS.includes(String(value ?? '')) ? null : `Must be one of: ${DEPARTMENTS.join(', ')}`;
-		},
 	},
 	{
 		field: 'status',
@@ -150,9 +137,6 @@ const COLUMNS: ColumnDef<Employee>[] = [
 			if (row.status === 'On Leave') return 'Bonus is locked while on leave';
 			return null;
 		},
-		valueValidator: ({ value }) => {
-			return STATUSES.includes(value as EmployeeStatus) ? null : `Must be one of: ${STATUSES.join(', ')}`;
-		},
 	},
 	{
 		field: 'salary',
@@ -160,49 +144,27 @@ const COLUMNS: ColumnDef<Employee>[] = [
 		width: 120,
 		minWidth: 80,
 		maxWidth: 200,
-		// Salary is locked for terminated employees
-		editable: ({ row }) => row.status !== 'Terminated',
+		canEdit: ({ row }) => row?.status !== 'Terminated',
 		tooltip: ({ row }) => (row.status === 'Terminated' ? 'Salary locked — employee is terminated' : null),
-		valueValidator: ({ value }) => {
-			const n = Number(String(value ?? '').replace(/[$,]/g, ''));
-			if (isNaN(n)) return 'Must be a number';
-			if (n < 0) return 'Salary cannot be negative';
-			if (n > 10_000_000) return 'Salary exceeds maximum ($10M)';
-			return null;
-		},
 	},
 	{
 		field: 'bonus',
 		header: 'Bonus ($)',
 		width: 110,
-		// Bonus is only editable for Active employees
-		editable: ({ row }) => row.status === 'Active',
+		canEdit: ({ row }) => row?.status === 'Active',
 		tooltip: ({ row }) => {
 			if (row.status === 'Active') return null;
 			return `Bonus not applicable — status is "${row.status}"`;
-		},
-		valueValidator: ({ value }) => {
-			if (value === null || value === '' || value === undefined) return null;
-			const n = Number(String(value).replace(/[$,]/g, ''));
-			if (isNaN(n)) return 'Must be a number';
-			if (n < 0) return 'Bonus cannot be negative';
-			if (n > 1_000_000) return 'Bonus exceeds maximum ($1M)';
-			return null;
 		},
 	},
 	{
 		field: 'startDate',
 		header: 'Start Date',
 		width: 115,
-		valueValidator: ({ value }) => {
-			const d = new Date(String(value ?? ''));
-			if (isNaN(d.getTime())) return 'Invalid date (YYYY-MM-DD)';
-			return null;
-		},
 	},
 ];
 
-// ─── Cross-field row validator ────────────────────────────────────────────────
+// ─── Validation rules (integrity pipeline) ───────────────────────────────────
 
 const DEPT_MIN_SALARY: Record<string, number> = {
 	Engineering: 70000,
@@ -214,34 +176,112 @@ const DEPT_MIN_SALARY: Record<string, number> = {
 	HR: 45000,
 };
 
-const employeeRowValidator: RowValidator<Employee> = ({ row }) => {
-	const errors: Record<string, string | null> = {};
-	const salary = Number(row.salary);
-	const dept = row.department;
-	const minSalary = DEPT_MIN_SALARY[dept];
+const EMPLOYEE_CELL_RULES: GridCellIntegrityRule<Employee>[] = [
+	{
+		id: 'name-required',
+		field: 'name',
+		validate: async ({ value }) => {
+			const s = String(value ?? '').trim();
+			if (!s) return { message: 'Name is required' };
+			if (s.length < 2) return { message: 'Name must be at least 2 characters' };
+			return null;
+		},
+	},
+	{
+		id: 'email-required',
+		field: 'email',
+		validate: async ({ value }) => {
+			const s = String(value ?? '').trim();
+			if (!s) return { message: 'Email is required' };
+			if (!isValidEmail(s)) return { message: 'Invalid email format (user@domain.com)' };
+			await new Promise((resolve) => setTimeout(resolve, 220));
+			if (s.endsWith('@contractor.test')) {
+				return { message: 'Async policy: contractor.test addresses require manual approval' };
+			}
+			return null;
+		},
+	},
+	{
+		id: 'department-valid',
+		field: 'department',
+		validate: ({ value }) => {
+			return DEPARTMENTS.includes(String(value ?? '')) ? null : { message: `Must be one of: ${DEPARTMENTS.join(', ')}` };
+		},
+	},
+	{
+		id: 'status-valid',
+		field: 'status',
+		validate: ({ value }) => {
+			return STATUSES.includes(value as EmployeeStatus) ? null : { message: `Must be one of: ${STATUSES.join(', ')}` };
+		},
+	},
+	{
+		id: 'salary-valid',
+		field: 'salary',
+		validate: ({ value }) => {
+			const n = Number(String(value ?? '').replace(/[$,]/g, ''));
+			if (isNaN(n)) return { message: 'Must be a number' };
+			if (n < 0) return { message: 'Salary cannot be negative' };
+			if (n > 10_000_000) return { message: 'Salary exceeds maximum ($10M)' };
+			return null;
+		},
+	},
+	{
+		id: 'bonus-valid',
+		field: 'bonus',
+		validate: ({ value }) => {
+			if (value === null || value === '' || value === undefined) return null;
+			const n = Number(String(value).replace(/[$,]/g, ''));
+			if (isNaN(n)) return { message: 'Must be a number' };
+			if (n < 0) return { message: 'Bonus cannot be negative' };
+			if (n > 1_000_000) return { message: 'Bonus exceeds maximum ($1M)' };
+			return null;
+		},
+	},
+	{
+		id: 'start-date-valid',
+		field: 'startDate',
+		validate: ({ value }) => {
+			const d = new Date(String(value ?? ''));
+			return isNaN(d.getTime()) ? { message: 'Invalid date (YYYY-MM-DD)' } : null;
+		},
+	},
+];
 
-	// Per-department salary minimum (skip for terminated — salary is locked)
-	if (row.status !== 'Terminated' && minSalary !== undefined && !isNaN(salary) && salary >= 0 && salary < minSalary) {
-		errors.salary = `${dept} minimum salary is $${minSalary.toLocaleString()}`;
-	} else {
-		errors.salary = null;
-	}
-
-	// Bonus only allowed for Active employees
-	if (row.status !== 'Active' && row.bonus !== null && row.bonus !== undefined) {
-		errors.bonus = `Bonus not applicable for status "${row.status}"`;
-	} else {
-		errors.bonus = null;
-	}
-
-	return errors;
-};
+const EMPLOYEE_ROW_RULES: GridRowIntegrityRule<Employee>[] = [
+	{
+		id: 'dept-min-salary',
+		validate: ({ row }) => {
+			const salary = Number((row as Employee).salary);
+			const dept = (row as Employee).department;
+			const minSalary = DEPT_MIN_SALARY[dept];
+			if ((row as Employee).status !== 'Terminated' && minSalary !== undefined && !isNaN(salary) && salary >= 0 && salary < minSalary) {
+				return { message: `${dept} minimum salary is $${minSalary.toLocaleString()}`, fields: ['salary'] };
+			}
+			return null;
+		},
+	},
+	{
+		id: 'bonus-inactive',
+		validate: ({ row }) => {
+			const r = row as Employee;
+			if (r.status !== 'Active' && r.bonus !== null && r.bonus !== undefined) {
+				return { message: `Bonus not applicable for status "${r.status}"`, fields: ['bonus'] };
+			}
+			return null;
+		},
+	},
+];
 
 // ─── Submit state type ────────────────────────────────────────────────────────
 
 type SubmitStatus = 'idle' | 'validating' | 'submitting' | 'success' | 'error';
 
-type SubmissionLog = { kind: 'error'; errors: CellValidationError[] } | { kind: 'success'; rows: Employee[] } | null;
+type SubmissionLog =
+	| { kind: 'error'; errors: GridIntegrityIssue[] }
+	| { kind: 'success'; rows: Employee[] }
+	| { kind: 'writeBlocked'; blocked: GridWriteBlockedEventPayload }
+	| null;
 
 // ─── JSON syntax highlight helper ────────────────────────────────────────────
 
@@ -296,6 +336,23 @@ function SubmissionLogPanel({ log }: { log: SubmissionLog }) {
 		);
 	}
 
+	if (log.kind === 'writeBlocked') {
+		return (
+			<div className='flex h-full flex-col gap-3 overflow-hidden p-3'>
+				<div className='flex items-center gap-2'>
+					<AlertTriangle className='h-3.5 w-3.5 shrink-0 text-amber-400' />
+					<span className='text-[10px] font-extrabold uppercase tracking-wider text-amber-400'>
+						{log.blocked.source} blocked · {log.blocked.status}
+					</span>
+				</div>
+				<div className='rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-200'>{log.blocked.reason}</div>
+				<div className='min-h-0 flex-1 overflow-auto rounded-lg bg-slate-950/60 p-3'>
+					<JsonBlock value={log.blocked} />
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className='flex h-full flex-col gap-3 overflow-hidden p-3'>
 			<div className='flex items-center gap-2'>
@@ -314,7 +371,7 @@ function SubmissionLogPanel({ log }: { log: SubmissionLog }) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface Props {
-	onGridReady?: (event: GridReadyEvent<any>) => void;
+	onGridReady?: (event: GridReadyEvent<Employee>) => void;
 	editTrigger: 'singleClick' | 'doubleClick';
 	arrowKeyNavigationEdit: boolean;
 	pinLeftColumns?: number;
@@ -325,15 +382,20 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 	const apiRef = useRef<GridApi<Employee> | null>(null);
 	const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
 	const [submitMessage, setSubmitMessage] = useState('');
-	const [validationSummary, setValidationSummary] = useState<CellValidationError[]>([]);
+	const [validationSummary, setValidationSummary] = useState<GridIntegrityIssue[]>([]);
 	const [submissionLog, setSubmissionLog] = useState<SubmissionLog>(null);
-	const [errorSnapshot, setErrorSnapshot] = useState<CellValidationError[] | null>(null);
+	const [errorSnapshot, setErrorSnapshot] = useState<GridIntegrityIssue[] | null>(null);
+	const [lastWriteBlocked, setLastWriteBlocked] = useState<GridWriteBlockedEventPayload | null>(null);
 	const [rows] = useState<Employee[]>(INITIAL_ROWS);
+	const [jumpRowId, setJumpRowId] = useState('');
+	const [jumpColField, setJumpColField] = useState('');
+	const [jumpEdit, setJumpEdit] = useState(false);
+	const [lastJumped, setLastJumped] = useState<{ rowId: string; colField: string } | null>(null);
 
 	const handleGridReady = useCallback(
 		(event: GridReadyEvent<Employee>) => {
 			apiRef.current = event.api;
-			onGridReady?.(event as GridReadyEvent<any>);
+			onGridReady?.(event as GridReadyEvent<Employee>);
 		},
 		[onGridReady]
 	);
@@ -343,7 +405,8 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		if (!api) return;
 		setSubmitStatus('validating');
 		setSubmitMessage('');
-		const errors = await api.validateGrid();
+		const result = await api.integrity.validateGrid();
+		const errors = result.issues as GridIntegrityIssue[];
 		setValidationSummary(errors);
 		if (errors.length === 0) {
 			setSubmitStatus('idle');
@@ -365,7 +428,8 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		setSubmitStatus('validating');
 		setSubmitMessage('Validating…');
 		setValidationSummary([]);
-		const errors = await api.validateGrid();
+		const result = await api.integrity.validateGrid();
+		const errors = result.issues as GridIntegrityIssue[];
 		setValidationSummary(errors);
 
 		if (errors.length > 0) {
@@ -381,15 +445,26 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		setSubmitMessage('Sending to server…');
 		await new Promise((r) => setTimeout(r, 900));
 
-		// Simulate a 50% chance the server rejects row 4 for a domain policy reason
+		// Simulate a 50% chance the server rejects row 4 for a domain policy reason.
+		// api.integrity.publishIssues() pushes server errors into the integrity pipeline
 		const serverRejected = Math.random() > 0.5;
 		if (serverRejected) {
-			const serverErrors: CellValidationError[] = [
-				{ rowId: '4', colField: 'email', error: 'Server: @company.com domain reserved for existing staff' },
-			];
+			const serverIssue: GridIntegrityIssue = {
+				id: 'server-email-4',
+				source: 'serverValidation',
+				type: 'serverRejected',
+				severity: 'error',
+				blocking: true,
+				rowId: '4',
+				colField: 'email',
+				message: 'Server: @company.com domain reserved for existing staff',
+				createdAt: Date.now(),
+			};
+			api.integrity.publishIssues('serverValidation', [serverIssue]);
+			const serverErrors: GridIntegrityIssue[] = [serverIssue];
 			setValidationSummary(serverErrors);
 			setSubmitStatus('error');
-			setSubmitMessage('Server rejected the request. See error below.');
+			setSubmitMessage('Server rejected the request. Fix highlighted cells and retry.');
 			setSubmissionLog({ kind: 'error', errors: serverErrors });
 			api.openPanel('submission-log');
 			return;
@@ -397,7 +472,7 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 
 		// Step 3: success — collect all rows from the grid and log them
 		const allRows = api.rows().getAll();
-		api.clearValidationErrors();
+		api.integrity.clearIssues();
 		setValidationSummary([]);
 		setSubmitStatus('success');
 		setSubmitMessage('All changes saved successfully!');
@@ -412,20 +487,62 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 		api.applyTransaction({ add: [newRow] });
 	}, []);
 
+	const handleWriteBlocked = useCallback((blocked: GridWriteBlockedEventPayload) => {
+		setLastWriteBlocked(blocked);
+		setSubmitStatus('error');
+		setSubmitMessage(
+			`${blocked.source} blocked: ${blocked.reason}${
+				blocked.rowCount > 1 || blocked.colCount > 1
+					? ` (${blocked.rowCount} row${blocked.rowCount !== 1 ? 's' : ''}, ${blocked.colCount} column${blocked.colCount !== 1 ? 's' : ''})`
+					: ''
+			}`
+		);
+		if (blocked.issues && blocked.issues.length > 0) {
+			setValidationSummary([...blocked.issues]);
+		}
+		setSubmissionLog({ kind: 'writeBlocked', blocked });
+		apiRef.current?.openPanel('submission-log');
+	}, []);
+
 	const handleClearErrors = useCallback(() => {
-		apiRef.current?.clearValidationErrors();
+		apiRef.current?.integrity.clearIssues();
 		setValidationSummary([]);
 		setSubmitStatus('idle');
 		setSubmitMessage('');
 		setSubmissionLog(null);
 		setErrorSnapshot(null);
+		setLastWriteBlocked(null);
 	}, []);
+
+	const handleJump = useCallback(() => {
+		const api = apiRef.current;
+		if (!api || !jumpRowId.trim()) return;
+		const col = jumpColField.trim();
+		if (col) {
+			api.scrollToCell(jumpRowId.trim(), col, { select: true, edit: jumpEdit });
+			setLastJumped({ rowId: jumpRowId.trim(), colField: col });
+		} else {
+			api.scrollToRow(jumpRowId.trim(), { select: true });
+			setLastJumped({ rowId: jumpRowId.trim(), colField: '' });
+		}
+	}, [jumpRowId, jumpColField, jumpEdit]);
+
+	const handleScrollToError = useCallback((rowId: string, colField: string) => {
+		apiRef.current?.scrollToCell(rowId, colField, { select: true });
+		setLastJumped({ rowId, colField });
+	}, []);
+
+	useEffect(() => {
+		if (!lastJumped) return;
+		const t = setTimeout(() => setLastJumped(null), 1500);
+		return () => clearTimeout(t);
+	}, [lastJumped]);
 
 	// Synchronous read — no validators run, just reads current error state
 	const handleSnapshotErrors = useCallback(() => {
 		const api = apiRef.current;
 		if (!api) return;
-		setErrorSnapshot(api.getAllValidationErrors());
+		setErrorSnapshot(api.integrity.getIssues() as GridIntegrityIssue[]);
 	}, []);
 
 	// Sidebar panel — recreated when submissionLog changes so the render closure captures the latest value
@@ -482,7 +599,43 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 					Snapshot Errors
 				</button>
 
-				<div className='ml-auto'>
+				<div className='ml-auto flex items-center gap-2'>
+					{/* Jump to Row / Cell ──────────────────────────────────────────── */}
+					<div className='flex items-center gap-1.5 rounded-lg border border-indigo-500/25 bg-indigo-500/8 px-2.5 py-1'>
+						<Navigation2 className='h-3 w-3 shrink-0 text-indigo-400' />
+						<span className='text-[10px] font-bold uppercase tracking-wider text-indigo-400'>Jump</span>
+						<input
+							value={jumpRowId}
+							onChange={(e) => setJumpRowId(e.target.value)}
+							onKeyDown={(e) => e.key === 'Enter' && handleJump()}
+							placeholder='row id'
+							className='w-14 rounded bg-slate-900/60 px-1.5 py-0.5 text-[10px] text-slate-300 placeholder-slate-600 outline-none ring-1 ring-slate-700 focus:ring-indigo-500/50'
+						/>
+						<input
+							value={jumpColField}
+							onChange={(e) => setJumpColField(e.target.value)}
+							onKeyDown={(e) => e.key === 'Enter' && handleJump()}
+							placeholder='field (opt)'
+							className='w-20 rounded bg-slate-900/60 px-1.5 py-0.5 text-[10px] text-slate-300 placeholder-slate-600 outline-none ring-1 ring-slate-700 focus:ring-indigo-500/50'
+						/>
+						<label className='flex cursor-pointer items-center gap-1 select-none'>
+							<input
+								type='checkbox'
+								checked={jumpEdit}
+								onChange={(e) => setJumpEdit(e.target.checked)}
+								className='h-3 w-3 accent-indigo-500'
+							/>
+							<span className='text-[10px] text-indigo-300/70'>edit</span>
+						</label>
+						<button
+							onClick={handleJump}
+							disabled={!jumpRowId.trim()}
+							className='rounded bg-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white transition-all hover:bg-indigo-500 disabled:opacity-40'
+						>
+							Go
+						</button>
+					</div>
+
 					<button
 						onClick={handleAddRow}
 						className='flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-bold text-emerald-300 transition-all hover:bg-emerald-500/20'
@@ -518,22 +671,51 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 			{/* Validation error list */}
 			{validationSummary.length > 0 && (
 				<div className='shrink-0 rounded-xl border border-rose-500/20 bg-rose-500/5 px-4 py-3'>
-					<p className='mb-2 text-[10px] font-extrabold uppercase tracking-wider text-rose-400'>
-						{validationSummary.length} validation error{validationSummary.length > 1 ? 's' : ''}
-					</p>
-					<ul className='flex flex-col gap-1'>
-						{validationSummary.map((e, i) => (
-							<li key={i} className='flex items-start gap-2 text-[11px] text-rose-300/80'>
-								<span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400' />
-								<span>
-									<span className='font-semibold text-rose-300'>
-										Row {e.rowId} / {e.colField}:
-									</span>{' '}
-									{e.error}
-								</span>
-							</li>
-						))}
+					<div className='mb-2 flex items-center justify-between'>
+						<p className='text-[10px] font-extrabold uppercase tracking-wider text-rose-400'>
+							{validationSummary.length} validation error{validationSummary.length > 1 ? 's' : ''}
+						</p>
+						<span className='text-[9px] text-rose-600 italic'>click a row to scroll to it</span>
+					</div>
+					<ul className='flex flex-col gap-1 h-[70px] overflow-auto'>
+						{validationSummary.map((e, i) => {
+							const isJumped = !!e.rowId && !!e.colField && lastJumped?.rowId === e.rowId && lastJumped?.colField === e.colField;
+							return (
+								<li
+									key={i}
+									onClick={() => e.rowId && e.colField && handleScrollToError(e.rowId, e.colField)}
+									className={`-mx-1 flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 text-[11px] text-rose-300/80 transition-colors ${
+										isJumped ? 'bg-rose-500/20 text-rose-200' : 'hover:bg-rose-500/10 hover:text-rose-200'
+									}`}
+								>
+									<Navigation2
+										className={`mt-0.5 h-3 w-3 shrink-0 transition-colors ${isJumped ? 'text-rose-300' : 'text-rose-600'}`}
+									/>
+									<span>
+										<span className='font-semibold text-rose-300'>
+											Row {e.rowId} / {e.colField}:
+										</span>{' '}
+										{e.message}
+									</span>
+								</li>
+							);
+						})}
 					</ul>
+				</div>
+			)}
+
+			{lastWriteBlocked && (
+				<div className='shrink-0 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3'>
+					<div className='mb-2 flex items-center gap-2'>
+						<AlertTriangle className='h-3.5 w-3.5 text-amber-400' />
+						<p className='text-[10px] font-extrabold uppercase tracking-wider text-amber-400'>
+							Last blocked write · {lastWriteBlocked.source} · {lastWriteBlocked.status}
+						</p>
+					</div>
+					<p className='text-[11px] text-amber-200'>{lastWriteBlocked.reason}</p>
+					<p className='mt-1 text-[10px] text-amber-300/80'>
+						Affected cells: {lastWriteBlocked.cells.map((cell) => `${cell.rowId}/${cell.colField}`).join(', ') || 'none'}
+					</p>
 				</div>
 			)}
 
@@ -559,18 +741,29 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 					{errorSnapshot.length === 0 ? (
 						<p className='text-[11px] text-sky-600 italic'>No errors in current state — run Validate All first to populate errors.</p>
 					) : (
-						<ul className='flex flex-col gap-1'>
-							{errorSnapshot.map((e, i) => (
-								<li key={i} className='flex items-start gap-2 text-[11px] text-sky-300/80'>
-									<span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400' />
-									<span>
-										<span className='font-semibold text-sky-300'>
-											Row {e.rowId} / {e.colField}:
-										</span>{' '}
-										{e.error}
-									</span>
-								</li>
-							))}
+						<ul className='flex flex-col gap-1 h-[70px] overflow-auto'>
+							{errorSnapshot.map((e, i) => {
+								const isJumped = !!e.rowId && !!e.colField && lastJumped?.rowId === e.rowId && lastJumped?.colField === e.colField;
+								return (
+									<li
+										key={i}
+										onClick={() => e.rowId && e.colField && handleScrollToError(e.rowId, e.colField)}
+										className={`-mx-1 flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 text-[11px] text-sky-300/80 transition-colors ${
+											isJumped ? 'bg-sky-500/20 text-sky-200' : 'hover:bg-sky-500/10 hover:text-sky-200'
+										}`}
+									>
+										<Navigation2
+											className={`mt-0.5 h-3 w-3 shrink-0 transition-colors ${isJumped ? 'text-sky-300' : 'text-sky-600'}`}
+										/>
+										<span>
+											<span className='font-semibold text-sky-300'>
+												Row {e.rowId} / {e.colField}:
+											</span>{' '}
+											{e.message}
+										</span>
+									</li>
+								);
+							})}
 						</ul>
 					)}
 				</div>
@@ -579,19 +772,25 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 			{/* Grid */}
 			<div className='min-h-0 flex-1'>
 				<Grid<Employee>
-					mode='client'
+					rowModelType='client'
 					columns={COLUMNS}
 					rows={rows}
 					getRowId={(r) => r.id}
-					rowValidator={employeeRowValidator}
+					dataIntegrity={{
+						validation: {
+							cellRules: EMPLOYEE_CELL_RULES,
+							rowRules: EMPLOYEE_ROW_RULES,
+						},
+					}}
 					navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
 					pinLeftColumns={pinLeftColumns}
 					pinRightColumns={pinRightColumns}
 					onGridReady={handleGridReady}
+					onWriteBlocked={handleWriteBlocked}
 					showFilterChipBar
 					initialState={{ defaultColWidth: 130 }}
 					sidebar={{
-						panels: [...sidebarPanels, 'themes'],
+						panels: [...sidebarPanels, 'themes', 'dataIntegrity'],
 						position: 'right',
 						width: 320,
 					}}
@@ -612,7 +811,23 @@ export default function CrudValidationDemo({ onGridReady, editTrigger, arrowKeyN
 				<span>·</span>
 				<span>Use the header filter menu to filter — active filters appear as chips above the headers</span>
 				<span>·</span>
-				<span>Row validator enforces per-department salary minimums</span>
+				<span>Cross-field rules enforce per-department salary minimums and bonus eligibility</span>
+				<span>·</span>
+				<span>
+					<strong className='text-slate-400'>Submit Changes</strong> may surface a server error pushed via{' '}
+					<code className='text-slate-400'>api.integrity.publishIssues()</code>
+				</span>
+				<span>Â·</span>
+				<span>
+					Try editing or pasting an email ending with <code className='text-slate-400'>@contractor.test</code> to see async pre-commit
+					validation block the write
+				</span>
+				<span>·</span>
+				<span>
+					<strong className='text-slate-400'>Click any error row</strong> to scroll to that cell via{' '}
+					<code className='text-slate-400'>api.scrollToCell()</code> — or use the <strong className='text-slate-400'>Jump</strong> input to
+					call <code className='text-slate-400'>scrollToRow()</code> / <code className='text-slate-400'>scrollToCell()</code> directly
+				</span>
 			</div>
 		</div>
 	);

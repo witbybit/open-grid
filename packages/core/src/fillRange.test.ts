@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { GridStore } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
+import { GridEventName } from './api/GridEvents.js';
 
 type FillRangeRow = {
 	id: string;
@@ -27,6 +28,8 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 			],
 			columns: store.getState().columns,
 		});
+		const blockedHandler = vi.fn();
+		store.addEventListener(GridEventName.writeBlocked, blockedHandler);
 
 		// Source range is r1:value to r2:value (values 10, 20)
 		// Target range is r3:value to r4:value
@@ -238,5 +241,165 @@ describe('Spreadsheet fill range sequence extrapolation and reference shifting',
 		expect(store.getCellValue('r1', 'formula3')).toBe(45);
 
 		controller.dispose();
+	});
+
+	it('fill uses the same dependency invalidation pipeline as direct writes', () => {
+		let getterCalls = 0;
+		const store = new GridStore<{ id: string; price: number; price_display: string }>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'price', header: 'Price', width: 100 },
+				{
+					field: 'price_display',
+					header: 'Display',
+					width: 120,
+					valueGetterDependencies: ['price'],
+					valueGetter: ({ row }) => {
+						getterCalls++;
+						return `$${row.price}.00`;
+					},
+				},
+			],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'r1', price: 15, price_display: '' },
+				{ id: 'r2', price: 30, price_display: '' },
+				{ id: 'r3', price: 0, price_display: '' },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(store.getCellValue('r3', 'price_display')).toBe('$0.00');
+		expect(getterCalls).toBe(1);
+
+		store.engine.fillRange(
+			{
+				start: { rowId: 'r1', colField: 'price' },
+				end: { rowId: 'r2', colField: 'price' },
+			},
+			{
+				start: { rowId: 'r3', colField: 'price' },
+				end: { rowId: 'r3', colField: 'price' },
+			}
+		);
+
+		expect(store.getCellValue('r3', 'price')).toBe(45);
+		expect(store.getCellValue('r3', 'price_display')).toBe('$45.00');
+		expect(getterCalls).toBe(2);
+
+		controller.dispose();
+	});
+
+	it('fillRangeAsync rejects blocking fill proposals before commit when validateOnFill is enabled', async () => {
+		const store = new GridStore<FillRangeRow>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 50 },
+					{ field: 'text', header: 'Text', width: 100 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						validateOnFill: true,
+						cellRules: [
+							{ id: 'required-text', field: 'text', validate: ({ value }) => (value ? null : { message: 'Text is required' }) },
+						],
+					},
+				},
+			}
+		);
+		const controller = new ClientRowModelController<FillRangeRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'r1', text: '' },
+				{ id: 'r2', text: 'seed' },
+			],
+			columns: store.getState().columns,
+		});
+		const blockedHandler = vi.fn();
+		store.addEventListener(GridEventName.writeBlocked, blockedHandler);
+
+		const result = await store.engine.fillRangeAsync(
+			{
+				start: { rowId: 'r1', colField: 'text' },
+				end: { rowId: 'r1', colField: 'text' },
+			},
+			{
+				start: { rowId: 'r2', colField: 'text' },
+				end: { rowId: 'r2', colField: 'text' },
+			}
+		);
+
+		expect(result.status).toBe('validationFailed');
+		expect(blockedHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'fill',
+					status: 'validationFailed',
+				}),
+			})
+		);
+		expect(store.getCellValue('r2', 'text')).toBe('seed');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('fillRange reports capability-denied cells during sync fill flows', () => {
+		const store = new GridStore<FillRangeRow>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 50 },
+					{ field: 'text', header: 'Text', width: 100 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				capabilities: {
+					canPerformAction: ({ action, rowId }) => {
+						if (action === 'fill' && rowId === 'r2') {
+							return { allowed: false, reason: 'Row is locked' };
+						}
+						return { allowed: true };
+					},
+				},
+			}
+		);
+		const controller = new ClientRowModelController<FillRangeRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'r1', text: 'seed' },
+				{ id: 'r2', text: 'keep' },
+			],
+			columns: store.getState().columns,
+		});
+		const blockedHandler = vi.fn();
+		store.addEventListener(GridEventName.writeBlocked, blockedHandler);
+
+		store.engine.fillRange(
+			{
+				start: { rowId: 'r1', colField: 'text' },
+				end: { rowId: 'r1', colField: 'text' },
+			},
+			{
+				start: { rowId: 'r2', colField: 'text' },
+				end: { rowId: 'r2', colField: 'text' },
+			}
+		);
+
+		expect(store.getCellValue('r2', 'text')).toBe('keep');
+		expect(blockedHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'fill',
+					status: 'capabilityDenied',
+					reason: 'Row is locked',
+				}),
+			})
+		);
+
+		controller.dispose();
+		store.destroy();
 	});
 });

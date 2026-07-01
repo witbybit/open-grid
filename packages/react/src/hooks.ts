@@ -1,5 +1,5 @@
-import { GridApi, GridNavigationHandle, GridNavigationOptions, GridState, registerGridNavigation } from '@open-grid/core';
-import { useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { GridApi, GridNavigationHandle, GridNavigationOptions, GridStateSnapshot, registerGridNavigation } from '@open-grid/core';
+import { useCallback, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
 import { GridApiContext } from './gridContext.js';
 
 export function useGridApi<TRowData = unknown>(): GridApi<TRowData> {
@@ -15,12 +15,15 @@ export function useGridApi<TRowData = unknown>(): GridApi<TRowData> {
 /**
  * Custom selector hook utilizing useSyncExternalStore for targeted re-renders.
  */
-export function useGridSelector<T, TRowData = unknown>(selector: (state: GridState<TRowData>) => T, isEqual?: (left: T, right: T) => boolean): T {
+export function useGridSelector<T, TRowData = unknown>(
+	selector: (state: GridStateSnapshot<TRowData>) => T,
+	isEqual?: (left: T, right: T) => boolean
+): T {
 	return useGridSelectorWithEquality(selector, isEqual);
 }
 
 function useGridSelectorWithEquality<T, TRowData = unknown>(
-	selector: (state: GridState<TRowData>) => T,
+	selector: (state: GridStateSnapshot<TRowData>) => T,
 	isEqual: (left: T, right: T) => boolean = Object.is
 ): T {
 	const api = useGridApi<TRowData>();
@@ -29,57 +32,89 @@ function useGridSelectorWithEquality<T, TRowData = unknown>(
 	selectorRef.current = selector;
 	const isEqualRef = useRef(isEqual);
 	isEqualRef.current = isEqual;
-	const snapshotRef = useRef<{ hasValue: boolean; value: T }>({ hasValue: false, value: undefined as T });
+
+	const updateGenRef = useRef(0);
+	const cacheRef = useRef<{ gen: number; value: T }>({ gen: -1, value: undefined as T });
+
+	const subscribe = useCallback(
+		(onStoreChange: () => void) => {
+			return api.subscribe(() => {
+				updateGenRef.current++;
+				onStoreChange();
+			});
+		},
+		[api]
+	);
 
 	const getSnapshot = useCallback(() => {
-		const next = selectorRef.current(api.getState());
-		const previous = snapshotRef.current;
-		if (previous.hasValue && isEqualRef.current(previous.value, next)) {
-			return previous.value;
+		const currentGen = updateGenRef.current;
+		const cache = cacheRef.current;
+
+		if (cache.gen === currentGen) {
+			return cache.value;
 		}
-		snapshotRef.current = { hasValue: true, value: next };
-		return next;
+
+		const snapshot = api.getStateSnapshot();
+		const value = selectorRef.current(snapshot);
+
+		if (cache.gen !== -1 && isEqualRef.current(cache.value, value)) {
+			cacheRef.current = { gen: currentGen, value: cache.value };
+			return cache.value;
+		}
+
+		cacheRef.current = { gen: currentGen, value };
+		return value;
 	}, [api]);
 
-	return useSyncExternalStore(api.subscribe, getSnapshot, getSnapshot);
+	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 /**
  * Targeted selector for individual keys to achieve optimal performance.
- * The `key` must be a valid key of GridState — this drives fine-grained subscriptions
- * so the component only re-renders when that specific slice changes.
+ * The `key` must be a valid key of GridStateSnapshot so the component only re-renders
+ * when that specific slice changes.
  */
 export function useGridKeySelector<T, TRowData = unknown>(
-	key: keyof GridState<TRowData>,
-	selector: (state: GridState<TRowData>) => T,
+	key: keyof GridStateSnapshot<TRowData>,
+	selector: (state: GridStateSnapshot<TRowData>) => T,
 	isEqual?: (left: T, right: T) => boolean
 ): T {
 	return useGridKeySelectorWithEquality(key, selector, isEqual);
 }
 
 function useGridKeySelectorWithEquality<T, TRowData = unknown>(
-	key: keyof GridState<TRowData>,
-	selector: (state: GridState<TRowData>) => T,
+	key: keyof GridStateSnapshot<TRowData>,
+	selector: (state: GridStateSnapshot<TRowData>) => T,
 	isEqual: (left: T, right: T) => boolean = Object.is
 ): T {
 	const api = useGridApi<TRowData>();
 
 	const selectorRef = useRef(selector);
 	selectorRef.current = selector;
-	const isEqualRef = useRef(isEqual);
-	isEqualRef.current = isEqual;
-	const snapshotRef = useRef<{ hasValue: boolean; value: T }>({ hasValue: false, value: undefined as T });
+	const cacheRef = useRef<T | undefined>(undefined);
 
-	const subscribe = useCallback((onStoreChange: () => void) => api.subscribeToKey(key, onStoreChange), [api, key]);
+	const subscribe = useCallback(
+		(onStoreChange: () => void) => {
+			return api.subscribeToSnapshotSelector(
+				[key],
+				(snapshot) => selectorRef.current(snapshot),
+				(value) => {
+					cacheRef.current = value;
+					onStoreChange();
+				},
+				isEqual
+			);
+		},
+		[api, isEqual, key]
+	);
 
 	const getSnapshot = useCallback(() => {
-		const next = selectorRef.current(api.getState());
-		const previous = snapshotRef.current;
-		if (previous.hasValue && isEqualRef.current(previous.value, next)) {
-			return previous.value;
+		if (cacheRef.current !== undefined) {
+			return cacheRef.current;
 		}
-		snapshotRef.current = { hasValue: true, value: next };
-		return next;
+		const value = selectorRef.current(api.getStateSnapshot());
+		cacheRef.current = value;
+		return value;
 	}, [api]);
 
 	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
@@ -92,15 +127,27 @@ export function useGridNavigationController<TRowData = unknown>(options: GridNav
 	const api = useGridApi<TRowData>();
 	const optionsRef = useRef(options);
 	optionsRef.current = options;
-	const [controller, setController] = useState<GridNavigationHandle | null>(null);
+	const controllerRef = useRef<GridNavigationHandle | null>(null);
+	const facadeRef = useRef<GridNavigationHandle | null>(null);
+
+	if (enabled && facadeRef.current == null) {
+		facadeRef.current = {
+			handleKeyDown: (event) => controllerRef.current?.handleKeyDown(event),
+			handleMouseDown: (rowId, colField, event) => controllerRef.current?.handleMouseDown(rowId, colField, event),
+			handleClick: (rowId, colField, event) => controllerRef.current?.handleClick(rowId, colField, event),
+			handleMouseEnter: (rowId, colField) => controllerRef.current?.handleMouseEnter(rowId, colField),
+			handleMouseUp: () => controllerRef.current?.handleMouseUp(),
+			setCellEditing: (rowId, colField, isEditing) => controllerRef.current?.setCellEditing(rowId, colField, isEditing),
+			dispose: () => controllerRef.current?.dispose(),
+		};
+	}
 
 	useEffect(() => {
 		if (!enabled) {
-			setController(null);
+			controllerRef.current = null;
 			return;
 		}
 		const nav = registerGridNavigation<TRowData>(api, {
-			onCellValueChanged: (rowId, colField, val) => optionsRef.current.onCellValueChanged?.(rowId, colField, val),
 			get editTrigger() {
 				return optionsRef.current.editTrigger;
 			},
@@ -108,13 +155,15 @@ export function useGridNavigationController<TRowData = unknown>(options: GridNav
 				return optionsRef.current.arrowKeyNavigationEdit;
 			},
 		});
-		setController(nav);
+		controllerRef.current = nav;
 
 		return () => {
+			if (controllerRef.current === nav) {
+				controllerRef.current = null;
+			}
 			nav.dispose();
-			setController(null);
 		};
 	}, [api, enabled]);
 
-	return controller;
+	return enabled ? facadeRef.current : null;
 }

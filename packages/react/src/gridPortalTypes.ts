@@ -1,5 +1,13 @@
 import type { ColumnDef, GridApi, RowNode, VisualRow, CellRendererPhase } from '@open-grid/core';
 
+export interface CellPortalPhysicalIdentity {
+	readonly cellInstanceId: string;
+	readonly rowSlotId: string;
+	readonly slotGeneration: number;
+	readonly rowBindingGeneration: number;
+	readonly portalHostId: string;
+}
+
 export interface PortalCellProps<TRowData = unknown> {
 	rowId: string;
 	colField: string;
@@ -26,8 +34,8 @@ export interface PortalData<TRowData = unknown> {
 	isScrolling?: boolean;
 	isFocused?: boolean;
 	isSelected?: boolean;
-	/** Slot generation at the time this cell was mounted — used to reject stale async updates. */
-	slotGeneration?: number;
+	/** Physical ownership identity for pooled cell portals. */
+	physicalIdentity: CellPortalPhysicalIdentity;
 }
 
 /** Snapshot used by the optimised CellPortalPool — rebuilt only on structural changes (add/remove). */
@@ -68,6 +76,13 @@ export type ImperativeUpdaterFn<TRowData> = (
 ) => boolean;
 
 export interface PortalStore<TRowData = unknown> {
+	getDebugStats?(): {
+		cellStructuralPublishes: number;
+		rowMenuStructuralPublishes: number;
+		cellSnapshotRebuilds: number;
+		rowMenuSnapshotRebuilds: number;
+	};
+	resetDebugStats?(): void;
 	subscribeToCell?(cellKey: string, listener: () => void): () => void;
 	getCellData?(cellKey: string): PortalData<TRowData> | undefined;
 	// Optimised split subscriptions — implemented by createPortalStore
@@ -89,7 +104,7 @@ export interface PortalStore<TRowData = unknown> {
 		isScrolling: boolean | undefined,
 		isFocused: boolean | undefined,
 		isSelected: boolean | undefined,
-		slotGeneration?: number
+		physicalIdentity: CellPortalPhysicalIdentity
 	): boolean;
 	mountCell(
 		cellKey: string,
@@ -99,13 +114,13 @@ export interface PortalStore<TRowData = unknown> {
 		col: ColumnDef<TRowData>,
 		isEditing: boolean,
 		isLoading: boolean,
-		phase?: CellRendererPhase,
-		isScrolling?: boolean,
-		isFocused?: boolean,
-		isSelected?: boolean,
-		slotGeneration?: number
+		phase: CellRendererPhase | undefined,
+		isScrolling: boolean | undefined,
+		isFocused: boolean | undefined,
+		isSelected: boolean | undefined,
+		physicalIdentity: CellPortalPhysicalIdentity
 	): void;
-	unmountCell(cellKey: string, container?: HTMLElement, sync?: boolean): void;
+	unmountCell(cellKey: string, container?: HTMLElement, sync?: boolean, physicalIdentity?: CellPortalPhysicalIdentity): void;
 }
 
 export interface PortalManagerProps<TRowData = unknown> {

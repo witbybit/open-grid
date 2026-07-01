@@ -67,18 +67,20 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			store.destroy();
 		});
 
-		it('invalidates geometry, headers, and column', () => {
+		it('invalidates geometry, headers, and viewport', () => {
 			const store = makeStore();
 			const ctrl = makeController(store);
 			const engine = (store as any).engine;
 
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			store.setColumnWidth('name', 200);
 
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'geometry' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'column', colId: 'name' }));
+			expect(spyApply).toHaveBeenCalled();
+			const plan = spyApply.mock.calls[0][0];
+			expect(plan.geometry).toBe(true);
+			expect(plan.headers).toBe(true);
+			expect(plan.viewport).toBe(true);
 
 			ctrl.dispose();
 			store.destroy();
@@ -103,7 +105,7 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 		it('clears expansion.groups', () => {
 			const store = makeStore();
 			// Set some initial expansion state
-			store.setState((s) => ({
+			store.engine.stateManager.setState((s) => ({
 				...s,
 				expansion: { groups: { 'group-1': true as const }, treeRows: {}, details: {} },
 			}));
@@ -118,14 +120,16 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const store = makeStore();
 			const engine = (store as any).engine;
 
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			store.setGroupBy(['name']);
 
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'geometry' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'viewport' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'overlay' }));
+			expect(spyApply).toHaveBeenCalled();
+			const plan = spyApply.mock.calls[0][0];
+			expect(plan.geometry).toBe(true);
+			expect(plan.viewport).toBe(true);
+			expect(plan.headers).toBe(true);
+			expect(plan.overlay).toBe(true);
 
 			store.destroy();
 		});
@@ -165,12 +169,14 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const store = makeStore();
 			const engine = (store as any).engine;
 
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			store.setAggDefs([] as any[]);
 
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'viewport' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'overlay' }));
+			expect(spyApply).toHaveBeenCalled();
+			const plan = spyApply.mock.calls[0][0];
+			expect(plan.viewport).toBe(true);
+			expect(plan.overlay).toBe(true);
 
 			store.destroy();
 		});
@@ -200,32 +206,6 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			store.destroy();
 		});
 
-		it('commitEdit with validator failure returns false and does not close editor', async () => {
-			const store = makeStore({
-				columns: [
-					{ field: 'id', header: 'ID', width: 50 },
-					{
-						field: 'name',
-						header: 'Name',
-						width: 150,
-						valueValidator: async () => 'Value is too short',
-					},
-					{ field: 'price', header: 'Price', width: 100 },
-				],
-			});
-			const ctrl = makeController(store);
-
-			store.startEditing('1', 'name');
-			const result = await store.commitEdit('1', 'name', 'A');
-
-			expect(result).toBe(false);
-			// Editor should still be open (activeEdit not cleared)
-			expect(store.getState().activeEdit).not.toBeNull();
-
-			ctrl.dispose();
-			store.destroy();
-		});
-
 		it('commitEdit with async valueSetter returning false returns false and rolls back', async () => {
 			const store = makeStore({
 				columns: [
@@ -248,6 +228,7 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const result = await store.commitEdit('1', 'name', 'New Value');
 
 			expect(result).toBe(false);
+			expect(store.canUndo()).toBe(false);
 
 			ctrl.dispose();
 			store.destroy();
@@ -262,6 +243,7 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 
 			expect(result).toBe(true);
 			expect(store.getState().activeEdit).toBeNull();
+			expect(store.canUndo()).toBe(true);
 
 			ctrl.dispose();
 			store.destroy();
@@ -285,13 +267,15 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const ctrl = makeController(store);
 			const engine = (store as any).engine;
 
-			const spyInvalidate = vi.spyOn(engine.invalidation, 'invalidate');
+			const spyApply = vi.spyOn(engine.invalidation, 'applyNormalizedPlan');
 
 			store.applyRowSelectionGesture({ kind: 'replace', rowIds: ['1', '3'] });
 
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'row', rowId: '1' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'row', rowId: '3' }));
-			expect(spyInvalidate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'headers' }));
+			expect(spyApply).toHaveBeenCalled();
+			const plan = spyApply.mock.calls[0][0];
+			expect(plan.rows.has('1')).toBe(true);
+			expect(plan.rows.has('3')).toBe(true);
+			expect(plan.headers).toBe(true);
 
 			ctrl.dispose();
 			store.destroy();

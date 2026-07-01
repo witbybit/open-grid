@@ -205,6 +205,170 @@ describe('ClipboardController', () => {
 		store.destroy();
 	});
 
+	it('pasteFromClipboard does not fire cellsPasted when the batch write is rejected', async () => {
+		const store = makeStore();
+		const ctrl = makeController(store);
+		const handler = vi.fn();
+		store.addEventListener(GridEventName.cellsPasted, handler);
+		vi.spyOn(store.engine, 'batchCellValues').mockReturnValue({ status: 'rejected', reason: 'blocked' });
+
+		clip.setStored('Gamma');
+		store.selectCell({ rowId: '1', colField: 'name' });
+		await store.pasteFromClipboard();
+
+		expect(handler).not.toHaveBeenCalled();
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('pasteFromClipboard rejects the whole paste before commit when blocking proposal validation is enabled', async () => {
+		const store = new GridStore<{ id: string; name: string; note: string }>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 80 },
+					{ field: 'name', header: 'Name', width: 150 },
+					{ field: 'note', header: 'Note', width: 150 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						validateOnSubmit: true,
+						cellRules: [
+							{ id: 'required-note', field: 'note', validate: ({ value }) => (value ? null : { message: 'Note is required' }) },
+						],
+					},
+				},
+			}
+		);
+		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alpha', note: 'ok' },
+				{ id: '2', name: 'Beta', note: 'keep' },
+			],
+			columns: store.getState().columns,
+		});
+		const handler = vi.fn();
+		const blockedHandler = vi.fn();
+		store.addEventListener(GridEventName.cellsPasted, handler);
+		store.addEventListener(GridEventName.writeBlocked, blockedHandler);
+
+		clip.setStored('\t');
+		store.selectCell({ rowId: '1', colField: 'name' });
+		await store.pasteFromClipboard();
+
+		expect(handler).not.toHaveBeenCalled();
+		expect(blockedHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'paste',
+					status: 'validationFailed',
+				}),
+			})
+		);
+		expect(store.getCellValue('1', 'name')).toBe('Alpha');
+		expect(store.getCellValue('1', 'note')).toBe('ok');
+		expect(store.getCellValue('2', 'name')).toBe('Beta');
+		expect(store.getCellValue('2', 'note')).toBe('keep');
+		expect(store.canUndo()).toBe(false);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('pasteFromClipboard reports capability-denied cells even when part of the paste still succeeds', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [
+					{ field: 'id', header: 'ID', width: 80 },
+					{ field: 'name', header: 'Name', width: 150 },
+					{ field: 'price', header: 'Price', width: 100 },
+				],
+				getRowId: (row) => row.id,
+			},
+			{
+				capabilities: {
+					canPerformAction: ({ action, colField }) => {
+						if (action === 'paste' && colField === 'price') {
+							return { allowed: false, reason: 'Price column is locked' };
+						}
+						return { allowed: true };
+					},
+				},
+			}
+		);
+		const ctrl = makeController(store);
+		const blockedHandler = vi.fn();
+		store.addEventListener(GridEventName.writeBlocked, blockedHandler);
+
+		clip.setStored('Gamma\t999');
+		store.selectCell({ rowId: '1', colField: 'name' });
+		await store.pasteFromClipboard();
+
+		expect(store.getCellValue('1', 'name')).toBe('Gamma');
+		expect(store.getCellValue('1', 'price')).toBe(10);
+		expect(blockedHandler).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({
+					source: 'paste',
+					status: 'capabilityDenied',
+					reason: 'Price column is locked',
+				}),
+			})
+		);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('pasteFromClipboard uses the canonical dependency and sort reconciliation pipeline', async () => {
+		let getterCalls = 0;
+		const store = new GridStore<{ id: string; name: string; price: number; price_display: string }>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 80 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+				{
+					field: 'price_display',
+					header: 'Display',
+					width: 120,
+					valueGetterDependencies: ['price'],
+					valueGetter: ({ row }) => {
+						getterCalls++;
+						return `$${row.price}.00`;
+					},
+				},
+			],
+			getRowId: (row) => row.id,
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+		});
+		const ctrl = makeController(
+			store as GridStore<TestRow>,
+			[
+				{ id: '1', name: 'Alpha', price: 10, price_display: '' } as TestRow,
+				{ id: '2', name: 'Beta', price: 20, price_display: '' } as TestRow,
+				{ id: '3', name: 'Gamma', price: 30, price_display: '' } as TestRow,
+			] as TestRow[]
+		);
+
+		expect(store.getCellValue('1', 'price_display')).toBe('$10.00');
+		expect(getterCalls).toBe(1);
+
+		clip.setStored('25');
+		store.selectCell({ rowId: '1', colField: 'price' });
+		await store.pasteFromClipboard();
+
+		expect(store.getCellValue('1', 'price_display')).toBe('$25.00');
+		expect(getterCalls).toBe(2);
+		expect(store.getVisualIndexByRowId('2')).toBe(0);
+		expect(store.getVisualIndexByRowId('1')).toBe(1);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('copyRange copies explicit visual row/col bounds', async () => {
 		const store = makeStore();
 		const ctrl = makeController(store);

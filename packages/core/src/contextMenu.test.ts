@@ -302,7 +302,7 @@ describe('GridContextMenuPlugin', () => {
 		expect(params.rowId).toBe('r1');
 		expect(params.colField).toBe('name');
 		expect(params.api).not.toBe(store);
-		expect(params.api.getState()).toEqual(store.getState());
+		expect(params.api.getStateSnapshot()).toEqual(store.getStateSnapshot());
 		expect(params.selection.range).toEqual({
 			start: { rowId: 'r1', colField: 'name' },
 			end: { rowId: 'r2', colField: 'price' },

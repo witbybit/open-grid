@@ -1,5 +1,6 @@
 import type { RowNode } from './rowNode.js';
 import type { ColumnDef } from './columnDef.js';
+import { normalizeCapabilityResult } from './capabilities/capabilityTypes.js';
 import type { GroupPathItem } from './rows/visualRowIds.js';
 
 export interface DataVisualRow<T> {
@@ -90,9 +91,9 @@ export function isEditableVisualRow<TRowData>(row: VisualRow<TRowData> | null | 
 
 export function canEditCell<TRowData>(row: VisualRow<TRowData> | null | undefined, column: ColumnDef<TRowData> | null | undefined): boolean {
 	if (row?.kind !== 'data' || !column) return false;
-	if (column.editable === undefined) return true;
-	if (typeof column.editable === 'boolean') return column.editable;
-	return column.editable({ row: row.node.data as TRowData, rowId: row.rowId, colField: column.field });
+	if (!column.canEdit) return true;
+	return normalizeCapabilityResult(column.canEdit({ action: 'edit', row: row.node.data as TRowData, rowId: row.rowId, colField: column.field }))
+		.allowed;
 }
 
 export function canFocusVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {

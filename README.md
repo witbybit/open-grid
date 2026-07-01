@@ -1,6 +1,22 @@
-# 🚀 Headless High-Performance Data Grid & Spreadsheet Engine
+# 🚀 High-Performance Data Grid & Spreadsheet Engine
 
-Open Grid is a lightweight, framework-agnostic, headless grid engine for high-performance virtualized spreadsheets and data grids. Built to handle massive datasets with complex layouts, Open Grid maintains an out-of-render state loop in a centralized engine while exposing granular micro-subscriptions. This allows React, Vue, or vanilla JS wrappers to paint individual cells and rows with surgical precision, entirely bypassing the framework rendering bottleneck.
+Open Grid is a lightweight, framework-agnostic grid engine for high-performance virtualized spreadsheets and data grids. Built to handle massive datasets with complex layouts, Open Grid maintains an out-of-render state loop in a centralized engine while exposing granular micro-subscriptions. This allows React, Vue, or vanilla JS wrappers to paint individual cells and rows with surgical precision, entirely bypassing the framework rendering bottleneck.
+
+---
+
+## Alpha Status
+
+Open Grid is currently published as a pre-release alpha surface (`0.1.0-alpha.x`), not a stable `1.x` contract.
+
+- Use `@open-grid/react` for the supported React entrypoint and `@open-grid/core` for the supported headless entrypoint.
+- Incubating helpers live under `@open-grid/core/experimental` and `@open-grid/react/experimental`.
+- Anything under an `experimental` entry may change or be removed between alpha releases without compatibility guarantees.
+
+---
+
+## Architecture
+
+The normative architecture constitution is at [docs/architecture/core-target.md](docs/architecture/core-target.md). It defines layer ownership, legal dependency directions, canonical execution flows, feature maturity levels, and the responsibility registry for all major production classes. Plans 089–103 converge the codebase toward that document.
 
 ---
 
@@ -1411,13 +1427,15 @@ Open your browser to `http://localhost:5173` to explore the **Calculations Arena
 
 ---
 
-## 👑 Author & Creator
+## Author & Creator
 
-**Rishikesh Kumar**  
-Lead Architect of Open Grid
+**Rishikesh Kumar**
 
 ---
 
 ## 📄 License
 
-Open Grid is licensed under the [MIT License](LICENSE).
+Open Grid is proprietary software — all rights reserved. No license is granted to use, copy, modify,
+or distribute this software except by separate written agreement with Wit By Bit. Availability of this
+source is at the sole discretion of Wit By Bit and may be restricted, or made subject to a paid
+commercial license, at any time. See [LICENSE](LICENSE) for the full terms.

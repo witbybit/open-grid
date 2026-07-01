@@ -4,10 +4,11 @@ import type {
 	CellRendererProps,
 	FilterModel,
 	SortModel,
-	IGridDatasource,
 	GridApi,
 	GridCellClickParams,
-	GridState,
+	GridWriteBlockedEventPayload,
+	GridInitialState,
+	GridStateSnapshot,
 	ColumnFilter,
 	FilterCondition,
 	TextFilterCondition,
@@ -45,6 +46,11 @@ import type {
 	RowSelectionScope,
 	SelectRowsOptions,
 	SelectAllRowsOptions,
+	RowModelType,
+	InfiniteDatasource,
+	ServerDatasource,
+	ServerPaginationOptions,
+	ServerPageState,
 } from '@open-grid/core';
 import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from '@open-grid/core';
@@ -59,7 +65,12 @@ export type {
 	PersistedGridState,
 	PersistenceStatus,
 	PersistenceSaveStatus,
+	GridWorkspaceAdapter,
+	GridViewDefinition,
+	GridWorkspaceState,
+	SaveViewOptions,
 } from '@open-grid/core';
+export { createLocalStorageWorkspaceAdapter } from '@open-grid/core';
 
 export type {
 	ColumnDef,
@@ -77,10 +88,11 @@ export type {
 	NumberFilterOperator,
 	DateFilterOperator,
 	SortModel,
-	IGridDatasource as GridDatasource,
 	GridApi,
 	GridCellClickParams,
-	GridState,
+	GridWriteBlockedEventPayload,
+	GridInitialState,
+	GridStateSnapshot,
 	VisualRow,
 	DataVisualRow,
 	GroupVisualRow,
@@ -105,16 +117,39 @@ export type {
 
 export type StyleRule<TRowData = unknown> = GridStyleRule<TRowData>;
 
+export type { RowModelType, InfiniteDatasource, ServerDatasource, ServerPaginationOptions, ServerPageState };
+
+export type {
+	GridQueryModel,
+	GridQueryGroup,
+	GridQueryCondition,
+	GridQueryNode,
+	QueryDiagnostics,
+	QueryConditionDiagnostic,
+	QueryEvaluationContext,
+	QueryOperatorDefinition,
+	GridDistinctValueSummary,
+} from '@open-grid/core';
+export { createEmptyQueryModel, isQueryModelActive, countQueryNodes, getQueryOperator, getQueryOperatorsForType } from '@open-grid/core';
+
+export type {
+	GridCapabilityAction,
+	GridCapabilityParams,
+	GridCapabilityResult,
+	GridCapabilityCallback,
+	GridCapabilitiesConfig,
+	CapabilityDiagnostics,
+} from '@open-grid/core';
+export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from '@open-grid/core';
+
 /**
- * Fields from GridState that can be configured as top-level props on the public
- * Grid component. Sourced from the canonical GridState type so these never drift
+ * Fields from GridInitialState that can be configured as top-level props on the public
+ * Grid component. Sourced from the canonical GridInitialState type so these never drift
  * out of sync with the core.
  */
-type GridRenderOptions<TRowData> = Pick<GridState<TRowData>, 'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits'>;
-
-export type GridMode = 'client' | 'server';
+type GridRenderOptions<TRowData> = Pick<GridInitialState<TRowData>, 'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits'>;
 
 export interface GridReadyEvent<TRowData = unknown> {
 	api: GridApi<TRowData>;
-	mode: GridMode;
+	rowModelType: RowModelType;
 }

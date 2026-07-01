@@ -21,7 +21,11 @@ export type GridPageType =
 	| 'colgroups'
 	| 'clipboard'
 	| 'floatingfilters'
-	| 'rowdrag';
+	| 'rowdrag'
+	| 'advancedfilters'
+	| 'integrity'
+	| 'projects'
+	| 'kanban';
 // ============================================================================
 // 1. Global Render & Latency Telemetry Trackers
 // ============================================================================
@@ -241,7 +245,7 @@ export const StatusDropdownEditor = ({ value, onCommit }: CellEditorProps<any>) 
 };
 
 export const StatusHeaderFilter = ({ colField, api, close }: { colField: string; api: GridApi<any>; close: () => void }) => {
-	const state = api.getState();
+	const state = api.getStateSnapshot();
 	const activeFilter = state.filterModel?.[colField];
 
 	let activeFilterVal = '';

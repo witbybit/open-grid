@@ -181,6 +181,17 @@ export function getFilterChipText(filter: ColumnFilter): string {
 			const extra = filter.values.length > 3 ? ` +${filter.values.length - 3} more` : '';
 			return labels.join(', ') + extra;
 		}
+		case 'select': {
+			if (filter.values.length === 0) return '(none)';
+			// Use stored labels when available — avoids re-fetching async option lists.
+			const displayLabels =
+				filter.labels && filter.labels.length === filter.values.length
+					? filter.labels
+					: filter.values.map((v) => (v === null ? '(blank)' : String(v)));
+			const shown = displayLabels.slice(0, 2);
+			const extra = filter.values.length > 2 ? ` +${filter.values.length - 2} more` : '';
+			return shown.join(', ') + extra;
+		}
 		case 'compound': {
 			const [c1, c2] = filter.conditions;
 			return `${getFilterChipText(c1)} ${filter.operator} ${getFilterChipText(c2)}`;

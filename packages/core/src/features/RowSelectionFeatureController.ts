@@ -1,6 +1,8 @@
-import { isDataCellSelectable, GridEventName } from '../store.js';
-import type { RowModel, RowSelectionGesture, RowSelectionGestureSource, RowSelectionChangeResult, RowSelectionScope } from '../store.js';
+import type { RowSelectionGesture, RowSelectionGestureSource, RowSelectionChangeResult, RowSelectionScope } from '../api/GridApi.js';
+import { GridEventName } from '../api/GridEvents.js';
 import type { GridFeatureContext } from './GridFeatureContext.js';
+import { asSelectableDataRowModel, type RowModel } from '../rowModel.js';
+import { isDataCellSelectable } from '../visualRow.js';
 
 export class RowSelectionFeatureController<TRowData = unknown> {
 	constructor(
@@ -12,9 +14,9 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 		const allIds: string[] = [];
 		const rowModel = this.getRowModel();
 		if (!rowModel) return allIds;
-		if (rowModel.getSelectableDataRowIds) {
-			return rowModel.getSelectableDataRowIds(scope ?? this.ctx.getState().rowSelection?.selectAllScope ?? 'page');
-		}
+		const selectableRowModel = asSelectableDataRowModel(rowModel);
+		if (selectableRowModel)
+			return selectableRowModel.getSelectableDataRowIds(scope ?? this.ctx.getState().rowSelection?.selectAllScope ?? 'page');
 		const count = rowModel.getVisualRowCount();
 		for (let i = 0; i < count; i++) {
 			const vr = rowModel.getVisualRow(i);
@@ -120,7 +122,8 @@ export class RowSelectionFeatureController<TRowData = unknown> {
 				...result.changedRowIds.map((rowId) => ({ kind: 'row' as const, rowId, reason: 'selection' })),
 				{ kind: 'headers', reason: 'selection' },
 			],
-			events: [{ type: GridEventName.rowSelectionChanged, payload: result as never }],
+			domains: ['selection'],
+			events: [{ type: GridEventName.rowSelectionChanged, payload: result }],
 		});
 		return result;
 	}

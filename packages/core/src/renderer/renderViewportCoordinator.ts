@@ -21,7 +21,10 @@ export class RenderViewportCoordinator<TRowData = unknown> {
 	constructor(private readonly deps: RenderViewportCoordinatorDeps<TRowData>) {}
 
 	public syncLayoutPlan(renderWindow?: RenderWindow): GridLayoutPlan {
-		const layoutPlan = computeGridLayoutPlan(this.deps.engine, renderWindow);
+		const theme = this.deps.viewportRenderer.getTheme();
+		const themeLhh = theme?.leafHeaderHeight ? parseFloat(theme.leafHeaderHeight) : undefined;
+		const leafHeaderHeightPx = themeLhh && themeLhh > 0 ? themeLhh : undefined;
+		const layoutPlan = computeGridLayoutPlan(this.deps.engine, renderWindow, leafHeaderHeightPx);
 		this.deps.viewportRenderer.syncLayoutPlan(layoutPlan);
 		return layoutPlan;
 	}
@@ -47,6 +50,48 @@ export class RenderViewportCoordinator<TRowData = unknown> {
 		const target = computeScrollTarget({
 			rowIndex,
 			colIndex,
+			rowCount: rowModel.getVisualRowCount(),
+			colCount: this.deps.engine.columns.getDisplayedColumnCount(),
+			pinLeftColumns: this.deps.engine.viewport.pinLeftColumns,
+			pinRightColumns: this.deps.engine.viewport.pinRightColumns,
+			pinTopRows: this.deps.engine.viewport.pinTopRows,
+			pinBottomRows: this.deps.engine.viewport.pinBottomRows,
+			scrollTop: this.deps.engine.viewport.scrollTop,
+			scrollLeft: this.deps.engine.viewport.scrollLeft,
+			viewportHeight: this.deps.engine.viewport.viewportHeight,
+			viewportWidth: this.deps.engine.viewport.scrollViewportClientWidth || this.deps.engine.viewport.viewportWidth,
+			topChromeHeight: layoutPlan.chrome.topChromeHeight,
+			rowTops: this.deps.engine.geometry.rowTops,
+			rowHeights: this.deps.engine.geometry.rowHeights,
+			colLefts: this.deps.engine.geometry.colLefts,
+			colWidths: this.deps.engine.geometry.colWidths,
+			scrollViewportScrollHeight: scrollViewport.scrollHeight,
+			scrollViewportScrollWidth: scrollViewport.scrollWidth,
+			scrollViewportClientHeight: scrollViewport.clientHeight,
+			scrollViewportClientWidth: scrollViewport.clientWidth,
+		});
+
+		if (target) {
+			this.deps.scrollEngine.scrollTo(target.top, target.left);
+			this.deps.requestScrollFrame();
+		}
+	}
+
+	public scrollRowIntoView(rowId: string): void {
+		this.deps.rowRenderer.programmaticScrollCell = { rowId, colField: '' };
+		const scrollViewport = this.deps.viewportRenderer.scrollViewport;
+		if (!scrollViewport) return;
+
+		const rowModel = this.deps.engine.getRowModel();
+		if (!rowModel) return;
+
+		const rowIndex = rowModel.getVisualIndexByRowId(rowId);
+		if (rowIndex === null || rowIndex === -1) return;
+
+		const layoutPlan = this.deps.viewportRenderer.getLayoutPlan() ?? this.syncLayoutPlan();
+		const target = computeScrollTarget({
+			rowIndex,
+			colIndex: -1,
 			rowCount: rowModel.getVisualRowCount(),
 			colCount: this.deps.engine.columns.getDisplayedColumnCount(),
 			pinLeftColumns: this.deps.engine.viewport.pinLeftColumns,

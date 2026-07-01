@@ -10,12 +10,9 @@ export class PinnedContainerManager<TRowData = unknown> {
 				if (side === 'left') {
 					slot.pinLeftContainer = null;
 					slot.pinLeftContainerWidth = -1;
-					slot.pinLeftContainerTransform = '';
 				} else {
 					slot.pinRightContainer = null;
 					slot.pinRightContainerWidth = -1;
-					slot.pinRightContainerLeft = -1;
-					slot.pinRightContainerTransform = '';
 				}
 			}
 			return null;
@@ -29,12 +26,9 @@ export class PinnedContainerManager<TRowData = unknown> {
 			if (side === 'left') {
 				slot.pinLeftContainer = container;
 				slot.pinLeftContainerWidth = -1;
-				slot.pinLeftContainerTransform = '';
 			} else {
 				slot.pinRightContainer = container;
 				slot.pinRightContainerWidth = -1;
-				slot.pinRightContainerLeft = -1;
-				slot.pinRightContainerTransform = '';
 			}
 		}
 		const previousWidth = side === 'left' ? slot.pinLeftContainerWidth : slot.pinRightContainerWidth;

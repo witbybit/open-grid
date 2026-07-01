@@ -1,7 +1,5 @@
-import { getStoreFromApi } from './createGrid.js';
 import { RenderEngine } from './renderer/renderEngine.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
-import { createHeadlessPorts } from './engine/rendererPorts.js';
 import type {
 	GridCellContentMount,
 	GridCellContentUnmount,
@@ -10,8 +8,10 @@ import type {
 	GridHeaderMenuMount,
 	GridHeaderMenuUnmount,
 } from './renderer/IGridRenderer.js';
-import type { GridApi } from './store.js';
+import type { GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';
 import type { ColumnDef, InternalColumnDef } from './columnDef.js';
+import { asGroupMetaCapableRowModel } from './rowModel.js';
+import { resolveGridHostComposition } from './internal/apiInternalBridge.js';
 
 export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {
 	return (column as InternalColumnDef<TRowData>).cellRendererCapabilities?.imperativeUpdate === true;
@@ -43,6 +43,7 @@ export interface GridHostOptions<TRowData = unknown> {
 	cellContent?: GridCellContentAdapter<TRowData>;
 	rowContent?: GridRowContentAdapter<TRowData>;
 	headerMenu?: GridHeaderMenuAdapter<TRowData>;
+	autoRowHeight?: boolean;
 }
 
 export interface GridHost {
@@ -72,11 +73,11 @@ export interface GridHost {
 
 export interface GridAdapterHandle<TRowData = unknown> {
 	/** Resolve the cell pointer (rowId + colField) from a DOM element inside a cell. */
-	getCellPointerFromElement(element: Element): import('./store.js').GridCellPointer | null;
+	getCellPointerFromElement(element: Element): GridCellPointer | null;
 	/** Get full cell access data from a DOM element inside a cell. */
-	getCellAccessFromElement(element: Element): import('./store.js').GridCellAccess<TRowData> | null;
+	getCellAccessFromElement(element: Element): GridCellAccess<TRowData> | null;
 	/** Get full cell access data by row id and column field. */
-	getCellAccess(rowId: string, colField: string): import('./store.js').GridCellAccess<TRowData> | null;
+	getCellAccess(rowId: string, colField: string): GridCellAccess<TRowData> | null;
 	/** Get the visible descendant row ids for a group row. */
 	getGroupVisibleDescendantRowIds(groupId: string): string[];
 	/** Returns true when the column uses the imperative-update renderer protocol. */
@@ -90,9 +91,9 @@ export function mountGridHost<TRowData>(
 	container: HTMLElement,
 	options: GridHostOptions<TRowData> = {}
 ): GridHostWithAdapter<TRowData> {
-	const store = getStoreFromApi(api);
-	const engine = store.engine;
-	const internalApi = store;
+	const host = resolveGridHostComposition(api);
+	const engine = host.engine;
+	const internalApi = host.api;
 	const renderEngine = new RenderEngine(engine, internalApi);
 
 	renderEngine.onMountCellContent = options.cellContent?.mountCellContent;
@@ -102,33 +103,47 @@ export function mountGridHost<TRowData>(
 	renderEngine.onUnmountRowContent = options.rowContent?.unmountRowContent;
 	renderEngine.onMountHeaderMenu = options.headerMenu?.mountHeaderMenu;
 	renderEngine.onUnmountHeaderMenu = options.headerMenu?.unmountHeaderMenu;
+	if (options.autoRowHeight) renderEngine.setAutoRowHeight(true);
 
-	// Supply runtime ports to the store — public API methods now delegate through these.
-	store.setRendererPorts({
+	// Bind live runtime ports — exclusive: only one host may be active at a time.
+	const bindResult = internalApi.bindRuntimePorts({
 		renderer: {
 			requestRender: () => {},
 			getStats: () => renderEngine.getRenderStats(),
 			resetStats: () => renderEngine.resetRenderStats(),
 			getContainer: () => container,
+			scrollCellIntoView: (rowId, colField) => renderEngine.scrollCellIntoView(rowId, colField),
+			scrollRowIntoView: (rowId) => renderEngine.scrollRowIntoView(rowId),
 		},
 		theme: {
 			getTheme: () => renderEngine.viewportRenderer.getTheme(),
 			getThemeName: () => renderEngine.viewportRenderer.getThemeName(),
 			getAvailableThemes: () => renderEngine.viewportRenderer.getThemeManager()?.getAvailableThemes() ?? [],
 			switchTheme: (themeName) => renderEngine.viewportRenderer.switchTheme(themeName),
-			mergeTheme: (partial) => renderEngine.viewportRenderer.mergeTheme(partial),
+			mergeTheme: (partial) => {
+				renderEngine.viewportRenderer.mergeTheme(partial);
+				if ('leafHeaderHeight' in partial) {
+					renderEngine.scheduleFullPaint('theme-layout');
+				}
+			},
 			onThemeChange: (listener) => renderEngine.viewportRenderer.onThemeChange(listener),
 		},
 	});
+	if (!bindResult.ok) {
+		// Binding rejected — renderEngine was never mounted, so no DOM cleanup is needed.
+		throw new Error(`mountGridHost: port binding rejected (${bindResult.reason}). Destroy the active host before mounting a new one.`);
+	}
+	const binding = bindResult.binding;
 
 	if (options.pins) {
 		internalApi.setViewportPins(options.pins);
 	}
 
-	store.setContainerElement(container);
+	host.setContainerElement(container);
 	renderEngine.mount(container);
 
 	const observer = new ResizeObserver((entries) => {
+		if (!internalApi.isBindingCurrent(binding)) return;
 		if (!entries || entries.length === 0) return;
 		const { width, height } = entries[0].contentRect;
 		if (internalApi.setViewportSize(width, height)) {
@@ -145,7 +160,7 @@ export function mountGridHost<TRowData>(
 			const colField = cellEl.dataset.colField;
 			const rowEl = cellEl.closest('.og-row') as HTMLElement | null;
 			const rowIndex = Number(rowEl?.dataset.rowIndex);
-			const visualRow = Number.isFinite(rowIndex) ? store.getVisualRow(rowIndex) : null;
+			const visualRow = Number.isFinite(rowIndex) ? internalApi.getVisualRow(rowIndex) : null;
 			const rowId = visualRow?.kind === 'data' ? visualRow.rowId : undefined;
 			if (!colField || !rowId) return null;
 			return { rowId, colField };
@@ -153,13 +168,13 @@ export function mountGridHost<TRowData>(
 		getCellAccessFromElement(element: Element) {
 			const pointer = adapterHandle.getCellPointerFromElement(element);
 			if (!pointer) return null;
-			return store.getCellAccess(pointer.rowId, pointer.colField);
+			return internalApi.getCellAccess(pointer.rowId, pointer.colField);
 		},
 		getCellAccess(rowId: string, colField: string) {
-			return store.getCellAccess(rowId, colField);
+			return internalApi.getCellAccess(rowId, colField);
 		},
 		getGroupVisibleDescendantRowIds(groupId: string) {
-			return store.getRowModel()?.getGroupMeta?.(groupId)?.visibleDescendantRowIds ?? [];
+			return asGroupMetaCapableRowModel(internalApi.getRowModel())?.getGroupMeta(groupId)?.visibleDescendantRowIds ?? [];
 		},
 		isImperativeRendererColumn(column) {
 			return hasImperativeRendererCapability(column);
@@ -201,7 +216,7 @@ export function mountGridHost<TRowData>(
 			renderEngine.viewportRenderer.setTheme(theme);
 		},
 		switchTheme(themeName) {
-			store.switchTheme(themeName);
+			internalApi.switchTheme(themeName);
 		},
 		getTheme() {
 			return renderEngine.viewportRenderer.getTheme();
@@ -218,7 +233,7 @@ export function mountGridHost<TRowData>(
 		destroy() {
 			observer.disconnect();
 			renderEngine.unmount();
-			store.setRendererPorts(createHeadlessPorts());
+			internalApi.unbindRuntimePorts(binding);
 		},
 		adapterHandle,
 	};

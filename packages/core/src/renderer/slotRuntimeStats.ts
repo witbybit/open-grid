@@ -1,5 +1,5 @@
 /**
- * Phase 10 — Runtime stats for the slot-based viewport virtualization model.
+ * Runtime stats for the slot-based viewport virtualization model.
  *
  * All counters reflect actual operations. No fake zeros — if a counter is 0
  * it means the corresponding operation truly did not happen in that frame.

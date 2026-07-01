@@ -133,14 +133,14 @@ export default function InfiniteServerScroll({
 			setSeverityStats({ totalLoaded: 0, criticalError: 0, warning: 0, infoDebug: 0 });
 		};
 		const syncLoading = () => {
-			setIsLoading(!!api.getState().loading);
+			setIsLoading(!!api.getStateSnapshot().loading);
 		};
 
 		refreshSeverityStats();
 		refreshSelectionStats();
 		syncLoading();
-		const unsubBlockLoaded = api.addEventListener(GridEventName.serverBlockLoaded, handleBlockLoaded);
-		const unsubBlockLoadFailed = api.addEventListener(GridEventName.serverBlockLoadFailed, handleBlockLoadFailed);
+		const unsubBlockLoaded = api.addEventListener(GridEventName.infiniteBlockLoaded, handleBlockLoaded);
+		const unsubBlockLoadFailed = api.addEventListener(GridEventName.infiniteBlockLoadFailed, handleBlockLoadFailed);
 		const unsubCellValueChanged = api.addEventListener(GridEventName.cellValueChanged, refreshSeverityStats);
 		const unsubSelectionChanged = api.addEventListener(GridEventName.rowSelectionChanged, refreshSelectionStats);
 		const unsubSortChanged = api.addEventListener(GridEventName.sortChanged, clearSeverityStats);
@@ -202,19 +202,18 @@ export default function InfiniteServerScroll({
 
 				<div ref={gridHostRef} className='flex-1 min-h-0 min-w-0'>
 					<Grid
-						mode='server'
+						rowModelType='infinite'
 						columns={columns}
 						datasource={datasource}
 						blockSize={100}
-						pagination={{ pageSize: 1000 }}
 						getRowId={(row) => row.id}
 						pinLeftColumns={pinLeftColumns}
 						pinRightColumns={pinRightColumns}
 						enableNavigation
-						navigationOptions={{ editTrigger, arrowKeyNavigationEdit, onCellValueChanged: () => {} }}
+						navigationOptions={{ editTrigger, arrowKeyNavigationEdit }}
 						onGridReady={(event) => {
 							setApi(event.api);
-							setIsLoading(!!event.api.getState().loading);
+							setIsLoading(!!event.api.getStateSnapshot().loading);
 							onGridReady?.(event);
 						}}
 					/>

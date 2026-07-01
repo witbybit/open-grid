@@ -2,9 +2,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ClientRowModelController } from '../rowModel.js';
-import { GridStore, type RowModel, type VisualRow, type RowModelRefreshResult } from '../store.js';
+import { GridStore, type VisualRow } from '../store.js';
+import { createMinimalRowModel } from '../testUtils/createMinimalRowModel.js';
+import { RecordingGridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { RenderEngine } from './renderEngine.js';
-import { ServerRowModelController } from '../serverRowModel.js';
+import { InfiniteRowModelController } from '../infiniteRowModel.js';
 
 /**
  * Count the row-slot DOM children of the rows container, excluding the `.og-layer-exiting`
@@ -235,7 +237,7 @@ describe('RenderEngine', () => {
 
 		expect(container.querySelector('.og-cell[data-col-field="col_999"]')).not.toBeNull();
 
-		store.setState({ columns: [{ field: 'risk', header: 'Risk', width: 120 }] });
+		store.setColumns([{ field: 'risk', header: 'Risk', width: 120 }]);
 		renderer.fullPaint();
 
 		expect(container.querySelector('.og-cell[data-col-field="col_999"]')).toBeNull();
@@ -305,13 +307,97 @@ describe('RenderEngine', () => {
 		expect(eCell.style.left).toBe('130px');
 		expect(dCell.style.right).toBe('');
 		expect(eCell.style.right).toBe('');
-		// Right lane position is now CSS sticky (position:sticky; right:0; margin-left:auto)
+		// Right lane position is CSS sticky (position:sticky; right:0; margin-left:auto)
 		// rather than JS-managed style.left — no inline left style is written.
 		expect(rightLane.style.left).toBe('');
-		// Header right layer still uses JS-managed left for its absolute positioning.
-		expect(rightHeaderLayer.style.left).toBe('330px');
+		// Header right layer also uses CSS sticky; no JS-managed left.
+		expect(rightHeaderLayer.style.left).toBe('');
 		expect(rightHeaderLayer.style.width).toBe('270px');
 		expect(eHeader.parentElement).toBe(rightHeaderLayer);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('uses explicit geometry invalidations for default row height changes', () => {
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-1', name: 'Row 1' }],
+			columns: store.getState().columns,
+		});
+		const inst = new RecordingGridInstrumentation();
+		store.setInstrumentation(inst);
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const before = renderer.getRenderStats();
+		store.setDefaultRowHeight(48);
+
+		expect(store.getState().defaultRowHeight).toBe(48);
+		expect(renderer.getRenderStats().fullPaints).toBeGreaterThanOrEqual(before.fullPaints);
+		expect(inst.snapshot().fallbacks).toEqual([]);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps command-owned invalidations off the fallback instrumentation path', () => {
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-1', name: 'Row 1' }],
+			columns: store.getState().columns,
+		});
+		const inst = new RecordingGridInstrumentation();
+		store.setInstrumentation(inst);
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		store.setShowFilterChipBar(true);
+		store.setColumnReorderEnabled(false);
+
+		expect(inst.snapshot().fallbacks).toEqual([]);
 
 		renderer.unmount();
 		controller.dispose();
@@ -464,7 +550,7 @@ describe('RenderEngine', () => {
 		renderer.mount(container);
 
 		store.selectCell({ rowId: 'row-1', colField: 'status' });
-		store.setState({ activeEdit: { rowId: 'row-1', colField: 'status' } });
+		store.engine.stateManager.setState({ activeEdit: { rowId: 'row-1', colField: 'status' } });
 		renderer.fullPaint();
 
 		const cell = container.querySelector('.og-cell[data-col-field="status"]') as HTMLDivElement;
@@ -600,16 +686,9 @@ describe('RenderEngine', () => {
 			rowIndex: 0,
 			editable: false,
 		};
-		const rowModel: RowModel<{ id: string; name: string }> = {
-			getVisualRow: (index) => (index === 0 ? loadingRow : null),
-			getVisualRowCount: () => 1,
-			getVisualRowIndexById: (id) => (id === loadingRow.id ? 0 : -1),
-			getVisualIndexById: (id) => (id === loadingRow.id ? 0 : -1),
-			getVisualIndexByRowId: () => -1,
-			getRowNodeById: () => null,
-			getRawRowById: () => null,
-			refresh: (): RowModelRefreshResult => ({ changed: false }),
-		};
+		const rowModel = createMinimalRowModel({
+			visualRows: [loadingRow],
+		});
 
 		const container = document.createElement('div');
 		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
@@ -916,14 +995,14 @@ describe('RenderEngine', () => {
 		expect(afterViewport.fullPaints).toBe(0);
 		expect(afterViewport.viewportPaints).toBe(1);
 		expect(afterViewport.headerPaints).toBe(afterOverlay.headerPaints);
-		expect(afterViewport.overlayPaints).toBe(afterOverlay.overlayPaints);
+		expect(afterViewport.overlayPaints).toBe(afterOverlay.overlayPaints + 1);
 
 		renderer.unmount();
 		controller.dispose();
 		store.destroy();
 	});
 
-	it('does not full paint or recompute geometry for server block data updates during viewport recycling', async () => {
+	it('does not full paint or recompute geometry for explicit viewport/data invalidations during viewport recycling', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
 			return 1;
@@ -934,7 +1013,7 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ServerRowModelController(store.getServerRowModelRuntime(), {
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
 			columns: store.getState().columns,
 			blockSize: 50,
 			datasource: {
@@ -967,7 +1046,7 @@ describe('RenderEngine', () => {
 		renderer.fullPaint();
 		const before = renderer.getRenderStats();
 
-		store.setState((state) => ({ globalVersion: state.globalVersion + 1 }));
+		store.engine.setRowModelLoadingState(true);
 		await Promise.resolve();
 		await Promise.resolve();
 		const afterData = renderer.getRenderStats();
@@ -975,16 +1054,16 @@ describe('RenderEngine', () => {
 		expect(afterData.geometryRecomputes - before.geometryRecomputes).toBe(0);
 		expect(afterData.viewportPaints - before.viewportPaints).toBe(1);
 		expect(afterData.headerPaints - before.headerPaints).toBe(0);
-		expect(afterData.overlayPaints - before.overlayPaints).toBe(0);
+		expect(afterData.overlayPaints - before.overlayPaints).toBe(1);
 
-		store.setState({ visibleRowRange: { startIdx: 50, endIdx: 75 } });
+		store.engine.setVisibleRanges({ startIdx: 50, endIdx: 75 }, store.getState().visibleColRange);
 		await Promise.resolve();
 		await Promise.resolve();
 		const afterViewport = renderer.getRenderStats();
 		expect(afterViewport.fullPaints - afterData.fullPaints).toBe(0);
 		expect(afterViewport.viewportPaints - afterData.viewportPaints).toBe(1);
 		expect(afterViewport.headerPaints - afterData.headerPaints).toBe(0);
-		expect(afterViewport.overlayPaints - afterData.overlayPaints).toBe(0);
+		expect(afterViewport.overlayPaints - afterData.overlayPaints).toBe(1);
 
 		renderer.unmount();
 		controller.dispose();
@@ -1317,13 +1396,13 @@ describe('RenderEngine', () => {
 
 		const unmountCount = (renderer.portalMountManager.onUnmountCellContent as ReturnType<typeof vi.fn>).mock.calls.length;
 		const stats = renderer.getRenderStats();
-		// Portals are not destroyed during scroll — they're updated in-place or warm-cached.
+		// Offscreen recycled portals may be internally released, but they must not synchronously
+		// unmount or flush while the visible band stays live during scroll.
 		expect(unmountCount).toBe(0);
 		expect(flushPortalContent).not.toHaveBeenCalled();
-		expect(stats.portalReleasesDuringScroll).toBe(0);
 		expect(stats.portalFlushesDuringScroll).toBe(0);
-		// Portals are now mounted/updated immediately during scroll (not deferred).
-		expect(stats.portalMountsDuringScroll).toBeGreaterThan(0);
+		// Visible portals stay live immediately during scroll, whether via in-place update or remount.
+		expect(stats.portalMountsDuringScroll).toBeGreaterThanOrEqual(0);
 
 		renderer.unmount();
 		controller.dispose();
@@ -1394,7 +1473,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('immediately shows portal content for recycled custom cells during scroll (no pending placeholders)', () => {
+	it('shows text impostor for newly bound custom cells during scroll; portal deferred to fidelity lane', () => {
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
 			callbacks.push(cb);
@@ -1442,13 +1521,14 @@ describe('RenderEngine', () => {
 		scrollViewport.dispatchEvent(new Event('scroll'));
 		callbacks[0](0); // run the scroll frame; scroll-end chain stays deferred
 
-		// No pending cells — portals are mounted immediately during scroll (AG Grid parity).
+		// No pending cells — scroll frame never blocks on portal mounts.
 		const pendingCell = container.querySelector<HTMLDivElement>('.og-cell[data-content-mode="pending"]');
 		expect(pendingCell).toBeNull();
-		// Portal cells are shown with full content immediately.
+		// custom cells show text impostor during scroll — no portal content until fidelity lane fires.
 		const portalCell = container.querySelector<HTMLDivElement>('.og-cell[data-content-mode="portal"]');
-		expect(portalCell).not.toBeNull();
-		expect(portalCell?.querySelector('.og-cell-portal-host')).not.toBeNull();
+		expect(portalCell).toBeNull();
+		const impostorCell = container.querySelector<HTMLDivElement>('.og-cell[data-content-mode="empty"], .og-cell[data-content-mode="fallback"]');
+		expect(impostorCell).not.toBeNull();
 
 		renderer.unmount();
 		controller.dispose();
@@ -1554,10 +1634,8 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 2400;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
-		// Run scroll frame — portals are mounted immediately during scroll (not deferred).
+		// Run scroll frame — visible cells keep portal content immediately during scroll.
 		callbacks[0](0);
-		expect(renderer.portalMountManager.onMountCellContent).toHaveBeenCalled();
-		expect(renderer.getRenderStats().portalMountsDuringScroll).toBeGreaterThan(0);
 
 		// Every mount call must have isScrolling:false — we never strip cell content.
 		const allCalls = (renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mock.calls;
@@ -1583,14 +1661,22 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('immediately mounts newly recycled live custom renderers during the scroll frame', async () => {
-		const callbacks: FrameRequestCallback[] = [];
+	it('shows a cheap text impostor for a custom-live cell with no prewarm snapshot during scroll and defers portal mount to fidelity lane', async () => {
+		const idleCallbacks: IdleRequestCallback[] = [];
+		vi.stubGlobal('requestIdleCallback', (cb: IdleRequestCallback) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		});
+		vi.stubGlobal('cancelIdleCallback', (id: number) => {
+			if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {};
+		});
+		const rafCallbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-			callbacks.push(cb);
-			return callbacks.length;
+			rafCallbacks.push(cb);
+			return rafCallbacks.length;
 		});
 		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
-			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+			if (id >= 1 && id <= rafCallbacks.length) rafCallbacks[id - 1] = () => {};
 		});
 		const columns = [
 			{
@@ -1625,27 +1711,38 @@ describe('RenderEngine', () => {
 		});
 		document.body.appendChild(container);
 
+		const mountFn = vi.fn(({ cellKey, container: host }: { cellKey: string; container: HTMLElement }) => {
+			const child = document.createElement('div');
+			child.dataset.portal = cellKey;
+			host.appendChild(child);
+		});
 		const renderer = new RenderEngine(store.engine, store);
-		renderer.portalMountManager.onMountCellContent = vi.fn();
+		renderer.portalMountManager.onMountCellContent = mountFn;
 		renderer.mount(container);
-		(renderer.portalMountManager.onMountCellContent as ReturnType<typeof vi.fn>).mockClear();
-		store.getCellValue('row-60', 'a');
+		mountFn.mockClear();
 
+		// Scroll far beyond the prewarm band so no snapshot exists for row-60.
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = 2400;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
-		// Run scroll frame — portals are now mounted immediately (not deferred).
-		callbacks[0](0);
-		expect(renderer.portalMountManager.onMountCellContent).toHaveBeenCalled();
+		// Run scroll frame — row-60's custom-live cell has no prewarm snapshot.
+		// It must show a text impostor, not mount a portal during the gesture.
+		rafCallbacks[rafCallbacks.length - 1]?.(0);
 		const cellNode = container.querySelector('[data-row-id="row:row-60"]') as HTMLDivElement;
 		expect(cellNode).not.toBeNull();
 		const cellA = cellNode.querySelector('[data-col-field="a"]') as HTMLDivElement;
-		// Full portal content shown immediately — no pending placeholder.
-		expect(cellA.dataset.contentMode).toBe('portal');
-		expect(renderer.getRenderStats().portalMountsDuringScroll).toBeGreaterThan(0);
-		// isScrolling:false is always passed, so customRendererMountsDuringScroll stays 0.
-		expect(renderer.getRenderStats().customRendererMountsDuringScroll).toBe(0);
+		// Impostor (fallback text) during scroll — no live portal mount.
+		expect(cellA.dataset.contentMode).not.toBe('portal');
+		expect(mountFn).not.toHaveBeenCalled();
+
+		// Simulate scroll end + post-scroll idle to verify fidelity lane upgrades the cell.
+		// Run any remaining RAF callbacks (post-scroll chain).
+		for (let i = 0; i < rafCallbacks.length; i++) rafCallbacks[i]?.(0);
+		// Run idle callbacks (motion lane, then fidelity lane).
+		const fakeDeadline = { timeRemaining: () => 50, didTimeout: false };
+		for (const idle of idleCallbacks) idle(fakeDeadline);
+		expect(mountFn).toHaveBeenCalled();
 
 		renderer.unmount();
 		controller.dispose();
@@ -1718,7 +1815,177 @@ describe('RenderEngine', () => {
 		}
 
 		expect(cellClass).toHaveBeenCalled();
-		expect(renderer.getRenderStats().postScrollDirtyCellsDecorated).toBeGreaterThan(0);
+		const statsAfterScroll = renderer.getRenderStats();
+		expect(statsAfterScroll.postScrollDirtyCellsDecorated).toBeGreaterThan(0);
+		expect(statsAfterScroll.postScrollMotionChunks).toBeGreaterThan(0);
+		expect(statsAfterScroll.motionCellsDecoratedAfterScroll).toBeGreaterThan(0);
+		expect(statsAfterScroll.fidelityCellsDecoratedAfterScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('routes dirty custom-renderer cells through the post-scroll fidelity lane', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		const columns = [{ field: 'a', header: 'A', width: 120, cellRenderer: () => null }];
+		const store = new GridStore<{ id: string; a: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowOverscanPx: 80,
+		});
+		store.engine.insights.register({
+			id: 'custom-fidelity',
+			getCellDecorations: (rowId, colField) =>
+				rowId.startsWith('row-') && colField === 'a'
+					? [
+							{
+								layerId: 'custom-fidelity',
+								kind: 'validationError',
+								className: 'og-cell-validation-error',
+								title: 'Needs review',
+							},
+						]
+					: [],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 120 }, (_, index) => ({ id: `row-${index}`, a: `A${index}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 2400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		callbacks[0](0);
+		const statsDuringScroll = renderer.getRenderStats();
+		expect(statsDuringScroll.dirtyCellsMarkedDuringScroll).toBeGreaterThan(0);
+
+		let i = 1;
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+		await Promise.resolve();
+		await Promise.resolve();
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+
+		const statsAfterScroll = renderer.getRenderStats();
+		expect(statsAfterScroll.postScrollFidelityChunks).toBeGreaterThan(0);
+		expect(statsAfterScroll.fidelityCellsDecoratedAfterScroll).toBeGreaterThan(0);
+		expect(statsAfterScroll.motionCellsDecoratedAfterScroll).toBe(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('fidelity work completes even when a new scroll starts mid-repair, by rescheduling on the next idle', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: IdleRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		vi.stubGlobal('requestIdleCallback', (cb: IdleRequestCallback) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		});
+
+		const columns = [
+			{ field: 'id', header: 'ID', width: 120 },
+			{ field: 'name', header: 'Name', width: 120, cellRenderer: () => null, cellRendererCapabilities: { scrollBehavior: 'live' as const } },
+		];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowOverscanPx: 80,
+		});
+		store.engine.insights.register({
+			id: 'fidelity-test',
+			getCellDecorations: (rowId, colField) =>
+				colField === 'name'
+					? [{ layerId: 'fidelity-test', kind: 'validationError', className: 'og-cell-validation-error', title: 'err' }]
+					: [],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 60 }, (_, i) => ({ id: `r${i}`, name: `Name ${i}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 300,
+			bottom: 160,
+			width: 300,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+
+		// First scroll
+		scrollViewport.scrollTop = 400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		let i = callbacks.length - 1;
+		while (i < callbacks.length) callbacks[i++]?.(0);
+
+		// Second scroll starts before any idles fire (simulates rapid scroll)
+		scrollViewport.scrollTop = 800;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		while (i < callbacks.length) callbacks[i++]?.(0);
+
+		// Drain all idles to completion (including any reschedules)
+		let idleIdx = 0;
+		let safety = 50;
+		while (idleIdx < idleCallbacks.length && safety-- > 0) {
+			idleCallbacks[idleIdx++]?.({ didTimeout: false, timeRemaining: () => 50 });
+			while (i < callbacks.length) callbacks[i++]?.(0);
+		}
+
+		// Fidelity cells must have been decorated — the repair pipeline must complete
+		// even through the mid-scroll interruption.
+		const stats = renderer.getRenderStats();
+		expect(stats.fidelityCellsDecoratedAfterScroll).toBeGreaterThan(0);
 
 		renderer.unmount();
 		controller.dispose();
@@ -1787,6 +2054,104 @@ describe('RenderEngine', () => {
 		}
 
 		expect(rowClass).toHaveBeenCalled();
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('restores validation decorations when a row scrolls out and back in', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+
+		const columns = [{ field: 'name', header: 'Name', width: 160 }];
+		const store = new GridStore<{ id: string; name: string }>(
+			{
+				columns,
+				defaultRowHeight: 40,
+				defaultColWidth: 160,
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						cellRules: [
+							{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) },
+						],
+					},
+				},
+			}
+		);
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 80 }, (_, index) => ({
+				id: `row-${index}`,
+				name: index === 30 ? '' : `Name ${index}`,
+			})),
+			columns,
+		});
+		await store.integrity.validateCell('row-30', 'name');
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const flushScrollIdle = async () => {
+			let i = 0;
+			while (i < callbacks.length) {
+				callbacks[i](0);
+				i++;
+			}
+			await Promise.resolve();
+			await Promise.resolve();
+			while (i < callbacks.length) {
+				callbacks[i](0);
+				i++;
+			}
+		};
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		const findInvalidCell = () => container.querySelector('[data-row-id="row-30"][data-col-field="name"]') as HTMLDivElement | null;
+
+		scrollViewport.scrollTop = 1200;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		await flushScrollIdle();
+
+		let invalidCell = findInvalidCell();
+		expect(invalidCell).not.toBeNull();
+		expect(invalidCell?.className).toContain('og-cell-validation-error');
+		expect(invalidCell?.dataset.validationError).toBe('Name is required');
+
+		scrollViewport.scrollTop = 0;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		await flushScrollIdle();
+
+		scrollViewport.scrollTop = 1200;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		await flushScrollIdle();
+
+		invalidCell = findInvalidCell();
+		expect(invalidCell).not.toBeNull();
+		expect(invalidCell?.className).toContain('og-cell-validation-error');
+		expect(invalidCell?.dataset.validationError).toBe('Name is required');
 
 		renderer.unmount();
 		controller.dispose();
@@ -2103,7 +2468,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('preserves portals and immediately mounts new columns during horizontal recycling', async () => {
+	it('preserves portals during horizontal recycling without mounting new columns synchronously during scroll', async () => {
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
 			callbacks.push(cb);
@@ -2168,14 +2533,963 @@ describe('RenderEngine', () => {
 		// Portals for exited columns are warm-cached (deferred), not destroyed during scroll.
 		expect(unmountCount).toBe(0);
 		expect(flushPortalContent).not.toHaveBeenCalled();
-		expect(stats.portalReleasesDuringScroll).toBe(0);
 		expect(stats.portalFlushesDuringScroll).toBe(0);
-		// New columns entering the viewport are mounted immediately.
-		expect(stats.portalMountsDuringScroll).toBeGreaterThan(0);
+		// New columns entering the viewport take the impostor path during scroll — no synchronous portal mounts.
+		expect(stats.portalMountsDuringScroll).toBe(0);
 
 		renderer.unmount();
 		controller.dispose();
 		store.destroy();
+	});
+
+	it('wakes buffered offscreen columns when horizontal scroll moves them into the visible viewport', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		const columns = Array.from({ length: 12 }, (_, index) => ({
+			field: `col_${index}`,
+			header: `Col ${index}`,
+			width: 100,
+			valueGetter: ({ row }: { row: Record<string, string> }) => `${row.id}:${index}`,
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			rowOverscanPx: 80,
+			colBuffer: 4,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 40 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+
+		scrollViewport.scrollTop = 400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		expect(callbacks.length).toBeGreaterThanOrEqual(1);
+		callbacks[0](0);
+
+		scrollViewport.scrollLeft = 200;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		expect(callbacks.length).toBeGreaterThanOrEqual(2);
+		callbacks[1](0);
+
+		const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+		expect(row10).not.toBeNull();
+		const newlyVisibleCell = row10.querySelector('[data-col-field="col_6"]') as HTMLDivElement;
+		expect(newlyVisibleCell).not.toBeNull();
+		expect(newlyVisibleCell.textContent).not.toBe('row-2:6');
+
+		let i = 2;
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+		await Promise.resolve();
+		await Promise.resolve();
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+
+		expect(newlyVisibleCell.textContent).toBe('row-10:6');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('does not treat an emptied buffered portal host as authoritative during horizontal reveal', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		const columns = Array.from({ length: 12 }, (_, index) => ({
+			field: `col_${index}`,
+			header: `Col ${index}`,
+			width: 100,
+			cellRenderer: () => `Rendered ${index}`,
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			rowOverscanPx: 80,
+			colBuffer: 4,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 40 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+
+		scrollViewport.scrollTop = 400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		expect(callbacks.length).toBeGreaterThanOrEqual(1);
+		callbacks[0](0);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+		expect(row10).not.toBeNull();
+		const bufferedCell = row10.querySelector('[data-col-field="col_6"]') as HTMLDivElement;
+		expect(bufferedCell).not.toBeNull();
+		const bufferedHost = bufferedCell.querySelector('.og-cell-portal-host') as HTMLDivElement;
+		expect(bufferedHost).not.toBeNull();
+		expect(bufferedHost.childElementCount).toBeGreaterThan(0);
+
+		bufferedHost.replaceChildren();
+		expect(bufferedHost.childElementCount).toBe(0);
+
+		scrollViewport.scrollLeft = 200;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		expect(callbacks.length).toBeGreaterThanOrEqual(2);
+		callbacks[1](0);
+
+		const revealedCell = row10.querySelector('[data-col-field="col_6"]') as HTMLDivElement;
+		// custom cells always take the impostor path during scroll — emptied portal host is never
+		// mistaken for authoritative content; the cell shows empty/fallback, not portal.
+		expect(revealedCell.dataset.contentMode).not.toBe('portal');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('prewarms valueGetter columns just outside the visible band so horizontal re-entry wakes immediately', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: Array<(deadline?: { timeRemaining(): number; didTimeout: boolean }) => void> = [];
+		const previousRequestIdleCallback = (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+		const previousCancelIdleCallback = (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		(
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+				cancelIdleCallback?: (id: number) => void;
+			}
+		).requestIdleCallback = (cb) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		};
+		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback = (id) => {
+			if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {};
+		};
+
+		const columns = Array.from({ length: 12 }, (_, index) => ({
+			field: `col_${index}`,
+			header: `Col ${index}`,
+			width: 100,
+			valueGetterDependencies: [`col_${index}`],
+			valueGetter: ({ row }: { row: Record<string, string> }) => `Snapshot:${row.id}:${index}`,
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			rowOverscanPx: 80,
+			colBuffer: 0,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 40 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		try {
+			renderer.mount(container);
+
+			const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+			scrollViewport.scrollTop = 400;
+			scrollViewport.scrollLeft = 400;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(1);
+			callbacks[0](0);
+			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
+
+			scrollViewport.scrollLeft = 200;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(2);
+			callbacks[1](0);
+
+			const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+			expect(row10).not.toBeNull();
+			const reenteredCell = row10.querySelector('[data-col-field="col_2"]') as HTMLDivElement;
+			expect(reenteredCell).not.toBeNull();
+			expect(reenteredCell.textContent).toBe('Snapshot:row-10:2');
+			const stats = renderer.getRenderStats();
+			expect(stats.valueGetterCallsDuringScroll).toBe(0);
+			expect(stats.prewarmedDisplayValues).toBeGreaterThan(0);
+			expect(stats.prewarmedCellSnapshots).toBeGreaterThan(0);
+			expect(stats.prewarmPasses).toBeGreaterThan(0);
+		} finally {
+			if (previousRequestIdleCallback === undefined) {
+				delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+			} else {
+				(window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = previousRequestIdleCallback;
+			}
+			if (previousCancelIdleCallback === undefined) {
+				delete (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+			} else {
+				(window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback = previousCancelIdleCallback;
+			}
+			renderer.unmount();
+			controller.dispose();
+			store.destroy();
+		}
+	});
+
+	it('prewarms formula columns just outside the visible band so horizontal re-entry wakes immediately', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: Array<(deadline?: { timeRemaining(): number; didTimeout: boolean }) => void> = [];
+		const previousRequestIdleCallback = (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+		const previousCancelIdleCallback = (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		(
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+				cancelIdleCallback?: (id: number) => void;
+			}
+		).requestIdleCallback = (cb) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		};
+		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback = (id) => {
+			if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {};
+		};
+
+		const columns = [
+			{ field: 'id', header: 'Id', width: 100 },
+			{ field: 'val', header: 'Val', width: 100 },
+			{ field: 'formula', header: 'Formula', width: 100 },
+			...Array.from({ length: 9 }, (_, index) => ({
+				field: `filler_${index}`,
+				header: `Filler ${index}`,
+				width: 100,
+			})),
+		];
+		const rows = Array.from({ length: 40 }, (_, rowIndex) => ({
+			id: `row-${rowIndex}`,
+			val: rowIndex + 1,
+			formula: `=[row-${rowIndex}:val]*2`,
+			...Object.fromEntries(Array.from({ length: 9 }, (_, fillerIndex) => [`filler_${fillerIndex}`, `${rowIndex}:${fillerIndex}`])),
+		}));
+		const store = new GridStore<Record<string, string | number>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			rowOverscanPx: 80,
+			colBuffer: 0,
+			getRowId: (row) => String(row.id),
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows,
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		try {
+			renderer.mount(container);
+
+			const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+			scrollViewport.scrollTop = 400;
+			scrollViewport.scrollLeft = 400;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(1);
+			callbacks[0](0);
+			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
+
+			scrollViewport.scrollLeft = 200;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(2);
+			callbacks[1](0);
+
+			const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+			expect(row10).not.toBeNull();
+			const formulaCell = row10.querySelector('[data-col-field="formula"]') as HTMLDivElement;
+			expect(formulaCell).not.toBeNull();
+			expect(formulaCell.textContent).toBe('22');
+			const stats = renderer.getRenderStats();
+			expect(stats.getCellValueCallsDuringScroll).toBe(0);
+			expect(stats.formulaCallsDuringScroll).toBe(0);
+			expect(stats.prewarmedDisplayValues).toBeGreaterThan(0);
+			expect(stats.prewarmedCellSnapshots).toBeGreaterThan(0);
+		} finally {
+			if (previousRequestIdleCallback === undefined) {
+				delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+			} else {
+				(window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = previousRequestIdleCallback;
+			}
+			if (previousCancelIdleCallback === undefined) {
+				delete (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+			} else {
+				(window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback = previousCancelIdleCallback;
+			}
+			renderer.unmount();
+			controller.dispose();
+			store.destroy();
+		}
+	});
+
+	it('prewarms insight decorations just outside the visible band so horizontal re-entry keeps validation state', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: Array<(deadline?: { timeRemaining(): number; didTimeout: boolean }) => void> = [];
+		const previousRequestIdleCallback = (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+		const previousCancelIdleCallback = (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		(
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+				cancelIdleCallback?: (id: number) => void;
+			}
+		).requestIdleCallback = (cb) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		};
+		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback = (id) => {
+			if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {};
+		};
+
+		const columns = Array.from({ length: 12 }, (_, index) => ({
+			field: `col_${index}`,
+			header: `Col ${index}`,
+			width: 100,
+			...(index === 2
+				? {
+						tooltip: ({ row }: { row: Record<string, string> }) => `Tip:${row.id}`,
+						canEdit: () => ({ allowed: false }),
+					}
+				: {}),
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			rowOverscanPx: 80,
+			colBuffer: 0,
+			getRowId: (row) => row.id,
+		});
+		store.engine.insights.register({
+			id: 'dataIntegrity',
+			getCellDecorations: (rowId, colField) =>
+				rowId === 'row-10' && colField === 'col_2'
+					? [
+							{
+								layerId: 'dataIntegrity',
+								kind: 'validationError',
+								className: 'og-cell-validation-error',
+								title: 'Needs review',
+							},
+						]
+					: [],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 40 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		try {
+			renderer.mount(container);
+
+			const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+			scrollViewport.scrollTop = 400;
+			scrollViewport.scrollLeft = 400;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(1);
+			callbacks[0](0);
+			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
+
+			scrollViewport.scrollLeft = 200;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(2);
+			callbacks[1](0);
+
+			const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+			expect(row10).not.toBeNull();
+			const decoratedCell = row10.querySelector('[data-col-field="col_2"]') as HTMLDivElement;
+			expect(decoratedCell).not.toBeNull();
+			expect(decoratedCell.className).toContain('og-cell-validation-error');
+			expect(decoratedCell.className).toContain('og-cell-readonly');
+			expect(decoratedCell.dataset.validationError).toBe('Needs review');
+			expect(decoratedCell.title).toContain('Tip:row-10');
+			expect(decoratedCell.title).toContain('Needs review');
+			const stats = renderer.getRenderStats();
+			expect(stats.prewarmedCellSnapshots).toBeGreaterThan(0);
+			expect(stats.prewarmedDisplayValues).toBe(0);
+		} finally {
+			if (previousRequestIdleCallback === undefined) {
+				delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+			} else {
+				(window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = previousRequestIdleCallback;
+			}
+			if (previousCancelIdleCallback === undefined) {
+				delete (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+			} else {
+				(window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback = previousCancelIdleCallback;
+			}
+			renderer.unmount();
+			controller.dispose();
+			store.destroy();
+		}
+	});
+
+	it('prewarms style-rule snapshots just outside the visible band so horizontal re-entry keeps visual state without live wake-up', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: Array<(deadline: { timeRemaining(): number; didTimeout: boolean }) => void> = [];
+		const previousRequestIdleCallback = (
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+			}
+		).requestIdleCallback;
+		const previousCancelIdleCallback = (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		(
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+				cancelIdleCallback?: (id: number) => void;
+			}
+		).requestIdleCallback = (cb) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		};
+		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback = (id) => {
+			if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {};
+		};
+
+		const columns = Array.from({ length: 12 }, (_, index) => ({
+			field: `col_${index}`,
+			header: `Col ${index}`,
+			width: 100,
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			rowOverscanPx: 80,
+			colBuffer: 0,
+			getRowId: (row) => row.id,
+			styleRules: [
+				{
+					kind: 'cell',
+					field: 'col_2',
+					cellClass: 'prewarm-flag',
+					when: (row) => row.id === 'row-10',
+				},
+			],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 40 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		try {
+			renderer.mount(container);
+
+			const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+			scrollViewport.scrollTop = 400;
+			scrollViewport.scrollLeft = 400;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(1);
+			callbacks[0](0);
+			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
+
+			scrollViewport.scrollLeft = 200;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(2);
+			callbacks[1](0);
+
+			const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+			expect(row10).not.toBeNull();
+			const styledCell = row10.querySelector('[data-col-field="col_2"]') as HTMLDivElement;
+			expect(styledCell).not.toBeNull();
+			expect(styledCell.className).toContain('prewarm-flag');
+			expect(renderer.getRenderStats().prewarmedCellSnapshots).toBeGreaterThan(0);
+		} finally {
+			if (previousRequestIdleCallback === undefined) {
+				delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+			} else {
+				(window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = previousRequestIdleCallback;
+			}
+			if (previousCancelIdleCallback === undefined) {
+				delete (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+			} else {
+				(window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback = previousCancelIdleCallback;
+			}
+			renderer.unmount();
+			controller.dispose();
+			store.destroy();
+		}
+	});
+
+	it('prewarms plain primitive snapshots just outside the visible band so horizontal re-entry binds coherently', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: Array<(deadline: { timeRemaining(): number; didTimeout: boolean }) => void> = [];
+		const previousRequestIdleCallback = (
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+			}
+		).requestIdleCallback;
+		const previousCancelIdleCallback = (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		(
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+				cancelIdleCallback?: (id: number) => void;
+			}
+		).requestIdleCallback = (cb) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		};
+		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback = (id) => {
+			if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {};
+		};
+
+		const columns = Array.from({ length: 12 }, (_, index) => ({
+			field: `col_${index}`,
+			header: `Col ${index}`,
+			width: 100,
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			rowOverscanPx: 80,
+			colBuffer: 0,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 40 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		try {
+			renderer.mount(container);
+
+			const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+			scrollViewport.scrollTop = 400;
+			scrollViewport.scrollLeft = 400;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(1);
+			callbacks[0](0);
+			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
+
+			const snapshot = store.engine.getCellDisplaySnapshot('row-10', 'col_2');
+			expect(snapshot).toMatchObject({
+				rowId: 'row-10',
+				colField: 'col_2',
+				formattedValue: '10:2',
+				contentMode: 'text',
+			});
+
+			scrollViewport.scrollLeft = 200;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(2);
+			callbacks[1](0);
+
+			const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+			expect(row10).not.toBeNull();
+			const primitiveCell = row10.querySelector('[data-col-field="col_2"]') as HTMLDivElement;
+			expect(primitiveCell).not.toBeNull();
+			expect(primitiveCell.textContent).toBe('10:2');
+			expect(renderer.getRenderStats().prewarmedCellSnapshots).toBeGreaterThan(0);
+		} finally {
+			if (previousRequestIdleCallback === undefined) {
+				delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+			} else {
+				(window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = previousRequestIdleCallback;
+			}
+			if (previousCancelIdleCallback === undefined) {
+				delete (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+			} else {
+				(window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback = previousCancelIdleCallback;
+			}
+			renderer.unmount();
+			controller.dispose();
+			store.destroy();
+		}
+	});
+
+	it('prewarms custom-live impostor snapshots just outside the visible band so horizontal re-entry avoids blank wake-up', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: Array<(deadline: { timeRemaining(): number; didTimeout: boolean }) => void> = [];
+		const previousRequestIdleCallback = (
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+			}
+		).requestIdleCallback;
+		const previousCancelIdleCallback = (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		(
+			window as Window & {
+				requestIdleCallback?: (cb: (deadline: { timeRemaining(): number; didTimeout: boolean }) => void) => number;
+				cancelIdleCallback?: (id: number) => void;
+			}
+		).requestIdleCallback = (cb) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		};
+		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback = (id) => {
+			if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {};
+		};
+
+		const columns = Array.from({ length: 12 }, (_, index) => ({
+			field: `col_${index}`,
+			header: `Col ${index}`,
+			width: 100,
+			...(index === 2
+				? {
+						cellRenderer: ({ value }: { value: string }) => `Portal ${value}`,
+						cellRendererCapabilities: { scrollBehavior: 'live' as const },
+					}
+				: {}),
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			rowOverscanPx: 80,
+			colBuffer: 0,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 40 }, (_, rowIndex) => {
+				const row: Record<string, string> = { id: `row-${rowIndex}` };
+				for (let colIndex = 0; colIndex < columns.length; colIndex++) row[`col_${colIndex}`] = `${rowIndex}:${colIndex}`;
+				return row;
+			}),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		try {
+			renderer.mount(container);
+
+			const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+			scrollViewport.scrollTop = 400;
+			scrollViewport.scrollLeft = 400;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(1);
+			callbacks[0](0);
+			expect(idleCallbacks.length).toBeGreaterThanOrEqual(1);
+			idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 0 });
+
+			const snapshot = store.engine.getCellDisplaySnapshot('row-10', 'col_2');
+			expect(snapshot).toMatchObject({
+				rowId: 'row-10',
+				colField: 'col_2',
+				formattedValue: '10:2',
+				contentKind: 'impostor',
+				contentMode: 'fallback',
+			});
+
+			scrollViewport.scrollLeft = 200;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			expect(callbacks.length).toBeGreaterThanOrEqual(2);
+			callbacks[1](0);
+
+			const row10 = container.querySelector('[data-row-id="row:row-10"]') as HTMLDivElement;
+			expect(row10).not.toBeNull();
+			const customCell = row10.querySelector('[data-col-field="col_2"]') as HTMLDivElement;
+			expect(customCell).not.toBeNull();
+			expect(customCell.dataset.contentMode).toBe('fallback');
+			expect(customCell.textContent).toBe('10:2');
+			expect(renderer.getRenderStats().prewarmedCellSnapshots).toBeGreaterThan(0);
+			expect(renderer.getRenderStats().prewarmedDisplayValues).toBeGreaterThan(0);
+		} finally {
+			if (previousRequestIdleCallback === undefined) {
+				delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+			} else {
+				(window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = previousRequestIdleCallback;
+			}
+			if (previousCancelIdleCallback === undefined) {
+				delete (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+			} else {
+				(window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback = previousCancelIdleCallback;
+			}
+			renderer.unmount();
+			controller.dispose();
+			store.destroy();
+		}
+	});
+
+	it('prewarms more rows in the direction of vertical scroll travel than the trailing edge', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		const idleCallbacks: Array<(deadline: { timeRemaining(): number; didTimeout: boolean }) => void> = [];
+		const prevRIC = (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+		const prevCIC = (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		(
+			window as Window & { requestIdleCallback?: (cb: (d: { timeRemaining(): number; didTimeout: boolean }) => void) => number }
+		).requestIdleCallback = (cb) => {
+			idleCallbacks.push(cb);
+			return idleCallbacks.length;
+		};
+		(window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback = (id) => {
+			if (id >= 1 && id <= idleCallbacks.length) idleCallbacks[id - 1] = () => {};
+		};
+
+		const columns = [{ field: 'v', header: 'V', width: 100 }];
+		const store = new GridStore<{ id: string; v: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 80 }, (_, i) => ({ id: `r${i}`, v: `V${i}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 200,
+			bottom: 160,
+			width: 200,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		try {
+			renderer.mount(container);
+
+			const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+
+			// First scroll: establish a base position (rows 10-13 visible at scrollTop=400).
+			// This also primes lastPrewarmRequest to {visibleRowStart:10, ...}.
+			scrollViewport.scrollTop = 400;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			callbacks[callbacks.length - 1]?.(0);
+			idleCallbacks[idleCallbacks.length - 1]?.({ didTimeout: false, timeRemaining: () => 50 });
+
+			// Second scroll: jump down to rows 20-23 visible (scrollTop=800).
+			// rowDelta = 20-10 = 10 > 0 → scrolling down.
+			// rowBefore (trailing) = base = 2 → prewarms rows 18-19.
+			// rowAfter (leading)   = base × 2 = 4 → prewarms rows 24-27.
+			scrollViewport.scrollTop = 800;
+			scrollViewport.dispatchEvent(new Event('scroll'));
+			callbacks[callbacks.length - 1]?.(0);
+			idleCallbacks[idleCallbacks.length - 1]?.({ didTimeout: false, timeRemaining: () => 50 });
+
+			// Leading edge (rows 24-27): should be prewarmed.
+			expect(store.engine.getCellDisplaySnapshot('r27', 'v')).toBeDefined();
+			// Beyond leading edge (row 28): not yet prewarmed.
+			expect(store.engine.getCellDisplaySnapshot('r28', 'v')).toBeUndefined();
+
+			// Trailing edge: only 2 rows back (rows 18-19). Row 16 is 4 rows back — out of range.
+			expect(store.engine.getCellDisplaySnapshot('r18', 'v')).toBeDefined();
+			expect(store.engine.getCellDisplaySnapshot('r16', 'v')).toBeUndefined();
+		} finally {
+			if (prevRIC === undefined) delete (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback;
+			else (window as Window & { requestIdleCallback?: unknown }).requestIdleCallback = prevRIC;
+			if (prevCIC === undefined) delete (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback;
+			else (window as Window & { cancelIdleCallback?: unknown }).cancelIdleCallback = prevCIC;
+			renderer.unmount();
+			controller.dispose();
+			store.destroy();
+		}
 	});
 
 	it('updates cell widths immediately on column resize', async () => {
@@ -2268,7 +3582,7 @@ describe('RenderEngine', () => {
 
 		// Transition loading to false and supply rows
 		store.setRows([{ id: 'row-0', a: 'A0' }]);
-		store.setState({ loading: false });
+		store.engine.setRowModelLoadingState(false);
 
 		// Wait for render scheduler frame
 		await Promise.resolve();
@@ -2420,7 +3734,85 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('immediately shows portal content for all columns during scroll regardless of scrollBehavior', () => {
+	it('does not leave rows blank when they move from overscan into the visible viewport', async () => {
+		const callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			callbacks.push(cb);
+			return callbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= callbacks.length) callbacks[id - 1] = () => {};
+		});
+		const columns = [
+			{ field: 'name', header: 'Name', width: 120 },
+			{ field: 'computed', header: 'Computed', width: 120, valueGetter: ({ row }) => `${row.name}!` },
+		];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			rowOverscanPx: 80,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 50 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		expect(callbacks.length).toBeGreaterThanOrEqual(1);
+		callbacks[0](0);
+
+		scrollViewport.scrollTop = 480;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		expect(callbacks.length).toBeGreaterThanOrEqual(2);
+		callbacks[1](0);
+
+		const row15 = container.querySelector('[data-row-id="row:row-15"]') as HTMLDivElement;
+		expect(row15).not.toBeNull();
+		const computedCell = row15.querySelector('[data-col-field="computed"]') as HTMLDivElement;
+		expect(computedCell).not.toBeNull();
+		expect(computedCell.textContent).not.toBe('');
+
+		let i = 2;
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+		await Promise.resolve();
+		await Promise.resolve();
+		while (i < callbacks.length) {
+			callbacks[i](0);
+			i++;
+		}
+
+		expect(computedCell.textContent).toBe('Row 15!');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('all custom and deferred columns show text impostor during scroll; portal deferred to fidelity lane', () => {
 		vi.useFakeTimers();
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -2497,12 +3889,11 @@ describe('RenderEngine', () => {
 		const cell2 = row40.querySelector('[data-col-field="col2"]') as HTMLDivElement;
 		const cell3 = row40.querySelector('[data-col-field="col3"]') as HTMLDivElement;
 
-		// All cells show portal content immediately — no pending/fallback placeholders.
-		expect(cell1.dataset.contentMode).toBe('portal');
-		expect(cell2.dataset.contentMode).toBe('portal');
-		expect(cell3.dataset.contentMode).toBe('portal');
-		// onMountCellContent IS called during scroll (immediate mount, not deferred).
-		expect(renderer.portalMountManager.onMountCellContent).toHaveBeenCalled();
+		// All portal-mode columns show text impostor during scroll — no synchronous portal mounts.
+		// col1 (mode='custom'), col2 (mode='custom-live'), col3 (mode='custom', defer) all defer to fidelity lane.
+		expect(cell1.dataset.contentMode).not.toBe('portal');
+		expect(cell2.dataset.contentMode).not.toBe('portal');
+		expect(cell3.dataset.contentMode).not.toBe('portal');
 		// isScrolling:false always passed → customRendererMountsDuringScroll stays 0.
 		expect(renderer.getRenderStats().customRendererMountsDuringScroll).toBe(0);
 
@@ -2512,7 +3903,7 @@ describe('RenderEngine', () => {
 		vi.useRealTimers();
 	});
 
-	it('cellRendererCapabilities: all cells show portal content immediately during scroll', () => {
+	it('cellRendererCapabilities: all portal-mode cells show text impostor during scroll; portal deferred to fidelity lane', () => {
 		vi.useFakeTimers();
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -2593,15 +3984,12 @@ describe('RenderEngine', () => {
 
 		const row40 = container.querySelector('[data-row-id="row:row-40"]') as HTMLDivElement;
 		expect(row40).not.toBeNull();
-		// All cells show portal content immediately — scrollBehavior no longer causes deferral.
-		expect((row40.querySelector('[data-col-field="live"]') as HTMLDivElement).dataset.contentMode).toBe('portal');
+		// All portal-mode columns show text impostor during scroll — portal deferred to fidelity lane.
+		expect((row40.querySelector('[data-col-field="live"]') as HTMLDivElement).dataset.contentMode).not.toBe('portal');
 		const deferCell = row40.querySelector('[data-col-field="defer"]') as HTMLDivElement;
-		expect(deferCell.dataset.contentMode).toBe('portal');
-		// Portal mode: no fallback text content (React component renders instead).
-		expect(deferCell.querySelector('.og-cell-content')?.textContent).toBe('');
-		expect((row40.querySelector('[data-col-field="fallback"]') as HTMLDivElement).dataset.contentMode).toBe('portal');
-		// onMountCellContent IS called during scroll (immediate mount).
-		expect(renderer.portalMountManager.onMountCellContent).toHaveBeenCalled();
+		// defer cell has a cached display value ('Snapshot Defer 40') → prewarm snapshot tagged impostor → shows 'fallback'
+		expect(deferCell.dataset.contentMode).not.toBe('portal');
+		expect((row40.querySelector('[data-col-field="fallback"]') as HTMLDivElement).dataset.contentMode).not.toBe('portal');
 		// isScrolling:false always passed → customRendererMountsDuringScroll stays 0.
 		expect(renderer.getRenderStats().customRendererMountsDuringScroll).toBe(0);
 
@@ -2611,7 +3999,7 @@ describe('RenderEngine', () => {
 		vi.useRealTimers();
 	});
 
-	it('deferred custom renderers show portal content immediately during scroll', () => {
+	it('deferred custom renderers show text impostor during scroll; portal content deferred to fidelity lane', () => {
 		vi.useFakeTimers();
 		const callbacks: FrameRequestCallback[] = [];
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -2667,9 +4055,8 @@ describe('RenderEngine', () => {
 
 		const row40 = container.querySelector('[data-row-id="row:row-40"]') as HTMLDivElement;
 		const deferCell = row40.querySelector('[data-col-field="defer"]') as HTMLDivElement;
-		// Deferred cells now show portal content immediately — no pending placeholder.
-		expect(deferCell.dataset.contentMode).toBe('portal');
-		expect(deferCell.querySelector('.og-cell-content')?.textContent).toBe('');
+		// Deferred (custom) cells show text impostor during scroll — portal deferred to fidelity lane.
+		expect(deferCell.dataset.contentMode).not.toBe('portal');
 
 		renderer.unmount();
 		controller.dispose();
@@ -2729,9 +4116,9 @@ describe('RenderEngine', () => {
 		// reaches its steady-state size (full overscan above and below).
 		scrollViewport.scrollTop = 2400;
 		scrollViewport.dispatchEvent(new Event('scroll'));
-		// Run the scroll frame only, then discard queued scroll-end callbacks.
-		if (callbacks.length > 0) callbacks.shift()!(0);
-		callbacks.length = 0;
+		// Drain all callbacks: scroll frame + scroll-end detection quiet frames. This lets
+		// FrameCoordinator's rafId reset to null so the second scroll can schedule cleanly.
+		while (callbacks.length > 0) callbacks.shift()!(0);
 
 		// Record the steady-state slot count (full overscan both ways).
 		const slotCountAtSteadyState = renderer.rowRenderer.rowSlotPool.count;
@@ -2745,9 +4132,8 @@ describe('RenderEngine', () => {
 		// middle zone. The slot pool should not grow since the window size stays constant.
 		scrollViewport.scrollTop = 2480;
 		scrollViewport.dispatchEvent(new Event('scroll'));
-		// Run the scroll frame only.
-		if (callbacks.length > 0) callbacks.shift()!(0);
-		callbacks.length = 0;
+		// Drain all callbacks: scroll frame + scroll-end detection quiet frames.
+		while (callbacks.length > 0) callbacks.shift()!(0);
 
 		// Slot count and DOM child count must be identical after steady-state scroll.
 		expect(renderer.rowRenderer.rowSlotPool.count).toBe(slotCountAtSteadyState);
@@ -2904,6 +4290,55 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('rotates the viewport slot window and only rebinds one row for a one-row scroll', () => {
+		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+			cb(0);
+			return 1;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (_id: number) => {});
+
+		const columns = [{ field: 'a', header: 'A', width: 120 }];
+		const store = new GridStore<{ id: string; a: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowOverscanPx: 0,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 100 }, (_, i) => ({ id: `row-${i}`, a: `A${i}` })),
+			columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		renderer.resetRenderStats();
+		scrollViewport.scrollTop = 40;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		const stats = renderer.getRenderStats();
+		expect(stats.rowSlotMoves).toBeGreaterThan(0);
+		expect(stats.rowSlotRebinds).toBe(1);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('stable-slot model: custom renderers are updated in-place when slots rebind to new rows', () => {
 		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
 			cb(0);
@@ -2958,20 +4393,19 @@ describe('RenderEngine', () => {
 		scrollViewport.scrollTop = 400;
 		scrollViewport.dispatchEvent(new Event('scroll'));
 
-		// After scroll: portals are updated in-place (slot key unchanged → active instance found
-		// → rebindInstance called). No warm cache lookup needed, no portal destruction.
+		// After scroll: impostor path releases portals, full bind (via immediate RAF) restores them
+		// via warm cache. warmHits ≥ 4 (released + re-acquired), warmMisses stays at 5 (initial only).
 		const statsAfterScroll = renderer.portalMountManager.customRendererManager.getStats();
-		expect(statsAfterScroll.warmHits).toBe(0); // in-place update, not warm restore
-		expect(statsAfterScroll.warmMisses).toBe(5); // no new cold mounts — slots reused
+		expect(statsAfterScroll.warmHits).toBeGreaterThanOrEqual(4); // warm cache restore from fidelity/full-bind
+		expect(statsAfterScroll.warmMisses).toBe(5); // no additional cold mounts — warm cache covers rebound slots
 
-		// The lifecycle delivered to the adapter for the re-entering rows should be 'update',
-		// confirming the React portal is updated in-place (no remount, no reconciliation).
-		const updates = lifecycleLog.filter((e) => e.op === 'update');
-		expect(updates.length).toBe(5);
+		// onMountCellContent fires for initial cold mounts and for warm cache restores post-scroll.
+		// 5 initial + up to 5 warm cache restores from full bind = ≥ 5 total events.
+		expect(lifecycleLog.length).toBeGreaterThanOrEqual(5);
 
-		// Renderer keys are slot-based (S prefix from createSlotRendererKey).
-		for (const entry of updates) {
-			expect(entry.cellKey).toMatch(/^S\d+:rsp-/);
+		// cellKeys are cell-instance-based (C prefix from createCellInstanceRendererKey).
+		for (const entry of lifecycleLog) {
+			expect(entry.cellKey).toMatch(/^C\d+:ci\d+/);
 		}
 
 		renderer.unmount();

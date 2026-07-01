@@ -1,5 +1,7 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { GridEventName } from '../api/GridEvents.js';
+import { asRowOrderCapableModel, type RowOrderCapableModel } from '../rowModel.js';
+import type { RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 
 interface DragState {
 	pointerId: number;
@@ -27,8 +29,13 @@ export class RowDragController<TRowData = unknown> {
 	private scrollAnimFrame: number | null = null;
 	private container: HTMLElement | null = null;
 	private scrollViewport: HTMLElement | null = null;
+	private autoScrollRate = 0;
 
 	constructor(private readonly engine: GridEngine<TRowData>) {}
+
+	private getRowOrderCapableRowModel(): RowOrderCapableModel | null {
+		return asRowOrderCapableModel(this.engine.getRowModel());
+	}
 
 	public mount(container: HTMLElement, scrollViewport: HTMLElement): void {
 		this.container = container;
@@ -102,6 +109,7 @@ export class RowDragController<TRowData = unknown> {
 		if (!this.drag.activated) {
 			const dy = Math.abs(e.clientY - this.drag.startClientY);
 			if (dy < DRAG_THRESHOLD_PX) return;
+			if (!this.canActivateDrag()) return;
 			this.activateDrag();
 		}
 
@@ -163,6 +171,33 @@ export class RowDragController<TRowData = unknown> {
 			rowData: this.engine.getRowModel()?.getRawRowById(this.drag.rowId) ?? null,
 			visualIndex: this.drag.visualIndex,
 		});
+	}
+
+	private canActivateDrag(): boolean {
+		if (!this.drag) return false;
+		const state = this.engine.stateManager.getState();
+		if ((state.rowDragMode ?? 'managed') !== 'managed') {
+			return true;
+		}
+		const policy = this.engine.getManagedRowDragPolicy();
+		if (policy.allowed) {
+			return true;
+		}
+		this.reportManagedDragBlocked(policy.reason, policy.message);
+		this.detachDocListeners();
+		this.cancel();
+		return false;
+	}
+
+	private reportManagedDragBlocked(reason: string, message: string, operation: RuntimeFaultInput['operation'] = 'activate-managed-drag'): void {
+		const rowId = this.drag?.rowId;
+		const fault: RuntimeFaultInput = {
+			source: 'renderer',
+			operation,
+			error: new Error(message),
+			context: { rowId, reason },
+		};
+		this.engine.runtimeFaults.report(fault);
 	}
 
 	// ── Ghost ──────────────────────────────────────────────────────────────────
@@ -242,13 +277,16 @@ export class RowDragController<TRowData = unknown> {
 		const mode = state.rowDragMode ?? 'managed';
 
 		if (mode === 'managed' && overVisualIndex !== null && overVisualIndex !== fromVi) {
-			const rowModel = this.engine.getRowModel();
-			if (rowModel?.setRowOrder && rowModel?.getRowOrder) {
+			const policy = this.engine.getManagedRowDragPolicy();
+			if (!policy.allowed) {
+				this.reportManagedDragBlocked(policy.reason, policy.message, 'commit-managed-drag');
+				this.cleanup();
+				return;
+			}
+			const rowModel = this.getRowOrderCapableRowModel();
+			if (rowModel) {
 				// Snapshot BEFORE any state changes for FLIP
 				const before = this.snapshotRowPositions();
-
-				// Sorting overrides source order — clear first so the drag order is preserved
-				if (state.sortModel) this.engine.setSortModel(null, false);
 
 				const currentOrder = rowModel.getRowOrder();
 				const fromIdx = currentOrder.indexOf(rowId);
@@ -270,9 +308,23 @@ export class RowDragController<TRowData = unknown> {
 					this.container?.classList.remove('og-row-dragging');
 					this.drag = null;
 
-					rowModel.setRowOrder(newOrder);
-					this.engine.eventBus.dispatchEvent(GridEventName.rowOrderChanged, { rowIds: newOrder });
-					this.playFlipAnimation(before);
+					const result = this.engine.setRowOrder(newOrder, true, 'rows:drag-reorder');
+					if (result.status === 'applied' || result.status === 'noop') {
+						this.playFlipAnimation(before);
+						return;
+					}
+					this.engine.runtimeFaults.report({
+						source: 'renderer',
+						operation: 'commit-managed-drag',
+						error: new Error(result.status === 'failed' ? result.error.message : (result.reason ?? 'managed row drag rejected')),
+						context: {
+							rowId,
+							overRowId,
+							overVisualIndex,
+							status: result.status,
+							rejections: 'rejections' in result ? result.rejections : undefined,
+						},
+					});
 					return;
 				}
 			}
@@ -314,6 +366,7 @@ export class RowDragController<TRowData = unknown> {
 	private playFlipAnimation(before: Map<string, number>): void {
 		const container = this.container;
 		if (!container) return;
+		// Interaction-only row-reorder animation staging: this is not grid render scheduling.
 		// Double RAF: first frame the renderer re-positions rows, second frame DOM is settled.
 		requestAnimationFrame(() =>
 			requestAnimationFrame(() => {
@@ -407,16 +460,19 @@ export class RowDragController<TRowData = unknown> {
 	}
 
 	private startAutoScroll(rate: number): void {
-		this.stopAutoScroll();
+		this.autoScrollRate = rate;
+		if (this.scrollAnimFrame !== null) return;
+		// Interaction-only drag auto-scroll loop: this is user-driven pointer behavior, not grid rendering.
 		const scroll = (): void => {
 			if (!this.drag || !this.scrollViewport) return;
-			this.scrollViewport.scrollTop += rate;
+			this.scrollViewport.scrollTop += this.autoScrollRate;
 			this.scrollAnimFrame = requestAnimationFrame(scroll);
 		};
 		this.scrollAnimFrame = requestAnimationFrame(scroll);
 	}
 
 	private stopAutoScroll(): void {
+		this.autoScrollRate = 0;
 		if (this.scrollAnimFrame !== null) {
 			cancelAnimationFrame(this.scrollAnimFrame);
 			this.scrollAnimFrame = null;

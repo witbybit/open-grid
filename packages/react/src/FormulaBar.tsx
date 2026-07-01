@@ -31,14 +31,14 @@ export function FormulaBar<TRowData = unknown>({ api, className, style }: Formul
 	// Subscribe to selection changes to update displayed value.
 	useEffect(() => {
 		const unsubscribe = api.subscribeToKey('selection', () => {
-			const state = api.getState();
+			const state = api.getStateSnapshot();
 			const focus = state.selection.focus;
 			setFocusCell(focus ? { rowId: focus.rowId, colField: focus.colField } : null);
 		});
 		// Also subscribe broadly to catch cell value changes (e.g. live data).
 		const unsubscribeGlobal = api.subscribe(() => {
 			if (!isEditing) {
-				const state = api.getState();
+				const state = api.getStateSnapshot();
 				const focus = state.selection.focus;
 				if (focus) {
 					const formula = api.getFormula(focus.rowId, focus.colField);

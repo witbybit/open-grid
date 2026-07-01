@@ -1,7 +1,6 @@
 export { Grid } from './Grid.js';
-export type { GridProps, GridClientProps, GridServerProps, GridPaginationConfig } from './Grid.js';
-export type { ChartType, ChartTheme, ValueFormat } from './chart/GridChartOverlay.js';
-export { PortalCell, PortalManager } from './GridPortal.js';
+export type { GridProps, GridClientProps, GridInfiniteProps, GridServerPageProps, GridPaginationConfig } from './Grid.js';
+export type { RowModelType, InfiniteDatasource, ServerDatasource, ServerPaginationOptions, ServerPageState } from './types.js';
 export { useGridApi, useGridSelector, useGridKeySelector } from './hooks.js';
 export type { BuiltinSidebarPanelId, GridSidebarConfig, SidebarPanelDef } from './sidebar/GridSidebar.js';
 export {
@@ -49,11 +48,26 @@ export type {
 	ColumnTypeDefinition,
 } from './renderers/CellTypes.js';
 
-export { FormulaBar } from './FormulaBar.js';
-export type { FormulaBarProps } from './FormulaBar.js';
+// ─── Advanced filter API ──────────────────────────────────────────────────────
+export type {
+	ColumnFilterDef,
+	ColumnFilterType,
+	FilterSelectOption,
+	FilterFetchParams,
+	FilterFetchResult,
+	FilterPageParams,
+	FilterPageResult,
+	CustomFilterRendererParams,
+	FilterSurface,
+	SelectFilterCondition,
+} from '@open-grid/core';
+export { resolveColumnFilterDef } from '@open-grid/core';
 
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from './types.js';
 export type { GridEventPayloadMap, GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
+export type { GridWriteBlockedEventPayload } from './types.js';
+export type { GridWorkspaceAdapter, GridViewDefinition, GridWorkspaceState, SaveViewOptions } from './types.js';
+export { createLocalStorageWorkspaceAdapter } from './types.js';
 export type { StyleRule, RowStyleRule, GroupRowStyleRule, DetailRowStyleRule, CellStyleRule, HeaderCellStyleRule } from './types.js';
 export type {
 	ColumnDef,
@@ -61,10 +75,9 @@ export type {
 	CellRendererProps,
 	FilterModel,
 	SortModel,
-	GridDatasource,
 	GridApi,
 	GridCellClickParams,
-	GridState,
+	GridStateSnapshot,
 	VisualRow,
 	DataVisualRow,
 	GroupVisualRow,
@@ -91,17 +104,57 @@ export type {
 } from './types.js';
 
 export type {
+	GridCapabilityAction,
+	GridCapabilityParams,
+	GridCapabilityResult,
+	GridCapabilityCallback,
+	GridCapabilitiesConfig,
+	CapabilityDiagnostics,
+} from '@open-grid/core';
+export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from '@open-grid/core';
+
+export type {
 	GridContextMenuOptions,
 	GridContextMenuItem,
 	GridCellPointer,
 	HeaderMenuRendererProps,
-	CellValidationError,
-	RowValidatorParams,
-	RowValidator,
-	ValueValidatorParams,
-	EditableParams,
 	TooltipParams,
 	AutoSizeColumnOptions,
 	AutoSizeAllColumnsOptions,
 	FloatingFilterRendererParams,
 } from '@open-grid/core';
+
+// ── Data Integrity Pipeline types ─────────────────────────────────────────────
+export type {
+	GridIntegrityApi,
+	GridIntegrityIssue,
+	GridIntegrityIssueSource,
+	GridIntegrityIssueType,
+	GridIntegritySeverity,
+	GridIntegrityIssueFilter,
+	GridIntegritySummary,
+	GridIntegrityScope,
+	GridIntegrityRunOptions,
+	GridIntegrityRunResult,
+	GridDataIntegrityConfig,
+	GridValidationIntegrityOptions,
+	GridQualityIntegrityOptions,
+	GridDiffIntegrityOptions,
+	GridLiveStreamIntegrityOptions,
+	GridConflictIntegrityOptions,
+	GridCellIntegrityRule,
+	GridRowIntegrityRule,
+	GridIntegrityRuleResult,
+	GridDataQualityRule,
+	GridDiffModel,
+	GridCellDiff,
+	GridDiffResult,
+	GridDiffAcceptResult,
+	GridCellConflict,
+	ResolveConflictOptions,
+	ConflictResolutionResult,
+	ServerIntegrityReport,
+	GridTransactionStreamHandle,
+	GridTransactionStreamState,
+} from '@open-grid/core';
+export { duplicateValueRule, missingRequiredRule, required, email, min, max, number, date, oneOf, regex, customCellRule } from '@open-grid/core';

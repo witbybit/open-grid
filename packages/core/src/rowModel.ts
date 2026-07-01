@@ -2,12 +2,14 @@ import { type ColumnDef, setValueByPath, compilePathGetter } from './columnDef.j
 import { GridEventName } from './api/GridEvents.js';
 import type { RowDataTransaction, RowNodeTransaction, RowSelectionScope } from './api/GridApi.js';
 import type { ClientRowModelRuntime } from './engine/runtimePorts.js';
+import { GridMetric } from './diagnostics/GridInstrumentation.js';
 import { getFieldRoot } from './ids.js';
 import { RowNode } from './rowNode.js';
 import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
-import { RowDependencyRegistry, classifyMutation } from './rows/rowMutationClassifier.js';
+import { RowDependencyRegistry, classifyMutation, type RowMutationImpact } from './rows/rowMutationClassifier.js';
 import type { PageWindow } from './rows/pageModel.js';
 import { RowDataStore } from './rows/RowDataStore.js';
+import type { RowDataStoreTransactionSnapshot } from './rows/RowDataStore.js';
 import { toDataVisualRowId } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
 import {
@@ -31,7 +33,7 @@ export type {
 	DateFilterCondition,
 	SetFilterCondition,
 };
-export type { TextFilterOperator, NumberFilterOperator, DateFilterOperator } from './filterModel.js';
+export type { TextFilterOperator, NumberFilterOperator, DateFilterOperator, SelectFilterCondition } from './filterModel.js';
 
 export type SortDirection = 'asc' | 'desc';
 
@@ -45,14 +47,116 @@ export type SortModel = SortModelItem[];
 export interface ClientRowModelOptions<TData = unknown> {
 	rows: TData[];
 	columns: Array<ColumnDef<TData>>;
+	/** Per-row height callback. Called for every data row when building geometry. Return `undefined` to fall back to `defaultRowHeight`. Overridden by `api.setRowHeight()`. */
+	getRowHeight?: (row: TData, rowId: string) => number | undefined;
 }
 
+type ClientRowModelTransactionSnapshot<TData> = RowModelTransactionSnapshot<TData> & {
+	readonly modelType: 'client';
+	readonly snapshot: {
+		readonly dataStore: RowDataStoreTransactionSnapshot<TData>;
+	};
+};
+
 export type { GroupDef, RowModelConfig } from './rows/RowPipeline.js';
+export type { AggregationDef } from './rows/stages/aggregateStage.js';
+
+// ── Row model capability types ────────────────────────────────────────────────
+
+export type RowModelCapability =
+	| 'fullDataset'
+	| 'loadedDataset'
+	| 'pagedDataset'
+	| 'clientMutation'
+	| 'loadedRowMutation'
+	| 'pageRowMutation'
+	| 'transactions'
+	| 'rowOrder'
+	| 'blockLoading'
+	| 'serverPagination'
+	| 'clientSort'
+	| 'clientFilter'
+	| 'serverSort'
+	| 'serverFilter'
+	| 'clientGrouping'
+	| 'clientTree'
+	| 'aggregation'
+	| 'masterDetail'
+	| 'allRowSelection'
+	| 'loadedRowSelection'
+	| 'pageRowSelection';
+
+export type RowModelCapabilities = Readonly<Record<RowModelCapability, boolean>>;
+
+export interface CapableRowModel {
+	getCapabilities(): RowModelCapabilities;
+}
+
+export function asCapableRowModel(rowModel: unknown): CapableRowModel | null {
+	return rowModel && typeof (rowModel as CapableRowModel).getCapabilities === 'function' ? (rowModel as CapableRowModel) : null;
+}
+
+// ── Unsupported operation error ───────────────────────────────────────────────
+
+export class UnsupportedRowModelOperationError extends Error {
+	readonly operation: string;
+	readonly rowModelType: string;
+	readonly supportedRowModels: readonly string[];
+
+	constructor(opts: { operation: string; rowModelType: string; supportedRowModels: string[] }) {
+		super(
+			`[open-grid] Operation '${opts.operation}' is not supported by the '${opts.rowModelType}' row model. ` +
+				`Supported row model(s): ${opts.supportedRowModels.join(', ')}.`
+		);
+		this.name = 'UnsupportedRowModelOperationError';
+		this.operation = opts.operation;
+		this.rowModelType = opts.rowModelType;
+		this.supportedRowModels = opts.supportedRowModels;
+	}
+}
 
 // ── Row model contract types ──────────────────────────────────────────────────
 // Defined here to avoid a circular import with store.ts. store.ts re-exports these.
 
 export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit' | 'row-order';
+
+/**
+ * The renderer-facing read contract for the row model.
+ *
+ * This is the stable, model-agnostic interface the rendering layer depends on.
+ * It contains only visual-position lookups and row-data accessors — no mutation,
+ * pagination, server-datasource, or client-specific methods. Both
+ * ClientRowModelController and ServerRowModelController satisfy it.
+ *
+ * Renderer code must depend on VisualRowModel, not the full RowModel, so that
+ * client and server implementations remain substitutable and the renderer cannot
+ * accidentally call mutation or model-specific APIs.
+ */
+export interface VisualRowModel<TRowData = unknown> {
+	/** Fetch a rendered row by its visual (display) index, or null if out of range. */
+	getVisualRow(index: number): VisualRow<TRowData> | null;
+	/** Total number of visual rows currently displayed (includes group/aggregate rows). */
+	getVisualRowCount(): number;
+	/** Resolve a visual-row ID to its current visual index, or -1 if not found. */
+	getVisualIndexById(visualRowId: string): number;
+	/** Resolve a data-row ID to its current visual index, or -1 if not found. */
+	getVisualIndexByRowId(rowId: string): number;
+	/** Fetch the RowNode for a given data-row ID, or null. */
+	getRowNodeById(rowId: string): RowNode<TRowData> | null;
+	/** Fetch the raw source data for a given data-row ID, or null. */
+	getRawRowById(rowId: string): TRowData | null;
+	/**
+	 * Returns a map from a sticky-group row's visual index to the visual index of
+	 * its last descendant. Absent when there are no sticky group rows.
+	 */
+	getStickyGroupMeta?(): Map<number, number>;
+	/** Returns the group metadata for a row at the given visual index, or null. */
+	getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
+}
+
+export interface StickyGroupMetaCapableVisualRowModel {
+	getStickyGroupMeta(): Map<number, number>;
+}
 
 export interface RowModelRefreshResult {
 	changed: boolean;
@@ -64,40 +168,253 @@ export interface RowModelRefreshResult {
 	groupId?: string;
 }
 
-export interface RowModel<TRowData = unknown> {
-	getVisualRow(index: number): VisualRow<TRowData> | null;
-	getVisualRowCount(): number;
-	getDataRowCount?(): number;
-	getVisualRowIndexById(id: string): number;
-	getVisualIndexById(visualRowId: string): number;
-	getVisualIndexByRowId(rowId: string): number;
-	getRowNodeById(rowId: string): RowNode<TRowData> | null;
-	getRawRowById(rowId: string): TRowData | null;
-	getSelectableDataRowIds?(scope?: RowSelectionScope): string[];
-	toggleGroupExpanded?(groupId: string): RowModelRefreshResult | void;
-	toggleDetailExpanded?(rowId: string): RowModelRefreshResult | void;
-	isGroupExpanded?(groupId: string): boolean;
-	isDetailExpanded?(rowId: string): boolean;
-	expandAllGroups?(): RowModelRefreshResult | void;
-	collapseAllGroups?(): RowModelRefreshResult | void;
-	getStickyGroupMeta?(): Map<number, number>;
-	/** The active client page-window (Plan 041), or null when pagination is off. */
-	getPageWindow?(): PageWindow | null;
-	/** Returns all data nodes (unfiltered) for distinct-value computation. */
-	getAllDataNodes?(): RowNode<TRowData>[];
-	getGroupMeta?(groupId: string): GroupRowMeta | null;
-	getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
-	setRows?(rows: TRowData[]): void;
-	updateRows?(updater: (rows: TRowData[]) => TRowData[]): void;
-	applyTransaction?(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
-	getRowOrder?(): string[];
-	setRowOrder?(rowIds: string[]): void;
+export interface RowExpansionCapableModel<TRowData = unknown> {
+	expandAllGroups(): RowModelRefreshResult | void;
+	collapseAllGroups(): RowModelRefreshResult | void;
+	toggleGroupExpanded(groupId: string): RowModelRefreshResult | void;
+	toggleDetailExpanded(rowId: string): RowModelRefreshResult | void;
+}
+
+export interface RowExpansionStateReadableModel {
+	isGroupExpanded(groupId: string): boolean;
+	isDetailExpanded(rowId: string): boolean;
+}
+
+export interface DataRowCountModel {
+	getDataRowCount(): number;
+}
+
+export interface SelectableDataRowModel {
+	getSelectableDataRowIds(scope?: RowSelectionScope): string[];
+}
+
+export interface PageWindowCapableRowModel {
+	getPageWindow(): PageWindow | null;
+}
+
+export interface AllDataNodesCapableRowModel<TRowData = unknown> {
+	getAllDataNodes(): RowNode<TRowData>[];
+}
+
+export interface FilteredDataNodesCapableRowModel<TRowData = unknown> {
+	getFilteredDataNodes(): RowNode<TRowData>[];
+}
+
+export interface CurrentPageDataNodesCapableRowModel<TRowData = unknown> {
+	getCurrentPageDataNodes(): RowNode<TRowData>[];
+}
+
+export interface GroupMetaCapableRowModel {
+	getGroupMeta(groupId: string): GroupRowMeta | null;
+}
+
+export interface RowOrderCapableModel {
+	getRowOrder(): string[];
+	setRowOrder(rowIds: string[]): void;
+}
+
+export interface CellValueWritableRowModel<TRowData = unknown> {
+	setCellValue(rowId: string, colField: string, value: unknown, options?: { bypassValueSetter?: boolean }): boolean;
+}
+
+// ── Structural write contract ─────────────────────────────────────────────────
+
+/**
+ * How a data write affects the visual row model — drives refresh strategy.
+ * Aliased from RowMutationImpact so the commit layer and row-model classifier
+ * share one canonical type.
+ */
+export type RowWriteImpact = RowMutationImpact;
+
+/** Returned by every structural write method — carries exactly what changed, nothing else. */
+export interface RowModelWriteResult<TRowData = unknown> {
+	addedNodes?: RowNode<TRowData>[];
+	removedNodes?: RowNode<TRowData>[];
+	updatedNodes?: RowNode<TRowData>[];
+	changedFieldsByRow?: Map<string, Set<string>>;
+	changedValuesByRow?: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
+	visualChange: 'none' | 'partial' | 'full';
+}
+
+/**
+ * Structural row-model write interface — commit layer calls these methods.
+ * Implementations mutate storage and return what changed; they do NOT refresh,
+ * dispatch events, invalidate formulas, or bump versions.
+ */
+export interface ClientStructuralRowModel<TRowData = unknown> extends RowOrderCapableModel {
+	replaceRowsStructurally(rows: readonly TRowData[]): RowModelWriteResult<TRowData>;
+	updateRowsStructurally(updater: (rows: TRowData[]) => TRowData[]): RowModelWriteResult<TRowData>;
+	applyTransactionStructurally(
+		transaction: import('./api/GridApi.js').RowDataTransaction<TRowData>
+	): RowModelWriteResult<TRowData> & import('./api/GridApi.js').RowNodeTransaction<TRowData>;
+	writeCellValueStructurally(
+		rowId: string,
+		colField: string,
+		value: unknown,
+		options?: { bypassValueSetter?: boolean }
+	): RowModelWriteResult<TRowData>;
+	reconcileAfterDataWrite(writeResult: RowModelWriteResult<TRowData>, impact: RowWriteImpact): RowModelRefreshResult;
+	classifyFieldMutation(changedFields: ReadonlySet<string>): RowWriteImpact;
+}
+
+/**
+ * Classify which visual-model systems are affected by a set of changed data fields.
+ * Delegates to the row model's own registry when possible; returns 'none' when the
+ * row model is not a ClientStructuralRowModel (infinite/server never need client-side
+ * sort/filter/group classification).
+ */
+export function classifyWriteImpact(rowModel: RowModel<unknown> | null, changedFieldsByRow: Map<string, Set<string>>): RowWriteImpact {
+	const client = asClientStructuralRowModel(rowModel);
+	if (!client) return 'value-only';
+	const allFields = new Set<string>();
+	for (const fields of changedFieldsByRow.values()) {
+		for (const f of fields) allFields.add(f);
+	}
+	if (allFields.size === 0) return 'value-only';
+	return client.classifyFieldMutation(allFields);
+}
+
+export function asClientStructuralRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): ClientStructuralRowModel<TRowData> | null {
+	return hasFunctions(rowModel, [
+		'replaceRowsStructurally',
+		'updateRowsStructurally',
+		'applyTransactionStructurally',
+		'writeCellValueStructurally',
+		'reconcileAfterDataWrite',
+		'classifyFieldMutation',
+	])
+		? (rowModel as unknown as ClientStructuralRowModel<TRowData>)
+		: null;
+}
+
+/**
+ * Any row model that can structurally write a single cell value.
+ * Narrower than `ClientStructuralRowModel` — infinite and server models implement this
+ * without providing the full dataset-replace / update / reconcile contract.
+ * Duck-typed: any model with `writeCellValueStructurally` satisfies this interface.
+ */
+export interface AnyModelCellWritable<TRowData = unknown> {
+	writeCellValueStructurally(
+		rowId: string,
+		colField: string,
+		value: unknown,
+		options?: { bypassValueSetter?: boolean }
+	): RowModelWriteResult<TRowData>;
+}
+
+export function asAnyModelCellWritable<TRowData = unknown>(rowModel: RowModel<TRowData> | null): AnyModelCellWritable<TRowData> | null {
+	return hasFunctions(rowModel, ['writeCellValueStructurally']) ? (rowModel as unknown as AnyModelCellWritable<TRowData>) : null;
+}
+
+/** Capability interface for the infinite (block/range) row model. */
+export interface InfiniteControllableRowModel<TRowData = unknown> {
+	purgeCache(): void;
+	setDatasource(datasource: import('./infiniteRowModel.js').InfiniteDatasource<TRowData>, blockSize?: number): void;
+}
+
+/** Capability interface for the server-page row model. */
+export interface ServerPageControllableRowModel<TRowData = unknown> {
+	goToPage(page: number): void;
+	setPageSize(pageSize: number): void;
+	reloadPage(reason?: string): void;
+	getPageState(): import('./serverPageRowModel.js').ServerPageState;
+	setDatasource(datasource: import('./serverPageRowModel.js').ServerDatasource<TRowData>): void;
+}
+
+export interface VisibleBlockLoadCapableRowModel {
+	loadVisibleBlocks(startRow: number, endRow: number): void;
+}
+
+export interface RowModelTransactionSnapshot<TRowData = unknown> {
+	readonly modelType: string;
+	readonly snapshot: unknown;
+}
+
+export interface TransactionalRowModel<TRowData = unknown> {
+	captureTransactionSnapshot(
+		mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TRowData>
+	): RowModelTransactionSnapshot<TRowData>;
+	applyTransaction(mutation: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
+	restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;
+}
+
+/** Shared row-model contract used across engine and rendering code. */
+export interface RowModel<TRowData = unknown> extends VisualRowModel<TRowData> {
 	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
-	purgeCache?(): void;
-	setDatasource?(datasource: import('./serverRowModel.js').IGridDatasource<TRowData>, blockSize?: number): void;
-	goToPage?(page: number): void;
-	setCellValue?(rowId: string, colField: string, value: unknown): boolean;
-	loadVisibleBlocks?(startRow: number, endRow: number): void;
+}
+
+function hasFunctions(value: unknown, names: readonly string[]): boolean {
+	if (!value || (typeof value !== 'object' && typeof value !== 'function')) return false;
+	const record = value as Record<string, unknown>;
+	return names.every((name) => typeof record[name] === 'function');
+}
+
+export function asRowExpansionCapableModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): RowExpansionCapableModel<TRowData> | null {
+	return hasFunctions(rowModel, ['expandAllGroups', 'collapseAllGroups', 'toggleGroupExpanded', 'toggleDetailExpanded'])
+		? (rowModel as unknown as RowExpansionCapableModel<TRowData>)
+		: null;
+}
+
+export function asRowExpansionStateReadableModel(rowModel: RowModel<unknown> | null): RowExpansionStateReadableModel | null {
+	return hasFunctions(rowModel, ['isGroupExpanded', 'isDetailExpanded']) ? (rowModel as unknown as RowExpansionStateReadableModel) : null;
+}
+
+export function asDataRowCountModel(rowModel: RowModel<unknown> | null): DataRowCountModel | null {
+	return hasFunctions(rowModel, ['getDataRowCount']) ? (rowModel as unknown as DataRowCountModel) : null;
+}
+
+export function asSelectableDataRowModel(rowModel: RowModel<unknown> | null): SelectableDataRowModel | null {
+	return hasFunctions(rowModel, ['getSelectableDataRowIds']) ? (rowModel as unknown as SelectableDataRowModel) : null;
+}
+
+export function asPageWindowCapableRowModel(rowModel: RowModel<unknown> | null): PageWindowCapableRowModel | null {
+	return hasFunctions(rowModel, ['getPageWindow']) ? (rowModel as unknown as PageWindowCapableRowModel) : null;
+}
+
+export function asAllDataNodesCapableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): AllDataNodesCapableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['getAllDataNodes']) ? (rowModel as unknown as AllDataNodesCapableRowModel<TRowData>) : null;
+}
+
+export function asGroupMetaCapableRowModel(rowModel: RowModel<unknown> | null): GroupMetaCapableRowModel | null {
+	return hasFunctions(rowModel, ['getGroupMeta']) ? (rowModel as unknown as GroupMetaCapableRowModel) : null;
+}
+
+export function asRowOrderCapableModel(rowModel: RowModel<unknown> | null): RowOrderCapableModel | null {
+	return hasFunctions(rowModel, ['getRowOrder', 'setRowOrder']) ? (rowModel as unknown as RowOrderCapableModel) : null;
+}
+
+export function asCellValueWritableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): CellValueWritableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['setCellValue']) ? (rowModel as unknown as CellValueWritableRowModel<TRowData>) : null;
+}
+
+export function asInfiniteControllableRowModel<TRowData = unknown>(
+	rowModel: RowModel<TRowData> | null
+): InfiniteControllableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['purgeCache', 'setDatasource', 'loadVisibleBlocks'])
+		? (rowModel as unknown as InfiniteControllableRowModel<TRowData>)
+		: null;
+}
+
+export function asServerPageControllableRowModel<TRowData = unknown>(
+	rowModel: RowModel<TRowData> | null
+): ServerPageControllableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['goToPage', 'setPageSize', 'reloadPage', 'getPageState'])
+		? (rowModel as unknown as ServerPageControllableRowModel<TRowData>)
+		: null;
+}
+
+export function asVisibleBlockLoadCapableRowModel(rowModel: RowModel<unknown> | null): VisibleBlockLoadCapableRowModel | null {
+	return hasFunctions(rowModel, ['loadVisibleBlocks']) ? (rowModel as unknown as VisibleBlockLoadCapableRowModel) : null;
+}
+
+export function asTransactionalRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): TransactionalRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['captureTransactionSnapshot', 'applyTransaction', 'restoreTransactionSnapshot'])
+		? (rowModel as unknown as TransactionalRowModel<TRowData>)
+		: null;
+}
+
+export function asStickyGroupMetaCapableVisualRowModel(rowModel: VisualRowModel<unknown> | null): StickyGroupMetaCapableVisualRowModel | null {
+	return hasFunctions(rowModel, ['getStickyGroupMeta']) ? (rowModel as unknown as StickyGroupMetaCapableVisualRowModel) : null;
 }
 
 export interface GroupRowMeta {
@@ -153,6 +470,13 @@ interface PreparedSetFilter<TData> extends PreparedBase<TData> {
 	includeNull: boolean;
 }
 
+interface PreparedSelectFilter<TData> extends PreparedBase<TData> {
+	kind: 'select';
+	valueSet: Set<string>;
+	includeNull: boolean;
+	matchMode: 'any' | 'all';
+}
+
 interface PreparedCompoundFilter<TData> {
 	kind: 'compound';
 	logicalOp: 'AND' | 'OR';
@@ -165,6 +489,7 @@ type PreparedColumnFilter<TData> =
 	| PreparedNumberFilter<TData>
 	| PreparedDateFilter<TData>
 	| PreparedSetFilter<TData>
+	| PreparedSelectFilter<TData>
 	| PreparedCompoundFilter<TData>;
 
 function parseFilterDate(raw: string): Date | null {
@@ -286,6 +611,18 @@ function matchSetFilter(value: unknown, pf: PreparedSetFilter<unknown>): boolean
 	return pf.valueSet.has(String(value).toLowerCase());
 }
 
+function matchSelectFilter(value: unknown, pf: PreparedSelectFilter<unknown>): boolean {
+	if (pf.valueSet.size === 0 && !pf.includeNull) return false;
+	if (value == null || value === '') return pf.includeNull;
+	const strVal = String(value).toLowerCase();
+	if (pf.matchMode === 'all') {
+		// Unusual: cell value must equal every selected value (useful for multi-valued cells)
+		return pf.valueSet.has(strVal) && pf.valueSet.size === 1;
+	}
+	// Default: OR — any selected value matches
+	return pf.valueSet.has(strVal);
+}
+
 function matchPreparedFilter<TData>(node: RowNode<TData>, pf: PreparedColumnFilter<TData>): boolean {
 	if (pf.kind === 'compound') {
 		const l = matchPreparedFilter(node, pf.left);
@@ -302,6 +639,8 @@ function matchPreparedFilter<TData>(node: RowNode<TData>, pf: PreparedColumnFilt
 			return matchDateFilter(value, pf as PreparedDateFilter<unknown>);
 		case 'set':
 			return matchSetFilter(value, pf as PreparedSetFilter<unknown>);
+		case 'select':
+			return matchSelectFilter(value, pf as PreparedSelectFilter<unknown>);
 	}
 }
 
@@ -384,6 +723,11 @@ function prepareCondition<TData>(condition: FilterCondition, getter: (node: RowN
 		const hasNull = condition.values.includes(null);
 		const valueSet = new Set(condition.values.filter((v): v is string | number => v !== null).map((v) => String(v).toLowerCase()));
 		return { kind: 'set', getter, valueSet, includeNull: hasNull };
+	}
+	if (condition.type === 'select') {
+		const hasNull = condition.values.includes(null);
+		const valueSet = new Set(condition.values.filter((v): v is string | number => v !== null).map((v) => String(v).toLowerCase()));
+		return { kind: 'select', getter, valueSet, includeNull: hasNull, matchMode: condition.matchMode ?? 'any' };
 	}
 	return null;
 }
@@ -494,9 +838,46 @@ export function applyClientSortAndFilter<TData>(
 	return result;
 }
 
-export class ClientRowModelController<TData = unknown> implements RowModel<TData> {
+const CLIENT_CAPABILITIES: RowModelCapabilities = {
+	fullDataset: true,
+	loadedDataset: false,
+	pagedDataset: false,
+	clientMutation: true,
+	loadedRowMutation: false,
+	pageRowMutation: false,
+	transactions: true,
+	rowOrder: true,
+	blockLoading: false,
+	serverPagination: false,
+	clientSort: true,
+	clientFilter: true,
+	serverSort: false,
+	serverFilter: false,
+	clientGrouping: true,
+	clientTree: true,
+	aggregation: true,
+	masterDetail: true,
+	allRowSelection: true,
+	loadedRowSelection: false,
+	pageRowSelection: false,
+};
+
+export class ClientRowModelController<TData = unknown>
+	implements
+		RowModel<TData>,
+		DataRowCountModel,
+		SelectableDataRowModel,
+		RowExpansionCapableModel<TData>,
+		RowExpansionStateReadableModel,
+		PageWindowCapableRowModel,
+		AllDataNodesCapableRowModel<TData>,
+		GroupMetaCapableRowModel,
+		ClientStructuralRowModel<TData>,
+		CapableRowModel
+{
 	private readonly runtime: ClientRowModelRuntime<TData>;
 	private dataStore: RowDataStore<TData>;
+	private readonly getRowHeight: ClientRowModelOptions<TData>['getRowHeight'];
 	private visualRows: Array<VisualRow<TData>> = [];
 	private visualRowIdToIndex = new Map<string, number>();
 	private rowIdToVisualIndex = new Map<string, number>();
@@ -518,6 +899,10 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	public getGroupMetaByVisualIndex = (visualIndex: number): GroupRowMeta | null => this._groupMetaByVisualIndex.get(visualIndex) ?? null;
 
 	public getDataRowCount = (): number => this.dataRowCount;
+
+	public getCapabilities(): RowModelCapabilities {
+		return CLIENT_CAPABILITIES;
+	}
 
 	public toggleGroupExpanded = (groupId: string): RowModelRefreshResult => {
 		const expansion = this.runtime.getState().expansion;
@@ -564,7 +949,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 	public expandAllGroups = (): RowModelRefreshResult => {
 		const state = this.runtime.getState();
-		const allIds = this.pipeline.collectAllGroupIds({
+		const expansionIds = this.pipeline.collectAllExpansionIds({
 			nodes: this.dataStore.getAllNodes(),
 			columns: state.columns,
 			groupBy: state.groupBy,
@@ -572,18 +957,21 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			filterModel: state.filterModel,
 		});
 		const groups: Record<string, true> = {};
-		for (const id of allIds) groups[id] = true;
-		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups }));
+		for (const id of expansionIds.groupIds) groups[id] = true;
+		const treeRows: Record<string, true> = {};
+		for (const id of expansionIds.treeRowIds) treeRows[id] = true;
+		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups, treeRows }));
 		return this.refresh('expansion');
 	};
 
 	public collapseAllGroups = (): RowModelRefreshResult => {
-		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups: {} }));
+		this.runtime.updateExpansion((expansion) => ({ ...expansion, groups: {}, treeRows: {} }));
 		return this.refresh('expansion');
 	};
 
 	constructor(runtime: ClientRowModelRuntime<TData>, options: ClientRowModelOptions<TData>) {
 		this.runtime = runtime;
+		this.getRowHeight = options.getRowHeight;
 		this.dataStore = new RowDataStore<TData>((row) => this.runtime.getRowId(row));
 
 		this.runtime.initializeModel({
@@ -595,10 +983,21 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 		this.unsubscribers.push(
 			this.runtime.addEventListener(GridEventName.sortChanged, () => {
 				this.rebuildDependencyRegistry();
-				this.refresh();
+				this.runtime.applyRefreshInvalidation(this.refresh('sort'), {
+					invalidationReason: 'sort',
+					requestRenderReason: 'rows:set-sort-model',
+					includeHeaders: true,
+				});
 			}),
 			this.runtime.addEventListener(GridEventName.filterChanged, () => {
 				this.rebuildDependencyRegistry();
+				this.runtime.applyRefreshInvalidation(this.refresh('filter'), {
+					invalidationReason: 'filter',
+					requestRenderReason: 'rows:set-filter-model',
+					includeOverlay: true,
+				});
+			}),
+			this.runtime.addEventListener(GridEventName.queryModelChanged, () => {
 				this.refresh();
 			}),
 			this.runtime.addEventListener(GridEventName.groupByChanged, () => {
@@ -615,7 +1014,8 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			this.runtime.addEventListener(GridEventName.paginationChanged, () => this.refresh('flatten'))
 		);
 		this.rebuildDependencyRegistry();
-		this.setRows(options.rows);
+		this.dataStore.setRows(options.rows);
+		this.refresh();
 	}
 
 	public dispose(): void {
@@ -632,6 +1032,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			groupBy: state.groupBy,
 			aggDefs: state.aggDefs,
 			hasTreeParent: !!state.getParentId,
+			treeParentDependencies: state.rowModelConfig?.treeData?.getParentIdDependencies,
 		});
 	}
 
@@ -662,13 +1063,13 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	 * pipeline rebuild. Only applicable to flat (non-grouped, non-tree) grids with an active sort
 	 * and no pagination. Returns false to signal that the caller must fall back to full refresh.
 	 */
-	private relocateSortedRows(changedNodes: RowNode<TData>[]): boolean {
+	private relocateSortedRows(changedNodes: RowNode<TData>[]): number | null {
 		const state = this.runtime.getState();
-		if (state.groupBy?.length) return false;
-		if (state.rowModelConfig?.treeData?.enabled) return false;
-		if (state.rowModelConfig?.masterDetail?.enabled) return false;
-		if (!state.sortModel || state.sortModel.length === 0) return false;
-		if (this._pageWindow !== null) return false;
+		if (state.groupBy?.length) return null;
+		if (state.rowModelConfig?.treeData?.enabled) return null;
+		if (state.rowModelConfig?.masterDetail?.enabled) return null;
+		if (!state.sortModel || state.sortModel.length === 0) return null;
+		if (this._pageWindow !== null) return null;
 
 		// Build sort key getters mirroring the pipeline's comparator
 		const columnById = createColumnLookup(state.columns);
@@ -708,14 +1109,17 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			const vr = this.visualRows[oldIdx];
 			if (vr?.kind === 'data') toRelocate.push({ node, vr, oldIdx });
 		}
-		if (toRelocate.length === 0) return true;
+		if (toRelocate.length === 0) return 0;
 
-		// Remove in descending index order so prior splices don't shift remaining indices
+		// Remove in descending index order so prior splices don't shift remaining indices.
+		// After sort, toRelocate[last].oldIdx is the smallest (earliest) affected position.
 		toRelocate.sort((a, b) => b.oldIdx - a.oldIdx);
+		const earliestRemovedIndex = toRelocate[toRelocate.length - 1].oldIdx;
 		const mutable = this.visualRows.slice();
 		for (const item of toRelocate) mutable.splice(item.oldIdx, 1);
 
-		// Insert each row at its new sorted position
+		// Insert each row at its new sorted position; track earliest insertion index.
+		let earliestInsertedIndex = mutable.length;
 		for (const item of toRelocate) {
 			let lo = 0,
 				hi = mutable.length;
@@ -730,28 +1134,169 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				else lo = mid + 1;
 			}
 			mutable.splice(lo, 0, item.vr);
+			if (lo < earliestInsertedIndex) earliestInsertedIndex = lo;
 		}
 
-		// Rebuild all three index maps from the updated array
+		// Update maps in-place from the earliest affected index — no Map allocations.
 		this.visualRows = mutable;
-		this.visualRowIdToIndex = new Map();
-		this.rowIdToVisualIndex = new Map();
-		this.rowIdToVisualRowId = new Map();
-		for (let i = 0; i < this.visualRows.length; i++) {
-			const vr = this.visualRows[i];
-			this.visualRowIdToIndex.set(vr.id, i);
-			if (vr.kind === 'data') {
-				this.rowIdToVisualIndex.set(vr.rowId, i);
-				this.rowIdToVisualRowId.set(vr.rowId, vr.id);
-			}
-		}
-		return true;
+		const changedStartIndex = Math.min(earliestRemovedIndex, earliestInsertedIndex);
+		this.reindexFrom(changedStartIndex);
+		return changedStartIndex;
 	}
 
-	public setRows(rows: TData[]): void {
-		this.dataStore.setRows(rows);
-		this.runtime.clearFormulas();
-		this.refresh();
+	public replaceRowsStructurally(rows: readonly TData[]): RowModelWriteResult<TData> {
+		this.dataStore.setRows(rows as TData[]);
+		return { visualChange: 'full' };
+	}
+
+	public updateRowsStructurally(updater: (rows: TData[]) => TData[]): RowModelWriteResult<TData> {
+		const result = this.dataStore.updateRows(updater);
+		if (result.mismatch) {
+			const current = this.dataStore.getAllNodes().map((n) => n.data);
+			this.dataStore.setRows(updater(current));
+			return { visualChange: 'full' };
+		}
+		return {
+			updatedNodes: result.changedNodes,
+			changedFieldsByRow: result.changedFieldsByRow,
+			changedValuesByRow: result.changedValuesByRow,
+			visualChange: result.changedNodes.length > 0 ? 'partial' : 'none',
+		};
+	}
+
+	public applyTransactionStructurally(
+		transaction: import('./api/GridApi.js').RowDataTransaction<TData>
+	): RowModelWriteResult<TData> & import('./api/GridApi.js').RowNodeTransaction<TData> {
+		const result = this.dataStore.applyTransaction(transaction);
+		const hasStructural = result.added.length > 0 || result.removed.length > 0;
+		return {
+			add: result.added,
+			remove: result.removed,
+			update: result.updated,
+			addedNodes: result.added,
+			removedNodes: result.removed,
+			updatedNodes: result.updated,
+			changedFieldsByRow: result.changedFieldsByRow,
+			changedValuesByRow: result.changedValuesByRow,
+			visualChange: hasStructural ? 'partial' : result.updated.length > 0 ? 'partial' : 'none',
+		};
+	}
+
+	public writeCellValueStructurally(
+		rowId: string,
+		colField: string,
+		value: unknown,
+		options?: { bypassValueSetter?: boolean }
+	): RowModelWriteResult<TData> {
+		const node = this.getRowNodeById(rowId);
+		if (!node) return { visualChange: 'none' };
+
+		const col = this.runtime.getColumnDef(colField);
+		const oldValue = this.runtime.getCellValue(rowId, colField);
+		const updatedRow = { ...node.data };
+		if (options?.bypassValueSetter === true) {
+			setValueByPath(updatedRow, colField, value);
+		} else if (col?.valueSetter) {
+			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
+			if (result === false || (!(result instanceof Promise) && !result)) return { visualChange: 'none' };
+		} else {
+			setValueByPath(updatedRow, colField, value);
+		}
+
+		node.setData(updatedRow);
+
+		return {
+			updatedNodes: [node],
+			changedFieldsByRow: new Map([[rowId, new Set([colField])]]),
+			changedValuesByRow: new Map([[rowId, new Map([[colField, { oldValue, newValue: value }]])]]),
+			visualChange: 'none',
+		};
+	}
+
+	public reconcileAfterDataWrite(writeResult: RowModelWriteResult<TData>, impact: RowWriteImpact): RowModelRefreshResult {
+		const inst = this.runtime.getInstrumentation();
+		if (impact === 'insert' || impact === 'remove') {
+			const previousRowCount = this.visualRows.length;
+			const added = writeResult.addedNodes ?? [];
+			const removed = writeResult.removedNodes ?? [];
+			const changedStartIndex = this.tryIncrementalTransaction(added, removed);
+			if (changedStartIndex !== null) {
+				this.runtime.bumpGlobalVersion();
+				inst.increment(GridMetric.ROW_MUTATION_INCREMENTAL);
+				return {
+					changed: true,
+					reason: 'row-order' as RowRefreshReason,
+					previousRowCount,
+					nextRowCount: this.visualRows.length,
+					changedStartIndex,
+					changedEndIndex: Math.max(changedStartIndex, this.visualRows.length - 1),
+				};
+			}
+			inst.increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
+			return this.refresh('bulk');
+		}
+		if (writeResult.visualChange === 'full' || impact === 'full-rebuild') {
+			inst.increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
+			return this.refresh('bulk');
+		}
+		if (impact === 'group-key' || impact === 'tree-parent' || impact === 'aggregation-input') {
+			inst.increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
+			return this.refresh('bulk');
+		}
+		if (impact === 'sort-key') {
+			const nodes = writeResult.updatedNodes ?? [];
+			const changedStartIndex = nodes.length > 0 ? this.relocateSortedRows(nodes) : null;
+			if (changedStartIndex !== null) {
+				inst.increment(GridMetric.ROW_MUTATION_INCREMENTAL);
+				return {
+					changed: true,
+					reason: 'sort',
+					changedStartIndex,
+					changedEndIndex: Math.max(changedStartIndex, this.visualRows.length - 1),
+				};
+			}
+			inst.increment(GridMetric.ROW_MUTATION_FULL_REBUILD);
+			return this.refresh('sort' as RowRefreshReason);
+		}
+		if (impact === 'filter-key') {
+			inst.increment(GridMetric.ROW_MUTATION_INCREMENTAL);
+			const nodes = writeResult.updatedNodes ?? [];
+			const changed = nodes.length > 0 && this.filterMembershipChanged(nodes);
+			return changed ? this.refresh('filter' as RowRefreshReason) : { changed: false };
+		}
+		inst.increment(GridMetric.ROW_MUTATION_INCREMENTAL);
+		return { changed: false };
+	}
+
+	private collectCommittedCellChanges(writeResult: RowModelWriteResult<TData>): Map<string, Set<string>> {
+		const changes = new Map<string, Set<string>>();
+		if (!writeResult.changedFieldsByRow || writeResult.changedFieldsByRow.size === 0) return changes;
+
+		const addCell = (rowId: string, colField: string): void => {
+			let fields = changes.get(rowId);
+			if (!fields) {
+				fields = new Set<string>();
+				changes.set(rowId, fields);
+			}
+			fields.add(colField);
+		};
+
+		for (const [rowId, fields] of writeResult.changedFieldsByRow) {
+			const changedValues = writeResult.changedValuesByRow?.get(rowId);
+			for (const field of fields) {
+				const newRawValue = changedValues?.get(field)?.newValue ?? this.runtime.getCellValue(rowId, field);
+				this.runtime.syncFormulaForCell(rowId, field, newRawValue);
+				addCell(rowId, field);
+				for (const dep of this.runtime.getValueGetterDependents(field)) {
+					if (dep !== field) addCell(rowId, dep);
+				}
+				for (const formulaCell of this.runtime.invalidateFormulaCell(rowId, field)) {
+					addCell(formulaCell.rowId, formulaCell.colField);
+				}
+			}
+		}
+
+		return changes;
 	}
 
 	/**
@@ -762,32 +1307,74 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 	private static readonly INCREMENTAL_TX_LIMIT = 100;
 
 	/**
+	 * Returns false when the estimated reindex cost — proportional to the number of rows
+	 * that must have their map entries updated — exceeds the rebuild threshold.
+	 *
+	 * Rule: if reindexing would touch more than INCREMENTAL_TX_LIMIT × 10 rows AND more than
+	 * 40 % of the total visual model, a full O(N log N) pipeline rebuild is cheaper than
+	 * the O(N - earliestChangedIndex) partial reindex.
+	 */
+	private static isIncrementalCheaper(totalVisualRows: number, earliestChangedIndex: number): boolean {
+		const shiftCount = totalVisualRows - earliestChangedIndex;
+		if (shiftCount <= ClientRowModelController.INCREMENTAL_TX_LIMIT * 10) return true;
+		return shiftCount / totalVisualRows < 0.4;
+	}
+
+	/**
+	 * Update map entries in-place for all rows from `start` to the end of `visualRows`.
+	 * Avoids allocating new Map objects — preserves existing map identity and all entries
+	 * before `start` (which are unaffected by the incremental operation).
+	 * O(N - start) time; cheapest when the earliest changed index is near the end.
+	 */
+	private reindexFrom(start: number): void {
+		for (let i = start; i < this.visualRows.length; i++) {
+			const vr = this.visualRows[i];
+			this.visualRowIdToIndex.set(vr.id, i);
+			if (vr.kind === 'data') {
+				this.rowIdToVisualIndex.set(vr.rowId, i);
+				this.rowIdToVisualRowId.set(vr.rowId, vr.id);
+			}
+		}
+	}
+
+	/**
 	 * Attempts to apply structural row mutations (adds/removes) incrementally on flat grids.
 	 * Returns false to signal full rebuild is needed (grouped/tree/paginated grids, or when
 	 * the transaction exceeds the INCREMENTAL_TX_LIMIT threshold).
 	 */
-	private tryIncrementalTransaction(added: RowNode<TData>[], removed: RowNode<TData>[]): boolean {
+	private tryIncrementalTransaction(added: RowNode<TData>[], removed: RowNode<TData>[]): number | null {
 		const state = this.runtime.getState();
-		if (state.groupBy?.length) return false;
-		if (state.rowModelConfig?.treeData?.enabled) return false;
-		if (state.rowModelConfig?.masterDetail?.enabled) return false;
-		if (this._pageWindow !== null) return false;
-		if (added.length + removed.length > ClientRowModelController.INCREMENTAL_TX_LIMIT) return false;
+		if (state.groupBy?.length) return null;
+		if (state.rowModelConfig?.treeData?.enabled) return null;
+		if (state.rowModelConfig?.masterDetail?.enabled) return null;
+		if (this._pageWindow !== null) return null;
+		if (added.length + removed.length > ClientRowModelController.INCREMENTAL_TX_LIMIT) return null;
 
 		const mutable = this.visualRows.slice();
+		let earliestChangedIndex = mutable.length;
 
-		// Removals: collect visual indices in descending order so splices don't shift later indices
+		// Removals: collect visual indices in descending order so splices don't shift later indices.
+		// Delete stale map entries for removed rows before the splice.
 		if (removed.length > 0) {
 			const removalIndices: number[] = [];
 			for (const node of removed) {
 				const idx = this.rowIdToVisualIndex.get(node.id);
-				if (idx !== undefined) removalIndices.push(idx);
+				if (idx !== undefined) {
+					removalIndices.push(idx);
+					this.rowIdToVisualIndex.delete(node.id);
+					this.rowIdToVisualRowId.delete(node.id);
+					this.visualRowIdToIndex.delete(toDataVisualRowId(node.id));
+					this.dataRowCount--;
+				}
 			}
 			removalIndices.sort((a, b) => b - a);
 			for (const idx of removalIndices) mutable.splice(idx, 1);
+			if (removalIndices.length > 0) {
+				earliestChangedIndex = Math.min(earliestChangedIndex, removalIndices[removalIndices.length - 1]);
+			}
 		}
 
-		// Additions: filter-check, then insert at sorted position (or append if unsorted)
+		// Additions: filter-check, then insert at sorted position (or append if unsorted).
 		if (added.length > 0) {
 			const preparedFilters = prepareFilters(state.columns, state.filterModel);
 			const hasSort = !!(state.sortModel && state.sortModel.length > 0);
@@ -823,7 +1410,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			for (const node of added) {
 				if (preparedFilters.length > 0 && !nodeMatchesPreparedFilters(node, preparedFilters)) continue;
 
-				const explicitHeight = (state.rowHeights as Record<string, number>)[node.id];
+				const explicitHeight = (state.rowHeights as Record<string, number>)[node.id] ?? this.getRowHeight?.(node.data, node.id);
 				const vr: VisualRow<TData> = {
 					kind: 'data',
 					id: toDataVisualRowId(node.id),
@@ -849,181 +1436,79 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 						else lo = mid + 1;
 					}
 					mutable.splice(lo, 0, vr);
+					if (lo < earliestChangedIndex) earliestChangedIndex = lo;
 				} else {
+					earliestChangedIndex = Math.min(earliestChangedIndex, mutable.length);
 					mutable.push(vr);
 				}
-			}
-		}
-
-		// Rebuild all index maps from the updated visual array
-		this.visualRows = mutable;
-		this.visualRowIdToIndex = new Map();
-		this.rowIdToVisualIndex = new Map();
-		this.rowIdToVisualRowId = new Map();
-		this.dataRowCount = 0;
-		for (let i = 0; i < this.visualRows.length; i++) {
-			const vr = this.visualRows[i];
-			this.visualRowIdToIndex.set(vr.id, i);
-			if (vr.kind === 'data') {
-				this.rowIdToVisualIndex.set(vr.rowId, i);
-				this.rowIdToVisualRowId.set(vr.rowId, vr.id);
 				this.dataRowCount++;
 			}
 		}
-		return true;
+
+		// Update maps in-place from the earliest affected index — preserves Map identity.
+		this.visualRows = mutable;
+		this.reindexFrom(earliestChangedIndex);
+		return earliestChangedIndex === mutable.length ? 0 : earliestChangedIndex;
 	}
 
-	public updateRows(updater: (rows: TData[]) => TData[]): void {
-		const result = this.dataStore.updateRows(updater);
-
-		if (result.mismatch) {
-			const currentRows = this.dataStore.getAllNodes().map((n) => n.data);
-			this.setRows(updater(currentRows));
-			return;
-		}
-
-		if (result.changedNodes.length === 0) return;
-
-		// Invalidate changed cells and gather affected formula dependents.
-		const allInvalidatedCells = new Map<string, Set<string>>();
-		const addInvalidatedCell = (rowId: string, field: string) => {
-			let fields = allInvalidatedCells.get(rowId);
-			if (!fields) {
-				fields = new Set<string>();
-				allInvalidatedCells.set(rowId, fields);
-			}
-			fields.add(field);
+	public captureTransactionSnapshot = (
+		_mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TData>
+	): RowModelTransactionSnapshot<TData> => {
+		return {
+			modelType: 'client',
+			snapshot: {
+				dataStore: this.dataStore.captureTransactionSnapshot(),
+			},
 		};
-		for (const [rowId, fields] of result.changedFieldsByRow) {
-			for (const field of fields) {
-				addInvalidatedCell(rowId, field);
+	};
 
-				const node = this.dataStore.getNode(rowId);
-				if (node) {
-					const nextVal = (node.data as Record<string, unknown>)[field];
-					this.runtime.syncFormulaForCell(rowId, field, nextVal);
-				}
-
-				const invalidated = this.runtime.invalidateFormulaCell(rowId, field);
-				for (const cell of invalidated) {
-					addInvalidatedCell(cell.rowId, cell.colField);
-				}
-			}
+	public restoreTransactionSnapshot = (snapshot: RowModelTransactionSnapshot<TData>): void => {
+		if (snapshot.modelType !== 'client') {
+			throw new Error(`Open Grid: cannot restore ${snapshot.modelType} snapshot into client row model.`);
 		}
+		const clientSnapshot = snapshot as ClientRowModelTransactionSnapshot<TData>;
+		this.dataStore.restoreTransactionSnapshot(clientSnapshot.snapshot.dataStore);
+		this.runtime.clearFormulas();
+		this.refresh('bulk');
+	};
 
-		// Classify the mutation impact using the dependency registry — covers sort, filter,
-		// group, tree-parent, and formula dependencies in one pass over all changed fields.
-		const allChangedFields = new Set<string>();
-		for (const [, fields] of result.changedFieldsByRow) {
-			for (const field of fields) allChangedFields.add(field);
-		}
-		const impact = this.classifyFieldMutation(allChangedFields);
-
-		// sort-key: attempt incremental relocation within the sorted array. Falls back to full
-		// rebuild for grouped/tree/paginated grids or when relocateSortedRows returns false.
-		// filter-key: test membership for each changed node on flat grids. If no row enters
-		// or exits the filter, the visual array is unchanged — skip the pipeline rebuild.
-		let needsFullRefresh = impact === 'group-key' || impact === 'tree-parent';
-		let didSortRelocation = false;
-		if (!needsFullRefresh && impact === 'sort-key') {
-			didSortRelocation = this.relocateSortedRows(result.changedNodes);
-			needsFullRefresh = !didSortRelocation;
-		}
-		if (!needsFullRefresh && impact === 'filter-key') {
-			needsFullRefresh = this.filterMembershipChanged(result.changedNodes);
-		}
-
-		if (needsFullRefresh) {
-			this.refresh();
-		} else {
-			// No sorting or filtering is affected. Notify only changed cells, formula dependents,
-			// and explicitly declared valueGetter dependents.
-			const notifyCells = new Map<string, Set<string>>();
-			const addNotifyCell = (rowId: string, field: string) => {
-				let fields = notifyCells.get(rowId);
-				if (!fields) {
-					fields = new Set<string>();
-					notifyCells.set(rowId, fields);
-				}
-				fields.add(field);
-			};
-			for (const [rowId, fields] of allInvalidatedCells) {
-				for (const field of fields) addNotifyCell(rowId, field);
-			}
-			for (const node of result.changedNodes) {
-				const changedFields = result.changedFieldsByRow.get(node.id);
-				if (changedFields) {
-					for (const field of changedFields) {
-						addNotifyCell(node.id, field);
-						for (const dependentField of this.runtime.getValueGetterDependents(field)) {
-							if (dependentField !== field) {
-								addNotifyCell(node.id, dependentField);
-							}
-						}
-					}
-				}
-			}
-
-			this.runtime.notifyBulkCellChange(notifyCells);
-
-			// Sort relocation changed the visual order — bump version so geometry and renderer
-			// refresh with the new row positions. Value-only updates don't need this since
-			// the visual array is unchanged and each cell's notifyBulkCellChange is sufficient.
-			if (didSortRelocation) {
-				this.runtime.bumpGlobalVersion();
-			}
-
-			if (result.changedValuesByRow.size > 0) {
-				this.runtime.dispatchRowsUpdated({
-					changedValuesByRow: result.changedValuesByRow,
-					changedNodes: result.changedNodes,
-				});
-			}
-		}
-	}
-
+	// Compatibility shell only: structural writes and post-write lifecycle ownership stay centralized
+	// in applyTransactionStructurally(...) + reconcileAfterDataWrite(...) so transaction updates cannot
+	// diverge from setCellValue, batchCellValues, updateRows, or integrity-driven writes.
 	public applyTransaction = (transaction: RowDataTransaction<TData>): RowNodeTransaction<TData> => {
-		const result = this.dataStore.applyTransaction(transaction);
-
-		if (result.updated.length > 0) {
-			const notifyCells = new Map<string, Set<string>>();
-			for (const [rowId, fields] of result.changedFieldsByRow) {
-				const cellSet = new Set<string>();
-				for (const field of fields) {
-					cellSet.add(field);
-					for (const dep of this.runtime.getValueGetterDependents(field)) {
-						if (dep !== field) cellSet.add(dep);
-					}
-				}
-				notifyCells.set(rowId, cellSet);
-			}
+		const writeResult = this.applyTransactionStructurally(transaction);
+		const notifyCells = this.collectCommittedCellChanges(writeResult);
+		if (notifyCells.size > 0) {
 			this.runtime.notifyBulkCellChange(notifyCells);
 		}
-
-		if (result.added.length > 0 || result.removed.length > 0) {
-			// Attempt incremental insert/remove for flat grids within the threshold; fall
-			// back to full rebuild for grouped/tree/paginated grids or large transactions.
-			const wasIncremental = this.tryIncrementalTransaction(result.added, result.removed);
-			if (wasIncremental) {
-				this.runtime.bumpGlobalVersion();
-			} else {
-				this.refresh('bulk');
+		const hasStructural = (writeResult.addedNodes?.length ?? 0) > 0 || (writeResult.removedNodes?.length ?? 0) > 0;
+		const allChangedFields = new Set<string>();
+		if (!hasStructural && writeResult.changedFieldsByRow) {
+			for (const fields of writeResult.changedFieldsByRow.values()) {
+				for (const field of fields) allChangedFields.add(field);
 			}
 		}
+		const impact = hasStructural
+			? ('insert' as RowWriteImpact)
+			: allChangedFields.size > 0
+				? this.classifyFieldMutation(allChangedFields)
+				: ('value-only' as RowWriteImpact);
+		// Guardrail note: row mutation instrumentation remains centralized in reconcileAfterDataWrite via runtime.getInstrumentation().increment(...).
+		this.reconcileAfterDataWrite(writeResult, impact);
 
-		if (result.added.length > 0 || result.removed.length > 0 || result.updated.length > 0) {
+		if ((writeResult.add?.length ?? 0) > 0 || (writeResult.remove?.length ?? 0) > 0 || (writeResult.update?.length ?? 0) > 0) {
 			this.runtime.dispatchRowsUpdated({
-				changedValuesByRow: result.changedValuesByRow,
-				changedNodes: result.updated,
-				addedNodes: result.added,
-				removedNodes: result.removed,
+				changedValuesByRow: writeResult.changedValuesByRow ?? new Map(),
+				changedNodes: writeResult.update ?? [],
+				addedNodes: writeResult.add ?? [],
+				removedNodes: writeResult.remove ?? [],
 			});
 		}
 
 		return {
-			add: result.added,
-			remove: result.removed,
-			update: result.updated,
+			add: writeResult.add ?? [],
+			remove: writeResult.remove ?? [],
+			update: writeResult.update ?? [],
 		};
 	};
 
@@ -1033,11 +1518,6 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 	public getVisualRowCount = (): number => {
 		return this.visualRows.length;
-	};
-
-	public getVisualRowIndexById = (id: string): number => {
-		const idx = this.visualRowIdToIndex.get(id) ?? this.rowIdToVisualIndex.get(id);
-		return idx !== undefined ? idx : -1;
 	};
 
 	public getVisualIndexById = (visualRowId: string): number => {
@@ -1078,6 +1558,18 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 
 	public getAllDataNodes = (): RowNode<TData>[] => this.dataStore.getAllNodes();
 
+	/** Returns all nodes that currently pass the active filter (post-sort). With client pagination, returns only the current page. */
+	public getFilteredDataNodes = (): RowNode<TData>[] => {
+		const result: RowNode<TData>[] = [];
+		for (const vr of this.visualRows) {
+			if (vr.kind === 'data' && vr.node.data != null) result.push(vr.node);
+		}
+		return result;
+	};
+
+	/** Returns nodes on the current page. Without pagination, identical to getFilteredDataNodes(). */
+	public getCurrentPageDataNodes = (): RowNode<TData>[] => this.getFilteredDataNodes();
+
 	public getRowOrder = (): string[] => this.dataStore.getSourceOrder();
 
 	public setRowOrder = (rowIds: string[]): void => {
@@ -1115,6 +1607,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				columns: state.columns,
 				sortModel: state.sortModel,
 				filterModel: state.filterModel,
+				queryModel: state.queryModel,
 				groupBy: state.groupBy,
 				rowModelConfig,
 				getParentId: state.getParentId,
@@ -1124,6 +1617,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 				expandedDetailRowIds: new Set(Object.keys(expansion.details)),
 				defaultRowHeight: state.defaultRowHeight,
 				rowHeightsRecord: state.rowHeights,
+				getRowHeight: this.getRowHeight,
 				groupRowHeight: state.groupRowHeight,
 				detailRowHeight: state.detailRowHeight,
 				masterDetailEnabled: state.masterDetailEnabled,
@@ -1137,55 +1631,6 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			if (row?.kind === 'data') ids.push(row.rowId);
 		}
 		return ids;
-	};
-
-	public setCellValue = (rowId: string, colField: string, value: unknown): boolean => {
-		const node = this.getRowNodeById(rowId);
-		if (!node) return false;
-
-		const col = this.runtime.getColumnDef(colField);
-		const oldValue = this.runtime.getCellValue(rowId, colField);
-		const updatedRow = { ...node.data };
-		if (col?.valueSetter) {
-			// Sync path: call valueSetter with params. Async setters are handled by commitEdit.
-			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
-			if (result === false || (result instanceof Promise && false)) return false;
-			// For sync-returning false, bail out. Async setters proceed optimistically here.
-			if (!(result instanceof Promise) && !result) return false;
-		} else {
-			setValueByPath(updatedRow, colField, value);
-		}
-
-		node.setData(updatedRow);
-
-		// If the edited cell field affects active sorting, filtering, grouping, or aggregates,
-		// we must re-run the pipeline to update the row positions, visibility, or computed aggregates.
-		const state = this.runtime.getState();
-		let needsRefresh = false;
-
-		if (state.sortModel && state.sortModel.some((s) => s.colId === colField)) {
-			needsRefresh = true;
-		} else if (state.filterModel && state.filterModel[colField] !== undefined) {
-			needsRefresh = true;
-		} else if (state.groupBy && state.groupBy.includes(colField)) {
-			needsRefresh = true;
-		} else if (this.runtime.hasValueGetter(colField)) {
-			needsRefresh = true;
-		} else {
-			// If grouping or custom row models (e.g. parentId tree) are active, any cell edit
-			// might affect group calculations, so we refresh to keep aggregations/hierarchies correct.
-			const hasGrouping = state.groupBy && state.groupBy.length > 0;
-			const hasTree = !!state.getParentId;
-			if (hasGrouping || hasTree) {
-				needsRefresh = true;
-			}
-		}
-
-		if (needsRefresh) {
-			this.refresh();
-		}
-
-		return true;
 	};
 
 	public refresh(reason?: RowRefreshReason, groupId?: string): RowModelRefreshResult {
@@ -1217,6 +1662,7 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			columns: state.columns,
 			sortModel: state.sortModel,
 			filterModel: state.filterModel,
+			queryModel: state.queryModel,
 			groupBy: state.groupBy,
 			rowModelConfig,
 			getParentId: state.getParentId,
@@ -1226,13 +1672,14 @@ export class ClientRowModelController<TData = unknown> implements RowModel<TData
 			expandedDetailRowIds: new Set(Object.keys(expansion.details)),
 			defaultRowHeight: state.defaultRowHeight,
 			rowHeightsRecord: state.rowHeights,
+			getRowHeight: this.getRowHeight,
 			groupRowHeight: state.groupRowHeight,
 			detailRowHeight: state.detailRowHeight,
 			masterDetailEnabled: state.masterDetailEnabled,
 			detailRenderer: state.detailRenderer,
 			reportFault: this.runtime.reportRowPipelineFault,
-			// Client pagination (Plan 041): slice happens inside the pipeline so every
-			// derived map/meta/geometry stays page-consistent. Undefined → full list.
+			// Client pagination: slice happens inside the pipeline so every derived
+			// map/meta/geometry stays page-consistent. Undefined → full list.
 			pagination: state.pagination ? { pageSize: state.pagination.pageSize, page: state.pagination.page ?? 0 } : undefined,
 		});
 		const { visualRows } = result;

@@ -1,4 +1,4 @@
-import type { GridCellPointer } from '../store.js';
+import type { GridCellPointer } from '../api/GridApi.js';
 
 export class EditModel {
 	private activeEdit: GridCellPointer | null = null;

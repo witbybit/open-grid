@@ -87,7 +87,7 @@ function buildColumns(mode: 'managed' | 'unmanaged'): ColumnDef<TaskRow>[] {
 			header: '#',
 			width: 48,
 			// Drag handle only on rank column; locked rows (first/last) are not draggable in unmanaged mode demo
-			rowDrag: mode === 'managed' ? true : ({ rowData }) => !rowData.locked,
+			canDrag: mode === 'managed' ? () => true : ({ row }) => !row?.locked,
 		},
 		{ field: 'title', header: 'Task', width: 240 },
 		{
@@ -268,7 +268,7 @@ export default function RowDragDemo() {
 				<div className='flex-1 min-h-0 overflow-hidden rounded-xl border border-slate-900/60'>
 					<Grid<TaskRow>
 						key={mode}
-						mode='client'
+						rowModelType='client'
 						columns={cols}
 						rows={displayRows}
 						getRowId={(row) => row.id}

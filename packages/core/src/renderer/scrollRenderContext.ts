@@ -1,11 +1,11 @@
 import type { CompiledGridPlan } from '../columnDef.js';
 import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
-import type { GridState } from '../state/GridState.js';
+import type { InternalGridState } from '../state/GridState.js';
 
 export interface ScrollRenderContext<TRowData = unknown> {
 	isScrolling: boolean;
 
-	state?: GridState<TRowData>;
+	state?: InternalGridState<TRowData>;
 	stateVersion: number;
 	// Per-row version map: rowId → version bumped on each row data mutation.
 	// Used by the freeze check to thaw only cells whose row actually changed.
@@ -13,15 +13,23 @@ export interface ScrollRenderContext<TRowData = unknown> {
 	// Bumped on any structural change (sort, filter, group, row add/remove).
 	// When this changes all frozen portals must thaw.
 	globalVersion: number;
+	insightVersion: number;
 	styleVersion: number;
 	loadingVersion: number;
+	selectionVersion: number;
+	styleChangedDuringScroll: boolean;
+	loadingChangedDuringScroll: boolean;
+	selectionChangedDuringScroll: boolean;
+	globalChangedDuringScroll: boolean;
 
 	activeEdit: GridCellPointer | null;
 
 	hasDeferredCellStyleRules: boolean;
 	hasCustomRenderers: boolean;
+	hasInsightDecorations: boolean;
 
 	plan: CompiledGridPlan<TRowData>;
+	visibleRowRange: { startIdx: number; endIdx: number };
 	visibleColRange: { startIdx: number; endIdx: number };
 
 	focusedCell: GridCellPointer | null;

@@ -1,0 +1,71 @@
+{
+	"$comment": "Pre-convergence instrumentation baseline. Captured on 2026-06-18 against branch rendering-architecture-v2-wip-3. These are INFORMATIONAL — the enforceable budgets live in instrumentedBudgets.test.ts. A value here above the test budget means the test budget was set above baseline; values should drift DOWN as Stage B–D plans land.",
+	"capturedAt": "2026-06-18",
+	"branch": "rendering-architecture-v2-wip-3",
+	"environment": "jsdom / Vitest 4.1.8 / Node.js",
+	"scenarios": [
+		{
+			"id": "steady-scroll-zero-full-rebuild",
+			"description": "100 scroll updates on 100k flat rows",
+			"metrics": {
+				"ROW_MUTATION_FULL_REBUILD": 0,
+				"ROW_MUTATION_INCREMENTAL": 0,
+				"STATE_READS": "not measured in this scenario"
+			},
+			"budget": "ROW_MUTATION_FULL_REBUILD === 0 (enforced)"
+		},
+		{
+			"id": "targeted-invalidation-no-fanout",
+			"description": "Single cell update on 10k-row grid, two subscriptions",
+			"metrics": {
+				"relatedNotifications": 1,
+				"unrelatedNotifications": 0
+			},
+			"budget": "unrelatedNotifications === 0 (enforced)"
+		},
+		{
+			"id": "applyTransaction-100-updates",
+			"description": "applyTransaction with 100 row updates on 10k-row grid",
+			"metrics": {
+				"ROW_MUTATION_INCREMENTAL": 1,
+				"ROW_MUTATION_FULL_REBUILD": 0
+			},
+			"budget": "ROW_MUTATION_FULL_REBUILD === 0 (enforced)"
+		},
+		{
+			"id": "filter-scroll-no-pipeline-rerun",
+			"description": "50 scroll updates after setFilterModel on 10k-row grid",
+			"metrics": {
+				"ROW_MUTATION_FULL_REBUILD": 0,
+				"ROW_MUTATION_INCREMENTAL": 0
+			},
+			"budget": "ROW_MUTATION_FULL_REBUILD === 0 AND ROW_MUTATION_INCREMENTAL === 0 (enforced)"
+		},
+		{
+			"id": "state-reads-per-scroll-tick",
+			"description": "50 scroll updates on 10k-row grid — STATE_READS count",
+			"metrics": {
+				"STATE_READS_total": 300,
+				"STATE_READS_per_tick": 6
+			},
+			"budget": "STATE_READS <= 8 per tick (enforced at <=400 over 50 iterations)"
+		},
+		{
+			"id": "setRows-full-rebuild",
+			"description": "setRows(10k rows) from empty store",
+			"metrics": {
+				"ROW_MUTATION_FULL_REBUILD": 1
+			},
+			"budget": "ROW_MUTATION_FULL_REBUILD === 1 (enforced)"
+		}
+	],
+	"wallClockBaselines": {
+		"note": "Captured in jsdom — values will differ in a real browser. Use instrumentedBudgets.test.ts for reproducible CI assertions.",
+		"scrollPerTick_ms": "< 1ms in jsdom on dev machine",
+		"rangeCalcPerOp_ms": "< 0.1ms in jsdom on dev machine",
+		"singleCellUpdate_ms": "< 0.5ms in jsdom on dev machine",
+		"bulkCellUpdates1000_ms": "< 20ms in jsdom on dev machine",
+		"columnResize_ms": "< 1ms in jsdom on dev machine",
+		"selectionBounds_ms": "< 0.5ms in jsdom on dev machine"
+	}
+}

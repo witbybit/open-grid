@@ -1,5 +1,7 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 
+import { asStickyGroupMetaCapableVisualRowModel } from '../rowModel.js';
+
 export interface StickyGroupStackItem {
 	groupId: string;
 	visualIndex: number;
@@ -29,7 +31,7 @@ export interface RenderWindow {
 	geometryVersion?: number;
 	rowModelVersion?: number;
 	columnVersion?: number;
-	// Phase 9: pixel-first windowing fields
+	// Pixel-first windowing fields
 	/** Top pixel of the visible (non-pinned) area, accounting for pinned top rows. */
 	visibleTop?: number;
 	/** Bottom pixel of the visible area, accounting for pinned bottom rows. */
@@ -38,6 +40,14 @@ export interface RenderWindow {
 	bufferTopPx?: number;
 	/** Bottom pixel of the fully-buffered render region (includes overscan below visible). */
 	bufferBottomPx?: number;
+	/** First non-pinned row index whose pixels overlap the visible viewport band. */
+	visibleRowStart?: number;
+	/** Last non-pinned row index whose pixels overlap the visible viewport band. */
+	visibleRowEnd?: number;
+	/** First non-pinned displayed column index whose pixels overlap the visible viewport band. */
+	visibleColStart?: number;
+	/** Last non-pinned displayed column index whose pixels overlap the visible viewport band. */
+	visibleColEnd?: number;
 	// Sticky group rows — group rows that have scrolled above the viewport but whose
 	// descendants are still visible. Rendered at the top of the viewport, stacked by depth.
 	// Each entry contains the visual index, pixel position, and boundary metadata.
@@ -52,6 +62,10 @@ export interface ViewportDelta {
 	colsExited: number[];
 	colsStayed: number[];
 	hasChanges: boolean;
+}
+
+function getStickyGroupMeta(rowModel: import('../rowModel.js').VisualRowModel<unknown> | null): Map<number, number> | null {
+	return asStickyGroupMetaCapableVisualRowModel(rowModel)?.getStickyGroupMeta() ?? null;
 }
 
 /** Element-wise equality for sticky stack membership/state; pixel movement is handled by the sticky layer. */
@@ -85,6 +99,16 @@ export function sameRenderedWindow(a: RenderWindow | null, b: RenderWindow | nul
 		(a.rowModelVersion ?? 0) === (b.rowModelVersion ?? 0) &&
 		(a.columnVersion ?? 0) === (b.columnVersion ?? 0) &&
 		sameStickyStack(a.stickyGroupStack, b.stickyGroupStack)
+	);
+}
+
+export function sameVisibleContentWindow(a: RenderWindow | null, b: RenderWindow | null): boolean {
+	if (!a || !b) return false;
+	return (
+		(a.visibleRowStart ?? -1) === (b.visibleRowStart ?? -1) &&
+		(a.visibleRowEnd ?? -1) === (b.visibleRowEnd ?? -1) &&
+		(a.visibleColStart ?? -1) === (b.visibleColStart ?? -1) &&
+		(a.visibleColEnd ?? -1) === (b.visibleColEnd ?? -1)
 	);
 }
 
@@ -283,6 +307,10 @@ export function createEmptyRenderWindow(): RenderWindow {
 		visibleBottom: 0,
 		bufferTopPx: 0,
 		bufferBottomPx: 0,
+		visibleRowStart: -1,
+		visibleRowEnd: -1,
+		visibleColStart: -1,
+		visibleColEnd: -1,
 	};
 }
 
@@ -293,7 +321,7 @@ export function createEmptyRenderWindow(): RenderWindow {
  * overwritten every frame.
  */
 export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, target: RenderWindow): void {
-	const rowModel = engine.getRowModel();
+	const rowModel = engine.getVisualRowModel();
 	let rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 	const state = engine.stateManager.getState();
 	if (state.loading && rowCount === 0) {
@@ -323,10 +351,23 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 	const viewportHeight = engine.viewport.viewportHeight;
 	const visibleTop = scrollTop + pinnedTopHeight;
 	const visibleBottom = scrollTop + viewportHeight - pinnedBottomHeight;
+	const visibleRowStart = rowCount > pinTopRows + pinBottomRows ? Math.max(pinTopRows, engine.geometry.getRowIndexAtOffset(visibleTop)) : -1;
+	const visibleRowEnd =
+		rowCount > pinTopRows + pinBottomRows
+			? Math.min(rowCount - 1 - pinBottomRows, engine.geometry.getRowIndexAtOffset(Math.max(visibleTop, visibleBottom - 1)))
+			: -1;
 
 	// Buffer pixel bounds: the actual pixel span of the first/last rendered rows.
 	const bufferTopPx = newRowRange.startIdx >= 0 ? engine.geometry.getRowTop(newRowRange.startIdx, defaultRowHeight) : visibleTop;
 	const lastRenderedBottom = newRowRange.endIdx >= 0 ? engine.geometry.getRowBottom(newRowRange.endIdx, defaultRowHeight) : visibleBottom;
+	const centerViewportLeft = engine.viewport.scrollLeft;
+	const centerViewportRight = engine.viewport.scrollLeft + engine.viewport.viewportWidth;
+	const visibleColStart =
+		colCount > pinLeftCols + pinRightCols ? Math.max(pinLeftCols, engine.geometry.getColIndexAtOffset(centerViewportLeft)) : -1;
+	const visibleColEnd =
+		colCount > pinLeftCols + pinRightCols
+			? Math.min(colCount - 1 - pinRightCols, engine.geometry.getColIndexAtOffset(Math.max(centerViewportLeft, centerViewportRight - 1)))
+			: -1;
 
 	// Sticky group rows: groups whose natural top is above visibleTop but whose last
 	// descendant is still at or below visibleTop — they "stick" to the viewport top.
@@ -336,7 +377,7 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 	stickyGroupStack.length = 0;
 
 	if (state.enableStickyGroupRows && rowCount > 0) {
-		const stickyMeta = rowModel?.getStickyGroupMeta?.();
+		const stickyMeta = getStickyGroupMeta(rowModel);
 		if (stickyMeta && stickyMeta.size > 0) {
 			// stickyMeta is built during the DFS flatten, so group indices — and therefore
 			// group tops — ascend in iteration order. That allows two cuts vs scanning every
@@ -409,6 +450,10 @@ export function computeRenderWindowInto<TRowData>(engine: GridEngine<TRowData>, 
 	target.visibleBottom = visibleBottom;
 	target.bufferTopPx = bufferTopPx;
 	target.bufferBottomPx = lastRenderedBottom;
+	target.visibleRowStart = visibleRowStart;
+	target.visibleRowEnd = visibleRowEnd;
+	target.visibleColStart = visibleColStart;
+	target.visibleColEnd = visibleColEnd;
 }
 
 export function computeRenderWindow<TRowData>(engine: GridEngine<TRowData>): RenderWindow {

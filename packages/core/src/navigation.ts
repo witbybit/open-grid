@@ -1,7 +1,6 @@
-import { GridEventName, GridCellPointer, GridPlugin, GridPluginRuntime } from './store.js';
+import type { GridCellPointer, GridPlugin, GridPluginRuntime } from './api/GridApi.js';
 
 export interface GridNavigationOptions {
-	onCellValueChanged?: (rowId: string, colField: string, val: unknown) => void;
 	editTrigger?: 'singleClick' | 'doubleClick'; // default: 'doubleClick'
 	arrowKeyNavigationEdit?: boolean; // default: false
 }
@@ -12,7 +11,6 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	private isSelecting = false;
 	private rangeStart: GridCellPointer | null = null;
 	private options: GridNavigationOptions;
-	private unsubscribeCellValueChanged?: () => void;
 
 	constructor(options: GridNavigationOptions = {}) {
 		this.options = options;
@@ -20,27 +18,16 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 
 	public onInit(api: GridPluginRuntime<TRowData>): void {
 		this.runtime = api;
-
-		// Bind store event listener to invoke options callback when edits are committed
-		if (this.options.onCellValueChanged) {
-			this.unsubscribeCellValueChanged = this.runtime.addEventListener(GridEventName.cellValueChanged, (event) => {
-				const { rowId, colField, newValue } = event.payload;
-				this.options.onCellValueChanged?.(rowId, colField, newValue);
-			});
-		}
 	}
 
 	public onDestroy(): void {
 		this.dispose();
 	}
 
-	public dispose(): void {
-		this.unsubscribeCellValueChanged?.();
-		this.unsubscribeCellValueChanged = undefined;
-	}
+	public dispose(): void {}
 
 	private getPointerFromCoords(rowIdx: number, colIdx: number): GridCellPointer | null {
-		const state = this.runtime.getState();
+		const state = this.runtime.getStateSnapshot();
 		const visualRow = this.runtime.getVisualRow(rowIdx);
 		const col = state.columns[colIdx];
 		if (!visualRow || !col) return null;
@@ -107,7 +94,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 	 * Handle standard keyboard movements and selection expansions.
 	 */
 	public handleKeyDown = (event: KeyboardEvent): void => {
-		const state = this.runtime.getState();
+		const state = this.runtime.getStateSnapshot();
 		const active = state.selection.focus;
 		if (!active) return;
 
@@ -194,8 +181,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 					break;
 				case 'PageUp':
 				case 'PageDown': {
-					const vr = state.visibleRowRange;
-					const page = Math.max(1, (vr ? vr.endIdx - vr.startIdx : 0) - 1 || 10);
+					const page = 10;
 					if (event.key === 'PageUp') nextRow = this.clampToDataRow(row - page, 'down');
 					else nextRow = this.clampToDataRow(row + page, 'up');
 					handled = true;
@@ -212,7 +198,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 								if (currentVisualRow.kind === 'group') {
 									this.runtime.toggleGroupExpanded(currentVisualRow.id);
 								} else if (currentVisualRow.kind === 'data') {
-									if (this.runtime.getState().masterDetailEnabled) {
+									if (this.runtime.getStateSnapshot().masterDetailEnabled) {
 										this.runtime.toggleDetailExpanded(active.rowId);
 									} else {
 										let parentGroupRowId: string | null = null;
@@ -405,7 +391,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 			return; // do not move cell focus
 		}
 
-		const state = this.runtime.getState();
+		const state = this.runtime.getStateSnapshot();
 		const prevFocus = state.selection.focus;
 		const trigger = this.options.editTrigger ?? 'doubleClick';
 
@@ -446,7 +432,7 @@ export class GridNavigationController<TRowData = unknown> implements GridPlugin<
 		const trigger = this.options.editTrigger ?? 'doubleClick';
 		if (trigger !== 'singleClick') return;
 
-		const state = this.runtime.getState();
+		const state = this.runtime.getStateSnapshot();
 		const range = state.selection.range;
 		// Only enter editing if the selection is a single cell (not a multi-cell range drag)
 		const isSingleCell = !range || (range.start.rowId === range.end.rowId && range.start.colField === range.end.colField);

@@ -45,7 +45,7 @@ describe('client pagination — row model integration', () => {
 		});
 		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: rows(23), columns: store.getState().columns });
 
-		store.setState({ pagination: { pageSize: 5, page: 2 } });
+		store.engine.stateManager.setState({ pagination: { pageSize: 5, page: 2 } });
 		ctrl.refresh('flatten');
 
 		expect(ctrl.getVisualRowCount()).toBe(5);
@@ -80,7 +80,7 @@ describe('client pagination — row model integration', () => {
 		});
 		const ctrl = new ClientRowModelController(store.getClientRowModelRuntime(), { rows: rows(23), columns: store.getState().columns });
 
-		store.setState({ pagination: { pageSize: 5, page: 4 } }); // last page: rows 20..22 (3 rows)
+		store.engine.stateManager.setState({ pagination: { pageSize: 5, page: 4 } }); // last page: rows 20..22 (3 rows)
 		ctrl.refresh('flatten');
 
 		expect(ctrl.getVisualRowCount()).toBe(3);
