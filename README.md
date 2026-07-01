@@ -1435,4 +1435,7 @@ Open your browser to `http://localhost:5173` to explore the **Calculations Arena
 
 ## 📄 License
 
-Open Grid is licensed under the [MIT License](LICENSE).
+Open Grid is proprietary software — all rights reserved. No license is granted to use, copy, modify,
+or distribute this software except by separate written agreement with Wit By Bit. Availability of this
+source is at the sole discretion of Wit By Bit and may be restricted, or made subject to a paid
+commercial license, at any time. See [LICENSE](LICENSE) for the full terms.
