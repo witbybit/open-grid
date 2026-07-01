@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { CellSlot } from './cellSlot.js';
-import { bindCellDuringScroll, type RowCellBinderDeps } from './rowCellBinder.js';
+import { bindCellDuringScroll, bindCellFull, type RowCellBinderDeps } from './rowCellBinder.js';
 import { createCellInstanceRendererKey } from './identityKeys.js';
 
 describe('bindCellDuringScroll', () => {
@@ -2627,5 +2627,88 @@ describe('bindCellDuringScroll', () => {
 		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
 		// No getCheapDisplayValue mock → empty fallback; cell shows 'empty' mode.
 		expect(cellSlot.lastContentMode).toBe('empty');
+	});
+});
+
+describe('bindCellFull', () => {
+	it('captures frozenHtml from an already-live portal on a normal re-render, without ever going through a scroll freeze', () => {
+		// Regression for: scrollSnapshot:'html' columns showed plain fallback text on their very
+		// first scroll, even though the portal had already settled with real content long before
+		// any scroll started. The scroll-freeze path can only capture HTML that a PRIOR full bind
+		// already made available — it never captures fresh HTML itself. Before this fix, frozenHtml
+		// was only ever produced by a scroll freeze, so the first-ever scroll always missed it.
+		const cellSlot = new CellSlot<{ id: string; name: string }>(document.createElement('div'));
+		const stableKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		const portalHost = document.createElement('div');
+		cellSlot.element.appendChild(portalHost);
+
+		const snapshotStore = new Map<string, any>();
+		const engine = {
+			cellAccess: {
+				get: vi.fn(() => ({ isFocused: false, isSelected: false, isEditing: false, isLoading: false, value: 'INFO', rawValue: 'INFO' })),
+			},
+			insights: { getCellDecorations: vi.fn(() => []), getVersion: vi.fn(() => 0) },
+			selectionVersion: 0,
+			rowVersions: { get: vi.fn(() => 3) },
+			cellDisplaySnapshots: {
+				get: vi.fn((rowId: string, colField: string) => snapshotStore.get(`${rowId}:${colField}`)),
+				set: vi.fn((snapshot: any) => snapshotStore.set(`${snapshot.rowId}:${snapshot.colField}`, snapshot)),
+			},
+			geometry: { rowHeights: [40] },
+			getCheapDisplayValue: vi.fn(() => 'INFO'),
+		};
+
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: engine as any,
+			cellRenderer: { showPortalContent: vi.fn(), ensureLoadingSkeleton: vi.fn() } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => true), mountCell: vi.fn() } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => false,
+			getIsScrollFrameActive: () => false,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: vi.fn(() => portalHost),
+			getCellPortalHost: () => portalHost,
+			markCellDirtyAfterScroll: vi.fn(),
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		const baseRequest = {
+			cellSlot,
+			slotId: 'slot-1',
+			slotGeneration: 0,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name', cellRenderer: () => null, cellRendererCapabilities: { scrollSnapshot: 'html' as const } } as any,
+			lane: 'center' as const,
+			pinRightBaseLeft: 0,
+			plan: { colLefts: [0], colWidths: [100], columnPlans: [{ isCustom: true, mode: 'custom' }] } as any,
+			state: { globalVersion: 1, styleRules: undefined } as any,
+		};
+
+		// First full bind: portal has never been mounted, nothing exists to capture yet.
+		bindCellFull(deps, baseRequest);
+		expect(cellSlot.lastPortalKey).toBe(stableKey);
+		expect(snapshotStore.get('r1:name').frozenHtml).toBeUndefined();
+
+		// Simulate React having committed the portal's real content sometime after that first bind.
+		portalHost.innerHTML = '<div class="badge badge-info">INFO</div>';
+
+		// Second full bind: same row/col identity, triggered by something unrelated (e.g. a focus or
+		// selection change elsewhere) — not a scroll, and not the cell's own data changing.
+		bindCellFull(deps, { ...baseRequest, state: { globalVersion: 2, styleRules: undefined } as any });
+
+		expect(snapshotStore.get('r1:name').frozenHtml).toBe('<div class="badge badge-info">INFO</div>');
+		expect(snapshotStore.get('r1:name').frozenRowHeight).toBe(40);
 	});
 });

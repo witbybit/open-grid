@@ -431,6 +431,23 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	let contentMode: CellContentMode = 'empty';
 	let formattedValue = '';
 	let portalImpostorValue = '';
+	const hasScrollSnapshotHtmlCap = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollSnapshot === 'html';
+	// scrollSnapshot: 'html' — capture the committed HTML of an already-live portal on every full
+	// (non-scroll) bind, not just the scroll freeze-in-place moment. Without this, a cell only ever
+	// gets a frozen clone after surviving one prior scroll-while-visible cycle; any normal re-render
+	// (selection, focus, unrelated repaint elsewhere in the grid) settles this cell's portal without
+	// ever reading its committed DOM, so the very first scroll after that settle still falls back to
+	// plain text. Reading here — before this bind decides whether to release/remount the portal —
+	// means the cell already "looks frozen" the first time it is ever scrolled.
+	let freshFrozenHtml: string | undefined;
+	let freshFrozenRowHeight: number | undefined;
+	if (hasScrollSnapshotHtmlCap && cellSlot.lastPortalKey === stableKey && deps.portalMountManager.isCellMounted(stableKey)) {
+		const existingHost = deps.getCellPortalHost(cellSlot.element);
+		if (existingHost && existingHost.childElementCount > 0) {
+			freshFrozenHtml = existingHost.innerHTML;
+			freshFrozenRowHeight = deps.engine.geometry?.rowHeights?.[rowIndex];
+		}
+	}
 
 	if (((col as InternalColumnDef<TRowData>).cellRenderer || access.isEditing) && !access.isLoading) {
 		contentMode = 'portal';
@@ -527,17 +544,16 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			: contentMode;
 	const snapshotContentMode = contentMode === 'portal' && snapshotContentKind === 'impostor' ? ('fallback' as const) : contentMode;
 	const snapshotFormattedValue = contentMode === 'portal' && snapshotContentKind === 'impostor' ? portalImpostorValue : formattedValue;
-	// Carry frozenHtml forward from the previous snapshot so the scroll impostor can replay the
-	// styled HTML clone. frozenHtml is captured in the freeze-in-place path of bindCellDuringScroll
-	// (the only moment we have guaranteed committed React DOM). Without this carry-over, every
-	// fidelity render would silently drop the captured HTML and the impostor would revert to text.
-	// Guard on rowVersion: if the row's data changed, the captured HTML is stale — drop it so the
-	// next freeze re-captures the updated badge/chip rather than replaying ghost data.
-	const prevSnapshot =
-		(col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollSnapshot === 'html'
-			? deps.engine.cellDisplaySnapshots.get(node.id, col.field)
-			: undefined;
-	const prevFrozenHtml = prevSnapshot?.rowVersion === rowVersion ? prevSnapshot.frozenHtml : undefined;
+	// Prefer the HTML captured fresh above (this bind's own committed portal read). Otherwise carry
+	// frozenHtml/frozenRowHeight forward from the previous snapshot so the scroll impostor can still
+	// replay the styled clone — e.g. when this bind's portal key changed and nothing was available to
+	// read this time. Guard on rowVersion: if the row's data changed, the captured HTML is stale —
+	// drop it so the next capture reflects the updated badge/chip rather than replaying ghost data.
+	const prevSnapshot = hasScrollSnapshotHtmlCap ? deps.engine.cellDisplaySnapshots.get(node.id, col.field) : undefined;
+	const carriedFrozenHtml = prevSnapshot?.rowVersion === rowVersion ? prevSnapshot.frozenHtml : undefined;
+	const carriedFrozenRowHeight = prevSnapshot?.rowVersion === rowVersion ? prevSnapshot.frozenRowHeight : undefined;
+	const prevFrozenHtml = freshFrozenHtml ?? carriedFrozenHtml;
+	const prevFrozenRowHeight = freshFrozenHtml !== undefined ? freshFrozenRowHeight : carriedFrozenRowHeight;
 	deps.engine.cellDisplaySnapshots.set(
 		createCellDisplaySnapshot({
 			rowId: node.id,
@@ -557,6 +573,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			title: cellSlot.element.title,
 			validationError: validationDecTitle,
 			frozenHtml: prevFrozenHtml,
+			frozenRowHeight: prevFrozenRowHeight,
 		})
 	);
 
