@@ -265,8 +265,8 @@ Required coverage:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core test
-corepack pnpm --filter @open-grid/react test
+corepack pnpm --filter @eregister/open-grid-core test
+corepack pnpm --filter @eregister/open-grid-react test
 ```
 
 Expected result: exit 0.
@@ -298,10 +298,10 @@ Done criteria:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core build
-corepack pnpm --filter @open-grid/core test
-corepack pnpm --filter @open-grid/react build
-corepack pnpm --filter @open-grid/react test
+corepack pnpm --filter @eregister/open-grid-core build
+corepack pnpm --filter @eregister/open-grid-core test
+corepack pnpm --filter @eregister/open-grid-react build
+corepack pnpm --filter @eregister/open-grid-react test
 corepack pnpm --filter demo-app build
 ```
 
@@ -333,9 +333,9 @@ Done criteria:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core exec vitest run src/renderer/renderWindow.test.ts src/renderer/renderEngine.test.ts
-corepack pnpm --filter @open-grid/core test
-corepack pnpm --filter @open-grid/react test
+corepack pnpm --filter @eregister/open-grid-core exec vitest run src/renderer/renderWindow.test.ts src/renderer/renderEngine.test.ts
+corepack pnpm --filter @eregister/open-grid-core test
+corepack pnpm --filter @eregister/open-grid-react test
 corepack pnpm --filter demo-app build
 ```
 
@@ -374,9 +374,9 @@ Done criteria:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core exec vitest run src/rows/stages/groupStage.test.ts src/rows/stages/flattenStage.test.ts src/rowModel.test.ts
-corepack pnpm --filter @open-grid/core test
-corepack pnpm --filter @open-grid/react test
+corepack pnpm --filter @eregister/open-grid-core exec vitest run src/rows/stages/groupStage.test.ts src/rows/stages/flattenStage.test.ts src/rowModel.test.ts
+corepack pnpm --filter @eregister/open-grid-core test
+corepack pnpm --filter @eregister/open-grid-react test
 ```
 
 ### Phase 4: Header band architecture
@@ -401,9 +401,9 @@ Done criteria:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core exec vitest run src/renderer/headerPopover.test.ts src/renderer/renderEngine.test.ts
-corepack pnpm --filter @open-grid/core test
-corepack pnpm --filter @open-grid/react test
+corepack pnpm --filter @eregister/open-grid-core exec vitest run src/renderer/headerPopover.test.ts src/renderer/renderEngine.test.ts
+corepack pnpm --filter @eregister/open-grid-core test
+corepack pnpm --filter @eregister/open-grid-react test
 corepack pnpm --filter demo-app build
 ```
 
@@ -451,8 +451,8 @@ Done criteria:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core test
-corepack pnpm --filter @open-grid/react test
+corepack pnpm --filter @eregister/open-grid-core test
+corepack pnpm --filter @eregister/open-grid-react test
 corepack pnpm --filter demo-app build
 ```
 
@@ -496,10 +496,10 @@ The pure layout tests are the most important. AG Grid-level reliability comes fr
 
 | Purpose     | Command                                               | Expected on success |
 | ----------- | ----------------------------------------------------- | ------------------- |
-| Core tests  | `corepack pnpm --filter @open-grid/core test`         | exit 0              |
-| Core build  | `corepack pnpm --filter @open-grid/core build`        | exit 0              |
-| React tests | `corepack pnpm --filter @open-grid/react test`        | exit 0              |
-| React build | `corepack pnpm --filter @open-grid/react build`       | exit 0              |
+| Core tests  | `corepack pnpm --filter @eregister/open-grid-core test`         | exit 0              |
+| Core build  | `corepack pnpm --filter @eregister/open-grid-core build`        | exit 0              |
+| React tests | `corepack pnpm --filter @eregister/open-grid-react test`        | exit 0              |
+| React build | `corepack pnpm --filter @eregister/open-grid-react build`       | exit 0              |
 | Demo build  | `corepack pnpm --filter demo-app build`               | exit 0              |
 | Formatting  | `corepack pnpm exec prettier --check <touched files>` | exit 0              |
 

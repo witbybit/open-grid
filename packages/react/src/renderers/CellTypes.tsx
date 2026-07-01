@@ -1,5 +1,5 @@
 /**
- * @open-grid/react — Built-in High-Fidelity Cell Renderers & Editors
+ * @eregister/open-grid-react — Built-in High-Fidelity Cell Renderers & Editors
  *
  * Zero external dependencies. Pure inline styles + a single lazily-injected
  * `<style>` tag (for :hover, :focus, scrollbar, and keyframe animations).
@@ -193,7 +193,7 @@ function hashIndex(str: string): number {
  *
  * @example
  * ```ts
- * import { CheckboxCellRenderer } from '@open-grid/react';
+ * import { CheckboxCellRenderer } from '@eregister/open-grid-react';
  *
  * const columns: ColumnDef<MyRow>[] = [{
  *   field: 'isActive',
@@ -733,7 +733,7 @@ export function createMultiSelectCellEditor(options: string[]) {
  *
  * @example
  * ```ts
- * import { DateCellRenderer, DateCellEditor } from '@open-grid/react';
+ * import { DateCellRenderer, DateCellEditor } from '@eregister/open-grid-react';
  *
  * { field: 'startDate', renderer: { kind: 'react', component: DateCellRenderer }, cellEditor: DateCellEditor }
  * ```

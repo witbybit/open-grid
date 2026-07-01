@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Grid, duplicateValueRule } from '@open-grid/react';
-import type { ColumnDef, GridReadyEvent, GridApi, GridTransactionStreamHandle, GridIntegrityIssue, GridDiffModel } from '@open-grid/react';
+import { Grid, duplicateValueRule } from '@eregister/open-grid-react';
+import type { ColumnDef, GridReadyEvent, GridApi, GridTransactionStreamHandle, GridIntegrityIssue, GridDiffModel } from '@eregister/open-grid-react';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 

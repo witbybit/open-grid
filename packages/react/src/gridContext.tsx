@@ -1,5 +1,5 @@
 import { createContext } from 'react';
-import type { GridApi } from '@open-grid/core';
+import type { GridApi } from '@eregister/open-grid-core';
 import type { GridAdapterHandle } from './reactHostBridge.js';
 import type { ReactNode } from 'react';
 

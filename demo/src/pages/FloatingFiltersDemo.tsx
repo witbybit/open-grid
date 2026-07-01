@@ -7,7 +7,7 @@ import {
 	type FilterModel,
 	type FloatingFilterRendererParams,
 	type CellRendererProps,
-} from '@open-grid/react';
+} from '@eregister/open-grid-react';
 import { Filter, X, ToggleLeft, ToggleRight, Zap, Code2 } from 'lucide-react';
 
 // ── Row type ──────────────────────────────────────────────────────────────────

@@ -23,7 +23,7 @@ Open Grid provides a **modern, shadcn-style theming system** with:
 The grid defaults to the dark theme. To switch themes:
 
 ```typescript
-import { createClientGrid } from '@open-grid/core';
+import { createClientGrid } from '@eregister/open-grid-core';
 
 const api = createClientGrid(config);
 
@@ -39,7 +39,7 @@ const themeManager = host.setTheme?.toString(); // Access via host methods
 ### 2. Using ThemeManager Directly
 
 ```typescript
-import { ThemeManager, DARK_THEME } from '@open-grid/core';
+import { ThemeManager, DARK_THEME } from '@eregister/open-grid-core';
 
 const manager = new ThemeManager(DARK_THEME);
 manager.mount(); // Inject theme into document
@@ -64,7 +64,7 @@ unsubscribe();
 ### 3. Creating Custom Themes
 
 ```typescript
-import { createTheme, ThemeManager } from '@open-grid/core';
+import { createTheme, ThemeManager } from '@eregister/open-grid-core';
 
 // Simple override approach
 const myTheme = createTheme({
@@ -84,7 +84,7 @@ manager.mount();
 Automatically sync with OS dark/light mode preferences:
 
 ```typescript
-import { ThemeManager } from '@open-grid/core';
+import { ThemeManager } from '@eregister/open-grid-core';
 
 // Create a manager that syncs with system preference
 const manager = ThemeManager.createSystemAware();
@@ -100,7 +100,7 @@ manager.mount();
 High-contrast, professional dark theme optimized for extended viewing and reduced eye strain.
 
 ```typescript
-import { DARK_THEME } from '@open-grid/core';
+import { DARK_THEME } from '@eregister/open-grid-core';
 ```
 
 ### Light
@@ -108,7 +108,7 @@ import { DARK_THEME } from '@open-grid/core';
 Clean, bright professional theme for daytime use.
 
 ```typescript
-import { LIGHT_THEME } from '@open-grid/core';
+import { LIGHT_THEME } from '@eregister/open-grid-core';
 ```
 
 ### High-Contrast Light (`light-hc`)
@@ -116,7 +116,7 @@ import { LIGHT_THEME } from '@open-grid/core';
 Enhanced light theme with stronger contrasts for better accessibility.
 
 ```typescript
-import { HIGH_CONTRAST_LIGHT_THEME } from '@open-grid/core';
+import { HIGH_CONTRAST_LIGHT_THEME } from '@eregister/open-grid-core';
 ```
 
 ### High-Contrast Dark (`dark-hc`)
@@ -124,7 +124,7 @@ import { HIGH_CONTRAST_LIGHT_THEME } from '@open-grid/core';
 Enhanced dark theme with stronger contrasts for better accessibility.
 
 ```typescript
-import { HIGH_CONTRAST_DARK_THEME } from '@open-grid/core';
+import { HIGH_CONTRAST_DARK_THEME } from '@eregister/open-grid-core';
 ```
 
 ### Cool Blue (`cool-blue`)
@@ -132,7 +132,7 @@ import { HIGH_CONTRAST_DARK_THEME } from '@open-grid/core';
 Modern tech aesthetic with cool blue accent tones.
 
 ```typescript
-import { COOL_BLUE_THEME } from '@open-grid/core';
+import { COOL_BLUE_THEME } from '@eregister/open-grid-core';
 ```
 
 ### Warm Orange (`warm-orange`)
@@ -140,7 +140,7 @@ import { COOL_BLUE_THEME } from '@open-grid/core';
 Energetic, warm aesthetic with orange accent tones.
 
 ```typescript
-import { WARM_ORANGE_THEME } from '@open-grid/core';
+import { WARM_ORANGE_THEME } from '@eregister/open-grid-core';
 ```
 
 ### Minimal Monochrome (`minimal-monochrome`)
@@ -148,7 +148,7 @@ import { WARM_ORANGE_THEME } from '@open-grid/core';
 Ultra-clean, minimalist monochrome theme.
 
 ```typescript
-import { MINIMAL_MONOCHROME_THEME } from '@open-grid/core';
+import { MINIMAL_MONOCHROME_THEME } from '@eregister/open-grid-core';
 ```
 
 ## Theme Tokens
@@ -298,7 +298,7 @@ const BUILT_IN_THEMES: Record<BuiltInThemeName, ThemeTokens>;
 Modify specific tokens while keeping the rest:
 
 ```typescript
-import { ThemeManager, DARK_THEME } from '@open-grid/core';
+import { ThemeManager, DARK_THEME } from '@eregister/open-grid-core';
 
 const manager = new ThemeManager(DARK_THEME);
 manager.mount();
@@ -315,7 +315,7 @@ manager.mergeTheme({
 
 ```typescript
 import { useCallback, useEffect, useState } from 'react';
-import { createClientGrid } from '@open-grid/core';
+import { createClientGrid } from '@eregister/open-grid-core';
 
 function DynamicThemeExample() {
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('dark');
@@ -340,7 +340,7 @@ function DynamicThemeExample() {
 ### 3. System Preference Sync
 
 ```typescript
-import { ThemeManager } from '@open-grid/core';
+import { ThemeManager } from '@eregister/open-grid-core';
 
 // Create manager that syncs with system dark mode preference
 const manager = ThemeManager.createSystemAware();
@@ -355,7 +355,7 @@ manager.onThemeChange((theme) => {
 ### 4. Custom Theme from Brand Guidelines
 
 ```typescript
-import { createTheme, ThemeManager } from '@open-grid/core';
+import { createTheme, ThemeManager } from '@eregister/open-grid-core';
 
 const brandTheme = createTheme({
 	// Brand primary
@@ -387,7 +387,7 @@ manager.mount();
 ### 5. Exporting Theme Configuration
 
 ```typescript
-import { themeToCSSVariables } from '@open-grid/core';
+import { themeToCSSVariables } from '@eregister/open-grid-core';
 
 const theme = createTheme({...});
 const cssText = themeToCSSVariables(theme);
@@ -406,7 +406,7 @@ console.log(cssText);
 The theme API is integrated into the GridHost interface for convenience:
 
 ```typescript
-import { mountGridHost } from '@open-grid/core/internal';
+import { mountGridHost } from '@eregister/open-grid-core/internal';
 
 const host = mountGridHost(api, container);
 

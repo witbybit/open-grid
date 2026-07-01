@@ -271,13 +271,13 @@ A physical identity is a transient DOM slot assignment that may change on every 
 
 | Package            | Role                                                             | Allowed consumers            |
 | ------------------ | ---------------------------------------------------------------- | ---------------------------- |
-| `@open-grid/core`  | Engine, state, row pipeline, physical renderer, host integration | framework adapters, demo app |
-| `@open-grid/react` | React adapter (component, hooks, portals)                        | React applications           |
+| `@eregister/open-grid-core`  | Engine, state, row pipeline, physical renderer, host integration | framework adapters, demo app |
+| `@eregister/open-grid-react` | React adapter (component, hooks, portals)                        | React applications           |
 
 Rules:
 
-- `@open-grid/core` must not import from `@open-grid/react` or any other framework package.
-- `@open-grid/react` imports from `@open-grid/core` only through the exported public API (`src/index.ts`), never through deep internal paths.
+- `@eregister/open-grid-core` must not import from `@eregister/open-grid-react` or any other framework package.
+- `@eregister/open-grid-react` imports from `@eregister/open-grid-core` only through the exported public API (`src/index.ts`), never through deep internal paths.
 - No other inter-package imports are permitted until a new package is chartered with an explicit dependency budget.
 
 ---

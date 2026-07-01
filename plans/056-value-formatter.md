@@ -107,8 +107,8 @@ When mounting a custom React/DOM renderer, pass both `value` (raw) and `formatte
 ## Verification gate
 
 ```
-pnpm -F @open-grid/core build && pnpm -F @open-grid/core test
-pnpm -F @open-grid/react build && pnpm -F @open-grid/react test
+pnpm -F @eregister/open-grid-core build && pnpm -F @eregister/open-grid-core test
+pnpm -F @eregister/open-grid-react build && pnpm -F @eregister/open-grid-react test
 ```
 
 Column with `valueFormatter` shows formatted value in cell. CSV export shows formatted value. Existing columns without `valueFormatter` behavior unchanged.

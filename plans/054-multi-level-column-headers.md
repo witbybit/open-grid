@@ -166,10 +166,10 @@ If anything is wrong, fix `viewportRenderer.syncPinnedLayerPositions` to not tou
 After all phases:
 
 ```
-pnpm -F @open-grid/core build
-pnpm -F @open-grid/core test
-pnpm -F @open-grid/react build
-pnpm -F @open-grid/react test
+pnpm -F @eregister/open-grid-core build
+pnpm -F @eregister/open-grid-core test
+pnpm -F @eregister/open-grid-react build
+pnpm -F @eregister/open-grid-react test
 pnpm -F demo-app build
 ```
 

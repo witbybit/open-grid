@@ -1,6 +1,6 @@
 import React from 'react';
-import { Grid } from '@open-grid/react';
-import type { ColumnDef, CellRendererProps, GridReadyEvent } from '@open-grid/react';
+import { Grid } from '@eregister/open-grid-react';
+import type { ColumnDef, CellRendererProps, GridReadyEvent } from '@eregister/open-grid-react';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 

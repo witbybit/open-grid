@@ -1,4 +1,4 @@
-import { createClientGrid, createInfiniteGrid, createServerPageGrid, createLocalStorageAdapter } from '@open-grid/core';
+import { createClientGrid, createInfiniteGrid, createServerPageGrid, createLocalStorageAdapter } from '@eregister/open-grid-core';
 import { useEffect, useMemo, useRef, useInsertionEffect, type PropsWithChildren } from 'react';
 import { GridProvider } from './gridContext.js';
 import { GridView, type GridViewProps } from './GridView.js';
@@ -15,7 +15,7 @@ import type {
 	ServerPaginationOptions,
 } from './types.js';
 import type { GridReadyEvent, StyleRule, ColumnTypeDefinition } from './types.js';
-import type { GridCapabilitiesConfig } from '@open-grid/core';
+import type { GridCapabilitiesConfig } from '@eregister/open-grid-core';
 
 type GridShellProps<TRowData> = Omit<GridViewProps<TRowData>, 'api'>;
 const DEFAULT_PAGE_SIZE = 100;
@@ -43,7 +43,7 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
 	styleRules?: StyleRule<TRowData>[];
 	/** Unified Data Integrity pipeline — validation, quality, diff, live stream, conflict resolution. */
-	dataIntegrity?: import('@open-grid/core').GridDataIntegrityConfig<TRowData>;
+	dataIntegrity?: import('@eregister/open-grid-core').GridDataIntegrityConfig<TRowData>;
 	/** Grid-level capability rules. Control which actions are allowed per cell, column, or row. */
 	capabilities?: GridCapabilitiesConfig<TRowData>;
 	detailRowHeight?: number;

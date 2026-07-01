@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Grid, type ColumnDef, type CellRendererProps, type GridApi, type GridReadyEvent } from '@open-grid/react';
+import { Grid, type ColumnDef, type CellRendererProps, type GridApi, type GridReadyEvent } from '@eregister/open-grid-react';
 import {
 	Building2,
 	ChevronRight,

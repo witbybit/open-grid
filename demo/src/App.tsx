@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Layout } from 'lucide-react';
-import type { FilterModel, GridApi, GridReadyEvent } from '@open-grid/react';
+import type { FilterModel, GridApi, GridReadyEvent } from '@eregister/open-grid-react';
 import { DemoGridApiScope } from './DemoGridContext';
 import ShowroomHeader from './components/ShowroomHeader';
 import ShowroomLeftSidebar from './components/ShowroomLeftSidebar';

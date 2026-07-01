@@ -52,7 +52,7 @@ The operator explicitly wants either one pipeline for all writes or, if that is 
 | Purpose                   | Command                                                                                                                                                                                                                                                                   | Expected on success |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
 | Architecture gate         | `corepack pnpm run test:architecture`                                                                                                                                                                                                                                     | exit 0              |
-| Core tests                | `corepack pnpm --filter @open-grid/core test`                                                                                                                                                                                                                             | exit 0              |
+| Core tests                | `corepack pnpm --filter @eregister/open-grid-core test`                                                                                                                                                                                                                             | exit 0              |
 | Workspace tests           | `corepack pnpm run test`                                                                                                                                                                                                                                                  | exit 0              |
 | Build/typecheck           | `corepack pnpm run build`                                                                                                                                                                                                                                                 | exit 0              |
 | Focused write regressions | `C:\Users\rishi\witbybit\open-grid\node_modules\.bin\vitest.cmd run packages/core/src/store.test.ts packages/core/src/fillRange.test.ts packages/core/src/features/ClipboardController.test.ts packages/core/src/features/dataIntegrity/GridDataIntegrityManager.test.ts` | all pass            |
@@ -141,7 +141,7 @@ This is the heart of the plan. The important outcome is that `paste`, `fill`, in
 
 Do not let feature-local helpers secretly own one of these stages after the refactor.
 
-**Verify**: `corepack pnpm --filter @open-grid/core test` -> exit 0
+**Verify**: `corepack pnpm --filter @eregister/open-grid-core test` -> exit 0
 
 ### Step 4: Route every production write source through the chosen canonical path
 

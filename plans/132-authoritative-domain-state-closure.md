@@ -39,7 +39,7 @@ Open Grid cannot claim a single source of truth while integrity-critical state s
 | Purpose           | Command                                       | Expected on success |
 | ----------------- | --------------------------------------------- | ------------------- |
 | Architecture gate | `corepack pnpm run test:architecture`         | exit 0              |
-| Core tests        | `corepack pnpm --filter @open-grid/core test` | exit 0              |
+| Core tests        | `corepack pnpm --filter @eregister/open-grid-core test` | exit 0              |
 | Workspace tests   | `corepack pnpm run test`                      | exit 0              |
 | Build/typecheck   | `corepack pnpm run build`                     | exit 0              |
 
@@ -101,7 +101,7 @@ Introduce explicit integrity mutation types and commit reasons for every authori
 
 The rule is: if integrity state changes, it must happen through `GridCommitKernel`, not direct field mutation on managers or modules.
 
-**Verify**: `corepack pnpm --filter @open-grid/core test` -> exit 0
+**Verify**: `corepack pnpm --filter @eregister/open-grid-core test` -> exit 0
 
 ### Step 3: Reduce managers/modules to pure domain services and projections
 
@@ -114,13 +114,13 @@ Refactor `GridDataIntegrityManager` and its modules so they no longer own author
 
 Delete the old local owner fields rather than mirroring them.
 
-**Verify**: `corepack pnpm --filter @open-grid/core exec vitest run src/engine/architectureGuards.test.ts` -> all pass
+**Verify**: `corepack pnpm --filter @eregister/open-grid-core exec vitest run src/engine/architectureGuards.test.ts` -> all pass
 
 ### Step 4: Rebuild the integrity summary from authoritative state
 
 Make the summary a deterministic projection from integrity domain state, not a manager-maintained mutable cache. If caching is required, cache as derived state with explicit ownership and invalidation rules.
 
-**Verify**: `corepack pnpm --filter @open-grid/core test` -> exit 0
+**Verify**: `corepack pnpm --filter @eregister/open-grid-core test` -> exit 0
 
 ### Step 5: Lock the boundary with architecture guards
 

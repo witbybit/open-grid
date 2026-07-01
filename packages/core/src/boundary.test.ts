@@ -6,7 +6,7 @@ import { createClientGrid } from './createGrid.js';
 import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
 
 describe('Public/internal boundary', () => {
-	describe('Public entry (@open-grid/core)', () => {
+	describe('Public entry (@eregister/open-grid-core)', () => {
 		it('does not export GridStore', () => {
 			expect((publicApi as Record<string, unknown>)['GridStore']).toBeUndefined();
 		});
@@ -158,7 +158,7 @@ describe('Public/internal boundary', () => {
 		});
 	});
 
-	describe('Experimental entry (@open-grid/core/experimental)', () => {
+	describe('Experimental entry (@eregister/open-grid-core/experimental)', () => {
 		it('exports style-rule compiler, visual-row helpers, and concrete instrumentation helpers', () => {
 			expect(typeof (experimentalApi as Record<string, unknown>)['compileStyleRules']).toBe('function');
 			expect(typeof (experimentalApi as Record<string, unknown>)['NoopGridInstrumentation']).toBe('function');
@@ -193,7 +193,7 @@ describe('Public/internal boundary', () => {
 		});
 	});
 
-	describe('Internal entry (@open-grid/core/internal)', () => {
+	describe('Internal entry (@eregister/open-grid-core/internal)', () => {
 		it('exports mountGridHost', () => {
 			expect(typeof (internalApi as Record<string, unknown>)['mountGridHost']).toBe('function');
 		});

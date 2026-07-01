@@ -90,10 +90,10 @@ Add an adapter guard test (in the `architectureGuards` style) asserting: `Grid.t
 ## Verification
 
 ```sh
-corepack pnpm --filter @open-grid/react build
-corepack pnpm --filter @open-grid/react test
+corepack pnpm --filter @eregister/open-grid-react build
+corepack pnpm --filter @eregister/open-grid-react test
 corepack pnpm --filter demo-app build
-corepack pnpm --filter @open-grid/core test
+corepack pnpm --filter @eregister/open-grid-core test
 ```
 
 ## Scope

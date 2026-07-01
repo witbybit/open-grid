@@ -68,7 +68,7 @@ In tests/dev builds, optionally scan the pool after assignment and assert it mat
 ## Verification gate
 
 ```text
-pnpm -F @open-grid/core build && pnpm -F @open-grid/core test
+pnpm -F @eregister/open-grid-core build && pnpm -F @eregister/open-grid-core test
 ```
 
 Runtime performance tests must show zero full active-slot scans during ordinary viewport recycling.

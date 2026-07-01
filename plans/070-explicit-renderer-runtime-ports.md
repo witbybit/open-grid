@@ -81,8 +81,8 @@ Document which API calls are valid without a mounted renderer. Unsupported calls
 ## Verification gate
 
 ```text
-pnpm -F @open-grid/core build && pnpm -F @open-grid/core test
-pnpm -F @open-grid/react build && pnpm -F @open-grid/react test
+pnpm -F @eregister/open-grid-core build && pnpm -F @eregister/open-grid-core test
+pnpm -F @eregister/open-grid-react build && pnpm -F @eregister/open-grid-react test
 ```
 
 Add tests for mounted, headless, and destroyed runtimes, including deterministic behavior for renderer-dependent API calls.

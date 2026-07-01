@@ -1,4 +1,4 @@
-import type { ColumnDef, GridApi, RowNode, VisualRow, CellRendererPhase } from '@open-grid/core';
+import type { ColumnDef, GridApi, RowNode, VisualRow, CellRendererPhase } from '@eregister/open-grid-core';
 
 export interface CellPortalPhysicalIdentity {
 	readonly cellInstanceId: string;

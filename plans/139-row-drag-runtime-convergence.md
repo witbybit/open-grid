@@ -46,7 +46,7 @@ The grid needs one explicit runtime story for drag: when it is allowed, how it i
 | Purpose            | Command                                                                                                                                                                                                   | Expected on success |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
 | Architecture gate  | `corepack pnpm run test:architecture`                                                                                                                                                                     | exit 0              |
-| Core tests         | `corepack pnpm --filter @open-grid/core test`                                                                                                                                                             | exit 0              |
+| Core tests         | `corepack pnpm --filter @eregister/open-grid-core test`                                                                                                                                                             | exit 0              |
 | Workspace tests    | `corepack pnpm run test`                                                                                                                                                                                  | exit 0              |
 | Build/typecheck    | `corepack pnpm run build`                                                                                                                                                                                 | exit 0              |
 | Focused drag tests | `C:\Users\rishi\witbybit\open-grid\node_modules\.bin\vitest.cmd run packages/core/src/features/RowDragController.test.ts packages/core/src/store.test.ts packages/core/src/renderer/renderEngine.test.ts` | all pass            |
@@ -111,7 +111,7 @@ Given the current architecture, the likely correct answer is to disallow managed
 
 If you disallow, surface it through the existing capability/runtime fault patterns rather than silently doing nothing.
 
-**Verify**: `corepack pnpm --filter @open-grid/core test` -> exit 0
+**Verify**: `corepack pnpm --filter @eregister/open-grid-core test` -> exit 0
 
 ### Step 4: Reduce drag-local scheduling to the narrowest interaction shell possible
 

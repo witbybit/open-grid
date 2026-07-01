@@ -57,7 +57,7 @@ cleaner contract with a better center of gravity:
   warnings after mount.
 - `packages/react/src/OpenGrid.tsx:16` and
   `packages/react/src/GridPortal.tsx:25` still reach into
-  `@open-grid/core/internal` for mount and renderer-capability plumbing. That is
+  `@eregister/open-grid-core/internal` for mount and renderer-capability plumbing. That is
   a narrow dependency today, but it should be concentrated into one tiny React
   bridge module rather than spread across the public surface.
 - `demo/src/components/GridShared.tsx:429-498` already has a local `GridView`
@@ -78,10 +78,10 @@ cleaner contract with a better center of gravity:
 
 | Purpose     | Command                                         | Expected on success |
 | ----------- | ----------------------------------------------- | ------------------- |
-| Build core  | `corepack pnpm --filter @open-grid/core build`  | exit 0              |
-| Build react | `corepack pnpm --filter @open-grid/react build` | exit 0              |
-| Core tests  | `corepack pnpm --filter @open-grid/core test`   | exit 0              |
-| React tests | `corepack pnpm --filter @open-grid/react test`  | exit 0              |
+| Build core  | `corepack pnpm --filter @eregister/open-grid-core build`  | exit 0              |
+| Build react | `corepack pnpm --filter @eregister/open-grid-react build` | exit 0              |
+| Core tests  | `corepack pnpm --filter @eregister/open-grid-core test`   | exit 0              |
+| React tests | `corepack pnpm --filter @eregister/open-grid-react test`  | exit 0              |
 | Demo build  | `corepack pnpm --filter demo-app build`         | exit 0              |
 
 ## Scope
@@ -122,7 +122,7 @@ people to use:
 - keep `OpenGrid` only as compatibility sugar around the new primitives.
 
 At the same time, create one small React-owned host bridge module that is the
-only place in `packages/react/src` allowed to import `@open-grid/core/internal`
+only place in `packages/react/src` allowed to import `@eregister/open-grid-core/internal`
 for mount/imperative-renderer wiring. `OpenGrid`, `GridPortal`, and the new
 entrypoints should consume that bridge rather than importing core internals
 directly.
@@ -131,7 +131,7 @@ Export the new public primitives from `packages/react/src/index.ts`, and mark
 `OpenGrid` as compatibility-only in the package docs/comments if you keep it
 around.
 
-**Verify**: `corepack pnpm --filter @open-grid/react build` -> exit 0.
+**Verify**: `corepack pnpm --filter @eregister/open-grid-react build` -> exit 0.
 
 ### Step 2: Make lifecycle mutability explicit in the React types
 
@@ -153,7 +153,7 @@ Add or update focused tests in `packages/react/src/index.test.tsx` to prove the
 new entrypoints mount correctly, the compatibility wrapper still works, and the
 initial-only fields remain stable after mount.
 
-**Verify**: `corepack pnpm --filter @open-grid/react test` -> exit 0.
+**Verify**: `corepack pnpm --filter @eregister/open-grid-react test` -> exit 0.
 
 ### Step 3: Migrate the demo app to the recommended surface as part of the same pass
 
@@ -185,7 +185,7 @@ Add guardrail coverage that codifies the new intended surface:
 - the package barrel should expose the explicit primitives first,
 - `OpenGrid` should be tested as a compatibility path, not the recommended
   contract,
-- the new public entrypoints should not reach into `@open-grid/core/internal`
+- the new public entrypoints should not reach into `@eregister/open-grid-core/internal`
   directly outside the single host bridge module,
 - the demo should not import `OpenGrid` once the migration is complete.
 
@@ -196,10 +196,10 @@ Update `plans/README.md` to mark this plan done and to document the new
 recommended public surface.
 
 **Verify**:
-`corepack pnpm --filter @open-grid/core build`
-`corepack pnpm --filter @open-grid/react build`
-`corepack pnpm --filter @open-grid/core test`
-`corepack pnpm --filter @open-grid/react test`
+`corepack pnpm --filter @eregister/open-grid-core build`
+`corepack pnpm --filter @eregister/open-grid-react build`
+`corepack pnpm --filter @eregister/open-grid-core test`
+`corepack pnpm --filter @eregister/open-grid-react test`
 `corepack pnpm --filter demo-app build`
 -> all exit 0.
 
@@ -211,7 +211,7 @@ recommended public surface.
 - Keep the old `OpenGrid` characterization only as far as needed to prove the
   wrapper still forwards correctly.
 - Add a demo import guard or package test that fails if the recommended demo
-  files drift back to `OpenGrid` or `@open-grid/core/internal` imports.
+  files drift back to `OpenGrid` or `@eregister/open-grid-core/internal` imports.
 
 ## Done criteria
 

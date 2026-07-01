@@ -82,7 +82,7 @@ useEffect(() => {
 ## Repo conventions
 
 - New types in `packages/react/src/` use PascalCase interfaces, camelCase functions.
-- No `@open-grid/core/internal` imports in new public API files.
+- No `@eregister/open-grid-core/internal` imports in new public API files.
 - Helper functions are pure and co-located with their type in the same file.
 - Tests use `vitest` `describe`/`it`/`expect` — no mocks needed for pure functions.
 
@@ -95,7 +95,7 @@ useEffect(() => {
 Create `packages/react/src/styleRules.ts`:
 
 ```ts
-import type { ColumnDef, GridStyleSlots, GridRowClassParams, GridCellClassParams } from '@open-grid/core';
+import type { ColumnDef, GridStyleSlots, GridRowClassParams, GridCellClassParams } from '@eregister/open-grid-core';
 
 // ─── Rule types ───────────────────────────────────────────────────────────────
 
@@ -151,7 +151,7 @@ export function compileStyleRules<TRowData>(rules: StyleRule<TRowData>[]): GridS
 }
 ```
 
-**Verification:** `pnpm -F @open-grid/react build` — no TS errors.
+**Verification:** `pnpm -F @eregister/open-grid-react build` — no TS errors.
 
 ---
 
@@ -215,7 +215,7 @@ const makeCellParams = (field: string, value: unknown, overrides = {}) => ({
 11. **Cell-only rules produce no `rowClass` in output**.
 12. **`compileStyleRules` is a pure function — calling it twice with same input produces equivalent output**.
 
-**Verification:** `pnpm -F @open-grid/react test -- styleRules` — all pass.
+**Verification:** `pnpm -F @eregister/open-grid-react test -- styleRules` — all pass.
 
 ---
 
@@ -255,7 +255,7 @@ In `packages/react/src/types.ts`:
  }
 ```
 
-**Verification:** `pnpm -F @open-grid/react build` — no errors.
+**Verification:** `pnpm -F @eregister/open-grid-react build` — no errors.
 
 ---
 
@@ -285,7 +285,7 @@ Apply the same pattern to `useServerGrid`.
 
 **Note on referential stability:** `styleRules` is an array and will trigger the effect on every render if defined inline. Document in JSDoc on `StyleRule` (Step 3) that users should memoize the array with `useMemo`. This matches the existing convention for `columns`.
 
-**Verification:** `pnpm -F @open-grid/react build` — no errors.
+**Verification:** `pnpm -F @eregister/open-grid-react build` — no errors.
 
 ---
 
@@ -314,7 +314,7 @@ In `packages/react/src/OpenGrid.tsx`:
    });
 ```
 
-**Verification:** `pnpm -F @open-grid/react build` — no errors.
+**Verification:** `pnpm -F @eregister/open-grid-react build` — no errors.
 
 ---
 
@@ -325,7 +325,7 @@ In `packages/react/src/OpenGrid.tsx`:
 +export { compileStyleRules } from './styleRules.js';
 ```
 
-**Verification:** `pnpm -F @open-grid/react build` — no errors.
+**Verification:** `pnpm -F @eregister/open-grid-react build` — no errors.
 
 ---
 
@@ -334,7 +334,7 @@ In `packages/react/src/OpenGrid.tsx`:
 In `demo/src/pages/RealtimeDashboard.tsx`:
 
 1. Remove the `useEffect` block that calls `api.setStyleSlots(...)`.
-2. Import `StyleRule` from `@open-grid/react`.
+2. Import `StyleRule` from `@eregister/open-grid-react`.
 3. Define `styleRules` as a `useMemo`-stabilized array and pass it to `useClientGrid` (or `<OpenGrid>` if in inline mode).
 
 **Before (abbreviated):**
@@ -357,7 +357,7 @@ useEffect(() => {
 **After:**
 
 ```ts
-import { type StyleRule } from '@open-grid/react';
+import { type StyleRule } from '@eregister/open-grid-react';
 // ...
 
 const styleRules = useMemo<StyleRule<DashboardStockRow>[]>(
@@ -440,15 +440,15 @@ Open `demo/src/pages/CalculationsArena.tsx`. Find the `setStyleSlots` call (line
 ## Done criteria
 
 ```bash
-pnpm -F @open-grid/react build         # exits 0
-pnpm -F @open-grid/react test          # all tests pass including new styleRules.test.ts
+pnpm -F @eregister/open-grid-react build         # exits 0
+pnpm -F @eregister/open-grid-react test          # all tests pass including new styleRules.test.ts
 pnpm dev:demo                          # RealtimeDashboard and CalculationsArena styling unchanged
 ```
 
 - `styleRules.test.ts` has ≥ 12 test cases.
 - `api.setStyleSlots` is no longer called in `RealtimeDashboard.tsx` or `CalculationsArena.tsx`.
 - Both demo pages pass `styleRules` via `useMemo`.
-- `StyleRule`, `RowStyleRule`, `CellStyleRule`, `compileStyleRules` are all exported from `@open-grid/react`.
+- `StyleRule`, `RowStyleRule`, `CellStyleRule`, `compileStyleRules` are all exported from `@eregister/open-grid-react`.
 
 ---
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Grid } from '@open-grid/react';
-import type { ColumnDef, GridApi, GridReadyEvent } from '@open-grid/react';
+import { Grid } from '@eregister/open-grid-react';
+import type { ColumnDef, GridApi, GridReadyEvent } from '@eregister/open-grid-react';
 
 interface FinancialRow {
 	id: string;

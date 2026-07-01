@@ -7,8 +7,8 @@
  * badge should show ≤ 20 columns regardless of horizontal scroll position.
  */
 import React, { useState, useCallback, useEffect } from 'react';
-import { Grid } from '@open-grid/react';
-import type { ColumnDef, GridApi, GridReadyEvent } from '@open-grid/react';
+import { Grid } from '@eregister/open-grid-react';
+import type { ColumnDef, GridApi, GridReadyEvent } from '@eregister/open-grid-react';
 import { Eye, Columns, SlidersHorizontal } from 'lucide-react';
 
 // ─── Config ──────────────────────────────────────────────────────────────────

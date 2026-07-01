@@ -1,7 +1,7 @@
 import React from 'react';
 import { Zap, Filter, ArrowDownAZ, ArrowUpAZ, Keyboard, Layers, HelpCircle, RefreshCw, GripVertical, MoveLeft, MoveRight } from 'lucide-react';
-import type { GridApi } from '@open-grid/react';
-import { normalizeCapabilityResult } from '@open-grid/react';
+import type { GridApi } from '@eregister/open-grid-react';
+import { normalizeCapabilityResult } from '@eregister/open-grid-react';
 import { GridPageType, LatencyProfiler } from './GridShared';
 
 // ============================================================================

@@ -50,7 +50,7 @@ The grid does not need dishonest fake parity. It does need one explicit integrit
 | Purpose                 | Command                                                                                                                                                                                                                        | Expected on success |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
 | Architecture gate       | `corepack pnpm run test:architecture`                                                                                                                                                                                          | exit 0              |
-| Core tests              | `corepack pnpm --filter @open-grid/core test`                                                                                                                                                                                  | exit 0              |
+| Core tests              | `corepack pnpm --filter @eregister/open-grid-core test`                                                                                                                                                                                  | exit 0              |
 | Workspace tests         | `corepack pnpm run test`                                                                                                                                                                                                       | exit 0              |
 | Build/typecheck         | `corepack pnpm run build`                                                                                                                                                                                                      | exit 0              |
 | Focused integrity tests | `C:\Users\rishi\witbybit\open-grid\node_modules\.bin\vitest.cmd run packages/core/src/features/dataIntegrity/GridDataIntegrityManager.test.ts packages/core/src/store.test.ts packages/core/src/rowModel.capabilities.test.ts` | all pass            |
@@ -112,7 +112,7 @@ Refactor the provider setup so integrity no longer depends on three ad hoc provi
 
 It is acceptable to keep multiple implementations internally if the public/runtime contract becomes single, explicit, and testable. It is not acceptable to keep three behaviorally drifting providers with no shared authority model.
 
-**Verify**: `corepack pnpm --filter @open-grid/core test` -> exit 0
+**Verify**: `corepack pnpm --filter @eregister/open-grid-core test` -> exit 0
 
 ### Step 3: Fail early for unsupported integrity/row-model combinations
 

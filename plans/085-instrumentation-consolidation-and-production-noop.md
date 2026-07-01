@@ -101,9 +101,9 @@ Benchmark no-op instrumentation versus instrumentation disabled at compile time 
 ## Verification gate
 
 ```text
-pnpm -F @open-grid/core build && pnpm -F @open-grid/core test
-pnpm -F @open-grid/core test -- performance
-pnpm -F @open-grid/react build && pnpm -F @open-grid/react test
+pnpm -F @eregister/open-grid-core build && pnpm -F @eregister/open-grid-core test
+pnpm -F @eregister/open-grid-core test -- performance
+pnpm -F @eregister/open-grid-react build && pnpm -F @eregister/open-grid-react test
 ```
 
 Add tests for metric parity, no-op stability, bounded histories, reset behavior, compatibility render stats, and absence of old direct counter fields through architecture guards.

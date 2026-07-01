@@ -101,9 +101,9 @@ Delivered:
 
 Verification completed:
 
-- `corepack pnpm --filter @open-grid/core exec vitest run src/boundary.test.ts src/gridHost.test.ts src/gridHost.adversarial.test.ts src/engine/architectureGuards.test.ts`
-- `corepack pnpm --filter @open-grid/core exec vitest run src/persistence/statePersistence.test.ts src/store.test.ts`
-- `corepack pnpm --filter @open-grid/core build`
+- `corepack pnpm --filter @eregister/open-grid-core exec vitest run src/boundary.test.ts src/gridHost.test.ts src/gridHost.adversarial.test.ts src/engine/architectureGuards.test.ts`
+- `corepack pnpm --filter @eregister/open-grid-core exec vitest run src/persistence/statePersistence.test.ts src/store.test.ts`
+- `corepack pnpm --filter @eregister/open-grid-core build`
 
 ## Completion gate
 

@@ -1,4 +1,4 @@
-import { GridApi, GridNavigationHandle, GridNavigationOptions, GridStateSnapshot, registerGridNavigation } from '@open-grid/core';
+import { GridApi, GridNavigationHandle, GridNavigationOptions, GridStateSnapshot, registerGridNavigation } from '@eregister/open-grid-core';
 import { useCallback, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
 import { GridApiContext } from './gridContext.js';
 

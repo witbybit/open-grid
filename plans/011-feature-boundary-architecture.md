@@ -30,7 +30,7 @@ The current implementation has good building blocks, but ownership is still too 
 - `packages/core/src/store.ts` is 1600+ lines. It exports public types, state slices, validation helpers, `GridApi`, `InternalGridApi`, and the `GridStore` implementation from one file.
 - `packages/core/src/engine/GridEngine.ts` is 1000+ lines. It owns column mutations, sorting, filtering, grouping, editing, row selection, subscriptions, formula invalidation, derived state, invalidation, event dispatch, and render requests.
 - `packages/core/src/createGrid.ts` manually mirrors every public API method into a frozen facade.
-- `packages/react/src/OpenGrid.tsx` and `packages/react/src/GridPortal.tsx` import `@open-grid/core/internal` for routine adapter work.
+- `packages/react/src/OpenGrid.tsx` and `packages/react/src/GridPortal.tsx` import `@eregister/open-grid-core/internal` for routine adapter work.
 
 Evidence:
 
@@ -122,7 +122,7 @@ React adapter code still relies on internal core types and store access:
 
 ```ts
 // packages/react/src/OpenGrid.tsx:16
-import { InternalColumnDef, GridHost, mountGridHost, getStoreFromApi } from '@open-grid/core/internal';
+import { InternalColumnDef, GridHost, mountGridHost, getStoreFromApi } from '@eregister/open-grid-core/internal';
 
 // packages/react/src/OpenGrid.tsx:380
 const visualRow = Number.isFinite(rowIndex) ? getStoreFromApi(api).getVisualRow(rowIndex) : null;
@@ -131,7 +131,7 @@ const visualRow = Number.isFinite(rowIndex) ? getStoreFromApi(api).getVisualRow(
 const access = getStoreFromApi(api).getCellAccess(pointer.rowId, pointer.colField);
 
 // packages/react/src/GridPortal.tsx:24
-import type { InternalColumnDef, InternalGridApi } from '@open-grid/core/internal';
+import type { InternalColumnDef, InternalGridApi } from '@eregister/open-grid-core/internal';
 
 // packages/react/src/GridPortal.tsx:132
 const iCol = col as InternalColumnDef | undefined;
@@ -186,7 +186,7 @@ export interface GridChange<TRowData = unknown> {
 If the event typing becomes awkward, prefer a small helper method per event over weakening the whole contract to `any`.
 
 3. **Framework adapters use a stable host adapter contract**
-    - Keep `@open-grid/core/internal` for renderer mounting, but stop requiring React to recover `GridStore` for common interactions.
+    - Keep `@eregister/open-grid-core/internal` for renderer mounting, but stop requiring React to recover `GridStore` for common interactions.
     - Add adapter-facing methods to `GridHost` or a new `GridAdapterHandle`, not to the public `GridApi`.
     - Examples: `getCellPointerFromElement`, `getCellAccessFromElement`, `getGroupVisibleDescendantRowIds`, `isImperativeRendererColumn`.
 
@@ -194,10 +194,10 @@ If the event typing becomes awkward, prefer a small helper method per event over
 
 | Purpose      | Command                                                                                                               | Expected |
 | ------------ | --------------------------------------------------------------------------------------------------------------------- | -------- |
-| Core build   | `corepack pnpm --filter @open-grid/core build`                                                                        | exit 0   |
-| Core tests   | `corepack pnpm --filter @open-grid/core test`                                                                         | exit 0   |
-| React build  | `corepack pnpm --filter @open-grid/react build`                                                                       | exit 0   |
-| React tests  | `corepack pnpm --filter @open-grid/react test`                                                                        | exit 0   |
+| Core build   | `corepack pnpm --filter @eregister/open-grid-core build`                                                                        | exit 0   |
+| Core tests   | `corepack pnpm --filter @eregister/open-grid-core test`                                                                         | exit 0   |
+| React build  | `corepack pnpm --filter @eregister/open-grid-react build`                                                                       | exit 0   |
+| React tests  | `corepack pnpm --filter @eregister/open-grid-react test`                                                                        | exit 0   |
 | Demo build   | `corepack pnpm --filter demo-app build`                                                                               | exit 0   |
 | Format check | `corepack pnpm exec prettier --check packages/core/src packages/react/src plans/011-feature-boundary-architecture.md` | exit 0   |
 
@@ -262,8 +262,8 @@ Required test coverage:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core test
-corepack pnpm --filter @open-grid/react test
+corepack pnpm --filter @eregister/open-grid-core test
+corepack pnpm --filter @eregister/open-grid-react test
 ```
 
 Expected: exit 0. Tests may initially exercise the current implementation, not the future one.
@@ -300,8 +300,8 @@ Done criteria:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core exec vitest run src/engine/GridChangeApplier.test.ts
-corepack pnpm --filter @open-grid/core build
+corepack pnpm --filter @eregister/open-grid-core exec vitest run src/engine/GridChangeApplier.test.ts
+corepack pnpm --filter @eregister/open-grid-core build
 ```
 
 Expected: exit 0.
@@ -354,8 +354,8 @@ Done criteria:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core exec vitest run src/store.test.ts src/boundary.test.ts src/engine/GridChangeApplier.test.ts
-corepack pnpm --filter @open-grid/core build
+corepack pnpm --filter @eregister/open-grid-core exec vitest run src/store.test.ts src/boundary.test.ts src/engine/GridChangeApplier.test.ts
+corepack pnpm --filter @eregister/open-grid-core build
 ```
 
 Expected: exit 0.
@@ -394,8 +394,8 @@ Done criteria:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core exec vitest run src/rowModel.test.ts src/rows/stages/groupStage.test.ts src/rows/stages/flattenStage.test.ts src/renderer/layoutPlan.test.ts
-corepack pnpm --filter @open-grid/core test
+corepack pnpm --filter @eregister/open-grid-core exec vitest run src/rowModel.test.ts src/rows/stages/groupStage.test.ts src/rows/stages/flattenStage.test.ts src/renderer/layoutPlan.test.ts
+corepack pnpm --filter @eregister/open-grid-core test
 ```
 
 Expected: exit 0.
@@ -429,15 +429,15 @@ Done criteria:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core exec vitest run src/store.test.ts src/models/SelectionModel.test.ts
-corepack pnpm --filter @open-grid/react test
+corepack pnpm --filter @eregister/open-grid-core exec vitest run src/store.test.ts src/models/SelectionModel.test.ts
+corepack pnpm --filter @eregister/open-grid-react test
 ```
 
 Expected: exit 0.
 
 ### Phase 5: Introduce an adapter-facing host contract
 
-React currently reaches into `@open-grid/core/internal` for common tasks. Replace common store reach-throughs with a stable host/adapter handle.
+React currently reaches into `@eregister/open-grid-core/internal` for common tasks. Replace common store reach-throughs with a stable host/adapter handle.
 
 Add to `packages/core/src/gridHost.ts` or a new adjacent module:
 
@@ -459,21 +459,21 @@ Migrate:
 - `packages/react/src/GridPortal.tsx` imperative renderer capability checks.
 - `packages/react/src/chart/GridChartOverlay.tsx` store access if it only needs read-only row/cell state that can be represented by the adapter/public API.
 
-Do not remove `@open-grid/core/internal` entirely in this phase; React may still need `mountGridHost`, `GridHost`, and internal column type imports until the host contract is complete.
+Do not remove `@eregister/open-grid-core/internal` entirely in this phase; React may still need `mountGridHost`, `GridHost`, and internal column type imports until the host contract is complete.
 
 Done criteria:
 
 - `OpenGrid.tsx` no longer calls `getStoreFromApi(api)`.
 - `GridPortal.tsx` no longer casts the public api to `InternalGridApi`.
-- Any remaining `@open-grid/core/internal` imports in React are limited to renderer mounting or documented adapter-only types.
+- Any remaining `@eregister/open-grid-core/internal` imports in React are limited to renderer mounting or documented adapter-only types.
 - Boundary tests assert public `GridApi` still has no hidden store/engine methods.
 
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core test
-corepack pnpm --filter @open-grid/react test
-corepack pnpm --filter @open-grid/react build
+corepack pnpm --filter @eregister/open-grid-core test
+corepack pnpm --filter @eregister/open-grid-react test
+corepack pnpm --filter @eregister/open-grid-react build
 ```
 
 Expected: exit 0.
@@ -518,10 +518,10 @@ Done criteria:
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core build
-corepack pnpm --filter @open-grid/core test
-corepack pnpm --filter @open-grid/react build
-corepack pnpm --filter @open-grid/react test
+corepack pnpm --filter @eregister/open-grid-core build
+corepack pnpm --filter @eregister/open-grid-core test
+corepack pnpm --filter @eregister/open-grid-react build
+corepack pnpm --filter @eregister/open-grid-react test
 ```
 
 Expected: exit 0.
@@ -534,7 +534,7 @@ Required guardrails:
 
 - A test that fails if `packages/core/src/engine/GridEngine.ts` grows above 800 lines.
 - A test that fails if `packages/core/src/store.ts` grows above 900 lines after Phase 6.
-- A boundary test that lists the allowed `@open-grid/core/internal` imports from React and fails on new `getStoreFromApi` usage outside approved files.
+- A boundary test that lists the allowed `@eregister/open-grid-core/internal` imports from React and fails on new `getStoreFromApi` usage outside approved files.
 - A test or lint-like script that forbids new direct `stateManager.setState` calls in feature-adjacent files except inside feature controllers, `StateManager`, and a short allowlist.
 
 Do not add a new lint dependency. Implement these as Vitest tests using Node `fs` reads if needed.
@@ -542,8 +542,8 @@ Do not add a new lint dependency. Implement these as Vitest tests using Node `fs
 Verification:
 
 ```sh
-corepack pnpm --filter @open-grid/core test
-corepack pnpm --filter @open-grid/react test
+corepack pnpm --filter @eregister/open-grid-core test
+corepack pnpm --filter @eregister/open-grid-react test
 corepack pnpm --filter demo-app build
 ```
 

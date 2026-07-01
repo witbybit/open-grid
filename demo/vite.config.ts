@@ -6,7 +6,7 @@ export default defineConfig({
 	plugins: [react()],
 	resolve: {
 		alias: {
-			'@open-grid/react': resolve(__dirname, '../packages/react/src/index.ts'),
+			'@eregister/open-grid-react': resolve(__dirname, '../packages/react/src/index.ts'),
 		},
 		dedupe: ['react', 'react-dom'],
 	},

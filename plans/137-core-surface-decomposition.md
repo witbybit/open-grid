@@ -29,7 +29,7 @@ Even with better ownership, the core will drift again if `GridEngine`, `GridStor
 | Purpose           | Command                                       | Expected on success |
 | ----------------- | --------------------------------------------- | ------------------- |
 | Architecture gate | `corepack pnpm run test:architecture`         | exit 0              |
-| Core tests        | `corepack pnpm --filter @open-grid/core test` | exit 0              |
+| Core tests        | `corepack pnpm --filter @eregister/open-grid-core test` | exit 0              |
 | Workspace tests   | `corepack pnpm run test`                      | exit 0              |
 | Build/typecheck   | `corepack pnpm run build`                     | exit 0              |
 
@@ -75,7 +75,7 @@ Extract stable sub-owners for:
 
 Avoid helper files that still depend on the full `GridEngine` object for everything; extract real ownership boundaries.
 
-**Verify**: `corepack pnpm --filter @open-grid/core test` -> exit 0
+**Verify**: `corepack pnpm --filter @eregister/open-grid-core test` -> exit 0
 
 ### Step 3: Separate the public API into conceptual surfaces
 
