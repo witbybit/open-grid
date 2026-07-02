@@ -179,7 +179,10 @@ function getCheapCellText<TRowData>(
 	if (isScrolling) {
 		const cachedVal = deps.engine.data.getCachedDisplayValue(node.id, col.field);
 		if (cachedVal !== undefined) return col.valueFormatter ? applyValueFormatter(col, cachedVal, node) : cachedVal;
-		return cellSlot?.lastFormattedValue ?? '';
+		// Warm DOM may accelerate only when it still belongs to this exact row/column — otherwise
+		// it's a different row's leftover text and must not be shown as a stand-in for this one.
+		const isSameIdentity = !!cellSlot && cellSlot.rowId === node.id && cellSlot.colField === col.field;
+		return isSameIdentity ? cellSlot!.lastFormattedValue ?? '' : '';
 	}
 	if (col.valueGetter || deps.engine.hasFormula(node.id, col.field)) {
 		const val = deps.engine.data.getCellValue(node.id, col.field);
@@ -200,7 +203,11 @@ function getScrollMountValue<TRowData>(
 	if (col.valueGetter || deps.engine.hasFormula(node.id, col.field)) {
 		return '';
 	}
-	return node.data ? (node.data as Record<string, unknown>)[col.field] : (cellSlot?.lastFormattedValue ?? '');
+	if (node.data) return (node.data as Record<string, unknown>)[col.field];
+	// No row data at all (e.g. a loading placeholder row) — warm DOM may only stand in for this
+	// exact row/column identity, never for whatever row previously occupied this slot.
+	const isSameIdentity = !!cellSlot && cellSlot.rowId === node.id && cellSlot.colField === col.field;
+	return isSameIdentity ? cellSlot!.lastFormattedValue ?? '' : '';
 }
 
 /**

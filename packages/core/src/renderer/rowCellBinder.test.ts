@@ -2712,8 +2712,78 @@ describe('bindCellFull', () => {
 		expect(snapshotStore.get('r1:name').frozenRowHeight).toBe(40);
 	});
 
-	describe('warm DOM cannot authorize correctness (adversarial row rebind)', () => {
-		it('does not show a previous row primitive text on a rebound slot when no fresh snapshot exists', () => {
+	it('does not fall back to a rebound slot\'s previous row text when the cache misses during a scroll-adjacent full bind', () => {
+		// getCheapCellText's isScrolling branch intentionally avoids a real getCellValue call and
+		// falls back to warm DOM as a last resort when the authoritative cache misses. That warm
+		// DOM must belong to the SAME row/column identity — otherwise this full bind (which is
+		// establishing row B's real content) would show row A's leftover text.
+		const cellSlot = new CellSlot<{ id: string; name: string }>(document.createElement('div'));
+		// Simulate the slot being warm from a previous row A occupant.
+		cellSlot.update(0, 'name', 0, 'rowA', 0, -1, 100, 'og-cell', 'text', undefined, 'Stale Row A Value', undefined);
+
+		const engine = {
+			cellAccess: {
+				get: vi.fn(() => ({ isFocused: false, isSelected: false, isEditing: false, isLoading: false, value: 'Row B', rawValue: 'Row B' })),
+			},
+			insights: { getCellDecorations: vi.fn(() => []), getVersion: vi.fn(() => 0) },
+			selectionVersion: 0,
+			rowVersions: { get: vi.fn(() => 1) },
+			cellDisplaySnapshots: { get: vi.fn(() => undefined), set: vi.fn() },
+			data: { getCachedDisplayValue: vi.fn(() => undefined) },
+			hasFormula: vi.fn(() => false),
+			getCheapDisplayValue: vi.fn(() => ''),
+		};
+
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: engine as any,
+			cellRenderer: { showPortalContent: vi.fn(), ensureLoadingSkeleton: vi.fn() } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => false), mountCell: vi.fn() } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => false,
+			getIsScrollFrameActive: () => false,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: vi.fn(),
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: vi.fn(),
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellFull(deps, {
+			cellSlot,
+			slotId: 'slot-1',
+			slotGeneration: 1,
+			node: { id: 'rowB', data: { id: 'rowB', name: 'Row B Value' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name' } as any,
+			lane: 'center',
+			pinRightBaseLeft: 0,
+			plan: { colLefts: [0], colWidths: [100], columnPlans: [{ isCustom: false, mode: 'primitive' }] } as any,
+			state: { globalVersion: 1, styleRules: undefined } as any,
+			// isScrolling: true forces getCheapCellText past the authoritative getCellValue path,
+			// straight to its cache-or-warm-DOM fallback — the exact branch under test.
+			ctx: { isScrolling: true } as any,
+		});
+
+		expect(cellSlot.lastFormattedValue).not.toBe('Stale Row A Value');
+		expect(cellSlot.lastFormattedValue).toBe('');
+	});
+});
+
+// This targets bindCellDuringScroll, not bindCellFull — kept as its own top-level describe so the
+// test names accurately reflect which binder function they exercise.
+describe('warm DOM cannot authorize correctness (adversarial row rebind)', () => {
+	it('does not show a previous row primitive text on a rebound slot when no fresh snapshot exists', () => {
 			const dirty = vi.fn();
 			const cellSlot = new CellSlot(document.createElement('div'));
 			// Simulate a slot that was previously bound to row A and is warm with row A's content.
@@ -2877,4 +2947,4 @@ describe('bindCellFull', () => {
 			expect(cellSlot.lastContentMode).toBe('empty');
 		});
 	});
-});
+
