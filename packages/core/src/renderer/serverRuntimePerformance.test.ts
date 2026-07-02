@@ -627,6 +627,66 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		});
 	});
 
+	// THE no-semantic-scroll contract (Phase 9 of the renderer hardening plan): every semantic-read/
+	// mount counter listed here must be exactly zero across an active scroll frame, no matter how
+	// feature-rich the columns are. The scattered per-scenario assertions elsewhere in this file and
+	// in runtimePerformance.test.ts/renderEngine.test.ts each prove a slice of this; this test is the
+	// single, hard-to-miss place that proves the WHOLE list together against one maximally feature-rich
+	// grid (valueGetters, formula-driven columns, custom renderers of every scroll mode, registered
+	// insight decorations, pinned columns, and a still-loading tail) across vertical, horizontal, and
+	// diagonal scroll. If a future change makes any of these non-zero, it must show up here first.
+	it('THE no-semantic-scroll contract: every semantic-read/mount counter stays zero across vertical, horizontal, and diagonal scroll', async () => {
+		const grid = await createServerAuditGrid({
+			rows: 50_000,
+			cols: 200,
+			configureStore: (store) => {
+				store.setPinnedColumns({ left: 1, right: 1 });
+				store.engine.insights.register({
+					id: 'no-semantic-scroll-contract',
+					getCellDecorations: (_rowId, colField) => {
+						if (colField !== 'id') return [];
+						return [{ layerId: 'no-semantic-scroll-contract', kind: 'validationError', className: 'og-cell-validation-error', title: 'Review' }];
+					},
+				});
+			},
+		});
+		grid.store.engine.requestInsightRepaint();
+		await flushAnimationFrame();
+
+		function assertContract(): void {
+			const stats = grid.renderer.getRenderStats();
+			expect(stats.getCellValueCallsDuringScroll).toBe(0);
+			expect(stats.valueGetterCallsDuringScroll).toBe(0);
+			expect(stats.formulaCallsDuringScroll).toBe(0);
+			expect(stats.customRendererMountsDuringScroll).toBe(0);
+			expect(stats.cellClassComputesDuringScroll).toBe(0);
+			expect(stats.integrityComputesDuringScroll).toBe(0);
+			expect(stats.focusCallsDuringScroll).toBe(0);
+		}
+
+		// Vertical
+		grid.renderer.resetRenderStats();
+		await browserScrollTo(grid, 400_000, 0);
+		assertContract();
+
+		// Horizontal
+		grid.renderer.resetRenderStats();
+		await browserScrollTo(grid, 400_000, 9_000);
+		assertContract();
+
+		// Diagonal (both axes move in the same frame)
+		grid.renderer.resetRenderStats();
+		await browserScrollTo(grid, 40_000, 1_500);
+		assertContract();
+
+		// Near the loading tail — rows not yet resolved by the mock datasource are still in flight.
+		grid.renderer.resetRenderStats();
+		await browserScrollTo(grid, 0, 0);
+		assertContract();
+
+		cleanupGrid(grid);
+	}, 20_000);
+
 	it('mounts the audit-ledger server grid at million-row scale without expanding rendered DOM beyond caps', async () => {
 		const grid = await createServerAuditGrid({ rows: 1_000_000, cols: 1200 });
 
