@@ -293,4 +293,43 @@ describe('HeaderPopoverMenu', () => {
 
 		nameMenuBtn.click();
 	});
+
+	it('hides "Group by Column" when canGroup returns false, even though enableRowGroup is not set', () => {
+		store.setColumns([
+			{ field: 'id', header: 'ID', canGroup: () => false },
+			{ field: 'name', header: 'Name' },
+			{ field: 'price', header: 'Price' },
+		]);
+
+		engine.unmount();
+		engine.mount(container);
+
+		// "id" is groupable by enableRowGroup's default, but explicitly denied via canGroup.
+		const idCell = Array.from(container.querySelectorAll('.og-header-cell')).find(
+			(el) => (el as HTMLElement).dataset.colField === 'id'
+		) as HTMLElement;
+		const idMenuBtn = idCell.querySelector('.og-header-menu-button') as HTMLDivElement;
+		idMenuBtn.click();
+
+		let popover = document.querySelector('.og-header-popover') as HTMLDivElement;
+		expect(popover).not.toBeNull();
+		const idGroupItems = Array.from(popover.querySelectorAll('.og-popover-item')).filter((el) => el.textContent?.includes('Group by Column'));
+		expect(idGroupItems.length).toBe(0);
+
+		idMenuBtn.click();
+		document.querySelectorAll('.og-header-popover').forEach((el) => el.remove());
+
+		// "name" has no canGroup restriction — the item should still be present for comparison.
+		const nameCell = Array.from(container.querySelectorAll('.og-header-cell')).find(
+			(el) => (el as HTMLElement).dataset.colField === 'name'
+		) as HTMLElement;
+		const nameMenuBtn = nameCell.querySelector('.og-header-menu-button') as HTMLDivElement;
+		nameMenuBtn.click();
+
+		popover = document.querySelector('.og-header-popover') as HTMLDivElement;
+		const nameGroupItems = Array.from(popover.querySelectorAll('.og-popover-item')).filter((el) => el.textContent?.includes('Group by Column'));
+		expect(nameGroupItems.length).toBe(1);
+
+		nameMenuBtn.click();
+	});
 });
