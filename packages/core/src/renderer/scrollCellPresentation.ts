@@ -5,7 +5,23 @@ import type { CellSlot, CellContentMode } from './cellSlot.js';
 import type { CellDisplaySnapshot } from './cellDisplaySnapshot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { hasMountedDataVersionDrifted, type VisualFreshness } from './visualFreshness.js';
-import type { RowCellBinderDeps } from './rowCellBinder.js';
+
+/**
+ * Narrow, purpose-built dependency surface for the scroll presentation resolver — deliberately
+ * NOT `RowCellBinderDeps` (the full binder dependency bag). The resolver only ever needs
+ * read-only inspection of these three things; it must never gain access to the broader bag,
+ * which would make it easy to accidentally reach for a semantic read or a mount call. Testable
+ * without constructing the full binder.
+ */
+export interface ScrollCellPresentationDeps {
+	/** Read-only: does this cell currently have a portal host element mounted? */
+	getCellPortalHost(cell: HTMLDivElement): HTMLDivElement | null;
+	/** Read-only: the geometry-computed row height for the given row index, if known. */
+	getRowHeight(rowIndex: number): number | undefined;
+	/** Read-only: a cached cheap display value for the synthetic-impostor fallback — already
+	 *  exempt from the no-semantic-read counters (it's a cache lookup, not a value computation). */
+	getCheapDisplayValue(rowId: string, colField: string): string | undefined;
+}
 
 export function isPrimitiveSnapshotContent(snapshot: CellDisplaySnapshot | undefined): snapshot is CellDisplaySnapshot {
 	return !!snapshot && (snapshot.contentMode === 'text' || snapshot.contentMode === 'empty' || snapshot.contentMode === 'fallback');
@@ -16,7 +32,7 @@ export function isPortalSnapshotContent(snapshot: CellDisplaySnapshot | undefine
 }
 
 export function hasAuthoritativePortalHostContent<TRowData>(
-	deps: RowCellBinderDeps<TRowData>,
+	deps: ScrollCellPresentationDeps,
 	cellSlot: CellSlot<TRowData>,
 	portalKey: string | undefined
 ): boolean {
@@ -160,7 +176,7 @@ function buildCellPinClass(lane: 'left' | 'center' | 'right'): string {
  * no-semantic-read counters — see runtimePerformance.test.ts).
  */
 export function resolveScrollCellPresentation<TRowData>(
-	deps: RowCellBinderDeps<TRowData>,
+	deps: ScrollCellPresentationDeps,
 	input: ScrollCellPresentationInput<TRowData>
 ): ScrollCellPresentation {
 	const {
@@ -309,7 +325,7 @@ export function resolveScrollCellPresentation<TRowData>(
 	const portalImpostorSnapshot =
 		hasScrollImpostorCapability && !isEditing && !isFocused && snapshot && snapshot.contentMode === 'fallback' ? snapshot : undefined;
 	if (portalImpostorSnapshot) {
-		const currentRowHeight = deps.engine.geometry?.rowHeights?.[rowIndex];
+		const currentRowHeight = deps.getRowHeight(rowIndex);
 		const frozenHtmlValid =
 			portalImpostorSnapshot.frozenHtml &&
 			(portalImpostorSnapshot.frozenRowHeight === undefined || portalImpostorSnapshot.frozenRowHeight === currentRowHeight);
@@ -346,7 +362,7 @@ export function resolveScrollCellPresentation<TRowData>(
 	// Synthesis impostor: no snapshot, no live content, no freeze path — show cheap text stand-in
 	// so the scroll frame stays portal-free. Fidelity lane mounts the real portal post-scroll.
 	if (hasScrollImpostorCapability && !isEditing && !isFocused && !canFreezePortal) {
-		const genericCheap = deps.engine.getCheapDisplayValue?.(node.id, col.field) ?? '';
+		const genericCheap = deps.getCheapDisplayValue(node.id, col.field) ?? '';
 		const scrollImpostorFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollImpostor;
 		const cheapValue =
 			isWarmBindingVersionFresh && cellSlot.lastFormattedValue != null && cellSlot.lastContentMode !== 'portal'
@@ -427,7 +443,7 @@ export function resolveScrollCellPresentation<TRowData>(
 	// custom-live/custom-imperative/custom impostor-capable set) — this is exactly the case that used
 	// to fall through to a synchronous cold mount. Show the same cheap deterministic stand-in the
 	// impostor-capable path already uses, and let the fidelity lane mount the real renderer later.
-	const genericCheap = deps.engine.getCheapDisplayValue?.(node.id, col.field) ?? '';
+	const genericCheap = deps.getCheapDisplayValue(node.id, col.field) ?? '';
 	const fallbackScrollImpostorFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollImpostor;
 	const fallbackCheapValue =
 		isWarmBindingVersionFresh && cellSlot.lastFormattedValue != null && cellSlot.lastContentMode !== 'portal'

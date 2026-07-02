@@ -1,40 +1,32 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { CellSlot } from './cellSlot.js';
-import { resolveScrollCellPresentation, type ScrollCellPresentationInput } from './scrollCellPresentation.js';
-import type { RowCellBinderDeps } from './rowCellBinder.js';
+import { resolveScrollCellPresentation, type ScrollCellPresentationDeps, type ScrollCellPresentationInput } from './scrollCellPresentation.js';
+
+it('BOUNDARY: scrollCellPresentation.ts must not import RowCellBinderDeps or any broad binder dependency bag', () => {
+	const source = readFileSync(resolve(__dirname, 'scrollCellPresentation.ts'), 'utf-8');
+	// Check the actual import statements, not prose — this file's own doc comment on
+	// ScrollCellPresentationDeps legitimately names RowCellBinderDeps as the thing it is NOT.
+	const importLines = source.split('\n').filter((line) => /^\s*import\b/.test(line));
+	for (const line of importLines) {
+		expect(line).not.toContain("from './rowCellBinder.js'");
+		expect(line).not.toContain('RowCellBinderDeps');
+	}
+});
 
 /**
- * The resolver must never perform a DOM write, portal mount/release, or semantic read. Deps here
- * intentionally omit getCellValue/valueGetter/formula/style-rule/integrity hooks entirely — if the
- * resolver ever reached for one, the call would throw "not a function" and fail the test.
+ * The resolver must never perform a DOM write, portal mount/release, or semantic read — deliberately
+ * constructed from ONLY `ScrollCellPresentationDeps` (not the full binder dependency bag) to prove the
+ * resolver is testable in isolation. If the resolver ever reached for a semantic read/mount hook, there
+ * would be no such method here to call and the test would throw.
  */
-function makeDeps(overrides: Partial<RowCellBinderDeps<{ id: string; name: string }>> = {}): RowCellBinderDeps<{ id: string; name: string }> {
+function makeDeps(overrides: Partial<ScrollCellPresentationDeps> = {}): ScrollCellPresentationDeps {
 	return {
-		engine: {
-			getCheapDisplayValue: vi.fn(() => ''),
-			geometry: { rowHeights: [40] },
-		} as any,
-		cellRenderer: {} as any,
-		portalMountManager: {} as any,
-		selectionPaint: {} as any,
-		cellClassScratch: {} as any,
-		getViewportContainer: () => null,
-		getIsScrolling: () => true,
-		getIsScrollFrameActive: () => true,
-		programmaticScrollCell: null,
-		clearProgrammaticScrollCell: vi.fn(),
-		setDeferredFocusCell: vi.fn(),
-		applyFocus: vi.fn(),
-		isEditorInteractiveElement: () => false,
-		ensureCellPortalHost: vi.fn(),
 		getCellPortalHost: vi.fn(() => null),
-		markCellDirtyAfterScroll: vi.fn(),
-		releaseCellPortal: vi.fn(),
-		incrementStyleHookCallsDuringScroll: vi.fn(),
-		incrementCellsBoundDuringScroll: vi.fn(),
-		incrementCurrentScrollCellsWritten: vi.fn(),
-		getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		getRowHeight: vi.fn(() => 40),
+		getCheapDisplayValue: vi.fn(() => ''),
 		...overrides,
 	};
 }

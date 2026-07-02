@@ -26,7 +26,7 @@ import {
 	type CellDisplaySnapshot,
 } from './cellDisplaySnapshot.js';
 import { isVisualFresh } from './visualFreshness.js';
-import { resolveScrollCellPresentation, type ScrollCellPresentation } from './scrollCellPresentation.js';
+import { resolveScrollCellPresentation, type ScrollCellPresentation, type ScrollCellPresentationDeps } from './scrollCellPresentation.js';
 
 function buildCellPinClass(lane: 'left' | 'center' | 'right'): string {
 	if (lane === 'left') return 'og-cell og-cell-pinned-left';
@@ -639,8 +639,15 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		deps.incrementStyleHookCallsDuringScroll();
 	}
 
-	// 2. Resolve what to show — the only place that decides, never mutates.
-	const presentation = resolveScrollCellPresentation(deps, {
+	// 2. Resolve what to show — the only place that decides, never mutates. Deliberately adapted
+	// down to the resolver's narrow ScrollCellPresentationDeps here, not the full binder deps bag —
+	// see the type comment on ScrollCellPresentationDeps for why.
+	const scrollPresentationDeps: ScrollCellPresentationDeps = {
+		getCellPortalHost: deps.getCellPortalHost,
+		getRowHeight: (idx) => deps.engine.geometry?.rowHeights?.[idx],
+		getCheapDisplayValue: (rowId, colField) => deps.engine.getCheapDisplayValue?.(rowId, colField),
+	};
+	const presentation = resolveScrollCellPresentation(scrollPresentationDeps, {
 		cellSlot,
 		node,
 		rowIndex,
