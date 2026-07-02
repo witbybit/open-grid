@@ -20,6 +20,7 @@ export interface GridStoreHostFacade {
 	getAvailableThemes(): BuiltInThemeName[];
 	switchTheme(themeName: string): void;
 	mergeTheme(partial: Partial<ThemeTokens>): void;
+	setTheme(theme: ThemeTokens): void;
 	onThemeChange(listener: (theme: ThemeTokens) => void): () => void;
 	setContainerElement(c: HTMLElement): void;
 	getContainerElement(): HTMLElement | null;
@@ -115,6 +116,7 @@ export function createGridStoreHostFacade(deps: GridStoreHostFacadeDeps): GridSt
 			deps.getRuntimePortsState().theme.switchTheme(themeName);
 		},
 		mergeTheme: (partial) => deps.getRuntimePortsState().theme.mergeTheme(partial),
+		setTheme: (theme) => deps.getRuntimePortsState().theme.setTheme(theme),
 		onThemeChange: (listener) => deps.getRuntimePortsState().theme.onThemeChange(listener),
 		setContainerElement: (container) => deps.setContainerElementState(container),
 		getContainerElement: () => deps.getRuntimePortsState().renderer.getContainer(),

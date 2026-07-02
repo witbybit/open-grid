@@ -1,5 +1,6 @@
 import type {
 	FilterModel,
+	QuickFilterModel,
 	SortModel,
 	RowModel,
 	ClientStructuralRowModel,
@@ -204,6 +205,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			activeEdit: initialState.activeEdit || null,
 			sortModel: initialState.sortModel || null,
 			filterModel: initialState.filterModel || null,
+			quickFilterModel: initialState.quickFilterModel || null,
 			queryModel: initialState.queryModel || null,
 			getRowId: initialState.getRowId,
 			loading: initialState.loading,
@@ -225,6 +227,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			pagination: initialState.pagination,
 			expansion: initialState.expansion,
 			themeName: initialState.themeName,
+			themeOverrides: initialState.themeOverrides,
 			rowOverscanPx: initialState.rowOverscanPx ?? 400,
 			colBuffer: initialState.colBuffer ?? 2,
 			// Always normalize runtimeLimits so all callers can assume it exists.
@@ -489,6 +492,23 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public setFilterModel = (filterModel: FilterModel | null): void => {
 		this.engine.setFilterModel(filterModel);
+	};
+
+	public getQuickFilter = (): QuickFilterModel | null => {
+		return this.state.quickFilterModel ?? null;
+	};
+
+	/**
+	 * Search a single string across multiple columns at once — the "search box" pattern.
+	 * A row passes if ANY targeted column's display value contains `text` (case-insensitive).
+	 * Combines with any active `filterModel`/`queryModel` via AND. Pass an empty/whitespace-only
+	 * string (or omit it) to clear the quick filter.
+	 *
+	 * @param columnIds Column fields to search. Omit to search every displayed column.
+	 */
+	public setQuickFilter = (text: string, columnIds?: string[]): void => {
+		const trimmed = text.trim();
+		this.engine.setQuickFilterModel(trimmed ? { text: trimmed, columnIds } : null);
 	};
 
 	public getQueryModel = (): GridQueryModel | null => {
@@ -1085,6 +1105,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getAvailableThemes = (): BuiltInThemeName[] => this.hostFacade.getAvailableThemes();
 	public switchTheme = (themeName: string): void => this.hostFacade.switchTheme(themeName);
 	public mergeTheme = (partial: Partial<ThemeTokens>): void => this.hostFacade.mergeTheme(partial);
+	public setTheme = (theme: ThemeTokens): void => this.hostFacade.setTheme(theme);
 	public onThemeChange = (listener: (theme: ThemeTokens) => void): (() => void) => this.hostFacade.onThemeChange(listener);
 	public setContainerElement = (c: HTMLElement): void => this.hostFacade.setContainerElement(c);
 	public getContainerElement = (): HTMLElement | null => this.hostFacade.getContainerElement();

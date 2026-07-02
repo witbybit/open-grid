@@ -5,8 +5,9 @@ import { GridEventName } from '../api/GridEvents.js';
  * Renders the group-by strip above the column headers.
  *
  * Shows each current groupBy column as a draggable chip.  Supports:
- * - Drop-from-header: when the ColumnInteractionController is dragging a column
- *   with enableRowGroup !== false, the panel highlights as a valid drop target.
+ * - Drop-from-header: when the ColumnInteractionController is dragging a column that
+ *   passes the 'group' capability check (column.canGroup, enableRowGroup, and any
+ *   grid-level canGroup rule), the panel highlights as a valid drop target.
  *   On drop it calls engine.addGroupBy(colId, dropIndex).
  * - Chip reorder: mousedown on a chip starts a local drag that calls
  *   engine.moveGroupBy on mouseup.
@@ -90,8 +91,8 @@ export class GroupPanelRenderer<TRowData = unknown> {
 	// ── Column-header drag protocol (called by ColumnInteractionController) ────
 
 	/**
-	 * Called when a groupable column drag starts over the panel area.
-	 * Returns true if the panel accepted the drag (enableRowGroup !== false).
+	 * Called when a groupable column drag starts over the panel area. The caller
+	 * (ColumnInteractionController) has already gated this on the 'group' capability check.
 	 */
 	public onHeaderDragEnter(colId: string): void {
 		if (this._headerDragActive && this._headerDragColId === colId) return;

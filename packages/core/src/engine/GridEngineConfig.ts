@@ -1,7 +1,7 @@
 import type { ColumnDef, GridStyleRule } from '../columnDef.js';
 import type { GridCellPointer, GridSelectionState, RowSelectionOptions } from '../api/GridApi.js';
-import type { BuiltInThemeName } from '../renderer/themes.js';
-import type { SortModel, FilterModel } from '../rowModel.js';
+import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
+import type { SortModel, FilterModel, QuickFilterModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { GridCapabilitiesConfig } from '../capabilities/capabilityTypes.js';
 import type { GridDataIntegrityConfig } from '../features/dataIntegrity/integrityTypes.js';
@@ -20,10 +20,17 @@ export interface GridEngineConfig<TRowData = unknown> {
 	selectedRowIds?: string[];
 	sortModel?: SortModel | null;
 	filterModel?: FilterModel | null;
+	quickFilterModel?: QuickFilterModel | null;
 	queryModel?: GridQueryModel | null;
 	capabilities?: GridCapabilitiesConfig<TRowData>;
 	canPerformAction?: GridCapabilitiesConfig<TRowData>['canPerformAction'];
 	themeName?: BuiltInThemeName;
+	/**
+	 * Partial theme token overrides applied on top of `themeName` (or the default theme) when the
+	 * renderer mounts. Resolved atomically with the base theme, before first paint — no separate
+	 * imperative call needed. For changes after mount, use `GridApi.setTheme()`/`mergeTheme()`.
+	 */
+	themeOverrides?: Partial<ThemeTokens>;
 	activeEdit?: GridCellPointer | null;
 	loadingSkeletonCount?: number;
 	styleRules?: GridStyleRule<TRowData>[];

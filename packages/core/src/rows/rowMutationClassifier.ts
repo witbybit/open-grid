@@ -1,6 +1,6 @@
 import { getFieldRoot } from '../ids.js';
 import type { ColumnDef } from '../columnDef.js';
-import type { FilterModel } from '../filterModel.js';
+import type { FilterModel, QuickFilterModel } from '../filterModel.js';
 import type { SortModel } from '../rowModel.js';
 import type { AggregationDef } from './stages/aggregateStage.js';
 
@@ -34,6 +34,7 @@ export interface RowDependencyConfig<TData = unknown> {
 	columns: ColumnDef<TData>[];
 	sortModel: SortModel | null | undefined;
 	filterModel: FilterModel | null | undefined;
+	quickFilterModel?: QuickFilterModel | null;
 	groupBy: string[] | undefined;
 	aggDefs: AggregationDef<TData>[] | undefined;
 	/** Whether a tree-parent resolver (getParentId) is configured for this grid. */
@@ -82,7 +83,7 @@ export class RowDependencyRegistry<TData = unknown> {
 	opaqueStructuralDependency = false;
 
 	update(config: RowDependencyConfig<TData>): void {
-		const { columns, sortModel, filterModel, groupBy, aggDefs, hasTreeParent, treeParentDependencies } = config;
+		const { columns, sortModel, filterModel, quickFilterModel, groupBy, aggDefs, hasTreeParent, treeParentDependencies } = config;
 
 		// Build a field→column lookup for dependency expansion.
 		const colByField = new Map<string, ColumnDef<TData>>();
@@ -109,6 +110,20 @@ export class RowDependencyRegistry<TData = unknown> {
 				for (const dep of col.valueGetterDependencies) this.filterKeys.add(dep);
 			} else if (col?.valueGetter) {
 				this.opaqueStructuralDependency = true;
+			}
+		}
+		if (quickFilterModel && quickFilterModel.text.trim()) {
+			// Quick filter can span every column (or an explicit subset) — a value change on any
+			// targeted column could flip filter membership, so all of them are filter keys too.
+			const quickFilterFields = quickFilterModel.columnIds?.length ? quickFilterModel.columnIds : columns.map((c) => c.field);
+			for (const k of quickFilterFields) {
+				this.filterKeys.add(k);
+				const col = colByField.get(k);
+				if (col?.valueGetterDependencies) {
+					for (const dep of col.valueGetterDependencies) this.filterKeys.add(dep);
+				} else if (col?.valueGetter) {
+					this.opaqueStructuralDependency = true;
+				}
 			}
 		}
 

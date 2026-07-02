@@ -76,6 +76,19 @@ export type ColumnFilter = FilterCondition | CompoundFilterCondition;
 export type FilterModel = Record<string, ColumnFilter>;
 
 /**
+ * A single search string matched (case-insensitively, via substring containment) against
+ * multiple columns at once — the "search box" pattern, as distinct from FilterModel's
+ * per-column conditions. A row passes if ANY targeted column's display value contains the
+ * search text; combined with any active FilterModel/GridQueryModel entries via AND.
+ */
+export interface QuickFilterModel {
+	/** Search text. Empty/whitespace-only text matches every row. */
+	text: string;
+	/** Column fields to search. Omit or leave empty to search every displayed column. */
+	columnIds?: string[];
+}
+
+/**
  * Compute distinct cell values from an array of row nodes for a given column field.
  * Used by getColumnDistinctValues on GridEngine. Extracted here to keep GridEngine lean.
  */

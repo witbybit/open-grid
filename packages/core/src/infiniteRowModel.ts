@@ -30,6 +30,8 @@ export interface InfiniteGetRowsParams {
 	readonly endRow: number;
 	readonly sortModel: unknown;
 	readonly filterModel: unknown;
+	/** QuickFilterModel | null — a single search string to match across multiple columns server-side. */
+	readonly quickFilterModel: unknown;
 	readonly queryModel: unknown;
 }
 
@@ -107,7 +109,8 @@ export class InfiniteRowModelController<TData = unknown>
 
 		this.unsubscribers.push(
 			this.runtime.addEventListener(GridEventName.sortChanged, () => this.purgeCache()),
-			this.runtime.addEventListener(GridEventName.filterChanged, () => this.purgeCache())
+			this.runtime.addEventListener(GridEventName.filterChanged, () => this.purgeCache()),
+			this.runtime.addEventListener(GridEventName.quickFilterChanged, () => this.purgeCache())
 		);
 
 		this.fetchBlock(0);
@@ -286,6 +289,7 @@ export class InfiniteRowModelController<TData = unknown>
 				endRow,
 				sortModel: state.sortModel,
 				filterModel: state.filterModel,
+				quickFilterModel: state.quickFilterModel,
 				queryModel: state.queryModel,
 			});
 

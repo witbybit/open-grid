@@ -208,7 +208,10 @@ export class HeaderMenuController<TRowData = unknown> {
 		}
 
 		const isPinnable = column.canPin === undefined || normalizeCapabilityResult(column.canPin({ action: 'pin', colField: column.field })).allowed;
-		const isGroupable = column.enableRowGroup !== false;
+		// Routes through the full capability chain (column.canGroup, column.enableRowGroup, and any
+		// grid-level canGroup rule) rather than checking enableRowGroup alone, so canGroup: () => false
+		// on a column actually hides the "Group by Column" menu item.
+		const isGroupable = api.can('group', { colField: column.field }).allowed;
 
 		if (isPinnable || isGroupable) {
 			const pinGroupContainer = document.createElement('div');
@@ -325,13 +328,6 @@ export class HeaderMenuController<TRowData = unknown> {
 			input.value = currentFilterVal;
 			input.addEventListener('keydown', (e) => {
 				if (e.key === 'Enter') applyBtn.click();
-			});
-			input.addEventListener('input', () => {
-				if (this.filterDebounceTimer !== null) clearTimeout(this.filterDebounceTimer);
-				this.filterDebounceTimer = setTimeout(() => {
-					this.filterDebounceTimer = null;
-					applyBtn.click();
-				}, 300);
 			});
 			filterContainer.appendChild(input);
 

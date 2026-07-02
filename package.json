@@ -2,7 +2,7 @@
 	"name": "open-grid",
 	"private": true,
 	"version": "0.1.0-alpha.0",
-	"description": "Headless high-performance spreadsheet and grid engine",
+	"description": "High-performance spreadsheet and grid engine",
 	"packageManager": "pnpm@10.33.0",
 	"scripts": {
 		"build": "pnpm run build:packages && pnpm run build:demo",

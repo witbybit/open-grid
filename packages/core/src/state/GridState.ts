@@ -1,8 +1,8 @@
-import type { FilterModel, SortDirection, SortModel } from '../rowModel.js';
+import type { FilterModel, QuickFilterModel, SortDirection, SortModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { ColumnDef, GridStyleRule } from '../columnDef.js';
-import type { BuiltInThemeName } from '../renderer/themes.js';
+import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { GridSelectionState, ActiveEditState, RowSelectionOptions } from '../api/GridApi.js';
 import type {
@@ -35,8 +35,12 @@ export interface GridModelState<TRowData = unknown> {
 
 	sortModel: SortModel | null;
 	filterModel: FilterModel | null;
+	/** Single search string matched across multiple columns — the "search box" pattern. ANDed with filterModel/queryModel. */
+	quickFilterModel: QuickFilterModel | null;
 	queryModel: GridQueryModel | null;
 	themeName: BuiltInThemeName;
+	/** Partial theme token overrides applied on top of `themeName` when the renderer mounts. */
+	themeOverrides?: Partial<ThemeTokens>;
 
 	groupBy?: string[];
 	aggDefs?: AggregationDef<TRowData>[];

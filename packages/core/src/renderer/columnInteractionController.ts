@@ -232,7 +232,9 @@ export class ColumnInteractionController<TRowData = unknown> {
 		if (colField && this.groupPanel) {
 			const state = this.engine.stateManager.getState();
 			const col = state.columns.find((c) => c.field === colField);
-			const isGroupable = col?.enableRowGroup !== false;
+			// Full capability chain (column.canGroup, column.enableRowGroup, grid-level canGroup),
+			// not just the enableRowGroup boolean, so canGroup: () => false blocks the drag too.
+			const isGroupable = !!col && this.engine.capabilityManager.can('group', { colField }).allowed;
 			const overPanel = isGroupable && this.groupPanel.containsPoint(e.clientX, e.clientY);
 
 			if (overPanel !== this.columnDragOverGroupPanel) {

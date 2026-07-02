@@ -29,6 +29,8 @@ export interface ServerGetPageParams {
 	readonly pageSize: number;
 	readonly sortModel: unknown;
 	readonly filterModel: unknown;
+	/** QuickFilterModel | null — a single search string to match across multiple columns server-side. */
+	readonly quickFilterModel: unknown;
 	readonly queryModel: unknown;
 }
 
@@ -132,6 +134,10 @@ export class ServerPageRowModelController<TData = unknown>
 				this.fetchPage({ preserveVisibleRows: false });
 			}),
 			this.runtime.addEventListener(GridEventName.filterChanged, () => {
+				this.currentPage = 0;
+				this.fetchPage({ preserveVisibleRows: false });
+			}),
+			this.runtime.addEventListener(GridEventName.quickFilterChanged, () => {
 				this.currentPage = 0;
 				this.fetchPage({ preserveVisibleRows: false });
 			})
@@ -298,6 +304,7 @@ export class ServerPageRowModelController<TData = unknown>
 				pageSize,
 				sortModel: state.sortModel,
 				filterModel: state.filterModel,
+				quickFilterModel: state.quickFilterModel,
 				queryModel: state.queryModel,
 			});
 

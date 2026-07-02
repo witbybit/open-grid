@@ -1,5 +1,5 @@
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
-import type { FilterModel, SortModel } from '../rowModel.js';
+import type { FilterModel, QuickFilterModel, SortModel } from '../rowModel.js';
 import type { RowNode } from '../rowNode.js';
 import type { GridCellPointer, GridSelectionState, SelectionChangeResult, RowSelectionChangeResult, GridCellClickParams } from './GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
@@ -30,6 +30,7 @@ export enum GridEventName {
 	editStopped = 'editStopped',
 	enableStickyGroupRowsChanged = 'enableStickyGroupRowsChanged',
 	filterChanged = 'filterChanged',
+	quickFilterChanged = 'quickFilterChanged',
 	focusChanged = 'focusChanged',
 	groupByChanged = 'groupByChanged',
 	groupColumnAdded = 'groupColumnAdded',
@@ -98,6 +99,7 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.editStopped]: { rowId: string; colField: string; cancel: boolean };
 	[GridEventName.enableStickyGroupRowsChanged]: { enableStickyGroupRows: boolean | undefined };
 	[GridEventName.filterChanged]: { filterModel: FilterModel | null };
+	[GridEventName.quickFilterChanged]: { quickFilterModel: QuickFilterModel | null };
 	[GridEventName.focusChanged]: { focus: GridCellPointer | null; selection: GridSelectionState };
 	[GridEventName.groupByChanged]: { groupBy: string[] | undefined };
 	[GridEventName.groupColumnAdded]: { colId: string; index: number; groupBy: string[] };

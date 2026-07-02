@@ -38,7 +38,7 @@ import { CellAccessModel } from '../models/CellAccess.js';
 import { DagEngine, type FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
-import type { SortModel, FilterModel } from '../rowModel.js';
+import type { SortModel, FilterModel, QuickFilterModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import { InvalidationManager, type GridInvalidationReason } from '../renderer/invalidationManager.js';
 import { GridCommitKernel } from './GridChangeApplier.js';
@@ -341,8 +341,10 @@ export class GridEngine<TRowData = unknown> {
 			activeEdit: config.activeEdit || null,
 			sortModel: config.sortModel || null,
 			filterModel: config.filterModel || null,
+			quickFilterModel: config.quickFilterModel || null,
 			queryModel: config.queryModel || null,
 			themeName: config.themeName ?? 'dark',
+			themeOverrides: config.themeOverrides,
 			globalVersion: 0,
 			visibleRowRange: { startIdx: 0, endIdx: 0 },
 			visibleColRange: { startIdx: 0, endIdx: 0 },
@@ -898,6 +900,9 @@ export class GridEngine<TRowData = unknown> {
 	}
 	public setFilterModel(filterModel: FilterModel | null, undoable = true): void {
 		this.stateFeature.setFilterModel(filterModel, undoable);
+	}
+	public setQuickFilterModel(quickFilterModel: QuickFilterModel | null): void {
+		this.stateFeature.setQuickFilterModel(quickFilterModel);
 	}
 	public setQueryModel(queryModel: GridQueryModel | null): void {
 		this.stateFeature.setQueryModel(queryModel);
