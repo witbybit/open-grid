@@ -45,6 +45,11 @@ export interface RenderRuntimeStats {
 	reusableCellsSkippedDuringScroll: number;
 	styleHookCallsDuringScroll: number;
 	integrityComputesDuringScroll: number;
+	cellSlotsRetained: number;
+	cellSlotsEvictedDuringTopology: number;
+	cellSlotsCreatedDuringTopology: number;
+	cellSlotsReusedDuringTopology: number;
+	maxCellsByColumnIdPerRowSlot: number;
 	portalFlushChunks: number;
 	maxPortalOpsFlushedInOneChunk: number;
 	postScrollDecorationChunks: number;
@@ -112,6 +117,11 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
 		integrityComputesDuringScroll: 0,
+		cellSlotsRetained: 0,
+		cellSlotsEvictedDuringTopology: 0,
+		cellSlotsCreatedDuringTopology: 0,
+		cellSlotsReusedDuringTopology: 0,
+		maxCellsByColumnIdPerRowSlot: 0,
 		portalFlushChunks: 0,
 		maxPortalOpsFlushedInOneChunk: 0,
 		postScrollDecorationChunks: 0,
@@ -198,6 +208,11 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		reusableCellsSkippedDuringScroll: deps.runtimeStats.reusableCellsSkippedDuringScroll,
 		styleHookCallsDuringScroll: deps.runtimeStats.styleHookCallsDuringScroll,
 		integrityComputesDuringScroll: deps.runtimeStats.integrityComputesDuringScroll,
+		cellSlotsRetained: deps.runtimeStats.cellSlotsRetained,
+		cellSlotsEvictedDuringTopology: deps.runtimeStats.cellSlotsEvictedDuringTopology,
+		cellSlotsCreatedDuringTopology: deps.runtimeStats.cellSlotsCreatedDuringTopology,
+		cellSlotsReusedDuringTopology: deps.runtimeStats.cellSlotsReusedDuringTopology,
+		maxCellsByColumnIdPerRowSlot: deps.runtimeStats.maxCellsByColumnIdPerRowSlot,
 		rowsEnteredDuringScroll: deps.runtimeStats.rowsEnteredDuringScroll,
 		rowsExitedDuringScroll: deps.runtimeStats.rowsExitedDuringScroll,
 		rowsStayedDuringScroll: deps.runtimeStats.rowsStayedDuringScroll,

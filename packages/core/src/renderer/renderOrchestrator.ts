@@ -88,6 +88,11 @@ export interface RenderStats {
 	prewarmPasses?: number;
 	prewarmedCellSnapshots?: number;
 	integrityComputesDuringScroll?: number;
+	cellSlotsRetained?: number;
+	cellSlotsEvictedDuringTopology?: number;
+	cellSlotsCreatedDuringTopology?: number;
+	cellSlotsReusedDuringTopology?: number;
+	maxCellsByColumnIdPerRowSlot?: number;
 }
 
 /** Returns a zero-value RenderStats object. Used by GridStore.getRenderStats() when no render engine is mounted. */
@@ -179,6 +184,11 @@ export function createEmptyRenderStats(): RenderStats {
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
 		integrityComputesDuringScroll: 0,
+		cellSlotsRetained: 0,
+		cellSlotsEvictedDuringTopology: 0,
+		cellSlotsCreatedDuringTopology: 0,
+		cellSlotsReusedDuringTopology: 0,
+		maxCellsByColumnIdPerRowSlot: 0,
 	};
 }
 
@@ -264,6 +274,11 @@ export class RenderOrchestrator {
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
 		integrityComputesDuringScroll: 0,
+		cellSlotsRetained: 0,
+		cellSlotsEvictedDuringTopology: 0,
+		cellSlotsCreatedDuringTopology: 0,
+		cellSlotsReusedDuringTopology: 0,
+		maxCellsByColumnIdPerRowSlot: 0,
 		hotDomReleases: 0,
 		coldDomReleases: 0,
 		cellsPatchedPerScrollFrame: [],
@@ -399,6 +414,11 @@ export class RenderOrchestrator {
 		this.stats.reusableCellsSkippedDuringScroll = 0;
 		this.stats.styleHookCallsDuringScroll = 0;
 		this.stats.integrityComputesDuringScroll = 0;
+		this.stats.cellSlotsRetained = 0;
+		this.stats.cellSlotsEvictedDuringTopology = 0;
+		this.stats.cellSlotsCreatedDuringTopology = 0;
+		this.stats.cellSlotsReusedDuringTopology = 0;
+		this.stats.maxCellsByColumnIdPerRowSlot = 0;
 		this.stats.hotDomReleases = 0;
 		this.stats.coldDomReleases = 0;
 		this.stats.cellsPatchedPerScrollFrame = [];

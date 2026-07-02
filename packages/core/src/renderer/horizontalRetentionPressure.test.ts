@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
+import { CELL_SLOT_RETENTION_CONFIG } from './cellSlotRetention.js';
 
 interface WideRow {
 	id: string;
@@ -22,7 +23,7 @@ function createWideRows(count: number, colCount: number): WideRow[] {
 	});
 }
 
-function mountWideGrid(rows: number, cols: number) {
+function mountWideGrid(rows: number, cols: number, configureStore?: (store: GridStore<WideRow>) => void) {
 	// Run scroll-driven RAF work synchronously — jsdom never fires real RAF callbacks on its own.
 	vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
 		cb(0);
@@ -37,6 +38,7 @@ function mountWideGrid(rows: number, cols: number) {
 		defaultColWidth: 100,
 		getRowId: (row) => row.id,
 	});
+	configureStore?.(store);
 	const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 		rows: createWideRows(rows, cols),
 		columns: store.getState().columns,
@@ -67,8 +69,8 @@ function cleanup(grid: ReturnType<typeof mountWideGrid>): void {
 	vi.unstubAllGlobals();
 }
 
-describe('horizontal cell-slot retention pressure (characterization — Phase 5 will bound this)', () => {
-	it('grows cellsByColumnId per row slot proportionally to distinct columns scrolled through, with no eviction', () => {
+describe('horizontal cell-slot retention pressure (bounded by cellSlotRetention.ts)', () => {
+	it('bounds cellsByColumnId per row slot even after scrolling through far more distinct columns than the bound', () => {
 		// 3000 columns at 100px each — far more than fit in any single horizontal window.
 		const totalCols = 3000;
 		const grid = mountWideGrid(30, totalCols);
@@ -95,13 +97,15 @@ describe('horizontal cell-slot retention pressure (characterization — Phase 5 
 		const [slotAfterScroll] = grid.renderer.rowRenderer.activeRows.values();
 		const cellCountAfterScroll = slotAfterScroll.cellsByColumnId.size;
 
-		// Current reality: reconcileCellTopologyForScroll never evicts from cellsByColumnId —
-		// it only detaches DOM for off-window columns and keeps the CellSlot object forever.
-		// This assertion documents that unbounded growth, proportional to distinct columns
-		// visited, is what happens today. Phase 5 (cellSlotRetention.ts) replaces this with a
-		// bounded policy (visible + approach-band + pinned + small LRU); at that point this
-		// assertion must be replaced with an upper bound close to initialCellCount.
-		expect(cellCountAfterScroll).toBeGreaterThan(initialCellCount * 5);
+		// Without eviction, 20 non-overlapping windows would have retained on the order of
+		// 20 * initialCellCount (100+) distinct CellSlot objects forever. cellSlotRetention.ts
+		// bounds cellsByColumnId to the currently-needed set (visible + approach-band + pinned +
+		// focused) plus a small LRU tail of recently-exited columns — never the full history.
+		const bound = CELL_SLOT_RETENTION_CONFIG.maxRetainedCenterCellsPerRowSlot + CELL_SLOT_RETENTION_CONFIG.maxRecentlyExitedColumnsPerRowSlot;
+		expect(cellCountAfterScroll).toBeLessThanOrEqual(bound);
+		// Still grew somewhat from the initial mount (the LRU tail is doing real work, not just
+		// always sitting empty) — this isn't a trivial "always equals the visible window" bound.
+		expect(cellCountAfterScroll).toBeGreaterThan(initialCellCount);
 
 		cleanup(grid);
 	});
@@ -114,6 +118,34 @@ describe('horizontal cell-slot retention pressure (characterization — Phase 5 
 		expect(slot).toBeDefined();
 		// Viewport is 500px wide at 100px/col ⇒ ~5 visible columns, plus colBuffer on each side.
 		expect(slot.cellsByColumnId.size).toBeLessThan(20);
+		cleanup(grid);
+	});
+
+	it('never evicts pinned-left/right columns under retention pressure, even far from the visible window', () => {
+		const totalCols = 3000;
+		const grid = mountWideGrid(30, totalCols, (store) => store.setPinnedColumns({ left: 1, right: 1 }));
+
+		const scrollViewport = grid.container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		const [slot] = grid.renderer.rowRenderer.activeRows.values();
+		expect(slot.cellsByColumnId.has('c0')).toBe(true); // pinned-left
+		expect(slot.cellsByColumnId.has(`c${totalCols - 1}`)).toBe(true); // pinned-right
+
+		// Scroll far enough, across enough distinct windows, to blow well past the retention
+		// budget for ordinary center columns.
+		const totalScrollWidth = totalCols * 100 - 500;
+		for (let i = 1; i <= 20; i++) {
+			scrollViewport.scrollLeft = Math.floor((totalScrollWidth * i) / 20);
+			scrollViewport.dispatchEvent(new Event('scroll'));
+		}
+
+		const [slotAfterScroll] = grid.renderer.rowRenderer.activeRows.values();
+		expect(slotAfterScroll.cellsByColumnId.has('c0')).toBe(true);
+		expect(slotAfterScroll.cellsByColumnId.has(`c${totalCols - 1}`)).toBe(true);
+		// And they're still the correct physical cells for their pinned lane, not stale/recreated
+		// with the wrong identity.
+		expect(slotAfterScroll.leftCells[0]?.colField).toBe('c0');
+		expect(slotAfterScroll.rightCells[0]?.colField).toBe(`c${totalCols - 1}`);
+
 		cleanup(grid);
 	});
 });

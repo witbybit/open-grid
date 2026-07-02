@@ -223,6 +223,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 			onScrollCellVisited: this.runtimeArgs.incrementCurrentScrollCellsVisited,
 			onScrollCellPatched: this.runtimeArgs.incrementCurrentScrollCellsPatched,
 			onScrollCellWritten: this.runtimeArgs.incrementCurrentScrollCellsWritten,
+			retentionStats: this.deps.stateHost.renderStats,
 		};
 
 		this.rowRenderMaintenanceDeps = {
