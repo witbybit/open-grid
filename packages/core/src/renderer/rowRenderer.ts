@@ -14,20 +14,12 @@ import type { GridCellContentUnmount } from './IGridRenderer.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { RowSlot } from './rowSlot.js';
 import { RowSlotPool } from './rowSlotPool.js';
-import { reportRendererFault } from './rendererFaults.js';
 import { RowRendererRuntimeBridge } from './rowRendererRuntime.js';
 import { asVisibleBlockLoadCapableRowModel } from '../rowModel.js';
-import { compileStyleRules, evaluateDetailRowStyleRules, evaluateGroupRowStyleRules, evaluateRowStyleRules } from '../styling/styleRules.js';
+import { compileStyleRules } from '../styling/styleRules.js';
 import { PinnedContainerManager } from './pinnedContainerManager.js';
 import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
-
-// Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
-const ROW_KIND_BASE: Record<string, string> = {
-	loading: 'og-row og-row-loading',
-	group: 'og-row og-row-group',
-	detail: 'og-row og-row-detail',
-	footer: 'og-row og-row-footer',
-};
+import { resolveRowPresentation } from './rowPresentationResolver.js';
 import {
 	applyRenderWindowRuntimeLimits,
 	computeRenderWindow,
@@ -587,72 +579,26 @@ export class RowRenderer<TRowData = unknown> {
 			);
 
 			// ── Row class name ────────────────────────────────────────────────────────
-			let rowClassName = ROW_KIND_BASE[visualRow.kind] ?? 'og-row';
-			if (visualRow.kind === 'group') {
-				if (compiledStyleRules.hasGroupRowRules) {
-					try {
-						const customClass = evaluateGroupRowStyleRules(compiledStyleRules, visualRow);
-						if (customClass) rowClassName += ' ' + customClass;
-					} catch (e) {
-						reportRendererFault(this.engine, 'group-row-class', e, { rowId: visualRow.id, rowIndex: r });
-					}
+			const rowPresentation = resolveRowPresentation(
+				{ engine: this.engine, selectionPaint: this.selectionPaint },
+				{
+					visualRow,
+					rowIndex: r,
+					state,
+					compiledStyleRules,
+					isScrollFrameActive,
+					isRowRebind,
+					slotLastVisualRowId: slot.lastVisualRowId,
+					slotRowKind: slot.rowKind,
+					slotLastClassName: slot.lastClassName,
+					pinTopRows,
+					pinBottomRows,
+					rowCount: nextWindow.rowCount,
+					shouldDeferWarmRowVisualRefresh,
 				}
-			} else if (visualRow.kind === 'detail') {
-				if (compiledStyleRules.hasDetailRowRules) {
-					try {
-						const customClass = evaluateDetailRowStyleRules(compiledStyleRules, visualRow);
-						if (customClass) rowClassName += ' ' + customClass;
-					} catch (e) {
-						reportRendererFault(this.engine, 'detail-row-class', e, { rowId: visualRow.id, rowIndex: r });
-					}
-				}
-			} else if (visualRow.kind === 'data') {
-				const node = visualRow.node;
-				const canPreserveWarmRowClass =
-					isScrollFrameActive &&
-					!isRowRebind &&
-					slot.lastVisualRowId === visualRow.id &&
-					slot.rowKind === 'data' &&
-					slot.lastClassName !== '';
-				if (canPreserveWarmRowClass) {
-					rowClassName = slot.lastClassName;
-					if (shouldDeferWarmRowVisualRefresh) {
-						this.dirtyRowsAfterScroll.add(r);
-					}
-				} else {
-					const isFocusedRow = state.selection.focus?.rowId === node.id;
-					const isSelectedRow = !!state.selection.bounds && r >= state.selection.bounds.minRow && r <= state.selection.bounds.maxRow;
-					const isLoadingRow = this.engine.data.isRowLoading(node.id);
-
-					if (r < pinTopRows) rowClassName += ' og-row-pinned-top';
-					else if (r >= nextWindow.rowCount - pinBottomRows) rowClassName += ' og-row-pinned-bottom';
-
-					if (this.selectionPaint.hoveredRowIndex === r) rowClassName += ' og-row-hovered';
-					if (isSelectedRow || isFocusedRow) rowClassName += ' og-row-selected';
-					if (isFocusedRow) rowClassName += ' og-row-focused';
-					if (this.selectionPaint.selectedRowIdSet?.has(node.id)) rowClassName += ' og-row-node-selected';
-					if (isLoadingRow) rowClassName += ' og-row-loading';
-
-					if (isScrollFrameActive && compiledStyleRules.hasRowRules && node.data) {
-						this.dirtyRowsAfterScroll.add(r);
-					} else if (compiledStyleRules.hasRowRules && node.data) {
-						try {
-							const rs = this.selectionPaint.rowClassScratchRef;
-							rs.row = node.data;
-							rs.rowId = node.id;
-							rs.rowIndex = r;
-							rs.isFocused = isFocusedRow;
-							rs.isSelected = isSelectedRow || isFocusedRow;
-							rs.isLoading = isLoadingRow;
-							rs.selection = state.selection;
-							const customRowClass = evaluateRowStyleRules(compiledStyleRules, node.data, rs);
-							if (customRowClass) rowClassName += ' ' + customRowClass;
-						} catch (e) {
-							reportRendererFault(this.engine, 'row-class', e, { rowId: node.id, rowIndex: r });
-						}
-					}
-				}
-			}
+			);
+			const rowClassName = rowPresentation.className;
+			if (rowPresentation.markDirtyAfterScroll) this.dirtyRowsAfterScroll.add(r);
 
 			const prevSlotIdx = slot.visualIndex;
 			const rowUpdated = slot.update(r, visualRow.id, visualRow.kind as any, rowTop, rowHeight, rowClassName);

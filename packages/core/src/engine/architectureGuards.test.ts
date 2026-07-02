@@ -232,7 +232,9 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('row renderer style hook paths report faults through runtime diagnostics', () => {
-		const files = ['renderer/rowRenderer.ts', 'renderer/selectionPaintManager.ts'];
+		// rowRenderer.ts delegates row-class computation (incl. style-rule hook error handling) to
+		// rowPresentationResolver.ts — see Phase 8 renderer hardening.
+		const files = ['renderer/rowPresentationResolver.ts', 'renderer/selectionPaintManager.ts'];
 		for (const file of files) {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not use console.error for renderer style hooks`).not.toContain('console.error');
