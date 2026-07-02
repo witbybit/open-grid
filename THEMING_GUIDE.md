@@ -11,86 +11,116 @@ Open Grid provides a **modern, shadcn-style theming system** with:
 - ✅ Pre-built branded themes (Cool Blue, Warm Orange, Minimal Monochrome)
 - ✅ Runtime theme switching with zero configuration
 - ✅ System color scheme detection (prefers-color-scheme)
-- ✅ Custom theme creation
+- ✅ Custom theme composition
 - ✅ Partial theme merging
 - ✅ Event-based theme change notifications
 - ✅ CSS-variable based (no JS-in-CSS overhead)
 
+All theme interaction from consumer code goes through `GridApi` — the same `api` object you get from `onGridReady` or `useGridApi()`. There is no separate theming object to construct or manage; the grid owns its own theme state internally and `GridApi` is the front door to it.
+
 ## Quick Start
 
-### 1. Using Built-In Themes
+### 1. Setting the theme when the grid is created
 
-The grid defaults to the dark theme. To switch themes:
+Set a built-in theme name declaratively via `initialState`. This is resolved once, atomically, before the grid's first paint — no flash of the default theme.
+
+```tsx
+<Grid
+  initialState={{ themeName: 'light' }}
+  // ...
+/>
+```
+
+Framework-agnostic (`@open-grid/core`) equivalent:
 
 ```typescript
 import { createClientGrid } from '@open-grid/core';
 
-const api = createClientGrid(config);
-
-// Via GridHost interface (recommended)
-host.switchTheme('light'); // Switch to light theme
-host.switchTheme('dark-hc'); // Switch to high-contrast dark
-host.switchTheme('cool-blue'); // Modern tech aesthetic
-
-// Or get the theme manager directly
-const themeManager = host.setTheme?.toString(); // Access via host methods
-```
-
-### 2. Using ThemeManager Directly
-
-```typescript
-import { ThemeManager, DARK_THEME } from '@open-grid/core';
-
-const manager = new ThemeManager(DARK_THEME);
-manager.mount(); // Inject theme into document
-
-// Switch themes
-manager.switchTheme('light');
-manager.switchTheme('cool-blue');
-
-// Get current theme
-const theme = manager.getTheme();
-
-// Subscribe to changes
-const unsubscribe = manager.onThemeChange((theme) => {
-	console.log('Theme changed:', theme);
+const api = createClientGrid({
+  ...config,
+  initialState: { themeName: 'light' },
 });
-
-// Cleanup
-manager.unmount();
-unsubscribe();
 ```
 
-### 3. Creating Custom Themes
+### 2. Switching themes at runtime
+
+Get `api` from `onGridReady` (React) or the return value of `createClientGrid`/`createInfiniteGrid`/`createServerPageGrid` (core), then call the theme methods directly on it:
 
 ```typescript
-import { createTheme, ThemeManager } from '@open-grid/core';
+api.switchTheme('dark-hc'); // switch to a built-in theme by name
+api.getTheme(); // read the full active ThemeTokens object
+api.getThemeName(); // 'dark-hc', or null if a fully custom theme is active
+api.getAvailableThemes(); // list of built-in theme names
+```
 
-// Simple override approach
-const myTheme = createTheme({
+### 3. Composing a custom theme
+
+`ThemeTokens` is a plain flat object — a themed variant of a built-in theme is just a spread, no helper function required:
+
+```typescript
+import { getBuiltInTheme, type ThemeTokens } from '@open-grid/core';
+
+export const acmeTheme: ThemeTokens = {
+	...getBuiltInTheme('light'),
 	bgColor: '#1a1a2e',
 	textColor: '#eaeaea',
 	focusRing: '#00d4ff',
 	headerBg: '#0f0f1e',
 	headerText: '#b0b0b0',
-});
-
-const manager = new ThemeManager(myTheme);
-manager.mount();
+};
 ```
 
-### 4. System Color Scheme Detection
+Apply it in one of two ways:
 
-Automatically sync with OS dark/light mode preferences:
+```typescript
+// Declaratively, at grid creation — atomic, no flicker:
+<Grid initialState={{ themeOverrides: acmeTheme }} />
+
+// Or imperatively at runtime, via the grid api:
+api.setTheme(acmeTheme);
+```
+
+For small, incremental tweaks on top of whatever theme is currently active, use `mergeTheme` instead of `setTheme`:
+
+```typescript
+api.mergeTheme({
+	focusRing: '#10b981', // just the accent color
+	selectionBg: 'rgba(16, 185, 129, 0.1)',
+});
+```
+
+Or declare the initial tweaks up front, alongside a base theme name — both are resolved together before first paint:
+
+```tsx
+<Grid
+  initialState={{
+    themeName: 'light',
+    themeOverrides: { focusRing: '#1e2148', selectionBg: 'rgba(30, 33, 72, 0.08)' },
+  }}
+/>
+```
+
+### 4. System color scheme detection
+
+`ThemeManager.detectSystemPreference()` is a standalone static helper (no grid instance needed) — use it to pick the right built-in theme name up front:
 
 ```typescript
 import { ThemeManager } from '@open-grid/core';
 
-// Create a manager that syncs with system preference
-const manager = ThemeManager.createSystemAware();
-manager.mount();
+const prefersDark = ThemeManager.detectSystemPreference();
 
-// Automatically switches to light/dark when system preference changes
+<Grid initialState={{ themeName: prefersDark ? 'dark' : 'light' }} />
+```
+
+To keep the grid in sync as the OS preference changes live, listen for the media query change yourself and call `api.switchTheme()`:
+
+```typescript
+useEffect(() => {
+	const mql = window.matchMedia('(prefers-color-scheme: dark)');
+	const onChange = (e: MediaQueryListEvent) => api.switchTheme(e.matches ? 'dark' : 'light');
+	mql.addEventListener('change', onChange);
+	return () => mql.removeEventListener('change', onChange);
+}, [api]);
 ```
 
 ## Built-In Themes
@@ -150,6 +180,8 @@ Ultra-clean, minimalist monochrome theme.
 ```typescript
 import { MINIMAL_MONOCHROME_THEME } from '@open-grid/core';
 ```
+
+All built-in themes are also reachable by name via `getBuiltInTheme(name)` and `BUILT_IN_THEMES[name]`, which is generally more convenient than importing each theme constant individually.
 
 ## Theme Tokens
 
@@ -250,42 +282,34 @@ interface ThemeTokens {
 }
 ```
 
-### ThemeManager API
+### GridApi theme methods
+
+This is the API surface every consumer should reach for — obtained via `onGridReady`/`useGridApi()` in React, or as the return value of `createClientGrid`/`createInfiniteGrid`/`createServerPageGrid` in core:
 
 ```typescript
-class ThemeManager {
-	// Create and initialize
-	constructor(initialTheme: ThemeTokens = DARK_THEME);
-	mount(selector?: string): void;
-	unmount(): void;
-
-	// Get/Set themes
+interface GridApi<TRowData> {
 	getTheme(): ThemeTokens;
-	setTheme(theme: ThemeTokens, selector?: string): void;
-	switchTheme(themeName: BuiltInThemeName, selector?: string): void;
-	mergeTheme(partial: Partial<ThemeTokens>, selector?: string): void;
-
-	// Utilities
+	getThemeName(): BuiltInThemeName | null; // null once a fully custom theme is active
 	getAvailableThemes(): BuiltInThemeName[];
+	switchTheme(themeName: string): void; // reset to a built-in theme by name
+	mergeTheme(partial: Partial<ThemeTokens>): void; // tweak specific tokens, keep the rest
+	setTheme(theme: ThemeTokens): void; // replace the active theme wholesale
 	onThemeChange(listener: (theme: ThemeTokens) => void): () => void;
-
-	// Static helpers
-	static detectSystemPreference(): boolean;
-	static createSystemAware(): ThemeManager;
+	// ... plus everything else on GridApi
 }
 ```
 
-### Helper Functions
+### Helper functions
 
 ```typescript
-// Create a custom theme with partial overrides
-function createTheme(overrides: Partial<ThemeTokens> = {}): ThemeTokens;
+// Get a built-in theme's full token set (compose your own variant with a plain spread)
+function getBuiltInTheme(themeName: BuiltInThemeName): ThemeTokens;
 
 // Convert theme to CSS custom properties
 function themeToCSSVariables(theme: ThemeTokens, selector?: string): string;
 
 // Available theme names
-type BuiltInThemeName = 'light' | 'dark' | 'light-hc' | 'dark-hc' | 'cool-blue' | 'warm-orange' | 'minimal-monochrome';
+type BuiltInThemeName = 'light' | 'dark' | 'light-hc' | 'dark-hc' | 'cool-blue' | 'warm-orange' | 'minimal-monochrome' | 'spreadsheet';
 
 // Pre-built theme registry
 const BUILT_IN_THEMES: Record<BuiltInThemeName, ThemeTokens>;
@@ -293,71 +317,59 @@ const BUILT_IN_THEMES: Record<BuiltInThemeName, ThemeTokens>;
 
 ## Advanced Usage
 
-### 1. Merging Themes
+### 1. Merging themes
 
-Modify specific tokens while keeping the rest:
+Modify specific tokens while keeping the rest, at any point after the grid is created:
 
 ```typescript
-import { ThemeManager, DARK_THEME } from '@open-grid/core';
-
-const manager = new ThemeManager(DARK_THEME);
-manager.mount();
-
 // Change just the accent color and selection background
-manager.mergeTheme({
+api.mergeTheme({
 	focusRing: '#10b981', // Emerald instead of blue
 	selectionBg: 'rgba(16, 185, 129, 0.1)',
 	groupBadgeText: '#34d399',
 });
 ```
 
-### 2. Dynamic Theme Switching
+### 2. Dynamic theme switching
 
-```typescript
-import { useCallback, useEffect, useState } from 'react';
-import { createClientGrid } from '@open-grid/core';
-
+```tsx
 function DynamicThemeExample() {
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('dark');
-
-  const host = useRef(null);
+  const [api, setApi] = useState<GridApi<Row> | null>(null);
 
   useEffect(() => {
-    // Switch theme when mode changes
-    host.current?.switchTheme(themeMode);
-  }, [themeMode]);
+    api?.switchTheme(themeMode);
+  }, [api, themeMode]);
 
   return (
     <div>
       <button onClick={() => setThemeMode('light')}>Light</button>
       <button onClick={() => setThemeMode('dark')}>Dark</button>
-      {/* Grid container */}
+      <Grid onGridReady={(event) => setApi(event.api)} /* ...rest of grid config */ />
     </div>
   );
 }
 ```
 
-### 3. System Preference Sync
+### 3. System preference sync
 
 ```typescript
 import { ThemeManager } from '@open-grid/core';
 
-// Create manager that syncs with system dark mode preference
-const manager = ThemeManager.createSystemAware();
-manager.mount();
+// Pick the initial theme from the OS preference, before the grid ever mounts
+const initialThemeName = ThemeManager.detectSystemPreference() ? 'dark' : 'light';
 
-// Subscribe to changes (both explicit and system-driven)
-manager.onThemeChange((theme) => {
-	console.log('Theme updated:', theme.bgColor);
-});
+// ...then keep it in sync as the OS preference changes (see Quick Start §4 above)
 ```
 
-### 4. Custom Theme from Brand Guidelines
+### 4. Custom theme from brand guidelines
 
 ```typescript
-import { createTheme, ThemeManager } from '@open-grid/core';
+import { getBuiltInTheme, type ThemeTokens } from '@open-grid/core';
 
-const brandTheme = createTheme({
+const brandTheme: ThemeTokens = {
+	...getBuiltInTheme('light'),
+
 	// Brand primary
 	focusRing: '#6366f1', // Indigo
 
@@ -378,18 +390,19 @@ const brandTheme = createTheme({
 	popoverBg: 'rgba(248, 250, 252, 0.98)',
 	popoverItemHoverBg: 'rgba(99, 102, 241, 0.08)',
 	popoverItemActiveBg: '#6366f1',
-});
+};
 
-const manager = new ThemeManager(brandTheme);
-manager.mount();
+api.setTheme(brandTheme);
+// or, declaratively at creation:
+<Grid initialState={{ themeOverrides: brandTheme }} />
 ```
 
-### 5. Exporting Theme Configuration
+### 5. Exporting theme configuration
 
 ```typescript
-import { themeToCSSVariables } from '@open-grid/core';
+import { getBuiltInTheme, themeToCSSVariables } from '@open-grid/core';
 
-const theme = createTheme({...});
+const theme = { ...getBuiltInTheme('dark'), focusRing: '#00d4ff' };
 const cssText = themeToCSSVariables(theme);
 
 // Output as a .css file, or embed in style tag
@@ -401,16 +414,15 @@ console.log(cssText);
 // }
 ```
 
-## Integration with GridHost
+## Integration with the low-level host (`@open-grid/core` internal)
 
-The theme API is integrated into the GridHost interface for convenience:
+If you're building a custom framework adapter directly on `mountGridHost` (rather than using `<Grid>` from `@open-grid/react`), the same theme methods are also available directly on the returned host object:
 
 ```typescript
 import { mountGridHost } from '@open-grid/core/internal';
 
 const host = mountGridHost(api, container);
 
-// Theme methods available directly on host
 host.switchTheme('light');
 host.setTheme(customTheme);
 const theme = host.getTheme();
@@ -419,6 +431,8 @@ const unsubscribe = host.onThemeChange((theme) => {
 	console.log('Theme changed');
 });
 ```
+
+Most consumers should never need this — reach for `GridApi` (the object you already have from `onGridReady`/`createClientGrid`) instead. `GridApi`'s theme methods delegate to the same underlying renderer once a host is mounted, and remain safely inert (rather than throwing) before mount.
 
 ## CSS Variable Customization
 
@@ -450,16 +464,17 @@ Open Grid includes an interactive CSS Theme Studio component to:
 - Export theme configuration code
 - Test custom color combinations
 
-```typescript
+```tsx
 import { CSSThemeStudio } from './components/CSSThemeStudio';
 
 function App() {
+  const [api, setApi] = useState<GridApi<Row> | null>(null);
+
   return (
-    <CSSThemeStudio
-      onThemeSelect={(themeName, theme) => {
-        gridHost.setTheme(theme);
-      }}
-    />
+    <>
+      <CSSThemeStudio onThemeSelect={(themeName, theme) => api?.setTheme(theme)} />
+      <Grid onGridReady={(event) => setApi(event.api)} /* ...rest of grid config */ />
+    </>
   );
 }
 ```
@@ -468,17 +483,17 @@ function App() {
 
 - **Zero runtime overhead**: All theming via CSS custom properties (no JS calculations)
 - **Instant switching**: Theme change = style element update (no re-render)
-- **SSR-safe**: ThemeManager detects SSR and skips DOM operations
-- **Memory efficient**: Single shared style element for all themes
-- **No flash**: Default (dark) theme in CORE_STYLES prevents FOUC
+- **SSR-safe**: theme resolution detects SSR and skips DOM operations
+- **Memory efficient**: single shared style element per mounted grid
+- **No flash**: `initialState.themeName`/`themeOverrides` are resolved atomically before the grid's first paint — no default-theme flicker, no imperative call needed on mount
 
 ## Best Practices
 
 1. **Use semantic token names** when creating themes (e.g., `selectionBg` not `blue42`)
 2. **Test with accessibility themes** (`light-hc`, `dark-hc`) for contrast
-3. **Provide system preference option** via `ThemeManager.createSystemAware()`
+3. **Detect system preference up front** via `ThemeManager.detectSystemPreference()` and pass the result as `initialState.themeName`
 4. **Persist theme choice** in localStorage for user preference
-5. **Use partial merging** for small tweaks rather than full theme replacement
+5. **Use `mergeTheme`** for small tweaks rather than a full `setTheme` replacement
 6. **Monitor color contrast** when creating custom themes
 7. **Avoid hardcoding colors** in component styles; use CSS variables instead
 
@@ -486,17 +501,20 @@ function App() {
 
 ### Theme not applying?
 
-1. Ensure `themeManager.mount()` is called after container is in the DOM
-2. Check that selector matches your grid container class
-3. Verify CSS specificity doesn't override `--og-*` variables
+1. Set it via `initialState.themeName`/`themeOverrides` for the initial theme, or `api.switchTheme()`/`api.mergeTheme()`/`api.setTheme()` for changes after mount — not by trying to reach into the renderer directly.
+2. Check that any custom CSS selectors targeting `--og-*` variables don't have higher specificity than the grid's own scoped theme selector.
+3. Confirm `api` in your `onGridReady` handler is the one actually attached to the `<Grid>` instance on screen (a common bug when multiple grids are mounted at once).
 
 ### Style flash on load?
 
-The default dark theme is embedded in `CORE_STYLES` to prevent FOUC. If you prefer light theme by default, set it immediately after mount:
+`initialState.themeName` and `initialState.themeOverrides` are both resolved atomically before the grid's first paint, so there is no flash as long as you set them there rather than switching themes in a `useEffect`/`onGridReady` callback after the grid has already mounted:
 
-```typescript
-manager.mount();
-manager.switchTheme('light');
+```tsx
+// No flash — resolved before first paint:
+<Grid initialState={{ themeName: 'light', themeOverrides: { focusRing: '#1e2148' } }} />
+
+// Avoid — the default theme paints first, then flips:
+<Grid onGridReady={({ api }) => api.switchTheme('light')} />
 ```
 
 ### Custom theme colors look wrong?
