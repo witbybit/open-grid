@@ -200,6 +200,8 @@ export interface GridRuntimeSubscriptionApi<TRowData = unknown> {
 	getAvailableThemes(): BuiltInThemeName[];
 	switchTheme(themeName: string): void;
 	mergeTheme(partial: Partial<ThemeTokens>): void;
+	/** Apply a full, self-composed theme (e.g. `{ ...getBuiltInTheme('light'), focusRing: '#...' }`). */
+	setTheme(theme: ThemeTokens): void;
 	onThemeChange(listener: (theme: ThemeTokens) => void): () => void;
 	getContainer(): HTMLElement | null;
 	getInsightDiagnostics(): Record<string, unknown>;

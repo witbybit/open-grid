@@ -201,4 +201,81 @@ describe('mountGridHost', () => {
 		expect(faults.some((f) => f.operation === 'unbindRuntimePorts')).toBe(true);
 		api.destroy();
 	});
+
+	it('applies initialState.themeName and themeOverrides atomically on mount, with no separate imperative call', () => {
+		vi.stubGlobal('ResizeObserver', TestResizeObserver);
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const api = createClientGrid({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			rows: [],
+			getRowId: (row) => (row as { id: string }).id,
+			initialState: {
+				themeName: 'light',
+				themeOverrides: { focusRing: '#1e2148' },
+			},
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const host = mountGridHost(api, container);
+
+		// Resolved base ('light') + override merged before this line ever runs — nothing else
+		// was called in between mount and this assertion.
+		expect(host.getThemeName()).toBe('light');
+		expect(host.getTheme().focusRing).toBe('#1e2148');
+
+		host.destroy();
+		api.destroy();
+	});
+
+	it('setTheme applies a fully custom theme and getTheme reflects it immediately', () => {
+		vi.stubGlobal('ResizeObserver', TestResizeObserver);
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const api = createClientGrid({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			rows: [],
+			getRowId: (row) => (row as { id: string }).id,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 160,
+			width: 500,
+			height: 160,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const host = mountGridHost(api, container);
+		const customTheme = { ...host.getTheme(), bgColor: '#010203', focusRing: '#fedcba' };
+		api.setTheme(customTheme);
+
+		expect(api.getTheme().bgColor).toBe('#010203');
+		expect(api.getTheme().focusRing).toBe('#fedcba');
+		expect(host.getTheme().bgColor).toBe('#010203');
+
+		host.destroy();
+		api.destroy();
+	});
 });

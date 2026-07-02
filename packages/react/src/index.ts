@@ -9,7 +9,6 @@ export {
 	BUILT_IN_THEME_METADATA,
 	getBuiltInTheme,
 	isBuiltInThemeName,
-	createTheme,
 	themeToCSSVariables,
 } from '@open-grid/core';
 
@@ -94,6 +93,7 @@ export type {
 	DomCellRendererParams,
 	ImperativeCellHandle,
 	GridReadyEvent,
+	GridInitialState,
 	BuiltInThemeName,
 	ThemeTokens,
 	RowSelectionMode,

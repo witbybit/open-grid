@@ -2,7 +2,7 @@ import type { FilterModel, SortDirection, SortModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { ColumnDef, GridStyleRule } from '../columnDef.js';
-import type { BuiltInThemeName } from '../renderer/themes.js';
+import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { GridSelectionState, ActiveEditState, RowSelectionOptions } from '../api/GridApi.js';
 import type {
@@ -37,6 +37,8 @@ export interface GridModelState<TRowData = unknown> {
 	filterModel: FilterModel | null;
 	queryModel: GridQueryModel | null;
 	themeName: BuiltInThemeName;
+	/** Partial theme token overrides applied on top of `themeName` when the renderer mounts. */
+	themeOverrides?: Partial<ThemeTokens>;
 
 	groupBy?: string[];
 	aggDefs?: AggregationDef<TRowData>[];

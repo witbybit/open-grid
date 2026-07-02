@@ -519,6 +519,19 @@ export function isBuiltInThemeName(value: string): value is BuiltInThemeName {
 	return value in BUILT_IN_THEMES;
 }
 
+/**
+ * Get the full token set for a built-in theme. `ThemeTokens` is a plain flat object, so a
+ * themed variant of a built-in is just a spread — no helper function needed:
+ *
+ * @example
+ * export const acmeTheme: ThemeTokens = {
+ *   ...getBuiltInTheme('light'),
+ *   focusRing: '#1e2148',
+ *   selectionBg: 'rgba(30, 33, 72, 0.08)',
+ * };
+ *
+ * api.setTheme(acmeTheme);
+ */
 export function getBuiltInTheme(themeName: BuiltInThemeName): ThemeTokens {
 	return BUILT_IN_THEMES[themeName];
 }
@@ -701,18 +714,4 @@ export class ThemeManager {
 			listener(this.currentTheme);
 		}
 	}
-}
-
-/**
- * Create a theme from user color preferences (simple convenience function).
- *
- * @example
- * const myTheme = createTheme({
- *   focusRing: '#10b981',
- *   bgColor: '#0a1428',
- *   textColor: '#d4d4d8',
- * });
- */
-export function createTheme(overrides: Partial<ThemeTokens> = {}): ThemeTokens {
-	return { ...DARK_THEME, ...overrides };
 }

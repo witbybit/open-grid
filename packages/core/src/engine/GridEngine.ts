@@ -343,6 +343,7 @@ export class GridEngine<TRowData = unknown> {
 			filterModel: config.filterModel || null,
 			queryModel: config.queryModel || null,
 			themeName: config.themeName ?? 'dark',
+			themeOverrides: config.themeOverrides,
 			globalVersion: 0,
 			visibleRowRange: { startIdx: 0, endIdx: 0 },
 			visibleColRange: { startIdx: 0, endIdx: 0 },

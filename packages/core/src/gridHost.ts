@@ -126,6 +126,12 @@ export function mountGridHost<TRowData>(
 					renderEngine.scheduleFullPaint('theme-layout');
 				}
 			},
+			setTheme: (theme) => {
+				renderEngine.viewportRenderer.setTheme(theme);
+				// A full theme swap can change any token, including layout-affecting ones
+				// (e.g. leafHeaderHeight) — always re-run layout, not just on mergeTheme's narrower check.
+				renderEngine.scheduleFullPaint('theme-layout');
+			},
 			onThemeChange: (listener) => renderEngine.viewportRenderer.onThemeChange(listener),
 		},
 	});

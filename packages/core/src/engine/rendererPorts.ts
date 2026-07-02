@@ -25,6 +25,7 @@ export interface ThemePort {
 	getAvailableThemes(): BuiltInThemeName[];
 	switchTheme(themeName: string): void;
 	mergeTheme(partial: Partial<ThemeTokens>): void;
+	setTheme(theme: ThemeTokens): void;
 	onThemeChange(listener: (theme: ThemeTokens) => void): () => void;
 }
 
@@ -55,6 +56,7 @@ export const headlessThemePort: ThemePort = {
 	getAvailableThemes: () => [],
 	switchTheme: () => {},
 	mergeTheme: () => {},
+	setTheme: () => {},
 	onThemeChange: () => () => {},
 };
 

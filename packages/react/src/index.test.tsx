@@ -2047,3 +2047,62 @@ describe('explicit React entrypoints', () => {
 		});
 	});
 });
+
+describe('Grid theme configuration', () => {
+	it('applies initialState.themeName and themeOverrides declaratively, with no imperative onGridReady call needed', async () => {
+		let api: GridApi<TestRow> | undefined;
+
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid<TestRow>
+					rowModelType='client'
+					rows={[{ id: '1', name: 'Alice' }]}
+					columns={[{ field: 'name', header: 'Name', width: 120 }]}
+					getRowId={(row) => row.id}
+					enableNavigation={false}
+					initialState={{ themeName: 'light', themeOverrides: { focusRing: '#1e2148' } }}
+					onGridReady={(event) => {
+						api = event.api;
+					}}
+				/>
+			</div>
+		);
+
+		await waitFor(() => expect(api).toBeDefined());
+		// By the time onGridReady fires the theme is already fully resolved — no separate
+		// mergeTheme() call was made anywhere in this test.
+		expect(api!.getThemeName()).toBe('light');
+		expect(api!.getTheme().focusRing).toBe('#1e2148');
+	});
+
+	it('supports runtime theme changes via the standard GridApi methods', async () => {
+		let api: GridApi<TestRow> | undefined;
+
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid<TestRow>
+					rowModelType='client'
+					rows={[{ id: '1', name: 'Alice' }]}
+					columns={[{ field: 'name', header: 'Name', width: 120 }]}
+					getRowId={(row) => row.id}
+					enableNavigation={false}
+					onGridReady={(event) => {
+						api = event.api;
+					}}
+				/>
+			</div>
+		);
+
+		await waitFor(() => expect(api).toBeDefined());
+
+		act(() => api!.switchTheme('dark'));
+		expect(api!.getThemeName()).toBe('dark');
+
+		act(() => api!.mergeTheme({ focusRing: '#00ff00' }));
+		expect(api!.getTheme().focusRing).toBe('#00ff00');
+
+		const custom = { ...api!.getTheme(), bgColor: '#010203' };
+		act(() => api!.setTheme(custom));
+		expect(api!.getTheme().bgColor).toBe('#010203');
+	});
+});

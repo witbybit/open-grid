@@ -262,6 +262,7 @@ export function createGridRuntimeComposition<TRowData>({
 		getAvailableThemes: () => runtime.getAvailableThemes(),
 		switchTheme: (themeName: string) => runtime.switchTheme(themeName),
 		mergeTheme: (partial: Partial<ThemeTokens>) => runtime.mergeTheme(partial),
+		setTheme: (theme: ThemeTokens) => runtime.setTheme(theme),
 		onThemeChange: (listener: (theme: ThemeTokens) => void) => runtime.onThemeChange(listener),
 		getContainer: () => runtime.getContainerElement(),
 		scrollToRow: (rowId: string, options?: ScrollToRowOptions) => runtime.scrollToRow(rowId, options),

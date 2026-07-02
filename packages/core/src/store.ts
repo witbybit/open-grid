@@ -225,6 +225,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			pagination: initialState.pagination,
 			expansion: initialState.expansion,
 			themeName: initialState.themeName,
+			themeOverrides: initialState.themeOverrides,
 			rowOverscanPx: initialState.rowOverscanPx ?? 400,
 			colBuffer: initialState.colBuffer ?? 2,
 			// Always normalize runtimeLimits so all callers can assume it exists.
@@ -1085,6 +1086,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getAvailableThemes = (): BuiltInThemeName[] => this.hostFacade.getAvailableThemes();
 	public switchTheme = (themeName: string): void => this.hostFacade.switchTheme(themeName);
 	public mergeTheme = (partial: Partial<ThemeTokens>): void => this.hostFacade.mergeTheme(partial);
+	public setTheme = (theme: ThemeTokens): void => this.hostFacade.setTheme(theme);
 	public onThemeChange = (listener: (theme: ThemeTokens) => void): (() => void) => this.hostFacade.onThemeChange(listener);
 	public setContainerElement = (c: HTMLElement): void => this.hostFacade.setContainerElement(c);
 	public getContainerElement = (): HTMLElement | null => this.hostFacade.getContainerElement();
