@@ -136,6 +136,7 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	incrementFullCellBinds?: () => void;
 	incrementGeometryOnlyCellBinds?: () => void;
 	incrementCellSlotRebinds?: () => void;
+	incrementIntegrityComputesDuringScroll?: () => void;
 	getSnapshotVisualVersions: () => SnapshotVisualVersions;
 	/** Live column-reorder preview offset (px) for a displayed column index.
 	 *  0 outside an active header drag. Only consulted on the full-bind path. */
@@ -326,6 +327,9 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	}
 
 	// Insight layer decorations — read-only overlay; must not mutate row data or DOM directly.
+	// This is the integrity/insights compute site. It must never fire on the scroll hot path
+	// (bindCellDuringScroll never calls it) — the counter proves that contract holds.
+	if (deps.getIsScrolling()) deps.incrementIntegrityComputesDuringScroll?.();
 	const cellDecorations = deps.engine.insights.getCellDecorations(node.id, col.field);
 	const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
 	cellClassName += decorationMetadata.classNameSuffix;

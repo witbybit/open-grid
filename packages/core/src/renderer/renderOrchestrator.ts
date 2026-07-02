@@ -87,6 +87,7 @@ export interface RenderStats {
 	prewarmedDisplayValues?: number;
 	prewarmPasses?: number;
 	prewarmedCellSnapshots?: number;
+	integrityComputesDuringScroll?: number;
 }
 
 /** Returns a zero-value RenderStats object. Used by GridStore.getRenderStats() when no render engine is mounted. */
@@ -177,6 +178,7 @@ export function createEmptyRenderStats(): RenderStats {
 		postScrollDirtyCellsDecorated: 0,
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
+		integrityComputesDuringScroll: 0,
 	};
 }
 
@@ -261,6 +263,7 @@ export class RenderOrchestrator {
 		postScrollDirtyCellsDecorated: 0,
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
+		integrityComputesDuringScroll: 0,
 		hotDomReleases: 0,
 		coldDomReleases: 0,
 		cellsPatchedPerScrollFrame: [],
@@ -395,6 +398,7 @@ export class RenderOrchestrator {
 		this.stats.postScrollDirtyCellsDecorated = 0;
 		this.stats.reusableCellsSkippedDuringScroll = 0;
 		this.stats.styleHookCallsDuringScroll = 0;
+		this.stats.integrityComputesDuringScroll = 0;
 		this.stats.hotDomReleases = 0;
 		this.stats.coldDomReleases = 0;
 		this.stats.cellsPatchedPerScrollFrame = [];

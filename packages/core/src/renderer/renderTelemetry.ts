@@ -44,6 +44,7 @@ export interface RenderRuntimeStats {
 	cellClassComputesDuringScroll: number;
 	reusableCellsSkippedDuringScroll: number;
 	styleHookCallsDuringScroll: number;
+	integrityComputesDuringScroll: number;
 	portalFlushChunks: number;
 	maxPortalOpsFlushedInOneChunk: number;
 	postScrollDecorationChunks: number;
@@ -110,6 +111,7 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		cellClassComputesDuringScroll: 0,
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
+		integrityComputesDuringScroll: 0,
 		portalFlushChunks: 0,
 		maxPortalOpsFlushedInOneChunk: 0,
 		postScrollDecorationChunks: 0,
@@ -195,6 +197,7 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		postScrollDirtyCellsDecorated: deps.rowRenderer.postScrollDirtyCellsDecorated,
 		reusableCellsSkippedDuringScroll: deps.runtimeStats.reusableCellsSkippedDuringScroll,
 		styleHookCallsDuringScroll: deps.runtimeStats.styleHookCallsDuringScroll,
+		integrityComputesDuringScroll: deps.runtimeStats.integrityComputesDuringScroll,
 		rowsEnteredDuringScroll: deps.runtimeStats.rowsEnteredDuringScroll,
 		rowsExitedDuringScroll: deps.runtimeStats.rowsExitedDuringScroll,
 		rowsStayedDuringScroll: deps.runtimeStats.rowsStayedDuringScroll,

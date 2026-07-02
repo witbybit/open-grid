@@ -518,6 +518,7 @@ function collectFeatherScenarioEvidence(grid: AuditGrid) {
 			getCellValueCallsDuringScroll: stats.getCellValueCallsDuringScroll,
 			formulaCallsDuringScroll: stats.formulaCallsDuringScroll,
 			customRendererMountsDuringScroll: stats.customRendererMountsDuringScroll,
+			integrityComputesDuringScroll: stats.integrityComputesDuringScroll,
 		},
 		fidelity: {
 			prewarmPasses: stats.prewarmPasses,
@@ -572,6 +573,7 @@ function assertScrollStatsAreRuthless(grid: AuditGrid, prevWindow: RenderWindow 
 	expect(stats.customRendererMountsDuringScroll).toBe(0);
 	expect(stats.focusCallsDuringScroll).toBe(0);
 	expect(stats.styleHookCallsDuringScroll).toBe(0);
+	expect(stats.integrityComputesDuringScroll).toBe(0);
 	expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(maxExpectedCells);
 	expect(stats.cellsWrittenDuringScroll).toBeLessThanOrEqual(maxExpectedCells);
 	expect(stats.portalOpsDuringScroll).toBeLessThanOrEqual(maxExpectedCells);
@@ -901,6 +903,12 @@ describe('Server demo ruthless runtime performance contracts', () => {
 			const evidence = collectFeatherScenarioEvidence(grid);
 			expect(evidence.motion.valueGetterCallsDuringScroll).toBe(0);
 			expect(evidence.motion.getCellValueCallsDuringScroll).toBe(0);
+			// Registered insight layer above actively decorates visible cells (id/auditMetric_159).
+			// This is the one scenario where a naive implementation would call
+			// engine.insights.getCellDecorations() from the scroll hot path to keep decorations
+			// current — the contract requires that read to happen only in bindCellFull (post-scroll
+			// fidelity), never during the scroll frame itself.
+			expect(evidence.motion.integrityComputesDuringScroll).toBe(0);
 		}
 
 		cleanupGrid(grid);

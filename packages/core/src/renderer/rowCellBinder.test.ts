@@ -2711,4 +2711,170 @@ describe('bindCellFull', () => {
 		expect(snapshotStore.get('r1:name').frozenHtml).toBe('<div class="badge badge-info">INFO</div>');
 		expect(snapshotStore.get('r1:name').frozenRowHeight).toBe(40);
 	});
+
+	describe('warm DOM cannot authorize correctness (adversarial row rebind)', () => {
+		it('does not show a previous row primitive text on a rebound slot when no fresh snapshot exists', () => {
+			const dirty = vi.fn();
+			const cellSlot = new CellSlot(document.createElement('div'));
+			// Simulate a slot that was previously bound to row A and is warm with row A's content.
+			cellSlot.update(0, 'name', 5, 'rowA', 0, -1, 100, 'og-cell', 'text', undefined, 'Stale Row A Value', undefined);
+			cellSlot.lastMountedRowVersion = 1;
+			cellSlot.lastMountedGlobalVersion = 7;
+			cellSlot.lastMountedInsightVersion = 0;
+			cellSlot.lastMountedStyleVersion = 0;
+			cellSlot.lastMountedLoadingVersion = 0;
+			cellSlot.lastMountedSelectionVersion = 0;
+
+			const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+				engine: {
+					data: { getCachedDisplayValue: vi.fn(() => 'Stale Row A Value') },
+					hasFormula: vi.fn(() => false),
+					getCellDisplaySnapshot: vi.fn(() => undefined),
+				} as any,
+				cellRenderer: { showPortalContent: vi.fn() } as any,
+				portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately: vi.fn() } as any,
+				selectionPaint: {} as any,
+				cellClassScratch: {} as any,
+				getViewportContainer: () => null,
+				getIsScrolling: () => true,
+				getIsScrollFrameActive: () => true,
+				programmaticScrollCell: null,
+				clearProgrammaticScrollCell: vi.fn(),
+				setDeferredFocusCell: vi.fn(),
+				applyFocus: vi.fn(),
+				isEditorInteractiveElement: () => false,
+				ensureCellPortalHost: (cell) => {
+					const host = document.createElement('div');
+					cell.appendChild(host);
+					return host;
+				},
+				getCellPortalHost: () => null,
+				markCellDirtyAfterScroll: dirty,
+				releaseCellPortal: vi.fn(),
+				incrementStyleHookCallsDuringScroll: vi.fn(),
+				incrementCellsBoundDuringScroll: vi.fn(),
+				incrementCurrentScrollCellsWritten: vi.fn(),
+				getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+			};
+
+			// The physical slot is now rebound to row B at the same column — same rowVersion map
+			// entry key ('rowB') never matches the warm 'rowA' identity the slot remembers.
+			bindCellDuringScroll(deps, {
+				cellSlot,
+				node: { id: 'rowB', data: { id: 'rowB', name: 'Row B Value' } } as any,
+				rowIndex: 5,
+				colIndex: 0,
+				col: { field: 'name' } as any,
+				lane: 'center',
+				ctx: {
+					activeEdit: null,
+					focusedCell: null,
+					globalVersion: 7,
+					insightVersion: 0,
+					styleVersion: 0,
+					selectionVersion: 0,
+					hasDeferredCellStyleRules: false,
+					hasInsightDecorations: false,
+					isScrolling: true,
+					loadingVersion: 0,
+					plan: { columnPlans: [{ isCustom: false, mode: 'primitive' }] },
+					visibleColRange: { startIdx: 0, endIdx: 0 },
+					rowVersions: new Map([['rowB', 1]]),
+				} as any,
+				pooledRowId: 'slot-1',
+				pooledRowGeneration: 1,
+				left: 0,
+				right: -1,
+				width: 100,
+				isRowRebind: true,
+				isRowLoading: false,
+				isInVisibleContent: true,
+			});
+
+			// Row A's warm text must never leak into row B's slot. With no fresh snapshot, the
+			// renderer must fall back to a deterministic placeholder, not the cached DOM value.
+			expect(cellSlot.lastFormattedValue).not.toBe('Stale Row A Value');
+			expect(cellSlot.lastFormattedValue).toBe('...');
+			expect(dirty).toHaveBeenCalledWith(cellSlot.element);
+		});
+
+		it('does not freeze or show a previous row live portal on a rebound slot when no fresh snapshot exists', () => {
+			const releaseCellPortal = vi.fn();
+			const cellSlot = new CellSlot<{ id: string; name: string }>(document.createElement('div'));
+			const stableKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+			const portalHost = document.createElement('div');
+			portalHost.innerHTML = '<div class="badge">Row A Live Content</div>';
+			cellSlot.element.appendChild(portalHost);
+			// Simulate a slot that was previously bound to row A and has a live, rendered portal.
+			cellSlot.update(0, 'name', 5, 'rowA', 0, -1, 100, 'og-cell', 'portal', undefined, '', stableKey);
+
+			const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+				engine: {
+					data: { getCachedDisplayValue: vi.fn(() => undefined) },
+					hasFormula: vi.fn(() => false),
+					getCellDisplaySnapshot: vi.fn(() => undefined),
+					getCheapDisplayValue: vi.fn(() => ''),
+				} as any,
+				cellRenderer: { showPortalContent: vi.fn() } as any,
+				portalMountManager: { isCellMounted: vi.fn(() => true), mountCellImmediately: vi.fn() } as any,
+				selectionPaint: {} as any,
+				cellClassScratch: {} as any,
+				getViewportContainer: () => null,
+				getIsScrolling: () => true,
+				getIsScrollFrameActive: () => true,
+				programmaticScrollCell: null,
+				clearProgrammaticScrollCell: vi.fn(),
+				setDeferredFocusCell: vi.fn(),
+				applyFocus: vi.fn(),
+				isEditorInteractiveElement: () => false,
+				ensureCellPortalHost: () => portalHost,
+				getCellPortalHost: () => portalHost,
+				markCellDirtyAfterScroll: vi.fn(),
+				releaseCellPortal,
+				incrementStyleHookCallsDuringScroll: vi.fn(),
+				incrementCellsBoundDuringScroll: vi.fn(),
+				incrementCurrentScrollCellsWritten: vi.fn(),
+				getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+			};
+
+			bindCellDuringScroll(deps, {
+				cellSlot,
+				node: { id: 'rowB', data: { id: 'rowB', name: 'Row B Value' } } as any,
+				rowIndex: 5,
+				colIndex: 0,
+				col: { field: 'name', cellRenderer: () => null } as any,
+				lane: 'center',
+				ctx: {
+					activeEdit: null,
+					focusedCell: null,
+					globalVersion: 7,
+					insightVersion: 0,
+					styleVersion: 0,
+					selectionVersion: 0,
+					hasDeferredCellStyleRules: false,
+					hasInsightDecorations: false,
+					isScrolling: true,
+					loadingVersion: 0,
+					plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] },
+					visibleColRange: { startIdx: 0, endIdx: 0 },
+					rowVersions: new Map([['rowB', 1]]),
+				} as any,
+				pooledRowId: 'slot-1',
+				pooledRowGeneration: 1,
+				left: 0,
+				right: -1,
+				width: 100,
+				isRowRebind: true,
+				isRowLoading: false,
+				isInVisibleContent: true,
+			});
+
+			// The stale row-A portal must be released, not frozen in place for row B.
+			expect(releaseCellPortal).toHaveBeenCalledWith(cellSlot.element, false, 'invalidated');
+			// The slot must land on a deterministic placeholder (empty, since no cheap value is
+			// available either) rather than continuing to display row A's live portal content.
+			expect(cellSlot.lastContentMode).not.toBe('portal');
+			expect(cellSlot.lastContentMode).toBe('empty');
+		});
+	});
 });
