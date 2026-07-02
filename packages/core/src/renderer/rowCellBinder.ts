@@ -32,6 +32,7 @@ import {
 	mergeCellSnapshotTitle,
 	type CellDisplaySnapshot,
 } from './cellDisplaySnapshot.js';
+import { isVisualFresh } from './visualFreshness.js';
 
 function buildCellPinClass(lane: 'left' | 'center' | 'right'): string {
 	if (lane === 'left') return 'og-cell og-cell-pinned-left';
@@ -98,13 +99,15 @@ function getFreshCellSnapshot<TRowData>(
 	const snapshot = snapshotLookup.getCellDisplaySnapshot?.(rowId, colField) ?? snapshotLookup.cellDisplaySnapshots?.get(rowId, colField);
 	if (!snapshot || !ctx) return snapshot;
 	const currentRowVersion = ctx.rowVersions?.get(rowId) ?? -1;
-	if (snapshot.globalVersion !== ctx.globalVersion) return undefined;
-	if (snapshot.insightVersion !== ctx.insightVersion) return undefined;
-	if (snapshot.styleVersion !== ctx.styleVersion) return undefined;
-	if (snapshot.loadingVersion !== ctx.loadingVersion) return undefined;
-	if (snapshot.selectionVersion !== ctx.selectionVersion) return undefined;
-	if (snapshot.rowVersion !== currentRowVersion) return undefined;
-	return snapshot;
+	const isFresh = isVisualFresh(snapshot, {
+		rowVersion: currentRowVersion,
+		globalVersion: ctx.globalVersion,
+		insightVersion: ctx.insightVersion,
+		styleVersion: ctx.styleVersion,
+		loadingVersion: ctx.loadingVersion,
+		selectionVersion: ctx.selectionVersion,
+	});
+	return isFresh ? snapshot : undefined;
 }
 
 export interface SnapshotVisualVersions {

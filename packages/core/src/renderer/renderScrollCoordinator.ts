@@ -18,6 +18,7 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { HeaderRenderer } from './headerRenderer.js';
 import type { FloatingFilterRenderer } from './floatingFilterRenderer.js';
 import type { StickyGroupRenderer } from './stickyGroupRenderer.js';
+import { isVisualFresh } from './visualFreshness.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
@@ -382,15 +383,14 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		};
 		const hasFreshSnapshot = (rowId: string, colField: string): boolean => {
 			const snapshot = this.deps.engine.getCellDisplaySnapshot(rowId, colField);
-			if (!snapshot) return false;
-			return (
-				snapshot.rowVersion === (this.deps.engine.rowVersions.get(rowId) ?? -1) &&
-				snapshot.globalVersion === state.globalVersion &&
-				snapshot.insightVersion === this.deps.engine.insights.getVersion() &&
-				snapshot.styleVersion === this.deps.rowRenderer.styleVersion &&
-				snapshot.loadingVersion === this.deps.rowRenderer.loadingVersion &&
-				snapshot.selectionVersion === this.deps.engine.selectionVersion
-			);
+			return isVisualFresh(snapshot, {
+				rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
+				globalVersion: state.globalVersion,
+				insightVersion: this.deps.engine.insights.getVersion(),
+				styleVersion: this.deps.rowRenderer.styleVersion,
+				loadingVersion: this.deps.rowRenderer.loadingVersion,
+				selectionVersion: this.deps.engine.selectionVersion,
+			});
 		};
 		const visitApproachBand = (visit: (rowIndex: number, colIndex: number) => boolean): void => {
 			for (let row = request.visibleRowStart; row <= request.visibleRowEnd && canContinue(); row++) {

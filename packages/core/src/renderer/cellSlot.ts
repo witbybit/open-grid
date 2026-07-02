@@ -1,6 +1,7 @@
 export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallback' | 'pending' | 'custom';
 
 import type { CellRendererHandle, CellPlacement } from './cellRendererHandle.js';
+import { isVisualFresh, type VisualFreshness } from './visualFreshness.js';
 
 export interface CellSlotMountedVisualVersions {
 	insightVersion: number;
@@ -70,6 +71,18 @@ export function matchesCellSlotMountedVisualVersions(cellSlot: CellSlot, version
 	);
 }
 
+/** Builds the canonical VisualFreshness snapshot of what this cell slot currently has mounted. */
+function mountedFreshnessOf(cellSlot: CellSlot): VisualFreshness {
+	return {
+		rowVersion: cellSlot.lastMountedRowVersion,
+		globalVersion: cellSlot.lastMountedGlobalVersion,
+		insightVersion: cellSlot.lastMountedInsightVersion,
+		styleVersion: cellSlot.lastMountedStyleVersion,
+		loadingVersion: cellSlot.lastMountedLoadingVersion,
+		selectionVersion: cellSlot.lastMountedSelectionVersion,
+	};
+}
+
 export function matchesCellSlotMountedFreshness(
 	cellSlot: CellSlot,
 	request: {
@@ -78,11 +91,14 @@ export function matchesCellSlotMountedFreshness(
 		visualVersions: CellSlotMountedVisualVersions;
 	}
 ): boolean {
-	return (
-		cellSlot.lastMountedRowVersion === request.rowVersion &&
-		cellSlot.lastMountedGlobalVersion === request.globalVersion &&
-		matchesCellSlotMountedVisualVersions(cellSlot, request.visualVersions)
-	);
+	return isVisualFresh(mountedFreshnessOf(cellSlot), {
+		rowVersion: request.rowVersion,
+		globalVersion: request.globalVersion,
+		insightVersion: request.visualVersions.insightVersion,
+		styleVersion: request.visualVersions.styleVersion,
+		loadingVersion: request.visualVersions.loadingVersion,
+		selectionVersion: request.visualVersions.selectionVersion,
+	});
 }
 
 export class CellSlot<TRowData = unknown> {

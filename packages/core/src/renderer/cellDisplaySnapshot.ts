@@ -1,17 +1,17 @@
 import type { CellContentMode } from './cellSlot.js';
 import type { GridCellDecoration } from '../insights/insightTypes.js';
+import type { VisualFreshness } from './visualFreshness.js';
 
 export type CellDisplayContentKind = CellContentMode | 'portal-live' | 'portal-frozen' | 'impostor';
 
-export interface CellDisplaySnapshot {
+/**
+ * Extends VisualFreshness (rowVersion/globalVersion/insightVersion/styleVersion/loadingVersion/
+ * selectionVersion) so a snapshot's freshness can be judged by the same canonical predicate
+ * (isVisualFresh) that mounted CellSlot state is judged by — see visualFreshness.ts.
+ */
+export interface CellDisplaySnapshot extends VisualFreshness {
 	rowId: string;
 	colField: string;
-	rowVersion: number;
-	globalVersion: number;
-	insightVersion: number;
-	styleVersion: number;
-	loadingVersion: number;
-	selectionVersion: number;
 	baseClassName: string;
 	stateClassName: string;
 	decorationClassName: string;
@@ -79,15 +79,9 @@ export function joinCellSnapshotClassNameParts(...parts: Array<string | undefine
 	return { className: classTokens.join(' '), classTokens };
 }
 
-export interface CreateCellDisplaySnapshotOptions {
+export interface CreateCellDisplaySnapshotOptions extends VisualFreshness {
 	rowId: string;
 	colField: string;
-	rowVersion: number;
-	globalVersion: number;
-	insightVersion: number;
-	styleVersion: number;
-	loadingVersion: number;
-	selectionVersion: number;
 	baseClassName: string;
 	stateClassName?: string;
 	decorationClassName?: string;
