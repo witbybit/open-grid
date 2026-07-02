@@ -262,7 +262,11 @@ export interface ColumnWindowDelta {
 	readonly exitedPinnedLeftColumns: readonly string[];
 	readonly enteredPinnedRightColumns: readonly string[];
 	readonly exitedPinnedRightColumns: readonly string[];
-	readonly laneMoves: ReadonlyArray<{ readonly colField: string; readonly from: 'left' | 'center' | 'right'; readonly to: 'left' | 'center' | 'right' }>;
+	readonly laneMoves: ReadonlyArray<{
+		readonly colField: string;
+		readonly from: 'left' | 'center' | 'right';
+		readonly to: 'left' | 'center' | 'right';
+	}>;
 }
 
 /**

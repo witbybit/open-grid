@@ -59,7 +59,8 @@ export function applyCellSlotRetentionPolicy<TRowData>(
 		}
 	}
 
-	const totalBudget = Math.max(CELL_SLOT_RETENTION_CONFIG.maxRetainedCenterCellsPerRowSlot, keepFields.size) +
+	const totalBudget =
+		Math.max(CELL_SLOT_RETENTION_CONFIG.maxRetainedCenterCellsPerRowSlot, keepFields.size) +
 		CELL_SLOT_RETENTION_CONFIG.maxRecentlyExitedColumnsPerRowSlot;
 
 	let evicted = 0;
@@ -70,9 +71,7 @@ export function applyCellSlotRetentionPolicy<TRowData>(
 			if (!keepFields.has(field)) evictable.push(field);
 		}
 
-		const ordered = CELL_SLOT_RETENTION_CONFIG.preferEvictPortalCells
-			? stablePartitionPortalFirst(evictable, cells)
-			: evictable;
+		const ordered = CELL_SLOT_RETENTION_CONFIG.preferEvictPortalCells ? stablePartitionPortalFirst(evictable, cells) : evictable;
 
 		for (let i = 0; i < overBudget && i < ordered.length; i++) {
 			const field = ordered[i];

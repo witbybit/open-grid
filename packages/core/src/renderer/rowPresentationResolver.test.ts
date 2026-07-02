@@ -57,24 +57,21 @@ describe('resolveRowPresentation', () => {
 	});
 
 	it('adds og-row-selected/og-row-focused for the focused row', () => {
-		const result = resolveRowPresentation(
-			makeDeps(),
-			baseInput({ state: { selection: { focus: { rowId: 'r1' }, bounds: null } } as any })
-		);
+		const result = resolveRowPresentation(makeDeps(), baseInput({ state: { selection: { focus: { rowId: 'r1' }, bounds: null } } as any }));
 		expect(result.className).toContain('og-row-selected');
 		expect(result.className).toContain('og-row-focused');
 	});
 
 	it('adds og-row-hovered when this row is the hovered row', () => {
-		const result = resolveRowPresentation(makeDeps({ selectionPaint: { hoveredRowIndex: 5, selectedRowIdSet: null, rowClassScratchRef: {} } as any }), baseInput());
+		const result = resolveRowPresentation(
+			makeDeps({ selectionPaint: { hoveredRowIndex: 5, selectedRowIdSet: null, rowClassScratchRef: {} } as any }),
+			baseInput()
+		);
 		expect(result.className).toContain('og-row-hovered');
 	});
 
 	it('adds og-row-loading when the row is loading', () => {
-		const result = resolveRowPresentation(
-			makeDeps({ engine: { data: { isRowLoading: vi.fn(() => true) } } as any }),
-			baseInput()
-		);
+		const result = resolveRowPresentation(makeDeps({ engine: { data: { isRowLoading: vi.fn(() => true) } } as any }), baseInput());
 		expect(result.className).toContain('og-row-loading');
 	});
 

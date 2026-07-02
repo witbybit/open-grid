@@ -155,8 +155,21 @@ export function resolveScrollCellPresentation<TRowData>(
 	deps: RowCellBinderDeps<TRowData>,
 	input: ScrollCellPresentationInput<TRowData>
 ): ScrollCellPresentation {
-	const { cellSlot, node, rowIndex, colIndex, col, lane, ctx, isRowRebind, isRowLoading, isInVisibleContent, snapshot, isWarmBindingVersionFresh, cellKey } =
-		input;
+	const {
+		cellSlot,
+		node,
+		rowIndex,
+		colIndex,
+		col,
+		lane,
+		ctx,
+		isRowRebind,
+		isRowLoading,
+		isInVisibleContent,
+		snapshot,
+		isWarmBindingVersionFresh,
+		cellKey,
+	} = input;
 
 	if (col.checkboxSelection) {
 		return { kind: 'checkbox-selector', className: buildCellPinClass(lane) + ' og-cell-row-selector', markDirty: isInVisibleContent };
@@ -177,7 +190,8 @@ export function resolveScrollCellPresentation<TRowData>(
 	if (!isInVisibleContent) {
 		const primitiveSnapshot = isPrimitiveSnapshotContent(snapshot) ? snapshot : undefined;
 		const canReuseSnapshotContent = !!primitiveSnapshot;
-		const canReuseSnapshotPortal = snapshot?.contentMode === 'portal' && hasAuthoritativePortalHostContent(deps, cellSlot, cellSlot.lastPortalKey);
+		const canReuseSnapshotPortal =
+			snapshot?.contentMode === 'portal' && hasAuthoritativePortalHostContent(deps, cellSlot, cellSlot.lastPortalKey);
 		const preservedContentMode: CellContentMode = canReuseSnapshotPortal
 			? 'portal'
 			: canReuseSnapshotContent
@@ -190,7 +204,9 @@ export function resolveScrollCellPresentation<TRowData>(
 			className: cellClassName,
 			contentMode: preservedContentMode,
 			formattedValue:
-				canReuseSnapshotContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback') ? primitiveSnapshot.formattedValue : '',
+				canReuseSnapshotContent && (preservedContentMode === 'text' || preservedContentMode === 'fallback')
+					? primitiveSnapshot.formattedValue
+					: '',
 			portalKey: preservedContentMode === 'portal' && canReuseSnapshotPortal ? cellSlot.lastPortalKey : undefined,
 			releaseStalePortal: !canReuseSnapshotPortal && !!cellSlot.lastPortalKey,
 			title: snapshot?.title || null,
@@ -251,7 +267,13 @@ export function resolveScrollCellPresentation<TRowData>(
 	const snapshotDemandsImpostor = snapshot?.contentMode === 'fallback';
 	const hasScrollSnapshotHtml = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollSnapshot === 'html';
 
-	if (hasScrollImpostorCapability && hasExistingLivePortalContent && !isEditing && !isFocused && (!snapshotDemandsImpostor || hasScrollSnapshotHtml)) {
+	if (
+		hasScrollImpostorCapability &&
+		hasExistingLivePortalContent &&
+		!isEditing &&
+		!isFocused &&
+		(!snapshotDemandsImpostor || hasScrollSnapshotHtml)
+	) {
 		const globalChanged = cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalVersion !== cellSlot.lastMountedGlobalVersion;
 		const rowChanged =
 			cellSlot.lastMountedRowVersion !== -1 && input.rowVersion !== undefined && input.rowVersion !== cellSlot.lastMountedRowVersion;

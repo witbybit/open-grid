@@ -645,7 +645,14 @@ describe('Server demo ruthless runtime performance contracts', () => {
 					id: 'no-semantic-scroll-contract',
 					getCellDecorations: (_rowId, colField) => {
 						if (colField !== 'id') return [];
-						return [{ layerId: 'no-semantic-scroll-contract', kind: 'validationError', className: 'og-cell-validation-error', title: 'Review' }];
+						return [
+							{
+								layerId: 'no-semantic-scroll-contract',
+								kind: 'validationError',
+								className: 'og-cell-validation-error',
+								title: 'Review',
+							},
+						];
 					},
 				});
 			},

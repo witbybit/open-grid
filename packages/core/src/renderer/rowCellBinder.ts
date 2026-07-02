@@ -7,7 +7,13 @@ import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import { matchesCellSlotMountedFreshness, recordCellSlotMountedVisualVersions, type CellSlot, type CellContentMode } from './cellSlot.js';
-import { TextRendererHandle, FallbackRendererHandle, PortalRendererHandle, LoadingRendererHandle, CustomRendererHandle } from './cellRendererHandle.js';
+import {
+	TextRendererHandle,
+	FallbackRendererHandle,
+	PortalRendererHandle,
+	LoadingRendererHandle,
+	CustomRendererHandle,
+} from './cellRendererHandle.js';
 import type { CellRenderer } from './cellRenderer.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
@@ -169,7 +175,7 @@ function getCheapCellText<TRowData>(
 		// Warm DOM may accelerate only when it still belongs to this exact row/column — otherwise
 		// it's a different row's leftover text and must not be shown as a stand-in for this one.
 		const isSameIdentity = !!cellSlot && cellSlot.rowId === node.id && cellSlot.colField === col.field;
-		return isSameIdentity ? cellSlot!.lastFormattedValue ?? '' : '';
+		return isSameIdentity ? (cellSlot!.lastFormattedValue ?? '') : '';
 	}
 	if (col.valueGetter || deps.engine.hasFormula(node.id, col.field)) {
 		const val = deps.engine.data.getCellValue(node.id, col.field);
@@ -194,7 +200,7 @@ function getScrollMountValue<TRowData>(
 	// No row data at all (e.g. a loading placeholder row) — warm DOM may only stand in for this
 	// exact row/column identity, never for whatever row previously occupied this slot.
 	const isSameIdentity = !!cellSlot && cellSlot.rowId === node.id && cellSlot.colField === col.field;
-	return isSameIdentity ? cellSlot!.lastFormattedValue ?? '' : '';
+	return isSameIdentity ? (cellSlot!.lastFormattedValue ?? '') : '';
 }
 
 /**
