@@ -4,7 +4,7 @@ import { createEditRendererKey } from './identityKeys.js';
 import type { CellSlot, CellContentMode } from './cellSlot.js';
 import type { CellDisplaySnapshot } from './cellDisplaySnapshot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
-import type { VisualFreshness } from './visualFreshness.js';
+import { hasMountedDataVersionDrifted, type VisualFreshness } from './visualFreshness.js';
 import type { RowCellBinderDeps } from './rowCellBinder.js';
 
 export function isPrimitiveSnapshotContent(snapshot: CellDisplaySnapshot | undefined): snapshot is CellDisplaySnapshot {
@@ -282,9 +282,10 @@ export function resolveScrollCellPresentation<TRowData>(
 		!isFocused &&
 		(!snapshotDemandsImpostor || hasScrollSnapshotHtml)
 	) {
-		const globalChanged = cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalVersion !== cellSlot.lastMountedGlobalVersion;
-		const rowChanged =
-			cellSlot.lastMountedRowVersion !== -1 && input.rowVersion !== undefined && input.rowVersion !== cellSlot.lastMountedRowVersion;
+		const { globalChanged, rowChanged } = hasMountedDataVersionDrifted(cellSlot, {
+			rowVersion: input.rowVersion,
+			globalVersion: ctx.globalVersion,
+		});
 		const hasSnapshotCoverageForDecorations = !ctx.hasInsightDecorations || !!snapshot;
 		const shouldDirtyFrozen =
 			globalChanged ||
@@ -373,8 +374,7 @@ export function resolveScrollCellPresentation<TRowData>(
 		};
 	}
 
-	const globalChanged = cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalVersion !== cellSlot.lastMountedGlobalVersion;
-	const rowChanged = cellSlot.lastMountedRowVersion !== -1 && input.rowVersion !== undefined && input.rowVersion !== cellSlot.lastMountedRowVersion;
+	const { globalChanged, rowChanged } = hasMountedDataVersionDrifted(cellSlot, { rowVersion: input.rowVersion, globalVersion: ctx.globalVersion });
 	const isDataStale = !isRowRebind && canFreezePortal && (globalChanged || rowChanged);
 	const isPortalFrozen =
 		!isRowRebind && canFreezePortal && (!isDataStale || (isPortalSnapshotContent(snapshot) && snapshot.contentKind === 'portal-frozen'));

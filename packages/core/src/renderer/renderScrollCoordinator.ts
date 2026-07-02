@@ -18,7 +18,7 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { HeaderRenderer } from './headerRenderer.js';
 import type { FloatingFilterRenderer } from './floatingFilterRenderer.js';
 import type { StickyGroupRenderer } from './stickyGroupRenderer.js';
-import { isVisualFresh } from './visualFreshness.js';
+import { isRowVersionFresh, isVisualFresh } from './visualFreshness.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
@@ -447,7 +447,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 				(col as InternalColumnDef).cellRendererCapabilities?.scrollSnapshot === 'html'
 					? (() => {
 							const prev = this.deps.engine.cellDisplaySnapshots.get(rowId, col.field);
-							return prev?.rowVersion === prewarmRowVersion ? prev.frozenHtml : undefined;
+							return isRowVersionFresh(prev?.rowVersion, prewarmRowVersion) ? prev!.frozenHtml : undefined;
 						})()
 					: undefined;
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
@@ -586,7 +586,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 				(col as InternalColumnDef).cellRendererCapabilities?.scrollSnapshot === 'html'
 					? (() => {
 							const prev = this.deps.engine.cellDisplaySnapshots.get(rowId, col.field);
-							return prev?.rowVersion === prewarmRowVersion ? prev.frozenHtml : undefined;
+							return isRowVersionFresh(prev?.rowVersion, prewarmRowVersion) ? prev!.frozenHtml : undefined;
 						})()
 					: undefined;
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);

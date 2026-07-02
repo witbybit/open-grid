@@ -10,6 +10,7 @@ import type { CompiledColumnTopology } from './columnTopology.js';
 import { GridMetric, type GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot } from './cellDisplaySnapshot.js';
 import { applyCellSlotRetentionPolicy } from './cellSlotRetention.js';
+import { hasMountedDataVersionDrifted } from './visualFreshness.js';
 
 /** Minimal mutable sink for cell-slot retention counters — see renderTelemetry.ts RenderRuntimeStats. */
 export interface CellSlotRetentionTelemetrySink {
@@ -408,10 +409,9 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 			(cellSlot.lastContentMode === 'text' && cellSlot.lastFormattedValue === '...') ||
 			hasStalePortalMount ||
 			hasEmptyPortalHost;
-		const globalDataChanged =
-			cellSlot.lastMountedGlobalVersion !== -1 && (ctx.globalChangedDuringScroll || ctx.globalVersion !== cellSlot.lastMountedGlobalVersion);
-		const rowDataChanged =
-			cellSlot.lastMountedRowVersion !== -1 && currentRowVersion !== undefined && currentRowVersion !== cellSlot.lastMountedRowVersion;
+		const mountedDataVersionDrift = hasMountedDataVersionDrifted(cellSlot, { rowVersion: currentRowVersion, globalVersion: ctx.globalVersion });
+		const globalDataChanged = mountedDataVersionDrift.globalChanged || (cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalChangedDuringScroll);
+		const rowDataChanged = mountedDataVersionDrift.rowChanged;
 		const mountedFreshnessMatches = matchesCellSlotMountedFreshness(cellSlot, {
 			rowVersion: currentRowVersion ?? -1,
 			globalVersion: ctx.globalVersion,
