@@ -1,5 +1,6 @@
 import type {
 	FilterModel,
+	QuickFilterModel,
 	SortModel,
 	RowModel,
 	ClientStructuralRowModel,
@@ -204,6 +205,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			activeEdit: initialState.activeEdit || null,
 			sortModel: initialState.sortModel || null,
 			filterModel: initialState.filterModel || null,
+			quickFilterModel: initialState.quickFilterModel || null,
 			queryModel: initialState.queryModel || null,
 			getRowId: initialState.getRowId,
 			loading: initialState.loading,
@@ -490,6 +492,23 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public setFilterModel = (filterModel: FilterModel | null): void => {
 		this.engine.setFilterModel(filterModel);
+	};
+
+	public getQuickFilter = (): QuickFilterModel | null => {
+		return this.state.quickFilterModel ?? null;
+	};
+
+	/**
+	 * Search a single string across multiple columns at once — the "search box" pattern.
+	 * A row passes if ANY targeted column's display value contains `text` (case-insensitive).
+	 * Combines with any active `filterModel`/`queryModel` via AND. Pass an empty/whitespace-only
+	 * string (or omit it) to clear the quick filter.
+	 *
+	 * @param columnIds Column fields to search. Omit to search every displayed column.
+	 */
+	public setQuickFilter = (text: string, columnIds?: string[]): void => {
+		const trimmed = text.trim();
+		this.engine.setQuickFilterModel(trimmed ? { text: trimmed, columnIds } : null);
 	};
 
 	public getQueryModel = (): GridQueryModel | null => {

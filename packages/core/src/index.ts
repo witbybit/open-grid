@@ -114,6 +114,7 @@ export type { PersistedGridState as SerializableGridState } from './persistence/
 export { isDomCellRenderer } from './columnDef.js';
 export type {
 	FilterModel,
+	QuickFilterModel,
 	ColumnFilter,
 	FilterCondition,
 	TextFilterCondition,

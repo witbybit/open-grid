@@ -118,6 +118,8 @@ export function createGridRuntimeComposition<TRowData>({
 		setRowHeight: (rowId: string, height: number) => runtime.setRowHeight(rowId, height),
 		setSortModel: (sortModel: SortModel | null) => runtime.setSortModel(sortModel),
 		setFilterModel: (filterModel: FilterModel | null) => runtime.setFilterModel(filterModel),
+		getQuickFilter: () => runtime.getQuickFilter(),
+		setQuickFilter: (text: string, columnIds?: string[]) => runtime.setQuickFilter(text, columnIds),
 		setGroupBy: (colIds: string[]) => runtime.setGroupBy(colIds),
 		getGroupBy: () => runtime.getGroupBy(),
 		addGroupBy: (colId: string, atIndex?: number) => runtime.addGroupBy(colId, atIndex),

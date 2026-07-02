@@ -1,4 +1,4 @@
-import type { FilterModel, SortModel, AggregationDef, RowModelCapability, RowModelCapabilities } from '../rowModel.js';
+import type { FilterModel, QuickFilterModel, SortModel, AggregationDef, RowModelCapability, RowModelCapabilities } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { RuntimePortBinding, RuntimePortBindResult, GridRuntimePorts } from '../engine/rendererPorts.js';
@@ -124,6 +124,9 @@ export interface GridStructureApi<TRowData = unknown> {
 	setRowHeight(rowId: string, height: number): void;
 	setSortModel(sortModel: SortModel | null): void;
 	setFilterModel(filterModel: FilterModel | null): void;
+	getQuickFilter(): QuickFilterModel | null;
+	/** Search a single string across multiple columns (or every column). See `QuickFilterModel`. */
+	setQuickFilter(text: string, columnIds?: string[]): void;
 	getQueryModel(): GridQueryModel | null;
 	setQueryModel(model: GridQueryModel | null): void;
 	clearQueryModel(): void;

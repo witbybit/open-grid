@@ -73,6 +73,7 @@ export type {
 	CellEditorProps,
 	CellRendererProps,
 	FilterModel,
+	QuickFilterModel,
 	SortModel,
 	GridApi,
 	GridCellClickParams,

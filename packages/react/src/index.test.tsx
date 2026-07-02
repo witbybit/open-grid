@@ -2106,3 +2106,42 @@ describe('Grid theme configuration', () => {
 		expect(api!.getTheme().bgColor).toBe('#010203');
 	});
 });
+
+describe('Grid quick filter (search across columns)', () => {
+	it('setQuickFilter narrows visible rows by matching across every column, without hand-rolled row filtering', async () => {
+		let api: GridApi<TestRow> | undefined;
+		const rows = [
+			{ id: '1', name: 'Alice' },
+			{ id: '2', name: 'Bob' },
+			{ id: '3', name: 'Cara' },
+		];
+
+		render(
+			<div style={{ width: 400, height: 300 }}>
+				<Grid<TestRow>
+					rowModelType='client'
+					rows={rows}
+					columns={[{ field: 'name', header: 'Name', width: 120 }]}
+					getRowId={(row) => row.id}
+					enableNavigation={false}
+					onGridReady={(event) => {
+						api = event.api;
+					}}
+				/>
+			</div>
+		);
+
+		await waitFor(() => expect(api).toBeDefined());
+		await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
+
+		act(() => api!.setQuickFilter('a'));
+		await waitFor(() => {
+			expect(screen.getByText('Alice')).toBeTruthy();
+			expect(screen.getByText('Cara')).toBeTruthy();
+			expect(screen.queryByText('Bob')).toBeNull();
+		});
+
+		act(() => api!.setQuickFilter(''));
+		await waitFor(() => expect(screen.getByText('Bob')).toBeTruthy());
+	});
+});

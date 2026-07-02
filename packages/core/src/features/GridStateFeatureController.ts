@@ -1,6 +1,6 @@
 import { GridEventName } from '../api/GridEvents.js';
 import type { StateManager } from '../state/StateManager.js';
-import type { SortModel, FilterModel } from '../rowModel.js';
+import type { SortModel, FilterModel, QuickFilterModel } from '../rowModel.js';
 import type { RowModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { GridCommit, GridCommitResult } from '../engine/GridChangeApplier.js';
@@ -219,6 +219,27 @@ export class GridStateFeatureController<TRowData = unknown> {
 						},
 					}
 				: undefined,
+			requestRender: !hasRowModel,
+		});
+	}
+
+	/**
+	 * Not undoable by default — a search box typically changes on every keystroke, and putting
+	 * each intermediate value on the undo stack would make undo/redo useless for anything else.
+	 */
+	public setQuickFilterModel(quickFilterModel: QuickFilterModel | null): void {
+		if (this.checkCapability) {
+			const result = this.checkCapability('filter', {});
+			if (!result.allowed) return;
+		}
+		const hasRowModel = this.deps.getRowModel?.() != null;
+		const forwardInvalidations = hasRowModel ? [] : [{ kind: 'full' } as const];
+		this.deps.applyChange({
+			reason: 'rows:set-quick-filter-model',
+			state: { quickFilterModel },
+			invalidations: forwardInvalidations,
+			domains: ['rows', 'filtering'],
+			events: [{ type: GridEventName.quickFilterChanged, payload: { quickFilterModel } }],
 			requestRender: !hasRowModel,
 		});
 	}

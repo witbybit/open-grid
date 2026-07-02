@@ -26,8 +26,8 @@ Set a built-in theme name declaratively via `initialState`. This is resolved onc
 
 ```tsx
 <Grid
-  initialState={{ themeName: 'light' }}
-  // ...
+	initialState={{ themeName: 'light' }}
+	// ...
 />
 ```
 
@@ -37,8 +37,8 @@ Framework-agnostic (`@open-grid/core`) equivalent:
 import { createClientGrid } from '@open-grid/core';
 
 const api = createClientGrid({
-  ...config,
-  initialState: { themeName: 'light' },
+	...config,
+	initialState: { themeName: 'light' },
 });
 ```
 
@@ -93,10 +93,10 @@ Or declare the initial tweaks up front, alongside a base theme name — both are
 
 ```tsx
 <Grid
-  initialState={{
-    themeName: 'light',
-    themeOverrides: { focusRing: '#1e2148', selectionBg: 'rgba(30, 33, 72, 0.08)' },
-  }}
+	initialState={{
+		themeName: 'light',
+		themeOverrides: { focusRing: '#1e2148', selectionBg: 'rgba(30, 33, 72, 0.08)' },
+	}}
 />
 ```
 
@@ -334,20 +334,20 @@ api.mergeTheme({
 
 ```tsx
 function DynamicThemeExample() {
-  const [themeMode, setThemeMode] = useState<'light' | 'dark'>('dark');
-  const [api, setApi] = useState<GridApi<Row> | null>(null);
+	const [themeMode, setThemeMode] = useState<'light' | 'dark'>('dark');
+	const [api, setApi] = useState<GridApi<Row> | null>(null);
 
-  useEffect(() => {
-    api?.switchTheme(themeMode);
-  }, [api, themeMode]);
+	useEffect(() => {
+		api?.switchTheme(themeMode);
+	}, [api, themeMode]);
 
-  return (
-    <div>
-      <button onClick={() => setThemeMode('light')}>Light</button>
-      <button onClick={() => setThemeMode('dark')}>Dark</button>
-      <Grid onGridReady={(event) => setApi(event.api)} /* ...rest of grid config */ />
-    </div>
-  );
+	return (
+		<div>
+			<button onClick={() => setThemeMode('light')}>Light</button>
+			<button onClick={() => setThemeMode('dark')}>Dark</button>
+			<Grid onGridReady={(event) => setApi(event.api)} /* ...rest of grid config */ />
+		</div>
+	);
 }
 ```
 
@@ -468,14 +468,14 @@ Open Grid includes an interactive CSS Theme Studio component to:
 import { CSSThemeStudio } from './components/CSSThemeStudio';
 
 function App() {
-  const [api, setApi] = useState<GridApi<Row> | null>(null);
+	const [api, setApi] = useState<GridApi<Row> | null>(null);
 
-  return (
-    <>
-      <CSSThemeStudio onThemeSelect={(themeName, theme) => api?.setTheme(theme)} />
-      <Grid onGridReady={(event) => setApi(event.api)} /* ...rest of grid config */ />
-    </>
-  );
+	return (
+		<>
+			<CSSThemeStudio onThemeSelect={(themeName, theme) => api?.setTheme(theme)} />
+			<Grid onGridReady={(event) => setApi(event.api)} /* ...rest of grid config */ />
+		</>
+	);
 }
 ```
 

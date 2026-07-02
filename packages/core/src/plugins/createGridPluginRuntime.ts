@@ -67,6 +67,8 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		setRowHeight: source.setRowHeight,
 		setSortModel: source.setSortModel,
 		setFilterModel: source.setFilterModel,
+		getQuickFilter: source.getQuickFilter,
+		setQuickFilter: source.setQuickFilter,
 		getQueryModel: source.getQueryModel,
 		setQueryModel: source.setQueryModel,
 		clearQueryModel: source.clearQueryModel,
