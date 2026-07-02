@@ -14,7 +14,7 @@ import { RowRendererRuntimeBridge } from './rowRendererRuntime.js';
 import { asVisibleBlockLoadCapableRowModel } from '../rowModel.js';
 import { compileStyleRules } from '../styling/styleRules.js';
 import { PinnedContainerManager } from './pinnedContainerManager.js';
-import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
+import { compileColumnTopology, computeColumnWindowDelta, type CompiledColumnTopology } from './columnTopology.js';
 import { resolveRowPresentation } from './rowPresentationResolver.js';
 import {
 	applyRenderWindowRuntimeLimits,
@@ -267,11 +267,38 @@ export class RowRenderer<TRowData = unknown> {
 		}
 	}
 
-	private getCompiledColumnTopology(plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>): CompiledColumnTopology {
+	private getCompiledColumnTopology(
+		plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>,
+		isScrollFrameActive: boolean
+	): CompiledColumnTopology {
 		if (this.cachedColumnTopology && this.cachedColumnTopologyVersion === plan.version) {
 			return this.cachedColumnTopology;
 		}
 		const topology = compileColumnTopology(plan);
+		// The topology itself only changes on pin/unpin/reorder/resize (plan.version bump) — NOT on
+		// routine horizontal scroll, which shifts centerColStart/centerColCount over a static
+		// topology (already tracked by cols{Entered,Exited,Stayed}DuringScroll via diffRenderWindow
+		// above). This delta is the real, previously-unused signal for topology-CHANGE events —
+		// in particular laneMoves (pin/unpin), which diffRenderWindow's index-window diff can't see.
+		if (this.cachedColumnTopology && this.renderStats) {
+			const delta = computeColumnWindowDelta(this.cachedColumnTopology, topology);
+			this.renderStats.columnTopologyDeltaComputations = (this.renderStats.columnTopologyDeltaComputations || 0) + 1;
+			if (isScrollFrameActive) {
+				this.renderStats.columnTopologyDeltaComputationsDuringScroll = (this.renderStats.columnTopologyDeltaComputationsDuringScroll || 0) + 1;
+			}
+			this.renderStats.horizontalStayedColumns = (this.renderStats.horizontalStayedColumns || 0) + delta.stayedCenterColumns.length;
+			this.renderStats.horizontalEnteredColumns =
+				(this.renderStats.horizontalEnteredColumns || 0) +
+				delta.enteredCenterColumns.length +
+				delta.enteredPinnedLeftColumns.length +
+				delta.enteredPinnedRightColumns.length;
+			this.renderStats.horizontalExitedColumns =
+				(this.renderStats.horizontalExitedColumns || 0) +
+				delta.exitedCenterColumns.length +
+				delta.exitedPinnedLeftColumns.length +
+				delta.exitedPinnedRightColumns.length;
+			this.renderStats.horizontalLaneMoves = (this.renderStats.horizontalLaneMoves || 0) + delta.laneMoves.length;
+		}
 		this.cachedColumnTopology = topology;
 		this.cachedColumnTopologyVersion = plan.version;
 		return topology;
@@ -346,7 +373,7 @@ export class RowRenderer<TRowData = unknown> {
 		const rowModel = this.engine.getVisualRowModel();
 
 		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
-		const columnTopology = this.getCompiledColumnTopology(plan);
+		const columnTopology = this.getCompiledColumnTopology(plan, isScrollFrameActive);
 		const columns = plan.displayedColumns;
 		const loading = ctx ? ctx.loadingVersion > 0 : state.loading;
 

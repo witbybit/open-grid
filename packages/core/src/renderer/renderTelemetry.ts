@@ -68,6 +68,12 @@ export interface RenderRuntimeStats {
 	colsEnteredDuringScroll: number;
 	colsExitedDuringScroll: number;
 	colsStayedDuringScroll: number;
+	columnTopologyDeltaComputations: number;
+	columnTopologyDeltaComputationsDuringScroll: number;
+	horizontalStayedColumns: number;
+	horizontalEnteredColumns: number;
+	horizontalExitedColumns: number;
+	horizontalLaneMoves: number;
 	cellsSkippedDuringScroll: number;
 	sameWindowBailouts: number;
 	cellsBoundDuringScroll: number;
@@ -141,6 +147,12 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		colsEnteredDuringScroll: 0,
 		colsExitedDuringScroll: 0,
 		colsStayedDuringScroll: 0,
+		columnTopologyDeltaComputations: 0,
+		columnTopologyDeltaComputationsDuringScroll: 0,
+		horizontalStayedColumns: 0,
+		horizontalEnteredColumns: 0,
+		horizontalExitedColumns: 0,
+		horizontalLaneMoves: 0,
 		cellsSkippedDuringScroll: 0,
 		sameWindowBailouts: 0,
 		cellsBoundDuringScroll: 0,
@@ -227,6 +239,12 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		colsEnteredDuringScroll: deps.runtimeStats.colsEnteredDuringScroll,
 		colsExitedDuringScroll: deps.runtimeStats.colsExitedDuringScroll,
 		colsStayedDuringScroll: deps.runtimeStats.colsStayedDuringScroll,
+		columnTopologyDeltaComputations: deps.runtimeStats.columnTopologyDeltaComputations,
+		columnTopologyDeltaComputationsDuringScroll: deps.runtimeStats.columnTopologyDeltaComputationsDuringScroll,
+		horizontalStayedColumns: deps.runtimeStats.horizontalStayedColumns,
+		horizontalEnteredColumns: deps.runtimeStats.horizontalEnteredColumns,
+		horizontalExitedColumns: deps.runtimeStats.horizontalExitedColumns,
+		horizontalLaneMoves: deps.runtimeStats.horizontalLaneMoves,
 		cellsSkippedDuringScroll: deps.runtimeStats.cellsSkippedDuringScroll,
 		sameWindowBailouts: deps.runtimeStats.sameWindowBailouts,
 		stateReadsDuringScroll: deps.runtimeStats.stateReadsDuringScroll,

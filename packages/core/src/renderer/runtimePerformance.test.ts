@@ -531,6 +531,30 @@ describe('Runtime Performance & Granular Versioning', () => {
 		cleanupGrid(grid);
 	});
 
+	it('BLOCKER: pinning a column mid-session drives real horizontal-delta telemetry via computeColumnWindowDelta', () => {
+		// Distinct from the routine-scroll cols{Entered,Exited,Stayed}DuringScroll counters (which
+		// track the render WINDOW shifting over a static topology) — this proves a genuine topology
+		// CHANGE (pin/unpin) is diffed via computeColumnWindowDelta, not silently dropped.
+		const grid = createWideGrid({ rows: 1000, cols: 20 });
+		grid.renderer.fullPaint();
+		grid.renderer.resetRenderStats();
+
+		grid.store.setPinnedColumns({ left: 2, right: 1 });
+		grid.renderer.fullPaint();
+
+		const stats = grid.renderer.getRenderStats();
+		expect(stats.columnTopologyDeltaComputations).toBeGreaterThan(0);
+		// Pinning relocates existing columns to a different lane — they remain in the column SET, so
+		// they show up as laneMoves (relocated), never as entered/exited (those track columns
+		// added/removed from the topology entirely, which pinning does not do).
+		expect(stats.horizontalLaneMoves).toBe(3); // 2 newly-pinned-left + 1 newly-pinned-right
+		expect(stats.horizontalEnteredColumns).toBe(0);
+		expect(stats.horizontalExitedColumns).toBe(0);
+		expect(stats.horizontalStayedColumns).toBe(17); // 20 columns - 3 relocated
+
+		cleanupGrid(grid);
+	});
+
 	it('caps rendered rows and cells through runtime limits', () => {
 		const grid = createWideGrid({ rows: 100000, cols: 1000 });
 		const window = grid.renderer.rowRenderer.currentWindow as RenderWindow;
