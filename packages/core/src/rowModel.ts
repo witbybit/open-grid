@@ -1039,6 +1039,7 @@ export class ClientRowModelController<TData = unknown>
 				this.runtime.applyRefreshInvalidation(this.refresh('filter'), {
 					invalidationReason: 'filter',
 					requestRenderReason: 'rows:set-filter-model',
+					includeHeaders: true,
 					includeOverlay: true,
 				});
 			}),
@@ -1047,6 +1048,7 @@ export class ClientRowModelController<TData = unknown>
 				this.runtime.applyRefreshInvalidation(this.refresh('filter'), {
 					invalidationReason: 'filter',
 					requestRenderReason: 'rows:set-quick-filter-model',
+					includeHeaders: true,
 					includeOverlay: true,
 				});
 			}),

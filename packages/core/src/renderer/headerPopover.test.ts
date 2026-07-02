@@ -10,6 +10,15 @@ interface TestRow {
 	price: number;
 }
 
+// Render invalidation is scheduled microtask → requestAnimationFrame (see frameCoordinator.ts),
+// so DOM repaints from state changes (e.g. setFilterModel) never happen synchronously — tests
+// that assert on the resulting DOM must flush both stages first.
+async function flushPendingPaint(): Promise<void> {
+	await Promise.resolve();
+	await Promise.resolve();
+	await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 describe('HeaderPopoverMenu', () => {
 	let store: GridStore<TestRow>;
 	let rowController: ClientRowModelController<TestRow>;
@@ -118,7 +127,7 @@ describe('HeaderPopoverMenu', () => {
 		expect(store.getDataRowAtVisualIndex(2)?.name).toBe('Product A');
 	});
 
-	it('should apply and clear column filters', () => {
+	it('should apply and clear column filters', async () => {
 		const priceCell = Array.from(container.querySelectorAll('.og-header-cell')).find(
 			(el) => (el as HTMLElement).dataset.colField === 'price'
 		) as HTMLElement;
@@ -140,11 +149,19 @@ describe('HeaderPopoverMenu', () => {
 		select.value = 'gt';
 		input.value = '150';
 		applyBtn.click();
+		await flushPendingPaint();
 
 		// Rows should be filtered: only C (300) and B (200) match
 		expect(store.getVisualRowCount()).toBe(2);
 		expect(store.getDataRowAtVisualIndex(0)?.price).toBe(300);
 		expect(store.getDataRowAtVisualIndex(1)?.price).toBe(200);
+
+		// The header's active-filter indicator must reflect the new filter as soon as the render
+		// pipeline's own paint scheduling flushes — no unrelated event (a later click, a focus
+		// change) should be required to nudge a repaint.
+		const filterIndicator = priceCell.querySelector('.og-header-filter-indicator') as HTMLDivElement;
+		expect(filterIndicator).not.toBeNull();
+		expect(filterIndicator.style.display).toBe('flex');
 
 		// Open popover again and verify existing query is populated
 		menuBtn.click();
@@ -158,9 +175,12 @@ describe('HeaderPopoverMenu', () => {
 		const clearBtn = Array.from(nextPopover.querySelectorAll('.og-popover-btn')).find((el) => el.textContent === 'Clear') as HTMLButtonElement;
 		expect(clearBtn).not.toBeNull();
 		clearBtn.click();
+		await flushPendingPaint();
 
 		// Rows should be restored
 		expect(store.getVisualRowCount()).toBe(3);
+		// Indicator must clear as soon as the paint pipeline flushes — same requirement as above.
+		expect(filterIndicator.style.display).toBe('none');
 	});
 
 	it('should support custom headerMenuRenderer in ColumnDef', () => {

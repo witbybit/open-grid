@@ -329,13 +329,6 @@ export class HeaderMenuController<TRowData = unknown> {
 			input.addEventListener('keydown', (e) => {
 				if (e.key === 'Enter') applyBtn.click();
 			});
-			input.addEventListener('input', () => {
-				if (this.filterDebounceTimer !== null) clearTimeout(this.filterDebounceTimer);
-				this.filterDebounceTimer = setTimeout(() => {
-					this.filterDebounceTimer = null;
-					applyBtn.click();
-				}, 300);
-			});
 			filterContainer.appendChild(input);
 
 			const btnGroup = document.createElement('div');
