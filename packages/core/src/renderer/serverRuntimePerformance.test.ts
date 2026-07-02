@@ -914,6 +914,45 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		cleanupGrid(grid);
 	}, 20_000);
 
+	it('shows the server loading skeleton identically in pinned-left, center, and pinned-right lanes', async () => {
+		// Pillar of Phase 7 (pinned lanes are geometry/topology only): the loading skeleton is a
+		// content decision, not a lane decision, so all three lanes must agree on it before any
+		// row data resolves — no lane should "wake" or settle differently than the others.
+		const grid = await createServerAuditGrid({
+			rows: 5_000,
+			cols: 20,
+			configureStore: (store) => store.setPinnedColumns({ left: 1, right: 1 }),
+		});
+
+		const firstRow = grid.container.querySelector('.og-row[data-row-index="0"]') as HTMLElement | null;
+		expect(firstRow).not.toBeNull();
+		const leftCell = firstRow!.querySelector<HTMLElement>('.og-cell.og-cell-pinned-left');
+		const rightCell = firstRow!.querySelector<HTMLElement>('.og-cell.og-cell-pinned-right');
+		const centerCell = Array.from(firstRow!.querySelectorAll<HTMLElement>('.og-cell')).find(
+			(cell) => !cell.classList.contains('og-cell-pinned-left') && !cell.classList.contains('og-cell-pinned-right')
+		);
+		expect(leftCell).toBeDefined();
+		expect(rightCell).toBeDefined();
+		expect(centerCell).toBeDefined();
+
+		// Assert parity, not a specific timing: whichever state the row is in immediately after
+		// mount, all three lanes must agree — never a mix where one lane is still loading while
+		// another has already settled real content.
+		const loadingStates = [leftCell, centerCell, rightCell].map(
+			(cell) => cell!.classList.contains('og-cell-loading') || cell!.dataset.contentMode === 'loading'
+		);
+		expect(new Set(loadingStates).size).toBe(1);
+
+		await settleVisibleServerRows(grid);
+		// Once settled, no lane should still be showing the loading skeleton while others resolved —
+		// they must all transition together.
+		for (const cell of [leftCell, centerCell, rightCell]) {
+			expect(cell!.classList.contains('og-cell-loading')).toBe(false);
+		}
+
+		cleanupGrid(grid);
+	}, 10_000);
+
 	it('records separate motion and fidelity evidence for feather-scroll review scenarios', async () => {
 		const grid = await createServerAuditGrid({ rows: 20_000, cols: 120 });
 		await browserScrollTo(grid, 2_000, 4_000);
