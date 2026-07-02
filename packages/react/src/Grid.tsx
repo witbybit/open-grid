@@ -364,11 +364,11 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 
 	return (
 		<GridProvider api={api}>
-			<div className='flex h-full w-full flex-col'>
-				<div className='min-h-0 flex-1'>
+			<div style={{ display: 'flex', height: '100%', width: '100%', flexDirection: 'column' }}>
+				<div style={{ minHeight: 0, flex: 1 }}>
 					<GridView<TRowData> {...viewProps} api={api} />
 				</div>
-				{children ? <div className='shrink-0'>{children}</div> : null}
+				{children ? <div style={{ flexShrink: 0 }}>{children}</div> : null}
 			</div>
 		</GridProvider>
 	);
