@@ -236,6 +236,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 				maxRenderedCells: 20_000,
 				suppressRenderedRangeLimit: false,
 				maxFilterDistinctValues: 500,
+				maxWarmCustomRenderers: 300,
 				...initialState.runtimeLimits,
 			},
 			overscanAdaptive: initialState.overscanAdaptive,

@@ -95,6 +95,14 @@ export interface GridModelState<TRowData = unknown> {
 		maxRenderedCells?: number;
 		suppressRenderedRangeLimit?: boolean;
 		maxFilterDistinctValues?: number;
+		/**
+		 * Max custom-cell-renderer instances kept warm (React-mounted, hidden) after scrolling
+		 * out of view, reused on re-entry instead of a full cold remount. Default: 300.
+		 * Size this to at least (visible custom-renderer cells) + (a few rows of scroll-back
+		 * slack) — undersizing causes cold-mount thrashing (React unmount+remount) whenever a
+		 * user scrolls past more distinct custom cells than this in one direction, then reverses.
+		 */
+		maxWarmCustomRenderers?: number;
 	};
 	overscanAdaptive?: boolean;
 }

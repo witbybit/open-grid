@@ -72,8 +72,21 @@ export class CustomRendererManager<TRowData = unknown> {
 	private lruCounter = 0;
 
 	// Limits
-	private maxWarm = 50;
+	/** Explicit override set via setLimits(); takes precedence over the live runtimeLimits config. */
+	private maxWarmOverride: number | null = null;
 	private ttlMs = 30000; // 30s TTL
+
+	/**
+	 * Live-read from runtimeLimits so a config change takes effect immediately without needing
+	 * an explicit setLimits() call. Falls back to 300 if unset/no engine (e.g. in isolated tests).
+	 * Undersizing this relative to how many distinct custom-renderer cells a user scrolls past
+	 * before reversing direction causes cold-mount thrashing — see customRendererManager.test.ts.
+	 */
+	private get maxWarm(): number {
+		if (this.maxWarmOverride !== null) return this.maxWarmOverride;
+		const configured = this.engine?.stateManager.getState().runtimeLimits?.maxWarmCustomRenderers;
+		return typeof configured === 'number' && configured > 0 ? configured : 300;
+	}
 
 	// Stats
 	private stats: CustomRendererStats = {
@@ -133,7 +146,7 @@ export class CustomRendererManager<TRowData = unknown> {
 	}
 
 	public setLimits(maxWarm: number, ttlMs: number): void {
-		this.maxWarm = maxWarm;
+		this.maxWarmOverride = maxWarm;
 		this.ttlMs = ttlMs;
 		this.pruneWarmCache();
 	}
