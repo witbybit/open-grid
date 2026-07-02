@@ -43,6 +43,39 @@ export function hasAuthoritativePortalHostContent<TRowData>(
 }
 
 /**
+ * Composite identity guard for freezing an already-mounted live portal in place during scroll
+ * instead of replacing it with an impostor. Warm DOM (`lastPortalKey`, the portal host's own
+ * child content) may gate this decision only through this exact three-part check — a row rebind
+ * means the warm content belongs to the OLD row identity and must never be trusted, and a
+ * mismatched portal key means the warm content belongs to a different cell/edit session.
+ */
+export function canFreezeExistingPortalForIdentity<TRowData>(
+	deps: ScrollCellPresentationDeps,
+	cellSlot: CellSlot<TRowData>,
+	expectedPortalKey: string,
+	isRowRebind: boolean
+): boolean {
+	return !isRowRebind && cellSlot.lastPortalKey === expectedPortalKey && hasAuthoritativePortalHostContent(deps, cellSlot, expectedPortalKey);
+}
+
+/**
+ * Identity+freshness guard for reusing a cell's own previously-rendered text as a scroll-time
+ * stand-in. Warm text (`lastFormattedValue`/`lastContentMode`) is only trustworthy at all when the
+ * slot's warm binding version is still fresh AND it actually has a cached value — that base check
+ * lives here so no call site probes `lastFormattedValue`/`isWarmBindingVersionFresh` directly.
+ * Callers apply their own additional content-mode filter on the returned `contentMode` (the
+ * acceptable mode set genuinely differs per call site — e.g. exactly text/fallback vs. merely
+ * not-portal), so this deliberately does not make that filtering decision itself.
+ */
+export function canReuseWarmTextForIdentity<TRowData>(
+	cellSlot: Pick<CellSlot<TRowData>, 'lastContentMode' | 'lastFormattedValue'>,
+	isWarmBindingVersionFresh: boolean
+): { formattedValue: string; contentMode: CellContentMode } | undefined {
+	if (!isWarmBindingVersionFresh || cellSlot.lastFormattedValue == null) return undefined;
+	return { formattedValue: cellSlot.lastFormattedValue, contentMode: cellSlot.lastContentMode };
+}
+
+/**
  * The full set of outcomes bindCellDuringScroll can resolve a cell to. Each variant carries
  * exactly the data its corresponding apply step in bindCellDuringScroll needs — the DOM writes,
  * portal mount/release calls, snapshot-store writes, and telemetry increments all stay in the
@@ -243,12 +276,13 @@ export function resolveScrollCellPresentation<TRowData>(
 		let contentMode: CellContentMode;
 		let formattedValue: string;
 		let markDirty = false;
+		const warmText = canReuseWarmTextForIdentity(cellSlot, isWarmBindingVersionFresh);
 		if (isPrimitiveSnapshotContent(snapshot)) {
 			formattedValue = snapshot.formattedValue;
 			contentMode = snapshot.contentMode;
-		} else if (isWarmBindingVersionFresh && (cellSlot.lastContentMode === 'text' || cellSlot.lastContentMode === 'fallback')) {
-			formattedValue = cellSlot.lastFormattedValue ?? '';
-			contentMode = cellSlot.lastContentMode;
+		} else if (warmText && (warmText.contentMode === 'text' || warmText.contentMode === 'fallback')) {
+			formattedValue = warmText.formattedValue;
+			contentMode = warmText.contentMode;
 			markDirty = true;
 		} else {
 			formattedValue = '...';
@@ -282,8 +316,7 @@ export function resolveScrollCellPresentation<TRowData>(
 	// that were already visible and rendered when the scroll began.
 	// A row rebind (different row reusing this slot) is excluded — existing content belongs to the
 	// old row identity and must never bleed into the incoming row.
-	const hasExistingLivePortalContent =
-		!isRowRebind && cellSlot.lastPortalKey === portalCellKey && hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
+	const hasExistingLivePortalContent = canFreezeExistingPortalForIdentity(deps, cellSlot, portalCellKey, isRowRebind);
 
 	// A prewarm snapshot that explicitly says 'fallback' (impostor) takes authority over the freeze
 	// path, except for scrollSnapshot:'html' columns, where the freeze moment is the only reliable
@@ -364,9 +397,10 @@ export function resolveScrollCellPresentation<TRowData>(
 	if (hasScrollImpostorCapability && !isEditing && !isFocused && !canFreezePortal) {
 		const genericCheap = deps.getCheapDisplayValue(node.id, col.field) ?? '';
 		const scrollImpostorFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollImpostor;
+		const warmSyntheticText = canReuseWarmTextForIdentity(cellSlot, isWarmBindingVersionFresh);
 		const cheapValue =
-			isWarmBindingVersionFresh && cellSlot.lastFormattedValue != null && cellSlot.lastContentMode !== 'portal'
-				? cellSlot.lastFormattedValue
+			warmSyntheticText && warmSyntheticText.contentMode !== 'portal'
+				? warmSyntheticText.formattedValue
 				: scrollImpostorFn != null
 					? scrollImpostorFn({ value: undefined, formattedValue: genericCheap }) || genericCheap
 					: genericCheap;
@@ -445,9 +479,10 @@ export function resolveScrollCellPresentation<TRowData>(
 	// impostor-capable path already uses, and let the fidelity lane mount the real renderer later.
 	const genericCheap = deps.getCheapDisplayValue(node.id, col.field) ?? '';
 	const fallbackScrollImpostorFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollImpostor;
+	const warmFallbackText = canReuseWarmTextForIdentity(cellSlot, isWarmBindingVersionFresh);
 	const fallbackCheapValue =
-		isWarmBindingVersionFresh && cellSlot.lastFormattedValue != null && cellSlot.lastContentMode !== 'portal'
-			? cellSlot.lastFormattedValue
+		warmFallbackText && warmFallbackText.contentMode !== 'portal'
+			? warmFallbackText.formattedValue
 			: fallbackScrollImpostorFn != null
 				? fallbackScrollImpostorFn({ value: undefined, formattedValue: genericCheap }) || genericCheap
 				: genericCheap;

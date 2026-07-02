@@ -3,7 +3,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { CellSlot } from './cellSlot.js';
-import { resolveScrollCellPresentation, type ScrollCellPresentationDeps, type ScrollCellPresentationInput } from './scrollCellPresentation.js';
+import {
+	canFreezeExistingPortalForIdentity,
+	canReuseWarmTextForIdentity,
+	resolveScrollCellPresentation,
+	type ScrollCellPresentationDeps,
+	type ScrollCellPresentationInput,
+} from './scrollCellPresentation.js';
 
 it('BOUNDARY: scrollCellPresentation.ts must not import RowCellBinderDeps or any broad binder dependency bag', () => {
 	const source = readFileSync(resolve(__dirname, 'scrollCellPresentation.ts'), 'utf-8');
@@ -185,5 +191,82 @@ describe('resolveScrollCellPresentation', () => {
 				})
 			)
 		).not.toThrow();
+	});
+});
+
+describe('canFreezeExistingPortalForIdentity', () => {
+	function warmPortalSlot(portalKey: string): CellSlot<{ id: string; name: string }> {
+		const cellSlot = new CellSlot<{ id: string; name: string }>(document.createElement('div'));
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell', 'portal', undefined, '', portalKey);
+		return cellSlot;
+	}
+
+	it('allows freezing when identity matches, not a row rebind, and the host has authoritative content', () => {
+		const cellSlot = warmPortalSlot('ci1:name');
+		const deps = makeDeps({
+			getCellPortalHost: () => {
+				const host = document.createElement('div');
+				host.appendChild(document.createElement('span'));
+				return host;
+			},
+		});
+		expect(canFreezeExistingPortalForIdentity(deps, cellSlot, 'ci1:name', false)).toBe(true);
+	});
+
+	it('refuses to freeze across a row rebind even when the portal key matches', () => {
+		const cellSlot = warmPortalSlot('ci1:name');
+		const deps = makeDeps({
+			getCellPortalHost: () => {
+				const host = document.createElement('div');
+				host.appendChild(document.createElement('span'));
+				return host;
+			},
+		});
+		expect(canFreezeExistingPortalForIdentity(deps, cellSlot, 'ci1:name', true)).toBe(false);
+	});
+
+	it('refuses to freeze when the mounted portal key does not match the expected cell', () => {
+		const cellSlot = warmPortalSlot('ci1:name');
+		const deps = makeDeps({
+			getCellPortalHost: () => {
+				const host = document.createElement('div');
+				host.appendChild(document.createElement('span'));
+				return host;
+			},
+		});
+		expect(canFreezeExistingPortalForIdentity(deps, cellSlot, 'ci2:name', false)).toBe(false);
+	});
+
+	it('refuses to freeze when the portal host has no authoritative content', () => {
+		const cellSlot = warmPortalSlot('ci1:name');
+		const deps = makeDeps({ getCellPortalHost: () => null });
+		expect(canFreezeExistingPortalForIdentity(deps, cellSlot, 'ci1:name', false)).toBe(false);
+	});
+});
+
+describe('canReuseWarmTextForIdentity', () => {
+	it('returns undefined when the warm binding version is not fresh', () => {
+		const cellSlot = new CellSlot<{ id: string; name: string }>(document.createElement('div'));
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell', 'text', undefined, 'hello');
+		expect(canReuseWarmTextForIdentity(cellSlot, false)).toBeUndefined();
+	});
+
+	it('returns undefined when there is no cached formatted value', () => {
+		const cellSlot = new CellSlot<{ id: string; name: string }>(document.createElement('div'));
+		expect(canReuseWarmTextForIdentity(cellSlot, true)).toBeUndefined();
+	});
+
+	it('returns the cached formatted value and content mode when fresh and present', () => {
+		const cellSlot = new CellSlot<{ id: string; name: string }>(document.createElement('div'));
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell', 'text', undefined, 'hello');
+		expect(canReuseWarmTextForIdentity(cellSlot, true)).toEqual({ formattedValue: 'hello', contentMode: 'text' });
+	});
+
+	it('still returns a portal-mode value — callers, not this helper, decide whether portal content is acceptable', () => {
+		const cellSlot = new CellSlot<{ id: string; name: string }>(document.createElement('div'));
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell', 'text', undefined, 'hello');
+		cellSlot.update(0, 'name', 0, 'r1', 0, -1, 100, 'og-cell', 'portal', undefined, '', 'ci1:name');
+		const warm = canReuseWarmTextForIdentity(cellSlot, true);
+		expect(warm?.contentMode).toBe('portal');
 	});
 });
