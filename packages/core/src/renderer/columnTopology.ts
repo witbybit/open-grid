@@ -250,3 +250,68 @@ export function diffColumnTopologies(prev: CompiledColumnTopology, next: Compile
 
 	return { prevVersion: prev.version, nextVersion: next.version, retained, relocated, entered, exited };
 }
+
+// ── Lane-segmented window delta ──────────────────────────────────────────────────
+
+/** Column field lists, segmented by lane, plus cross-lane moves — for scroll/resize-driven reconciliation. */
+export interface ColumnWindowDelta {
+	readonly enteredCenterColumns: readonly string[];
+	readonly exitedCenterColumns: readonly string[];
+	readonly stayedCenterColumns: readonly string[];
+	readonly enteredPinnedLeftColumns: readonly string[];
+	readonly exitedPinnedLeftColumns: readonly string[];
+	readonly enteredPinnedRightColumns: readonly string[];
+	readonly exitedPinnedRightColumns: readonly string[];
+	readonly laneMoves: ReadonlyArray<{ readonly colField: string; readonly from: 'left' | 'center' | 'right'; readonly to: 'left' | 'center' | 'right' }>;
+}
+
+/**
+ * Lane-segmented view of `diffColumnTopologies`, for callers that reconcile each lane
+ * independently (the normal horizontal-scroll case: only the center window shifts, pinned
+ * lanes are untouched). Column pin/unpin/reorder naturally shows up here as `laneMoves` —
+ * callers that need to handle that structurally are free to fall back to full reconciliation
+ * for those events (see `reconcileTopology` vs `reconcileCellTopologyForScroll` in
+ * `rowCellBindingLanes.ts`); this helper does not make that choice for them.
+ */
+export function computeColumnWindowDelta(prev: CompiledColumnTopology, next: CompiledColumnTopology): ColumnWindowDelta {
+	const diff = diffColumnTopologies(prev, next);
+
+	const enteredCenterColumns: string[] = [];
+	const enteredPinnedLeftColumns: string[] = [];
+	const enteredPinnedRightColumns: string[] = [];
+	for (const placement of diff.entered) {
+		if (placement.lane === 'left') enteredPinnedLeftColumns.push(placement.columnId);
+		else if (placement.lane === 'right') enteredPinnedRightColumns.push(placement.columnId);
+		else enteredCenterColumns.push(placement.columnId);
+	}
+
+	const exitedCenterColumns: string[] = [];
+	const exitedPinnedLeftColumns: string[] = [];
+	const exitedPinnedRightColumns: string[] = [];
+	for (const placement of diff.exited) {
+		if (placement.lane === 'left') exitedPinnedLeftColumns.push(placement.columnId);
+		else if (placement.lane === 'right') exitedPinnedRightColumns.push(placement.columnId);
+		else exitedCenterColumns.push(placement.columnId);
+	}
+
+	const stayedCenterColumns: string[] = [];
+	const relocatedIds = new Set(diff.relocated.map((r) => r.next.columnId));
+	for (const { next: nextPlacement } of diff.retained) {
+		if (nextPlacement.lane === 'center' && !relocatedIds.has(nextPlacement.columnId)) {
+			stayedCenterColumns.push(nextPlacement.columnId);
+		}
+	}
+
+	const laneMoves = diff.relocated.map((r) => ({ colField: r.next.columnId, from: r.prev.lane, to: r.next.lane }));
+
+	return {
+		enteredCenterColumns,
+		exitedCenterColumns,
+		stayedCenterColumns,
+		enteredPinnedLeftColumns,
+		exitedPinnedLeftColumns,
+		enteredPinnedRightColumns,
+		exitedPinnedRightColumns,
+		laneMoves,
+	};
+}
