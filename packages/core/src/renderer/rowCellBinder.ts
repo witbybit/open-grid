@@ -6,21 +6,8 @@ import type { GridCellPointer } from '../api/GridApi.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
-import {
-	matchesCellSlotMountedFreshness,
-	recordCellSlotMountedVisualVersions,
-	matchesCellSlotMountedVisualVersions,
-	type CellSlot,
-	type CellContentMode,
-} from './cellSlot.js';
-import {
-	TextRendererHandle,
-	FallbackRendererHandle,
-	PortalRendererHandle,
-	LoadingRendererHandle,
-	CustomRendererHandle,
-	type CellPlacement,
-} from './cellRendererHandle.js';
+import { matchesCellSlotMountedFreshness, recordCellSlotMountedVisualVersions, type CellSlot, type CellContentMode } from './cellSlot.js';
+import { TextRendererHandle, FallbackRendererHandle, PortalRendererHandle, LoadingRendererHandle, CustomRendererHandle } from './cellRendererHandle.js';
 import type { CellRenderer } from './cellRenderer.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
@@ -601,8 +588,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellDuringScrollRequest<TRowData>): void {
 	deps.incrementGeometryOnlyCellBinds?.();
 	deps.incrementCellSlotRebinds?.();
-	const { cellSlot, node, rowIndex, colIndex, col, lane, ctx, pooledRowId, left, right, width, isRowRebind, isRowLoading, isInVisibleContent } =
-		request;
+	const { cellSlot, node, rowIndex, colIndex, col, lane, ctx, isRowRebind, isRowLoading, isInVisibleContent } = request;
 
 	// 1. Geometry / warm-state precomputation shared by every presentation kind.
 	const canPreserveWarmVisuals = !isRowRebind && cellSlot.rowId === node.id && cellSlot.colField === col.field && !isRowLoading;
