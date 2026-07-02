@@ -9,7 +9,6 @@ export {
 	BUILT_IN_THEME_METADATA,
 	getBuiltInTheme,
 	isBuiltInThemeName,
-	createTheme,
 	themeToCSSVariables,
 } from '@eregister/open-grid-core';
 
@@ -74,6 +73,7 @@ export type {
 	CellEditorProps,
 	CellRendererProps,
 	FilterModel,
+	QuickFilterModel,
 	SortModel,
 	GridApi,
 	GridCellClickParams,
@@ -94,6 +94,7 @@ export type {
 	DomCellRendererParams,
 	ImperativeCellHandle,
 	GridReadyEvent,
+	GridInitialState,
 	BuiltInThemeName,
 	ThemeTokens,
 	RowSelectionMode,

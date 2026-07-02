@@ -114,6 +114,7 @@ export type { PersistedGridState as SerializableGridState } from './persistence/
 export { isDomCellRenderer } from './columnDef.js';
 export type {
 	FilterModel,
+	QuickFilterModel,
 	ColumnFilter,
 	FilterCondition,
 	TextFilterCondition,
@@ -214,7 +215,6 @@ export {
 	getBuiltInTheme,
 	isBuiltInThemeName,
 	themeToCSSVariables,
-	createTheme,
 } from './renderer/themes.js';
 export type { ThemeTokens, BuiltInThemeName } from './renderer/themes.js';
 export type { GridDomainVersions } from './state/GridDomainVersions.js';

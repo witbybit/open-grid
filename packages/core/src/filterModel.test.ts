@@ -323,3 +323,74 @@ describe('getColumnDistinctValues', () => {
 		controller.dispose();
 	});
 });
+
+// ── Quick filter (search across columns) ───────────────────────────────────────
+
+describe('quick filter', () => {
+	it('matches across every column by default (no columnIds)', () => {
+		const { store, controller } = makeStore();
+		// "active" appears in the status column of 'Apple'/'Cherry' (Active) and 'Banana' (Inactive
+		// contains "active" as a substring) — not in any name field.
+		store.setQuickFilter('active');
+		expect(getVisibleNames(store)).toEqual(['Apple', 'Banana', 'Cherry']);
+		controller.dispose();
+	});
+
+	it('is case-insensitive', () => {
+		const { store, controller } = makeStore();
+		store.setQuickFilter('ACTIVE');
+		expect(getVisibleNames(store)).toEqual(['Apple', 'Banana', 'Cherry']);
+		controller.dispose();
+	});
+
+	it('restricts matching to the given columnIds', () => {
+		const { store, controller } = makeStore();
+		// "active" would also match the status column, but we restrict the search to `name`.
+		store.setQuickFilter('active', ['name']);
+		expect(getVisibleNames(store)).toEqual([]);
+		controller.dispose();
+	});
+
+	it('matches a name-only search when restricted to the name column', () => {
+		const { store, controller } = makeStore();
+		store.setQuickFilter('ban', ['name']);
+		expect(getVisibleNames(store)).toEqual(['Banana']);
+		controller.dispose();
+	});
+
+	it('combines with an active column FilterModel via AND', () => {
+		const { store, controller } = makeStore();
+		store.setFilterModel({ status: { type: 'text', operator: 'contains', value: 'active' } });
+		// Matches 'Active' and 'Inactive' via the column filter...
+		expect(getVisibleNames(store)).toEqual(['Apple', 'Banana', 'Cherry']);
+		// ...quick filter narrows further to rows whose name also contains "ban".
+		store.setQuickFilter('ban');
+		expect(getVisibleNames(store)).toEqual(['Banana']);
+		controller.dispose();
+	});
+
+	it('clears when set to an empty or whitespace-only string', () => {
+		const { store, controller } = makeStore();
+		store.setQuickFilter('active');
+		expect(getVisibleNames(store)).not.toEqual(['Apple', 'Banana', 'Cherry', 'Date', 'apricot']);
+		store.setQuickFilter('   ');
+		expect(getVisibleNames(store)).toEqual(['Apple', 'Banana', 'Cherry', 'Date', 'apricot']);
+		expect(store.getQuickFilter()).toBeNull();
+		controller.dispose();
+	});
+
+	it('getQuickFilter reflects the active model, trimmed', () => {
+		const { store, controller } = makeStore();
+		expect(store.getQuickFilter()).toBeNull();
+		store.setQuickFilter('  apricot  ', ['name']);
+		expect(store.getQuickFilter()).toEqual({ text: 'apricot', columnIds: ['name'] });
+		controller.dispose();
+	});
+
+	it('matches numeric and other non-string column values by their string representation', () => {
+		const { store, controller } = makeStore();
+		store.setQuickFilter('120');
+		expect(getVisibleNames(store)).toEqual(['Cherry']);
+		controller.dispose();
+	});
+});

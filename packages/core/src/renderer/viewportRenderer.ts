@@ -71,8 +71,16 @@ export class ViewportRenderer<TRowData = unknown> {
 		this.container.dataset.ogThemeScope = String(themeScopeId);
 		this.themeSelector = `[data-og-theme-scope="${themeScopeId}"]`;
 
+		// Resolve base theme + any initial overrides atomically, before ThemeManager exists — no
+		// separate imperative mergeTheme() call is needed (or even possible) to get overrides onto
+		// the very first paint. This makes initialState.themeOverrides work identically for every
+		// adapter (React, vanilla, or otherwise), not just ones that happen to apply overrides in
+		// the right effect-timing window.
+		const themeOverrides = this.engine.getState().themeOverrides;
+		const initialTheme = themeOverrides ? { ...getBuiltInTheme(initialThemeName), ...themeOverrides } : getBuiltInTheme(initialThemeName);
+
 		// Initialize theme manager with grid-scoped CSS variables.
-		this.themeManager = new ThemeManager(getBuiltInTheme(initialThemeName), initialThemeName);
+		this.themeManager = new ThemeManager(initialTheme, initialThemeName);
 		this.themeManager.mount(this.themeSelector);
 
 		// Single scroll container — the only element that has overflow:auto. This and the

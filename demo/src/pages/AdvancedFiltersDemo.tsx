@@ -476,8 +476,17 @@ export default function AdvancedFiltersDemo() {
 	const [filterModel, setFilterModel] = useState<FilterModel | null>(null);
 	const [wsState, setWsState] = useState<GridWorkspaceState | null>(null);
 	const [log, setLog] = useState<LogEntry[]>([]);
+	const [quickFilterText, setQuickFilterText] = useState('');
 	const columns = useMemo(() => makeColumns(), []);
 	const rows = useMemo(() => ALL_ROWS, []);
+
+	// Global search box, wired straight to api.setQuickFilter — matches every column
+	// (id, name, department, location, status, level, salary, startDate, skills) at once,
+	// combined via AND with any active per-column filters and the pre-seeded views above.
+	const handleQuickFilterChange = (text: string) => {
+		setQuickFilterText(text);
+		apiRef.current?.setQuickFilter(text);
+	};
 
 	// Stable adapter instance — lives for the lifetime of this page.
 	const adapter = useMemo(() => new FakeAsyncWorkspaceAdapter(SEED_VIEWS, DEFAULT_VIEW_ID), []);
@@ -543,6 +552,63 @@ export default function AdvancedFiltersDemo() {
 						rename, and switch views
 					</div>
 				</div>
+
+				{/* Global quick filter — api.setQuickFilter() searches every column at once. */}
+				<div style={{ position: 'relative', flexShrink: 0, width: 240 }}>
+					<span
+						style={{
+							position: 'absolute',
+							left: 9,
+							top: '50%',
+							transform: 'translateY(-50%)',
+							fontSize: 12,
+							color: '#475569',
+							pointerEvents: 'none',
+						}}
+					>
+						🔍
+					</span>
+					<input
+						type='text'
+						value={quickFilterText}
+						onChange={(e) => handleQuickFilterChange(e.target.value)}
+						placeholder='Search all columns…'
+						style={{
+							width: '100%',
+							height: 28,
+							padding: '0 26px 0 26px',
+							fontSize: 11,
+							background: 'rgba(15,23,42,0.7)',
+							border: `1px solid ${quickFilterText ? 'rgba(59,130,246,0.4)' : '#1e293b'}`,
+							borderRadius: 6,
+							color: '#e2e8f0',
+							outline: 'none',
+							boxSizing: 'border-box',
+						}}
+					/>
+					{quickFilterText && (
+						<button
+							onClick={() => handleQuickFilterChange('')}
+							aria-label='Clear search'
+							style={{
+								position: 'absolute',
+								right: 6,
+								top: '50%',
+								transform: 'translateY(-50%)',
+								fontSize: 13,
+								lineHeight: 1,
+								color: '#64748b',
+								background: 'none',
+								border: 'none',
+								cursor: 'pointer',
+								padding: 2,
+							}}
+						>
+							×
+						</button>
+					)}
+				</div>
+
 				{activeFilters > 0 && (
 					<button
 						onClick={() => apiRef.current?.setFilterModel(null)}
@@ -789,6 +855,22 @@ export default function AdvancedFiltersDemo() {
 						<span style={{ color: '#94a3b8' }}>{col}</span>
 					</div>
 				))}
+				<div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, marginLeft: 'auto' }}>
+					<span
+						style={{
+							padding: '1px 6px',
+							background: '#60a5fa18',
+							border: '1px solid #60a5fa40',
+							borderRadius: 4,
+							color: '#60a5fa',
+							fontWeight: 600,
+							fontFamily: 'monospace',
+						}}
+					>
+						quickFilter
+					</span>
+					<span style={{ color: '#94a3b8' }}>Search box above — matches any column, ANDed with the per-column filters</span>
+				</div>
 			</div>
 
 			{/* ── Grid ──────────────────────────────────────────────────── */}

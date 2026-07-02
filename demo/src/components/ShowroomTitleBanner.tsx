@@ -73,7 +73,7 @@ export default function ShowroomTitleBanner({
 						{activePage === 'ranges' && 'Quantitative Financial Planning & Sheet Workbench'}
 						{activePage === 'editors' && 'Enterprise Inventory, Pricing & Asset Control Desk'}
 						{activePage === 'layout' && 'Dynamic Workspace Layout & Column Manager'}
-						{activePage === 'skins' && 'Headless Design System & CSS Themes Studio'}
+						{activePage === 'skins' && 'Design System & CSS Themes Studio'}
 						{activePage === 'dashboard' && 'Executive Portfolio & SVG Market Analytics Streamer'}
 						{activePage === 'gantt' && 'Quantitative Gantt Scheduling & Task Optimizer Arena'}
 						{activePage === 'nested' && 'Nested and Group Grid Arena'}

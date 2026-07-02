@@ -144,18 +144,18 @@ export const CSSThemeStudio: React.FC<CSSThemeStudioProps> = ({ onThemeSelect })
 							<CopyableCode
 								code={`import { ThemeManager, createTheme } from '@eregister/open-grid-react';
 
-// Use built-in theme
-const manager = new ThemeManager();
-manager.switchTheme('${selectedTheme}');
+// Use a built-in theme as-is
+api.switchTheme('${selectedTheme}');
 
-// Or create custom theme
-const customTheme = createTheme({
+// Or build a themed variant — ThemeTokens is a plain object, so overrides are just a spread
+const customTheme: ThemeTokens = {
+  ...getBuiltInTheme('${selectedTheme}'),
   bgColor: '${currentTheme.bgColor}',
   textColor: '${currentTheme.textColor}',
   focusRing: '${currentTheme.focusRing}',
   // ... override other tokens
-});
-manager.setTheme(customTheme);`}
+};
+api.setTheme(customTheme);`}
 							/>
 						</div>
 					</div>

@@ -32,7 +32,6 @@ describe('React public boundary', () => {
 			'createMultiSelectCellRenderer',
 			'createNumberCellEditor',
 			'createNumberCellRenderer',
-			'createTheme',
 			'customCellRule',
 			'date',
 			'dropdownColumnType',

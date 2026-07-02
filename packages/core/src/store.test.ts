@@ -2956,3 +2956,104 @@ describe('groupBy mutation API', () => {
 		store.destroy();
 	});
 });
+
+describe('Quick filter (search across columns)', () => {
+	it('setQuickFilter updates state and emits quickFilterChanged, but is not undoable', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Alpha', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const quickFilterChanged = vi.fn();
+		store.addEventListener(GridEventName.quickFilterChanged, quickFilterChanged);
+
+		store.setQuickFilter('alp');
+
+		expect(store.getState().quickFilterModel).toEqual({ text: 'alp', columnIds: undefined });
+		expect(store.getQuickFilter()).toEqual({ text: 'alp', columnIds: undefined });
+		expect(quickFilterChanged).toHaveBeenCalledTimes(1);
+		expect(quickFilterChanged).toHaveBeenLastCalledWith(
+			expect.objectContaining({ payload: { quickFilterModel: { text: 'alp', columnIds: undefined } } })
+		);
+
+		// Search-box text should not pollute the undo stack.
+		expect(store.canUndo()).toBe(false);
+
+		store.setQuickFilter('');
+		expect(store.getState().quickFilterModel).toBeNull();
+		expect(quickFilterChanged).toHaveBeenCalledTimes(2);
+		expect(quickFilterChanged).toHaveBeenLastCalledWith(expect.objectContaining({ payload: { quickFilterModel: null } }));
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('passes quickFilterModel through to the infinite datasource and purges the cache on change', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			getRowId: (row) => row.id,
+		});
+		const getRows = vi.fn(
+			async (): Promise<{ rows: TestRow[]; totalCount: number }> => ({
+				rows: [{ id: '1', name: 'Alpha', price: 10 }],
+				totalCount: 1,
+			})
+		);
+		const controller = new InfiniteRowModelController<TestRow>(store.getInfiniteRowModelRuntime(), {
+			columns: store.getState().columns,
+			getRowId: (row) => row.id,
+			datasource: { getRows },
+			blockSize: 25,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const callsBefore = getRows.mock.calls.length;
+
+		store.setQuickFilter('alp', ['name']);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getRows.mock.calls.length).toBeGreaterThan(callsBefore);
+		const lastCallParams = getRows.mock.calls.at(-1)?.[0];
+		expect(lastCallParams?.quickFilterModel).toEqual({ text: 'alp', columnIds: ['name'] });
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('passes quickFilterModel through to the server-page datasource and refetches on change', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			getRowId: (row) => row.id,
+			pagination: { pageSize: 10 },
+		});
+		const getPage = vi.fn(
+			async (): Promise<{ rows: TestRow[]; totalRowCount: number }> => ({
+				rows: [{ id: '1', name: 'Alpha', price: 10 }],
+				totalRowCount: 1,
+			})
+		);
+		const controller = new ServerPageRowModelController<TestRow>(store.getServerPageRowModelRuntime(), {
+			columns: store.getState().columns,
+			getRowId: (row) => row.id,
+			pagination: { pageSize: 10 },
+			datasource: { getPage },
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const callsBefore = getPage.mock.calls.length;
+
+		store.setQuickFilter('alp');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getPage.mock.calls.length).toBeGreaterThan(callsBefore);
+		const lastCallParams = getPage.mock.calls.at(-1)?.[0];
+		expect(lastCallParams?.quickFilterModel).toEqual({ text: 'alp', columnIds: undefined });
+
+		controller.dispose();
+		store.destroy();
+	});
+});

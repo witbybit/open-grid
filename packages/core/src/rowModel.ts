@@ -14,6 +14,7 @@ import { toDataVisualRowId } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
 import {
 	type FilterModel,
+	type QuickFilterModel,
 	type TextFilterCondition,
 	type NumberFilterCondition,
 	type DateFilterCondition,
@@ -25,6 +26,7 @@ import {
 
 export type {
 	FilterModel,
+	QuickFilterModel,
 	ColumnFilter,
 	FilterCondition,
 	CompoundFilterCondition,
@@ -484,13 +486,21 @@ interface PreparedCompoundFilter<TData> {
 	right: PreparedColumnFilter<TData>;
 }
 
+/** A single search string matched (OR) across every targeted column's getter. */
+interface PreparedQuickFilter<TData> {
+	kind: 'quick';
+	getters: Array<(node: RowNode<TData>) => unknown>;
+	textValue: string;
+}
+
 type PreparedColumnFilter<TData> =
 	| PreparedTextFilter<TData>
 	| PreparedNumberFilter<TData>
 	| PreparedDateFilter<TData>
 	| PreparedSetFilter<TData>
 	| PreparedSelectFilter<TData>
-	| PreparedCompoundFilter<TData>;
+	| PreparedCompoundFilter<TData>
+	| PreparedQuickFilter<TData>;
 
 function parseFilterDate(raw: string): Date | null {
 	const d = new Date(raw);
@@ -629,6 +639,13 @@ function matchPreparedFilter<TData>(node: RowNode<TData>, pf: PreparedColumnFilt
 		const r = matchPreparedFilter(node, pf.right);
 		return pf.logicalOp === 'AND' ? l && r : l || r;
 	}
+	if (pf.kind === 'quick') {
+		for (const getter of pf.getters) {
+			const text = String(getter(node) ?? '').toLowerCase();
+			if (text.includes(pf.textValue)) return true;
+		}
+		return false;
+	}
 	const value = pf.getter(node);
 	switch (pf.kind) {
 		case 'text':
@@ -743,20 +760,45 @@ function prepareColumnFilter<TData>(columnFilter: ColumnFilter, getter: (node: R
 	return prepareCondition(columnFilter, getter);
 }
 
-function prepareFilters<TData>(columns: Array<ColumnDef<TData>>, filterModel: FilterModel | null | undefined): PreparedColumnFilter<TData>[] {
-	const result: PreparedColumnFilter<TData>[] = [];
-	if (!filterModel) return result;
+function prepareQuickFilter<TData>(
+	columns: Array<ColumnDef<TData>>,
+	quickFilterModel: QuickFilterModel | null | undefined
+): PreparedQuickFilter<TData> | null {
+	if (!quickFilterModel || !quickFilterModel.text.trim()) return null;
 	const columnById = createColumnLookup(columns);
+	const targetColumns =
+		quickFilterModel.columnIds && quickFilterModel.columnIds.length > 0
+			? (quickFilterModel.columnIds.map((id) => columnById.get(id)).filter((c): c is ColumnDef<TData> => !!c) as ColumnDef<TData>[])
+			: columns;
+	if (targetColumns.length === 0) return null;
+	return {
+		kind: 'quick',
+		getters: targetColumns.map((column) => makeGetter(column)),
+		textValue: quickFilterModel.text.trim().toLowerCase(),
+	};
+}
 
-	for (const [colId, rawItem] of Object.entries(filterModel)) {
-		const item = rawItem as ColumnFilter;
-		if (!item) continue;
-		const column = columnById.get(colId);
-		if (!column) continue;
-		const getter = makeGetter(column);
-		const prepared = prepareColumnFilter(item, getter);
-		if (prepared) result.push(prepared);
+function prepareFilters<TData>(
+	columns: Array<ColumnDef<TData>>,
+	filterModel: FilterModel | null | undefined,
+	quickFilterModel?: QuickFilterModel | null
+): PreparedColumnFilter<TData>[] {
+	const result: PreparedColumnFilter<TData>[] = [];
+	if (filterModel) {
+		const columnById = createColumnLookup(columns);
+		for (const [colId, rawItem] of Object.entries(filterModel)) {
+			const item = rawItem as ColumnFilter;
+			if (!item) continue;
+			const column = columnById.get(colId);
+			if (!column) continue;
+			const getter = makeGetter(column);
+			const prepared = prepareColumnFilter(item, getter);
+			if (prepared) result.push(prepared);
+		}
 	}
+
+	const preparedQuick = prepareQuickFilter(columns, quickFilterModel);
+	if (preparedQuick) result.push(preparedQuick);
 
 	return result;
 }
@@ -771,9 +813,10 @@ function nodeMatchesPreparedFilters<TData>(node: RowNode<TData>, preparedFilters
 export function applyClientFilterOnly<TData>(
 	nodes: RowNode<TData>[],
 	columns: Array<ColumnDef<TData>>,
-	filterModel: FilterModel | null | undefined
+	filterModel: FilterModel | null | undefined,
+	quickFilterModel?: QuickFilterModel | null
 ): RowNode<TData>[] {
-	const preparedFilters = prepareFilters(columns, filterModel);
+	const preparedFilters = prepareFilters(columns, filterModel, quickFilterModel);
 	if (preparedFilters.length === 0) return nodes;
 	return nodes.filter((node) => nodeMatchesPreparedFilters(node, preparedFilters));
 }
@@ -782,13 +825,14 @@ export function applyClientSortAndFilter<TData>(
 	nodes: RowNode<TData>[],
 	columns: Array<ColumnDef<TData>>,
 	sortModel: SortModel | null | undefined,
-	filterModel: FilterModel | null | undefined
+	filterModel: FilterModel | null | undefined,
+	quickFilterModel?: QuickFilterModel | null
 ): Array<{ node: RowNode<TData>; sourceIndex: number }> {
 	const columnById = createColumnLookup(columns);
 	let result = nodes.map((node, sourceIndex) => ({ node, sourceIndex }));
 
 	// 1. Pre-compile and pre-resolve active filters to avoid O(N) entries allocations, string manipulation, and Map lookups
-	const preparedFilters = prepareFilters(columns, filterModel);
+	const preparedFilters = prepareFilters(columns, filterModel, quickFilterModel);
 	if (preparedFilters.length > 0) {
 		result = result.filter(({ node }) => nodeMatchesPreparedFilters(node, preparedFilters));
 	}
@@ -955,6 +999,7 @@ export class ClientRowModelController<TData = unknown>
 			groupBy: state.groupBy,
 			rowModelConfig: state.rowModelConfig,
 			filterModel: state.filterModel,
+			quickFilterModel: state.quickFilterModel,
 		});
 		const groups: Record<string, true> = {};
 		for (const id of expansionIds.groupIds) groups[id] = true;
@@ -994,6 +1039,16 @@ export class ClientRowModelController<TData = unknown>
 				this.runtime.applyRefreshInvalidation(this.refresh('filter'), {
 					invalidationReason: 'filter',
 					requestRenderReason: 'rows:set-filter-model',
+					includeHeaders: true,
+					includeOverlay: true,
+				});
+			}),
+			this.runtime.addEventListener(GridEventName.quickFilterChanged, () => {
+				this.rebuildDependencyRegistry();
+				this.runtime.applyRefreshInvalidation(this.refresh('filter'), {
+					invalidationReason: 'filter',
+					requestRenderReason: 'rows:set-quick-filter-model',
+					includeHeaders: true,
 					includeOverlay: true,
 				});
 			}),
@@ -1029,6 +1084,7 @@ export class ClientRowModelController<TData = unknown>
 			columns: state.columns,
 			sortModel: state.sortModel,
 			filterModel: state.filterModel,
+			quickFilterModel: state.quickFilterModel,
 			groupBy: state.groupBy,
 			aggDefs: state.aggDefs,
 			hasTreeParent: !!state.getParentId,
@@ -1049,7 +1105,7 @@ export class ClientRowModelController<TData = unknown>
 	private filterMembershipChanged(changedNodes: RowNode<TData>[]): boolean {
 		const state = this.runtime.getState();
 		if (state.groupBy?.length || state.rowModelConfig?.treeData?.enabled) return true;
-		const preparedFilters = prepareFilters(state.columns, state.filterModel);
+		const preparedFilters = prepareFilters(state.columns, state.filterModel, state.quickFilterModel);
 		for (const node of changedNodes) {
 			const wasVisible = this.rowIdToVisualIndex.has(node.id);
 			const passes = preparedFilters.length === 0 || nodeMatchesPreparedFilters(node, preparedFilters);
@@ -1376,7 +1432,7 @@ export class ClientRowModelController<TData = unknown>
 
 		// Additions: filter-check, then insert at sorted position (or append if unsorted).
 		if (added.length > 0) {
-			const preparedFilters = prepareFilters(state.columns, state.filterModel);
+			const preparedFilters = prepareFilters(state.columns, state.filterModel, state.quickFilterModel);
 			const hasSort = !!(state.sortModel && state.sortModel.length > 0);
 
 			let sortComparator: ((a: RowNode<TData>, b: RowNode<TData>) => number) | null = null;
@@ -1607,6 +1663,7 @@ export class ClientRowModelController<TData = unknown>
 				columns: state.columns,
 				sortModel: state.sortModel,
 				filterModel: state.filterModel,
+				quickFilterModel: state.quickFilterModel,
 				queryModel: state.queryModel,
 				groupBy: state.groupBy,
 				rowModelConfig,
@@ -1662,6 +1719,7 @@ export class ClientRowModelController<TData = unknown>
 			columns: state.columns,
 			sortModel: state.sortModel,
 			filterModel: state.filterModel,
+			quickFilterModel: state.quickFilterModel,
 			queryModel: state.queryModel,
 			groupBy: state.groupBy,
 			rowModelConfig,
