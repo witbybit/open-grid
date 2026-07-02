@@ -111,6 +111,7 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	incrementGeometryOnlyCellBinds?: () => void;
 	incrementCellSlotRebinds?: () => void;
 	incrementIntegrityComputesDuringScroll?: () => void;
+	incrementForceLiveMountsDuringScroll?: () => void;
 	getSnapshotVisualVersions: () => SnapshotVisualVersions;
 	/** Live column-reorder preview offset (px) for a displayed column index.
 	 *  0 outside an active header drag. Only consulted on the full-bind path. */
@@ -887,7 +888,12 @@ function applyScrollCellPresentation<TRowData>(
 			return;
 		}
 
-		case 'portal-mount': {
+		case 'force-live-interactive-exception': {
+			// The sole exception permitted to mount live during active scroll — see the type comment on
+			// ScrollCellPresentation. Counted separately from every other mount/portal metric on purpose:
+			// if this ever fires for a cell that isn't actively editing/focused, that's a regression, and
+			// folding it into a generic counter would hide it.
+			deps.incrementForceLiveMountsDuringScroll?.();
 			if (presentation.releasePriorPortal) deps.releaseCellPortal(cellSlot.element, undefined, 'scrolled-out');
 			deps.markCellDirtyAfterScroll(cellSlot.element);
 			const ensuredPortalHost = deps.ensureCellPortalHost(cellSlot.element);

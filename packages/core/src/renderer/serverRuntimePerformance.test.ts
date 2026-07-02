@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InfiniteRowModelController, type InfiniteDatasource } from '../infiniteRowModel.js';
+import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
 import { diffRenderWindow, getColIndices, getRowIndices, type RenderWindow } from './renderWindow.js';
@@ -693,6 +694,81 @@ describe('Server demo ruthless runtime performance contracts', () => {
 
 		cleanupGrid(grid);
 	}, 20_000);
+
+	it('BLOCKER: a cold, never-before-seen DOM-renderer cell never live-mounts during active scroll', async () => {
+		// mode:'custom-dom' is NOT in the impostor-capable set (custom-live/custom-imperative/custom) —
+		// this is the real compiled-plan shape for any column using a DOM cell renderer. Scrolling a
+		// never-before-visited window of such columns into view previously fell through to a synchronous
+		// mountCellImmediately call (a live DOM-renderer mount) inside the scroll frame itself.
+		// Client row model (not server/infinite) — all row data is immediately available, so there is
+		// no loading-state race to confound the result; the column with the DOM renderer is column 0
+		// (always on-screen), and the scroll target is a row band never rendered before. Uses the same
+		// real (unstubbed) rAF + flushAnimationFrame pattern as browserScrollTo elsewhere in this file —
+		// a synchronous immediate-RAF stub was tried first and produced a false failure because it
+		// short-circuits the scroll-frame state machine's phase transitions.
+		const domRendererMounts: string[] = [];
+		const domRendererMountPhases: Array<{ isScrolling: boolean; phase: string }> = [];
+		interface ColdRow {
+			id: string;
+			value: string;
+		}
+		const columns: ColumnDef<ColdRow>[] = [
+			{
+				field: 'value',
+				header: 'DOM Metric',
+				width: 120,
+				cellRenderer: {
+					mount(container: HTMLElement, params: { value: unknown; isScrolling: boolean; phase: string }) {
+						domRendererMounts.push(String(params.value));
+						domRendererMountPhases.push({ isScrolling: params.isScrolling, phase: params.phase });
+						container.textContent = String(params.value);
+						return { update: () => {}, destroy: () => {} };
+					},
+				} as any,
+			},
+		];
+		const store = new GridStore<ColdRow>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 50_000 }, (_, i) => ({ id: `r${i}`, value: `v${i}` }));
+		const controller = new ClientRowModelController<ColdRow>(store.getClientRowModelRuntime(), { rows, columns: store.getState().columns });
+		const container = createContainer(500, 400);
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		expect(scrollViewport).not.toBeNull();
+		// Only care about mounts from this point on — the initial pre-scroll mount for rows 0..N is a
+		// legitimate full bind (isScrollFrameActive is false at mount time) and is not what this test
+		// is about.
+		domRendererMounts.length = 0;
+		domRendererMountPhases.length = 0;
+		renderer.resetRenderStats();
+		// Jump straight to a row band far outside the initially-mounted window — genuinely cold, no
+		// snapshot, no warm state, no prewarm coverage.
+		scrollViewport.scrollTop = 1_500_000;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		await flushAnimationFrame();
+
+		const stats = renderer.getRenderStats();
+		// The authoritative proof: nothing mounted while flagged as happening during an active scroll
+		// frame. bindCellFull legitimately mounts the now-visible cells once the scroll settles (the
+		// fidelity lane doing its job) — every one of those mounts must report isScrolling:false; if
+		// even one reports isScrolling:true, that's the scroll-time-mount blocker back.
+		expect(stats.customRendererMountsDuringScroll).toBe(0);
+		expect(stats.portalMountsDuringScroll).toBe(0);
+		for (const mountPhase of domRendererMountPhases) {
+			expect(mountPhase.isScrolling).toBe(false);
+		}
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+		vi.unstubAllGlobals();
+	});
 
 	it('mounts the audit-ledger server grid at million-row scale without expanding rendered DOM beyond caps', async () => {
 		const grid = await createServerAuditGrid({ rows: 1_000_000, cols: 1200 });

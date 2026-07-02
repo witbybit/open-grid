@@ -1278,6 +1278,84 @@ describe('bindCellDuringScroll', () => {
 		expect(cellSlot.lastFormattedValue).toBe('$42');
 	});
 
+	it('BLOCKER: never live-mounts a cold custom-DOM-renderer cell during normal (non-editing, non-focused) active scroll', () => {
+		// mode:'custom-dom' is the real compiled-plan shape for a column using a DOM cell renderer
+		// (ColumnModel.ts sets this for isDomCellRenderer columns) — it is NOT in the impostor-capable
+		// set (custom-live/custom-imperative/custom), so before this fix it fell straight through to a
+		// synchronous mountCellImmediately call on first scroll-in. Normal scroll must never mount any
+		// renderer type live, regardless of capability bucket.
+		const dirty = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const deps: RowCellBinderDeps<{ id: string; amount: number }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+				getCellDisplaySnapshot: vi.fn(() => undefined),
+				getCheapDisplayValue: vi.fn(() => ''),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: (cell) => {
+				const h = document.createElement('div');
+				cell.appendChild(h);
+				return h;
+			},
+			getCellPortalHost: () => null,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', amount: 42 } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'amount', cellRenderer: () => null } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: null,
+				globalVersion: 1,
+				insightVersion: 0,
+				styleVersion: 0,
+				selectionVersion: 0,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-dom' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 1]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(mountCellImmediately).not.toHaveBeenCalled();
+		expect(dirty).toHaveBeenCalledWith(cellSlot.element);
+		expect(cellSlot.lastContentMode).not.toBe('portal');
+	});
+
 	it('uses impostor snapshot for a pinned-left custom-live cell during scroll, same as center lane', () => {
 		const dirty = vi.fn();
 		const mountCellImmediately = vi.fn();

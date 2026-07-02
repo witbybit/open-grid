@@ -108,7 +108,15 @@ export type ScrollCellPresentation =
 			validationError: string | undefined;
 	  }
 	| {
-			kind: 'portal-mount';
+			/**
+			 * The ONLY case allowed to mount a live renderer during active scroll: the cell is actively
+			 * being edited or holds keyboard focus, so an impostor would be visibly wrong (the user is
+			 * interacting with it right now). Must stay rare — every other portal-capable cell with no
+			 * live content and no usable snapshot degrades to `impostor-synthetic` instead. Callers must
+			 * count this separately (`forceLiveMountsDuringScroll`), never fold it into generic
+			 * mount/portal counters, so a regression that makes this fire for normal cells is visible.
+			 */
+			kind: 'force-live-interactive-exception';
 			className: string;
 			portalCellKey: string;
 			releasePriorPortal: boolean;
@@ -395,14 +403,53 @@ export function resolveScrollCellPresentation<TRowData>(
 		};
 	}
 
+	// Normal scroll must NEVER reach here with a live mount for a non-interactive cell — the only
+	// legitimate reason to still be here with no snapshot, no live content, and no frozen portal is
+	// that the cell is actively being edited or focused (an impostor would visibly lie to the user
+	// mid-interaction). That is the sole exception; everything else degrades to a deterministic
+	// placeholder and waits for the fidelity lane.
+	if (isEditing || isFocused) {
+		return {
+			kind: 'force-live-interactive-exception',
+			className: cellClassName,
+			portalCellKey,
+			releasePriorPortal: !!cellSlot.lastPortalKey && cellSlot.lastPortalKey !== portalCellKey,
+			isEditing,
+			isFocused,
+			recordVersionsFrom: snapshot,
+			title: snapshot?.title || null,
+			validationError: snapshot?.validationError,
+		};
+	}
+
+	// Not editing, not focused, no snapshot, no live content to freeze, no impostor capability
+	// declared for this column's renderer mode (e.g. 'custom-dom', which sits outside the
+	// custom-live/custom-imperative/custom impostor-capable set) — this is exactly the case that used
+	// to fall through to a synchronous cold mount. Show the same cheap deterministic stand-in the
+	// impostor-capable path already uses, and let the fidelity lane mount the real renderer later.
+	const genericCheap = deps.engine.getCheapDisplayValue?.(node.id, col.field) ?? '';
+	const fallbackScrollImpostorFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollImpostor;
+	const fallbackCheapValue =
+		isWarmBindingVersionFresh && cellSlot.lastFormattedValue != null && cellSlot.lastContentMode !== 'portal'
+			? cellSlot.lastFormattedValue
+			: fallbackScrollImpostorFn != null
+				? fallbackScrollImpostorFn({ value: undefined, formattedValue: genericCheap }) || genericCheap
+				: genericCheap;
+	const fallbackSyntheticMode: CellContentMode = fallbackCheapValue !== '' ? 'fallback' : 'empty';
 	return {
-		kind: 'portal-mount',
+		kind: 'impostor-synthetic',
 		className: cellClassName,
-		portalCellKey,
-		releasePriorPortal: !!cellSlot.lastPortalKey && cellSlot.lastPortalKey !== portalCellKey,
-		isEditing,
-		isFocused,
-		recordVersionsFrom: snapshot,
+		contentMode: fallbackSyntheticMode,
+		formattedValue: fallbackCheapValue,
+		releaseStalePortal: !!cellSlot.lastPortalKey,
+		recordVersions: snapshot ?? {
+			rowVersion: input.rowVersion,
+			globalVersion: ctx.globalVersion,
+			insightVersion: ctx.insightVersion,
+			styleVersion: ctx.styleVersion,
+			loadingVersion: ctx.loadingVersion,
+			selectionVersion: ctx.selectionVersion,
+		},
 		title: snapshot?.title || null,
 		validationError: snapshot?.validationError,
 	};

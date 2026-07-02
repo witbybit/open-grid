@@ -45,6 +45,7 @@ export interface RenderRuntimeStats {
 	reusableCellsSkippedDuringScroll: number;
 	styleHookCallsDuringScroll: number;
 	integrityComputesDuringScroll: number;
+	forceLiveMountsDuringScroll: number;
 	cellSlotsRetained: number;
 	cellSlotsEvictedDuringTopology: number;
 	cellSlotsCreatedDuringTopology: number;
@@ -117,6 +118,7 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
 		integrityComputesDuringScroll: 0,
+		forceLiveMountsDuringScroll: 0,
 		cellSlotsRetained: 0,
 		cellSlotsEvictedDuringTopology: 0,
 		cellSlotsCreatedDuringTopology: 0,
@@ -194,6 +196,11 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		cellsWrittenDuringScroll: deps.rowRenderer.currentScrollCellsWritten,
 		portalOpsDuringScroll:
 			deps.rowRenderer.currentScrollPortalOps + portalScrollStats.portalMountsDuringScroll + portalScrollStats.portalReleasesDuringScroll,
+		// portalMountsDuringScroll itself already flows through via the `...portalScrollStats` spread
+		// below — it's the top-level regression tripwire for the scroll-time-portal-mount blocker.
+		// Should be 0 for any normal (non force-live-exception) scroll frame; the fix is proven by the
+		// impostor-fallback tests, not by this counter alone, but a non-zero value outside the
+		// exception path means the bug is back.
 		cellsDecoratedAfterScroll: deps.runtimeStats.cellsDecoratedAfterScroll,
 		postScrollMotionChunks: deps.runtimeStats.postScrollMotionChunks,
 		maxMotionCellsDecoratedInOneChunk: deps.runtimeStats.maxMotionCellsDecoratedInOneChunk,
@@ -208,6 +215,7 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		reusableCellsSkippedDuringScroll: deps.runtimeStats.reusableCellsSkippedDuringScroll,
 		styleHookCallsDuringScroll: deps.runtimeStats.styleHookCallsDuringScroll,
 		integrityComputesDuringScroll: deps.runtimeStats.integrityComputesDuringScroll,
+		forceLiveMountsDuringScroll: deps.runtimeStats.forceLiveMountsDuringScroll,
 		cellSlotsRetained: deps.runtimeStats.cellSlotsRetained,
 		cellSlotsEvictedDuringTopology: deps.runtimeStats.cellSlotsEvictedDuringTopology,
 		cellSlotsCreatedDuringTopology: deps.runtimeStats.cellSlotsCreatedDuringTopology,

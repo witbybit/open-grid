@@ -132,17 +132,53 @@ describe('resolveScrollCellPresentation', () => {
 		expect(presentation.formattedValue).toBe('Fallback name');
 	});
 
-	it('resolves a portal-capable column with no snapshot and no live content to a cold portal-mount', () => {
+	it('BLOCKER: never mounts a cold portal-capable cell during normal (non-editing, non-focused) active scroll', () => {
+		// mode 'custom-dom' is deliberately NOT in the impostor-capable set (custom-live/custom-imperative/
+		// custom) — this is exactly the real-world shape of a DOM-renderer column (ColumnModel.ts sets
+		// mode:'custom-dom' for isDomCellRenderer columns), which previously fell all the way through to
+		// a synchronous cold mount on first scroll-in. Normal scroll must never do this, regardless of
+		// which renderer-capability bucket the column falls into.
 		const presentation = resolveScrollCellPresentation(
 			makeDeps(),
 			baseInput({
 				col: { field: 'name', cellRenderer: () => null } as any,
-				ctx: { ...baseInput().ctx, plan: { columnPlans: [{ isCustom: true, mode: 'primitive' }] } } as any,
+				ctx: { ...baseInput().ctx, plan: { columnPlans: [{ isCustom: true, mode: 'custom-dom' }] } } as any,
 			})
 		);
-		// mode is 'primitive' here (no impostor capability) and no existing portal — falls to the
-		// cold-mount tail rather than any impostor path.
-		expect(presentation.kind).toBe('portal-mount');
+		expect(presentation.kind).not.toBe('portal-mount');
+		expect(presentation.kind).not.toBe('force-live-interactive-exception');
+		// Must degrade to a deterministic, non-mounting placeholder/impostor instead.
+		expect(['impostor-synthetic', 'impostor-text', 'impostor-html', 'primitive']).toContain(presentation.kind);
+	});
+
+	it('BLOCKER: an actively-focused portal-capable cell with no snapshot and no live content uses the explicit force-live exception, not the generic portal-mount case', () => {
+		const presentation = resolveScrollCellPresentation(
+			makeDeps(),
+			baseInput({
+				col: { field: 'name', cellRenderer: () => null } as any,
+				ctx: {
+					...baseInput().ctx,
+					plan: { columnPlans: [{ isCustom: true, mode: 'custom-dom' }] },
+					focusedCell: { rowId: 'r1', colField: 'name' },
+				} as any,
+			})
+		);
+		expect(presentation.kind).toBe('force-live-interactive-exception');
+	});
+
+	it('BLOCKER: an actively-editing portal-capable cell with no snapshot and no live content uses the explicit force-live exception', () => {
+		const presentation = resolveScrollCellPresentation(
+			makeDeps(),
+			baseInput({
+				col: { field: 'name', cellRenderer: () => null } as any,
+				ctx: {
+					...baseInput().ctx,
+					plan: { columnPlans: [{ isCustom: true, mode: 'custom-dom' }] },
+					activeEdit: { rowId: 'r1', colField: 'name' },
+				} as any,
+			})
+		);
+		expect(presentation.kind).toBe('force-live-interactive-exception');
 	});
 
 	it('never calls a semantic read or portal-mount hook — deps deliberately omit them', () => {

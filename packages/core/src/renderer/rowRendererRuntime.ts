@@ -204,6 +204,12 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 						(this.deps.stateHost.renderStats.integrityComputesDuringScroll || 0) + 1;
 				}
 			},
+			incrementForceLiveMountsDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.forceLiveMountsDuringScroll =
+						(this.deps.stateHost.renderStats.forceLiveMountsDuringScroll || 0) + 1;
+				}
+			},
 			getSnapshotVisualVersions: () => ({
 				styleVersion: (this.deps.stateHost as unknown as { styleVersion?: number }).styleVersion ?? 0,
 				loadingVersion: (this.deps.stateHost as unknown as { loadingVersion?: number }).loadingVersion ?? 0,

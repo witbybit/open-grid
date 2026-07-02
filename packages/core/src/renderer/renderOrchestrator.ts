@@ -88,6 +88,7 @@ export interface RenderStats {
 	prewarmPasses?: number;
 	prewarmedCellSnapshots?: number;
 	integrityComputesDuringScroll?: number;
+	forceLiveMountsDuringScroll?: number;
 	cellSlotsRetained?: number;
 	cellSlotsEvictedDuringTopology?: number;
 	cellSlotsCreatedDuringTopology?: number;
@@ -184,6 +185,7 @@ export function createEmptyRenderStats(): RenderStats {
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
 		integrityComputesDuringScroll: 0,
+		forceLiveMountsDuringScroll: 0,
 		cellSlotsRetained: 0,
 		cellSlotsEvictedDuringTopology: 0,
 		cellSlotsCreatedDuringTopology: 0,
@@ -274,6 +276,7 @@ export class RenderOrchestrator {
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
 		integrityComputesDuringScroll: 0,
+		forceLiveMountsDuringScroll: 0,
 		cellSlotsRetained: 0,
 		cellSlotsEvictedDuringTopology: 0,
 		cellSlotsCreatedDuringTopology: 0,
@@ -414,6 +417,7 @@ export class RenderOrchestrator {
 		this.stats.reusableCellsSkippedDuringScroll = 0;
 		this.stats.styleHookCallsDuringScroll = 0;
 		this.stats.integrityComputesDuringScroll = 0;
+		this.stats.forceLiveMountsDuringScroll = 0;
 		this.stats.cellSlotsRetained = 0;
 		this.stats.cellSlotsEvictedDuringTopology = 0;
 		this.stats.cellSlotsCreatedDuringTopology = 0;

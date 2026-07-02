@@ -108,7 +108,7 @@ describe('horizontal cell-slot retention pressure (bounded by cellSlotRetention.
 		expect(cellCountAfterScroll).toBeGreaterThan(initialCellCount);
 
 		cleanup(grid);
-	});
+	}, 15_000); // 3000-column mount + 20 scroll windows is slow under full-suite parallel load (~5-9s observed)
 
 	it('retains a bounded working set immediately after mount before any horizontal scroll', () => {
 		// Establishes the "healthy" baseline this file's growth assertion is measured against —
