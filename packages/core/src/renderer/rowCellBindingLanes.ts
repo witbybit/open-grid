@@ -2,7 +2,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { CellRendererPhase, ColumnDef } from '../columnDef.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
-import { CellSlot, matchesCellSlotMountedFreshness, matchesCellSlotMountedVisualVersions, recordCellSlotMountedVisualVersions } from './cellSlot.js';
+import { CellSlot, recordCellSlotMountedVisualVersions } from './cellSlot.js';
 import { bindCellDuringScroll, bindCellFull, type RowCellBinderDeps } from './rowCellBinder.js';
 import type { RowSlot } from './rowSlot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
@@ -10,7 +10,7 @@ import type { CompiledColumnTopology } from './columnTopology.js';
 import { GridMetric, type GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot } from './cellDisplaySnapshot.js';
 import { applyCellSlotRetentionPolicy } from './cellSlotRetention.js';
-import { hasMountedDataVersionDrifted } from './visualFreshness.js';
+import { resolveWarmVisibleCellStatus } from './warmCellStatus.js';
 
 /** Minimal mutable sink for cell-slot retention counters — see renderTelemetry.ts RenderRuntimeStats. */
 export interface CellSlotRetentionTelemetrySink {
@@ -397,68 +397,23 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	const currentRowVersion = ctx?.rowVersions?.get(node.id);
 	const getWarmVisibleCellStatus = (cellSlot: CellSlot<TRowData>) => {
 		if (!ctx) return { needsImmediateWake: false, needsDeferredRefresh: false };
-		const lastPortalKey = cellSlot.lastPortalKey;
-		const portalHost = cellSlot.lastContentMode === 'portal' ? deps.cellBinderDeps.getCellPortalHost(cellSlot.element) : null;
-		const hasStalePortalMount =
-			cellSlot.lastContentMode === 'portal' && !!lastPortalKey && !deps.cellBinderDeps.portalMountManager.isCellMounted(lastPortalKey);
-		const hasEmptyPortalHost = cellSlot.lastContentMode === 'portal' && !!lastPortalKey && !!portalHost && portalHost.childElementCount === 0;
-		const hasSuspiciousWarmState =
-			cellSlot.lastMountedRowVersion === -1 ||
-			cellSlot.lastMountedGlobalVersion === -1 ||
-			cellSlot.lastContentMode === 'pending' ||
-			(cellSlot.lastContentMode === 'text' && cellSlot.lastFormattedValue === '...') ||
-			hasStalePortalMount ||
-			hasEmptyPortalHost;
-		const mountedDataVersionDrift = hasMountedDataVersionDrifted(cellSlot, { rowVersion: currentRowVersion, globalVersion: ctx.globalVersion });
-		const globalDataChanged =
-			mountedDataVersionDrift.globalChanged || (cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalChangedDuringScroll);
-		const rowDataChanged = mountedDataVersionDrift.rowChanged;
-		const mountedFreshnessMatches = matchesCellSlotMountedFreshness(cellSlot, {
-			rowVersion: currentRowVersion ?? -1,
-			globalVersion: ctx.globalVersion,
-			visualVersions: {
+		return resolveWarmVisibleCellStatus(
+			{ getCellPortalHost: deps.cellBinderDeps.getCellPortalHost, isCellMounted: (key) => deps.cellBinderDeps.portalMountManager.isCellMounted(key) },
+			cellSlot,
+			{
+				currentRowVersion,
+				globalVersion: ctx.globalVersion,
+				globalChangedDuringScroll: ctx.globalChangedDuringScroll,
 				insightVersion: ctx.insightVersion,
 				styleVersion: ctx.styleVersion,
 				loadingVersion: ctx.loadingVersion,
 				selectionVersion: ctx.selectionVersion,
-			},
-		});
-		const insightVisualStale =
-			ctx.hasInsightDecorations && (cellSlot.lastMountedInsightVersion === -1 || cellSlot.lastMountedInsightVersion !== ctx.insightVersion);
-		const styleVisualStale =
-			ctx.hasDeferredCellStyleRules && (cellSlot.lastMountedStyleVersion === -1 || cellSlot.lastMountedStyleVersion !== ctx.styleVersion);
-		const loadingVisualStale =
-			cellSlot.lastMountedLoadingVersion === -1 ||
-			!matchesCellSlotMountedVisualVersions(cellSlot, {
-				insightVersion: cellSlot.lastMountedInsightVersion,
-				styleVersion: cellSlot.lastMountedStyleVersion,
-				loadingVersion: ctx.loadingVersion,
-				selectionVersion: cellSlot.lastMountedSelectionVersion,
-			});
-		const selectionVisualStale =
-			cellSlot.lastMountedSelectionVersion === -1 ||
-			!matchesCellSlotMountedVisualVersions(cellSlot, {
-				insightVersion: cellSlot.lastMountedInsightVersion,
-				styleVersion: cellSlot.lastMountedStyleVersion,
-				loadingVersion: cellSlot.lastMountedLoadingVersion,
-				selectionVersion: ctx.selectionVersion,
-			});
-		return {
-			needsImmediateWake: hasSuspiciousWarmState || globalDataChanged || rowDataChanged,
-			needsDeferredRefresh:
-				hasSuspiciousWarmState ||
-				globalDataChanged ||
-				rowDataChanged ||
-				(!mountedFreshnessMatches &&
-					cellSlot.lastMountedInsightVersion !== -1 &&
-					cellSlot.lastMountedStyleVersion !== -1 &&
-					cellSlot.lastMountedLoadingVersion !== -1 &&
-					cellSlot.lastMountedSelectionVersion !== -1) ||
-				insightVisualStale ||
-				styleVisualStale ||
-				(ctx.loadingChangedDuringScroll && loadingVisualStale) ||
-				(ctx.selectionChangedDuringScroll && selectionVisualStale),
-		};
+				hasInsightDecorations: ctx.hasInsightDecorations,
+				hasDeferredCellStyleRules: ctx.hasDeferredCellStyleRules,
+				loadingChangedDuringScroll: ctx.loadingChangedDuringScroll,
+				selectionChangedDuringScroll: ctx.selectionChangedDuringScroll,
+			}
+		);
 	};
 	const shouldSkipStableCellDuringScroll = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
 		if (!isScrollFrameActive || forceCellRefresh || isRowRebind) return false;
