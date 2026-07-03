@@ -14,7 +14,8 @@ import { RowRendererRuntimeBridge } from './rowRendererRuntime.js';
 import { asVisibleBlockLoadCapableRowModel } from '../rowModel.js';
 import { compileStyleRules } from '../styling/styleRules.js';
 import { PinnedContainerManager } from './pinnedContainerManager.js';
-import { compileColumnTopology, computeColumnWindowDelta, type CompiledColumnTopology } from './columnTopology.js';
+import type { CompiledColumnTopology } from './columnTopology.js';
+import { ColumnTopologyCoordinator } from './columnTopologyCoordinator.js';
 import { resolveRowPresentation } from './rowPresentationResolver.js';
 import {
 	applyRenderWindowRuntimeLimits,
@@ -150,8 +151,7 @@ export class RowRenderer<TRowData = unknown> {
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
 	private readonly runtime: RowRendererRuntimeBridge<TRowData>;
 	private readonly pinnedContainers = new PinnedContainerManager<TRowData>();
-	private cachedColumnTopology: CompiledColumnTopology | null = null;
-	private cachedColumnTopologyVersion = -1;
+	private readonly columnTopologyCoordinator = new ColumnTopologyCoordinator<TRowData>();
 	/** Live column-reorder preview source, wired by RenderEngine to the
 	 *  ColumnInteractionController. Returns 0 outside an active header drag. */
 	public columnShiftSource: ((colIndex: number) => number) | null = null;
@@ -271,38 +271,7 @@ export class RowRenderer<TRowData = unknown> {
 		plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>,
 		isScrollFrameActive: boolean
 	): CompiledColumnTopology {
-		if (this.cachedColumnTopology && this.cachedColumnTopologyVersion === plan.version) {
-			return this.cachedColumnTopology;
-		}
-		const topology = compileColumnTopology(plan);
-		// The topology itself only changes on pin/unpin/reorder/resize (plan.version bump) — NOT on
-		// routine horizontal scroll, which shifts centerColStart/centerColCount over a static
-		// topology (already tracked by cols{Entered,Exited,Stayed}DuringScroll via diffRenderWindow
-		// above). This delta is the real, previously-unused signal for topology-CHANGE events —
-		// in particular laneMoves (pin/unpin), which diffRenderWindow's index-window diff can't see.
-		if (this.cachedColumnTopology && this.renderStats) {
-			const delta = computeColumnWindowDelta(this.cachedColumnTopology, topology);
-			this.renderStats.columnTopologyDeltaComputations = (this.renderStats.columnTopologyDeltaComputations || 0) + 1;
-			if (isScrollFrameActive) {
-				this.renderStats.columnTopologyDeltaComputationsDuringScroll =
-					(this.renderStats.columnTopologyDeltaComputationsDuringScroll || 0) + 1;
-			}
-			this.renderStats.columnTopologyStayedColumns = (this.renderStats.columnTopologyStayedColumns || 0) + delta.stayedCenterColumns.length;
-			this.renderStats.columnTopologyEnteredColumns =
-				(this.renderStats.columnTopologyEnteredColumns || 0) +
-				delta.enteredCenterColumns.length +
-				delta.enteredPinnedLeftColumns.length +
-				delta.enteredPinnedRightColumns.length;
-			this.renderStats.columnTopologyExitedColumns =
-				(this.renderStats.columnTopologyExitedColumns || 0) +
-				delta.exitedCenterColumns.length +
-				delta.exitedPinnedLeftColumns.length +
-				delta.exitedPinnedRightColumns.length;
-			this.renderStats.columnTopologyLaneMoves = (this.renderStats.columnTopologyLaneMoves || 0) + delta.laneMoves.length;
-		}
-		this.cachedColumnTopology = topology;
-		this.cachedColumnTopologyVersion = plan.version;
-		return topology;
+		return this.columnTopologyCoordinator.getCompiledTopology(plan, isScrollFrameActive, this.renderStats);
 	}
 
 	private getRenderedRowTop(
