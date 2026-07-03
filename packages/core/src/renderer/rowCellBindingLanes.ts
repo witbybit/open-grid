@@ -410,7 +410,8 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 			hasStalePortalMount ||
 			hasEmptyPortalHost;
 		const mountedDataVersionDrift = hasMountedDataVersionDrifted(cellSlot, { rowVersion: currentRowVersion, globalVersion: ctx.globalVersion });
-		const globalDataChanged = mountedDataVersionDrift.globalChanged || (cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalChangedDuringScroll);
+		const globalDataChanged =
+			mountedDataVersionDrift.globalChanged || (cellSlot.lastMountedGlobalVersion !== -1 && ctx.globalChangedDuringScroll);
 		const rowDataChanged = mountedDataVersionDrift.rowChanged;
 		const mountedFreshnessMatches = matchesCellSlotMountedFreshness(cellSlot, {
 			rowVersion: currentRowVersion ?? -1,

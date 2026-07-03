@@ -145,7 +145,7 @@ describe('visualFreshness', () => {
 		it.each(['rowVersion', 'globalVersion', 'insightVersion', 'styleVersion', 'loadingVersion', 'selectionVersion'] as const)(
 			'isMountedCellVisuallyFresh rejects a mounted cell that diverges only on %s',
 			(dimension) => {
-				const key = (`lastMounted${dimension[0].toUpperCase()}${dimension.slice(1)}` as const) as keyof MountedFreshnessHost;
+				const key = `lastMounted${dimension[0].toUpperCase()}${dimension.slice(1)}` as const as keyof MountedFreshnessHost;
 				const host = mountedHost();
 				const expected = freshness({ [dimension]: (host[key] as number) + 1 });
 				expect(isMountedCellVisuallyFresh(host, expected)).toBe(false);
@@ -200,7 +200,12 @@ describe('visualFreshness', () => {
 		});
 
 		it('does NOT depend on insight/style/loading/selection dimensions — narrower than full freshness on purpose', () => {
-			const host = mountedHost({ lastMountedInsightVersion: 1, lastMountedStyleVersion: 1, lastMountedLoadingVersion: 1, lastMountedSelectionVersion: 1 });
+			const host = mountedHost({
+				lastMountedInsightVersion: 1,
+				lastMountedStyleVersion: 1,
+				lastMountedLoadingVersion: 1,
+				lastMountedSelectionVersion: 1,
+			});
 			// Only row/global match the host; the other four dimensions are wildly different but must
 			// not factor into this check at all.
 			const result = hasMountedDataVersionDrifted(host, { rowVersion: 1, globalVersion: 2 });

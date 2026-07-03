@@ -127,8 +127,7 @@ export function hasMountedDataVersionDrifted(
 	expected: { rowVersion: number | undefined; globalVersion: number }
 ): { globalChanged: boolean; rowChanged: boolean } {
 	const globalChanged = host.lastMountedGlobalVersion !== -1 && expected.globalVersion !== host.lastMountedGlobalVersion;
-	const rowChanged =
-		host.lastMountedRowVersion !== -1 && expected.rowVersion !== undefined && expected.rowVersion !== host.lastMountedRowVersion;
+	const rowChanged = host.lastMountedRowVersion !== -1 && expected.rowVersion !== undefined && expected.rowVersion !== host.lastMountedRowVersion;
 	return { globalChanged, rowChanged };
 }
 

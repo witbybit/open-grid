@@ -284,7 +284,8 @@ export class RowRenderer<TRowData = unknown> {
 			const delta = computeColumnWindowDelta(this.cachedColumnTopology, topology);
 			this.renderStats.columnTopologyDeltaComputations = (this.renderStats.columnTopologyDeltaComputations || 0) + 1;
 			if (isScrollFrameActive) {
-				this.renderStats.columnTopologyDeltaComputationsDuringScroll = (this.renderStats.columnTopologyDeltaComputationsDuringScroll || 0) + 1;
+				this.renderStats.columnTopologyDeltaComputationsDuringScroll =
+					(this.renderStats.columnTopologyDeltaComputationsDuringScroll || 0) + 1;
 			}
 			this.renderStats.horizontalStayedColumns = (this.renderStats.horizontalStayedColumns || 0) + delta.stayedCenterColumns.length;
 			this.renderStats.horizontalEnteredColumns =
