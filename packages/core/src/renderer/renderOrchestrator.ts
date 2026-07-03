@@ -68,10 +68,10 @@ export interface RenderStats {
 	 */
 	columnTopologyDeltaComputations?: number;
 	columnTopologyDeltaComputationsDuringScroll?: number;
-	horizontalStayedColumns?: number;
-	horizontalEnteredColumns?: number;
-	horizontalExitedColumns?: number;
-	horizontalLaneMoves?: number;
+	columnTopologyStayedColumns?: number;
+	columnTopologyEnteredColumns?: number;
+	columnTopologyExitedColumns?: number;
+	columnTopologyLaneMoves?: number;
 	cellsSkippedDuringScroll: number;
 	sameWindowBailouts: number;
 	stateReadsDuringScroll: number;
@@ -171,10 +171,10 @@ export function createEmptyRenderStats(): RenderStats {
 		colsStayedDuringScroll: 0,
 		columnTopologyDeltaComputations: 0,
 		columnTopologyDeltaComputationsDuringScroll: 0,
-		horizontalStayedColumns: 0,
-		horizontalEnteredColumns: 0,
-		horizontalExitedColumns: 0,
-		horizontalLaneMoves: 0,
+		columnTopologyStayedColumns: 0,
+		columnTopologyEnteredColumns: 0,
+		columnTopologyExitedColumns: 0,
+		columnTopologyLaneMoves: 0,
 		cellsSkippedDuringScroll: 0,
 		sameWindowBailouts: 0,
 		stateReadsDuringScroll: 0,
@@ -286,10 +286,10 @@ export class RenderOrchestrator {
 		colsStayedDuringScroll: 0,
 		columnTopologyDeltaComputations: 0,
 		columnTopologyDeltaComputationsDuringScroll: 0,
-		horizontalStayedColumns: 0,
-		horizontalEnteredColumns: 0,
-		horizontalExitedColumns: 0,
-		horizontalLaneMoves: 0,
+		columnTopologyStayedColumns: 0,
+		columnTopologyEnteredColumns: 0,
+		columnTopologyExitedColumns: 0,
+		columnTopologyLaneMoves: 0,
 		cellsSkippedDuringScroll: 0,
 		sameWindowBailouts: 0,
 		stateReadsDuringScroll: 0,
@@ -434,10 +434,10 @@ export class RenderOrchestrator {
 		this.stats.colsStayedDuringScroll = 0;
 		this.stats.columnTopologyDeltaComputations = 0;
 		this.stats.columnTopologyDeltaComputationsDuringScroll = 0;
-		this.stats.horizontalStayedColumns = 0;
-		this.stats.horizontalEnteredColumns = 0;
-		this.stats.horizontalExitedColumns = 0;
-		this.stats.horizontalLaneMoves = 0;
+		this.stats.columnTopologyStayedColumns = 0;
+		this.stats.columnTopologyEnteredColumns = 0;
+		this.stats.columnTopologyExitedColumns = 0;
+		this.stats.columnTopologyLaneMoves = 0;
 		this.stats.cellsSkippedDuringScroll = 0;
 		this.stats.sameWindowBailouts = 0;
 		this.stats.cellAccessReadsDuringScroll = 0;

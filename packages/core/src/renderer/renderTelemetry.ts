@@ -70,10 +70,10 @@ export interface RenderRuntimeStats {
 	colsStayedDuringScroll: number;
 	columnTopologyDeltaComputations: number;
 	columnTopologyDeltaComputationsDuringScroll: number;
-	horizontalStayedColumns: number;
-	horizontalEnteredColumns: number;
-	horizontalExitedColumns: number;
-	horizontalLaneMoves: number;
+	columnTopologyStayedColumns: number;
+	columnTopologyEnteredColumns: number;
+	columnTopologyExitedColumns: number;
+	columnTopologyLaneMoves: number;
 	cellsSkippedDuringScroll: number;
 	sameWindowBailouts: number;
 	cellsBoundDuringScroll: number;
@@ -149,10 +149,10 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		colsStayedDuringScroll: 0,
 		columnTopologyDeltaComputations: 0,
 		columnTopologyDeltaComputationsDuringScroll: 0,
-		horizontalStayedColumns: 0,
-		horizontalEnteredColumns: 0,
-		horizontalExitedColumns: 0,
-		horizontalLaneMoves: 0,
+		columnTopologyStayedColumns: 0,
+		columnTopologyEnteredColumns: 0,
+		columnTopologyExitedColumns: 0,
+		columnTopologyLaneMoves: 0,
 		cellsSkippedDuringScroll: 0,
 		sameWindowBailouts: 0,
 		cellsBoundDuringScroll: 0,
@@ -241,10 +241,10 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		colsStayedDuringScroll: deps.runtimeStats.colsStayedDuringScroll,
 		columnTopologyDeltaComputations: deps.runtimeStats.columnTopologyDeltaComputations,
 		columnTopologyDeltaComputationsDuringScroll: deps.runtimeStats.columnTopologyDeltaComputationsDuringScroll,
-		horizontalStayedColumns: deps.runtimeStats.horizontalStayedColumns,
-		horizontalEnteredColumns: deps.runtimeStats.horizontalEnteredColumns,
-		horizontalExitedColumns: deps.runtimeStats.horizontalExitedColumns,
-		horizontalLaneMoves: deps.runtimeStats.horizontalLaneMoves,
+		columnTopologyStayedColumns: deps.runtimeStats.columnTopologyStayedColumns,
+		columnTopologyEnteredColumns: deps.runtimeStats.columnTopologyEnteredColumns,
+		columnTopologyExitedColumns: deps.runtimeStats.columnTopologyExitedColumns,
+		columnTopologyLaneMoves: deps.runtimeStats.columnTopologyLaneMoves,
 		cellsSkippedDuringScroll: deps.runtimeStats.cellsSkippedDuringScroll,
 		sameWindowBailouts: deps.runtimeStats.sameWindowBailouts,
 		stateReadsDuringScroll: deps.runtimeStats.stateReadsDuringScroll,

@@ -287,18 +287,18 @@ export class RowRenderer<TRowData = unknown> {
 				this.renderStats.columnTopologyDeltaComputationsDuringScroll =
 					(this.renderStats.columnTopologyDeltaComputationsDuringScroll || 0) + 1;
 			}
-			this.renderStats.horizontalStayedColumns = (this.renderStats.horizontalStayedColumns || 0) + delta.stayedCenterColumns.length;
-			this.renderStats.horizontalEnteredColumns =
-				(this.renderStats.horizontalEnteredColumns || 0) +
+			this.renderStats.columnTopologyStayedColumns = (this.renderStats.columnTopologyStayedColumns || 0) + delta.stayedCenterColumns.length;
+			this.renderStats.columnTopologyEnteredColumns =
+				(this.renderStats.columnTopologyEnteredColumns || 0) +
 				delta.enteredCenterColumns.length +
 				delta.enteredPinnedLeftColumns.length +
 				delta.enteredPinnedRightColumns.length;
-			this.renderStats.horizontalExitedColumns =
-				(this.renderStats.horizontalExitedColumns || 0) +
+			this.renderStats.columnTopologyExitedColumns =
+				(this.renderStats.columnTopologyExitedColumns || 0) +
 				delta.exitedCenterColumns.length +
 				delta.exitedPinnedLeftColumns.length +
 				delta.exitedPinnedRightColumns.length;
-			this.renderStats.horizontalLaneMoves = (this.renderStats.horizontalLaneMoves || 0) + delta.laneMoves.length;
+			this.renderStats.columnTopologyLaneMoves = (this.renderStats.columnTopologyLaneMoves || 0) + delta.laneMoves.length;
 		}
 		this.cachedColumnTopology = topology;
 		this.cachedColumnTopologyVersion = plan.version;

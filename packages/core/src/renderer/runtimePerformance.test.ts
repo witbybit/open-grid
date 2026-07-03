@@ -531,7 +531,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		cleanupGrid(grid);
 	});
 
-	it('BLOCKER: pinning a column mid-session drives real horizontal-delta telemetry via computeColumnWindowDelta', () => {
+	it('BLOCKER: pinning a column mid-session drives real column-topology-change delta telemetry via computeColumnWindowDelta', () => {
 		// Distinct from the routine-scroll cols{Entered,Exited,Stayed}DuringScroll counters (which
 		// track the render WINDOW shifting over a static topology) — this proves a genuine topology
 		// CHANGE (pin/unpin) is diffed via computeColumnWindowDelta, not silently dropped.
@@ -547,10 +547,10 @@ describe('Runtime Performance & Granular Versioning', () => {
 		// Pinning relocates existing columns to a different lane — they remain in the column SET, so
 		// they show up as laneMoves (relocated), never as entered/exited (those track columns
 		// added/removed from the topology entirely, which pinning does not do).
-		expect(stats.horizontalLaneMoves).toBe(3); // 2 newly-pinned-left + 1 newly-pinned-right
-		expect(stats.horizontalEnteredColumns).toBe(0);
-		expect(stats.horizontalExitedColumns).toBe(0);
-		expect(stats.horizontalStayedColumns).toBe(17); // 20 columns - 3 relocated
+		expect(stats.columnTopologyLaneMoves).toBe(3); // 2 newly-pinned-left + 1 newly-pinned-right
+		expect(stats.columnTopologyEnteredColumns).toBe(0);
+		expect(stats.columnTopologyExitedColumns).toBe(0);
+		expect(stats.columnTopologyStayedColumns).toBe(17); // 20 columns - 3 relocated
 
 		cleanupGrid(grid);
 	});
