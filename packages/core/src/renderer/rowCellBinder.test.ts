@@ -2717,6 +2717,77 @@ describe('bindCellDuringScroll', () => {
 		// No getCheapDisplayValue mock → empty fallback; cell shows 'empty' mode.
 		expect(cellSlot.lastContentMode).toBe('empty');
 	});
+
+	it('honestly reports isScrolling:true and a distinct phase for the force-live-interactive-exception mount', () => {
+		// This is the ONE case allowed to mount live during active scroll (the cell is focused). The
+		// mount call must not lie to the renderer about being mid-scroll — it genuinely is — and must
+		// use a phase distinct from ordinary 'scroll' (which never mounts) so telemetry and any
+		// renderer-side special-casing can tell the two apart.
+		const dirty = vi.fn();
+		const mountCellImmediately = vi.fn();
+		const incrementForceLiveMountsDuringScroll = vi.fn();
+		const cellSlot = new CellSlot(document.createElement('div'));
+		const host = document.createElement('div');
+
+		const deps: RowCellBinderDeps<{ id: string; name: string }> = {
+			engine: {
+				data: { getCachedDisplayValue: vi.fn(() => undefined) },
+				hasFormula: vi.fn(() => false),
+			} as any,
+			cellRenderer: { showPortalContent: vi.fn() } as any,
+			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately } as any,
+			selectionPaint: {} as any,
+			cellClassScratch: {} as any,
+			getViewportContainer: () => null,
+			getIsScrolling: () => true,
+			getIsScrollFrameActive: () => true,
+			programmaticScrollCell: null,
+			clearProgrammaticScrollCell: vi.fn(),
+			setDeferredFocusCell: vi.fn(),
+			applyFocus: vi.fn(),
+			isEditorInteractiveElement: () => false,
+			ensureCellPortalHost: () => host,
+			getCellPortalHost: () => host,
+			markCellDirtyAfterScroll: dirty,
+			releaseCellPortal: vi.fn(),
+			incrementStyleHookCallsDuringScroll: vi.fn(),
+			incrementCellsBoundDuringScroll: vi.fn(),
+			incrementCurrentScrollCellsWritten: vi.fn(),
+			incrementForceLiveMountsDuringScroll,
+			getSnapshotVisualVersions: () => ({ styleVersion: 0, loadingVersion: 0 }),
+		};
+
+		bindCellDuringScroll(deps, {
+			cellSlot,
+			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
+			rowIndex: 0,
+			colIndex: 0,
+			col: { field: 'name', cellRenderer: () => null } as any,
+			lane: 'center',
+			ctx: {
+				activeEdit: null,
+				focusedCell: { rowId: 'r1', colField: 'name' },
+				globalVersion: 4,
+				hasDeferredCellStyleRules: false,
+				isScrolling: true,
+				loadingVersion: 0,
+				plan: { columnPlans: [{ isCustom: true, mode: 'custom-dom' }] },
+				visibleColRange: { startIdx: 0, endIdx: 0 },
+				rowVersions: new Map([['r1', 7]]),
+			} as any,
+			pooledRowId: 'slot-1',
+			pooledRowGeneration: 0,
+			left: 0,
+			right: -1,
+			width: 100,
+			isRowRebind: false,
+			isRowLoading: false,
+			isInVisibleContent: true,
+		});
+
+		expect(mountCellImmediately).toHaveBeenCalledWith(expect.objectContaining({ phase: 'scroll-force-live', isScrolling: true }));
+		expect(incrementForceLiveMountsDuringScroll).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe('bindCellFull', () => {

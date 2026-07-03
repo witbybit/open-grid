@@ -32,7 +32,14 @@ export interface ValueSetterParams<TRowData = unknown> {
 
 // ─── Cell renderer phase + capabilities ──────────────────────────────────────
 
-export type CellRendererPhase = 'initial' | 'scroll' | 'scroll-idle' | 'interaction' | 'edit' | 'destroy';
+/**
+ * 'scroll-force-live' is distinct from 'scroll': it marks the narrow force-live-interactive-
+ * exception mount (an actively editing/focused cell that must mount live during an active scroll
+ * frame — see scrollCellPresentation.ts's ScrollCellPresentation union). The renderer callback is
+ * told `isScrolling: true` honestly for this phase — unlike ordinary 'scroll'-phase mounts, this
+ * one genuinely happens mid-motion, so a renderer that special-cases scrolling should know.
+ */
+export type CellRendererPhase = 'initial' | 'scroll' | 'scroll-force-live' | 'scroll-idle' | 'interaction' | 'edit' | 'destroy';
 
 export interface CellRendererCapabilities {
 	/**

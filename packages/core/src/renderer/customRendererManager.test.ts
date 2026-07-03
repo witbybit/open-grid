@@ -120,3 +120,25 @@ describe('CustomRendererManager warm cache sizing', () => {
 		expect(stats.warmMisses).toBeGreaterThan(110);
 	});
 });
+
+describe('CustomRendererManager scroll-time mount counter separation', () => {
+	it('counts an ordinary scroll-phase acquire against customRendererMountsDuringScroll', () => {
+		const engine = makeEngineStub();
+		const manager = new CustomRendererManager<Row>(engine);
+		const parent = document.createElement('div');
+		manager.acquire({ ...acquireParams(0, 0, parent), phase: 'scroll', isScrolling: true } as any);
+		expect(engine.customRendererMountsDuringScroll).toBe(1);
+	});
+
+	it('does NOT count the force-live-interactive-exception phase against customRendererMountsDuringScroll', () => {
+		// This is the one case deliberately allowed to mount live during active scroll (an editing/
+		// focused cell) — it must stay invisible to the generic "did anything mount during scroll"
+		// counter so that counter keeps proving the real contract (no mounts for ordinary cells),
+		// while the mount is still counted elsewhere via forceLiveMountsDuringScroll (rowCellBinder.ts).
+		const engine = makeEngineStub();
+		const manager = new CustomRendererManager<Row>(engine);
+		const parent = document.createElement('div');
+		manager.acquire({ ...acquireParams(0, 0, parent), phase: 'scroll-force-live', isScrolling: true } as any);
+		expect(engine.customRendererMountsDuringScroll).toBe(0);
+	});
+});

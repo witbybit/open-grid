@@ -164,7 +164,11 @@ export class CustomRendererManager<TRowData = unknown> {
 
 	public acquire(params: AcquireRendererParams<TRowData>): RendererInstance<TRowData> {
 		this.stats.totalAcquires++;
-		if (params.isScrolling && this.engine) {
+		// The force-live-interactive-exception phase is the ONE mount deliberately permitted during
+		// active scroll (editing/focus mid-gesture) — it is counted separately via
+		// forceLiveMountsDuringScroll (see rowCellBinder.ts), never folded into this generic counter,
+		// so a regression that makes ordinary cells mount here stays visible.
+		if (params.isScrolling && params.phase !== 'scroll-force-live' && this.engine) {
 			this.engine.customRendererMountsDuringScroll++;
 		}
 		if (!params.isScrolling && !this.engine?.isScrolling) {

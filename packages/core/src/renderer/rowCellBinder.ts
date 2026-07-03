@@ -906,8 +906,11 @@ function applyScrollCellPresentation<TRowData>(
 				portalHostId: cellSlot.portalHostId,
 				isEditing: presentation.isEditing,
 				isLoading: isRowLoading,
-				phase: 'scroll',
-				isScrolling: false,
+				// Honest phase/isScrolling: this mount genuinely happens mid-scroll (the sole force-live
+				// exception), unlike ordinary 'scroll'-phase mounts which never occur during active
+				// scroll. A renderer that special-cases scrolling deserves to know it's really scrolling.
+				phase: 'scroll-force-live',
+				isScrolling: true,
 				isFocused: presentation.isFocused,
 				isSelected: false,
 			});
