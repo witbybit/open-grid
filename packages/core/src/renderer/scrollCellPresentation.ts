@@ -18,13 +18,15 @@ export interface ScrollCellPresentationDeps {
 	getCellPortalHost(cell: HTMLDivElement): HTMLDivElement | null;
 	/** Read-only: the geometry-computed row height for the given row index, if known. */
 	getRowHeight(rowIndex: number): number | undefined;
+	/** Read-only: the compiled-plan column width for the given column index, if known. */
+	getColWidth(colIndex: number): number | undefined;
 	/** Read-only: a cached cheap display value for the synthetic-impostor fallback — already
 	 *  exempt from the no-semantic-read counters (it's a cache lookup, not a value computation). */
 	getCheapDisplayValue(rowId: string, colField: string): string | undefined;
-	/** Read-only: a previously-captured frozen HTML clone for this exact cell identity, gated by
-	 *  rowVersion — see htmlScrollSnapshotStore.ts. Returns undefined if nothing was captured or
-	 *  the row's data has changed since. */
-	getFrozenHtmlSnapshot(rowId: string, colField: string, rowVersion: number): { html: string; rowHeight: number | undefined } | undefined;
+	/** Read-only: a previously-captured frozen HTML clone for this exact cell identity, freshness-
+	 *  and size-gated — see htmlScrollSnapshotStore.ts. Returns undefined if nothing was captured, the
+	 *  row's data has changed since, or the row/column has been resized since capture. */
+	getFrozenHtmlSnapshot(rowId: string, colField: string, expected: VisualFreshness, rowHeight: number | undefined, colWidth: number | undefined): { html: string } | undefined;
 }
 
 export function isPrimitiveSnapshotContent(snapshot: CellDisplaySnapshot | undefined): snapshot is CellDisplaySnapshot {
@@ -362,11 +364,22 @@ export function resolveScrollCellPresentation<TRowData>(
 	const portalImpostorSnapshot =
 		hasScrollImpostorCapability && !isEditing && !isFocused && snapshot && snapshot.contentMode === 'fallback' ? snapshot : undefined;
 	if (portalImpostorSnapshot) {
-		const currentRowHeight = deps.getRowHeight(rowIndex);
-		const frozenHtml = deps.getFrozenHtmlSnapshot(node.id, col.field, input.rowVersion);
-		const frozenHtmlValid = frozenHtml && (frozenHtml.rowHeight === undefined || frozenHtml.rowHeight === currentRowHeight);
+		const frozenHtml = deps.getFrozenHtmlSnapshot(
+			node.id,
+			col.field,
+			{
+				rowVersion: input.rowVersion,
+				globalVersion: ctx.globalVersion,
+				insightVersion: ctx.insightVersion,
+				styleVersion: ctx.styleVersion,
+				loadingVersion: ctx.loadingVersion,
+				selectionVersion: ctx.selectionVersion,
+			},
+			deps.getRowHeight(rowIndex),
+			deps.getColWidth(colIndex)
+		);
 		const releaseStalePortal = !!cellSlot.lastPortalKey;
-		if (frozenHtmlValid) {
+		if (frozenHtml) {
 			return {
 				kind: 'impostor-html',
 				className: cellClassName,

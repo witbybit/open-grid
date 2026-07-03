@@ -32,6 +32,7 @@ function makeDeps(overrides: Partial<ScrollCellPresentationDeps> = {}): ScrollCe
 	return {
 		getCellPortalHost: vi.fn(() => null),
 		getRowHeight: vi.fn(() => 40),
+		getColWidth: vi.fn(() => 100),
 		getCheapDisplayValue: vi.fn(() => ''),
 		getFrozenHtmlSnapshot: vi.fn(() => undefined),
 		...overrides,
@@ -153,8 +154,8 @@ describe('resolveScrollCellPresentation', () => {
 		};
 		const deps = makeDeps({
 			getRowHeight: () => 40,
-			getFrozenHtmlSnapshot: (rowId, colField, rowVersion) =>
-				rowId === 'r1' && colField === 'name' && rowVersion === 3 ? { html: '<span>frozen</span>', rowHeight: 40 } : undefined,
+			getFrozenHtmlSnapshot: (rowId, colField, expected) =>
+				rowId === 'r1' && colField === 'name' && expected.rowVersion === 3 ? { html: '<span>frozen</span>' } : undefined,
 		});
 		const presentation = resolveScrollCellPresentation(
 			deps,
@@ -191,7 +192,10 @@ describe('resolveScrollCellPresentation', () => {
 		};
 		const deps = makeDeps({
 			getRowHeight: () => 60, // row has been resized since the HTML was captured at height 40
-			getFrozenHtmlSnapshot: () => ({ html: '<span>frozen</span>', rowHeight: 40 }),
+			// The row-height gate now lives inside the store (via the rowHeight arg) — this mock
+			// stands in for a store that refuses a stale-height capture, exactly as the real
+			// HtmlScrollSnapshotStore does.
+			getFrozenHtmlSnapshot: (_rowId, _colField, _expected, rowHeight) => (rowHeight === 40 ? { html: '<span>frozen</span>' } : undefined),
 		});
 		const presentation = resolveScrollCellPresentation(
 			deps,

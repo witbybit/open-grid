@@ -428,7 +428,14 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	if (hasScrollSnapshotHtmlCap && cellSlot.lastPortalKey === stableKey && deps.portalMountManager.isCellMounted(stableKey)) {
 		const existingHost = deps.getCellPortalHost(cellSlot.element);
 		if (existingHost && existingHost.childElementCount > 0) {
-			deps.engine.htmlScrollSnapshots.set(node.id, col.field, existingHost.innerHTML, rowVersion, deps.engine.geometry?.rowHeights?.[rowIndex]);
+			deps.engine.htmlScrollSnapshots.set(
+				node.id,
+				col.field,
+				existingHost.innerHTML,
+				{ rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions },
+				deps.engine.geometry?.rowHeights?.[rowIndex],
+				plan.colWidths?.[colIndex]
+			);
 		}
 	}
 
@@ -630,8 +637,10 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const scrollPresentationDeps: ScrollCellPresentationDeps = {
 		getCellPortalHost: deps.getCellPortalHost,
 		getRowHeight: (idx) => deps.engine.geometry?.rowHeights?.[idx],
+		getColWidth: (idx) => ctx.plan?.colWidths?.[idx],
 		getCheapDisplayValue: (rowId, colField) => deps.engine.getCheapDisplayValue?.(rowId, colField),
-		getFrozenHtmlSnapshot: (rowId, colField, expectedRowVersion) => deps.engine.htmlScrollSnapshots?.get(rowId, colField, expectedRowVersion),
+		getFrozenHtmlSnapshot: (rowId, colField, expected, rowHeight, colWidth) =>
+			deps.engine.htmlScrollSnapshots?.get(rowId, colField, expected, { rowHeight, colWidth }),
 	};
 	const presentation = resolveScrollCellPresentation(scrollPresentationDeps, {
 		cellSlot,
@@ -746,10 +755,13 @@ function applyScrollCellPresentation<TRowData>(
 				const snapshot = presentation.snapshotForCapture;
 				const portalHost = deps.getCellPortalHost(cellSlot.element);
 				const html = portalHost?.innerHTML;
-				const existing = deps.engine.htmlScrollSnapshots.get(snapshot.rowId, snapshot.colField, snapshot.rowVersion);
+				// `snapshot` (a CellDisplaySnapshot) already extends VisualFreshness — pass it directly
+				// as the freshness stamp rather than re-deriving it.
+				const existing = deps.engine.htmlScrollSnapshots.get(snapshot.rowId, snapshot.colField, snapshot);
 				if (html && html !== existing?.html) {
 					const capturedRowHeight = deps.engine.geometry?.rowHeights?.[rowIndex];
-					deps.engine.htmlScrollSnapshots.set(snapshot.rowId, snapshot.colField, html, snapshot.rowVersion, capturedRowHeight);
+					const capturedColWidth = ctx.plan?.colWidths?.[colIndex];
+					deps.engine.htmlScrollSnapshots.set(snapshot.rowId, snapshot.colField, html, snapshot, capturedRowHeight, capturedColWidth);
 				}
 			}
 

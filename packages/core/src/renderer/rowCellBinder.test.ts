@@ -2417,8 +2417,9 @@ describe('bindCellDuringScroll', () => {
 			isInVisibleContent: true,
 		});
 
-		// HTML snapshot store should be patched with captured innerHTML
-		expect(htmlSnapshotSet).toHaveBeenCalledWith('r1', 'name', '<span class="badge">INFO</span>', 2, undefined);
+		// HTML snapshot store should be patched with captured innerHTML — `existingSnapshot` itself
+		// (a CellDisplaySnapshot, which extends VisualFreshness) is passed through as the freshness stamp.
+		expect(htmlSnapshotSet).toHaveBeenCalledWith('r1', 'name', '<span class="badge">INFO</span>', existingSnapshot, undefined, undefined);
 		// Cell stays frozen — portal content visible, no remount
 		expect(showPortalContent).toHaveBeenCalledWith(cellSlot.element);
 	});
@@ -2858,10 +2859,14 @@ describe('bindCellFull', () => {
 			state: { globalVersion: 1, styleRules: undefined } as any,
 		};
 
+		// Only rowVersion is checked by default ('row-version-only' mode) — the other dimensions here
+		// are placeholders, not asserted against.
+		const expectedFreshness = { rowVersion: 3, globalVersion: 0, insightVersion: 0, styleVersion: 0, loadingVersion: 0, selectionVersion: 0 };
+
 		// First full bind: portal has never been mounted, nothing exists to capture yet.
 		bindCellFull(deps, baseRequest);
 		expect(cellSlot.lastPortalKey).toBe(stableKey);
-		expect(htmlScrollSnapshots.get('r1', 'name', 3)).toBeUndefined();
+		expect(htmlScrollSnapshots.get('r1', 'name', expectedFreshness)).toBeUndefined();
 
 		// Simulate React having committed the portal's real content sometime after that first bind.
 		portalHost.innerHTML = '<div class="badge badge-info">INFO</div>';
@@ -2870,7 +2875,9 @@ describe('bindCellFull', () => {
 		// selection change elsewhere) — not a scroll, and not the cell's own data changing.
 		bindCellFull(deps, { ...baseRequest, state: { globalVersion: 2, styleRules: undefined } as any });
 
-		expect(htmlScrollSnapshots.get('r1', 'name', 3)).toEqual({ html: '<div class="badge badge-info">INFO</div>', rowVersion: 3, rowHeight: 40 });
+		expect(htmlScrollSnapshots.get('r1', 'name', expectedFreshness, { rowHeight: 40, colWidth: 100 })?.html).toBe(
+			'<div class="badge badge-info">INFO</div>'
+		);
 	});
 
 	it("does not fall back to a rebound slot's previous row text when the cache misses during a scroll-adjacent full bind", () => {
