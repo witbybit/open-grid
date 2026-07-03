@@ -18,7 +18,7 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { HeaderRenderer } from './headerRenderer.js';
 import type { FloatingFilterRenderer } from './floatingFilterRenderer.js';
 import type { StickyGroupRenderer } from './stickyGroupRenderer.js';
-import { isRowVersionFresh, isVisualFresh } from './visualFreshness.js';
+import { isVisualFresh } from './visualFreshness.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
@@ -441,15 +441,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			if (!col) return true;
 			const isCustomLive = compiledPlan.columnPlans[colIndex]?.mode === 'custom-live';
 			const rowId = visualRow.node.id;
-			// Carry frozenHtml across prewarm writes — drop it if row data changed.
-			const prewarmRowVersion = this.deps.engine.rowVersions.get(rowId) ?? -1;
-			const prewarmFrozenHtml =
-				(col as InternalColumnDef).cellRendererCapabilities?.scrollSnapshot === 'html'
-					? (() => {
-							const prev = this.deps.engine.cellDisplaySnapshots.get(rowId, col.field);
-							return isRowVersionFresh(prev?.rowVersion, prewarmRowVersion) ? prev!.frozenHtml : undefined;
-						})()
-					: undefined;
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
 			const shouldPrimeFormula = typeof rawValue === 'string' && rawValue.startsWith('=');
 			const hasRegisteredFormula = this.deps.engine.hasFormula(rowId, col.field);
@@ -490,7 +481,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 							contentMode: snapshotContentMode,
 							formattedValue: displayValue,
 							title: '',
-							frozenHtml: prewarmFrozenHtml,
 						})
 					);
 					this.deps.renderStats.prewarmedCellSnapshots++;
@@ -562,7 +552,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 							formattedValue: displayValue,
 							title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
 							validationError: decorationMetadata.validationError,
-							frozenHtml: prewarmFrozenHtml,
 						})
 					);
 					this.deps.renderStats.prewarmedCellSnapshots++;
@@ -580,15 +569,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			const isCustomLive = compiledPlan.columnPlans[colIndex]?.mode === 'custom-live';
 			const rowId = visualRow.node.id;
 			if (hasFreshSnapshot(rowId, col.field)) return true;
-			// Carry frozenHtml across prewarm writes — drop it if row data changed.
-			const prewarmRowVersion = this.deps.engine.rowVersions.get(rowId) ?? -1;
-			const prewarmFrozenHtml =
-				(col as InternalColumnDef).cellRendererCapabilities?.scrollSnapshot === 'html'
-					? (() => {
-							const prev = this.deps.engine.cellDisplaySnapshots.get(rowId, col.field);
-							return isRowVersionFresh(prev?.rowVersion, prewarmRowVersion) ? prev!.frozenHtml : undefined;
-						})()
-					: undefined;
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
 			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
 			const hasInsightDecorations = cellDecorations.length > 0;
@@ -667,7 +647,6 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 					formattedValue: snapshotFormattedValue,
 					title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
 					validationError: decorationMetadata.validationError,
-					frozenHtml: prewarmFrozenHtml,
 				})
 			);
 			this.deps.renderStats.prewarmedCellSnapshots++;

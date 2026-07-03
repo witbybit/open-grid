@@ -425,13 +425,10 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	// ever reading its committed DOM, so the very first scroll after that settle still falls back to
 	// plain text. Reading here — before this bind decides whether to release/remount the portal —
 	// means the cell already "looks frozen" the first time it is ever scrolled.
-	let freshFrozenHtml: string | undefined;
-	let freshFrozenRowHeight: number | undefined;
 	if (hasScrollSnapshotHtmlCap && cellSlot.lastPortalKey === stableKey && deps.portalMountManager.isCellMounted(stableKey)) {
 		const existingHost = deps.getCellPortalHost(cellSlot.element);
 		if (existingHost && existingHost.childElementCount > 0) {
-			freshFrozenHtml = existingHost.innerHTML;
-			freshFrozenRowHeight = deps.engine.geometry?.rowHeights?.[rowIndex];
+			deps.engine.htmlScrollSnapshots.set(node.id, col.field, existingHost.innerHTML, rowVersion, deps.engine.geometry?.rowHeights?.[rowIndex]);
 		}
 	}
 
@@ -530,16 +527,6 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			: contentMode;
 	const snapshotContentMode = contentMode === 'portal' && snapshotContentKind === 'impostor' ? ('fallback' as const) : contentMode;
 	const snapshotFormattedValue = contentMode === 'portal' && snapshotContentKind === 'impostor' ? portalImpostorValue : formattedValue;
-	// Prefer the HTML captured fresh above (this bind's own committed portal read). Otherwise carry
-	// frozenHtml/frozenRowHeight forward from the previous snapshot so the scroll impostor can still
-	// replay the styled clone — e.g. when this bind's portal key changed and nothing was available to
-	// read this time. Guard on rowVersion: if the row's data changed, the captured HTML is stale —
-	// drop it so the next capture reflects the updated badge/chip rather than replaying ghost data.
-	const prevSnapshot = hasScrollSnapshotHtmlCap ? deps.engine.cellDisplaySnapshots.get(node.id, col.field) : undefined;
-	const carriedFrozenHtml = prevSnapshot?.rowVersion === rowVersion ? prevSnapshot.frozenHtml : undefined;
-	const carriedFrozenRowHeight = prevSnapshot?.rowVersion === rowVersion ? prevSnapshot.frozenRowHeight : undefined;
-	const prevFrozenHtml = freshFrozenHtml ?? carriedFrozenHtml;
-	const prevFrozenRowHeight = freshFrozenHtml !== undefined ? freshFrozenRowHeight : carriedFrozenRowHeight;
 	deps.engine.cellDisplaySnapshots.set(
 		createCellDisplaySnapshot({
 			rowId: node.id,
@@ -558,8 +545,6 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			formattedValue: snapshotFormattedValue,
 			title: cellSlot.element.title,
 			validationError: validationDecTitle,
-			frozenHtml: prevFrozenHtml,
-			frozenRowHeight: prevFrozenRowHeight,
 		})
 	);
 
@@ -646,6 +631,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		getCellPortalHost: deps.getCellPortalHost,
 		getRowHeight: (idx) => deps.engine.geometry?.rowHeights?.[idx],
 		getCheapDisplayValue: (rowId, colField) => deps.engine.getCheapDisplayValue?.(rowId, colField),
+		getFrozenHtmlSnapshot: (rowId, colField, expectedRowVersion) => deps.engine.htmlScrollSnapshots?.get(rowId, colField, expectedRowVersion),
 	};
 	const presentation = resolveScrollCellPresentation(scrollPresentationDeps, {
 		cellSlot,
@@ -753,16 +739,17 @@ function applyScrollCellPresentation<TRowData>(
 			if (presentation.shouldMarkDirty) deps.markCellDirtyAfterScroll(cellSlot.element);
 
 			// scrollSnapshot: 'html' — the portal host has live committed React content right now.
-			// Capture its innerHTML and patch the snapshot so future impostor renders for this row
-			// can replay the styled HTML instead of falling back to plain text. React commits async,
-			// so this freeze moment is the only reliable place to read committed DOM content.
+			// Capture its innerHTML into the HTML snapshot store so future impostor renders for this
+			// row can replay the styled HTML instead of falling back to plain text. React commits
+			// async, so this freeze moment is the only reliable place to read committed DOM content.
 			if (presentation.captureFrozenHtml && presentation.snapshotForCapture) {
 				const snapshot = presentation.snapshotForCapture;
 				const portalHost = deps.getCellPortalHost(cellSlot.element);
 				const html = portalHost?.innerHTML;
-				if (html && html !== snapshot.frozenHtml) {
+				const existing = deps.engine.htmlScrollSnapshots.get(snapshot.rowId, snapshot.colField, snapshot.rowVersion);
+				if (html && html !== existing?.html) {
 					const capturedRowHeight = deps.engine.geometry?.rowHeights?.[rowIndex];
-					deps.engine.cellDisplaySnapshots.set({ ...snapshot, frozenHtml: html, frozenRowHeight: capturedRowHeight });
+					deps.engine.htmlScrollSnapshots.set(snapshot.rowId, snapshot.colField, html, snapshot.rowVersion, capturedRowHeight);
 				}
 			}
 

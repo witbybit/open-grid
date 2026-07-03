@@ -21,6 +21,10 @@ export interface ScrollCellPresentationDeps {
 	/** Read-only: a cached cheap display value for the synthetic-impostor fallback — already
 	 *  exempt from the no-semantic-read counters (it's a cache lookup, not a value computation). */
 	getCheapDisplayValue(rowId: string, colField: string): string | undefined;
+	/** Read-only: a previously-captured frozen HTML clone for this exact cell identity, gated by
+	 *  rowVersion — see htmlScrollSnapshotStore.ts. Returns undefined if nothing was captured or
+	 *  the row's data has changed since. */
+	getFrozenHtmlSnapshot(rowId: string, colField: string, rowVersion: number): { html: string; rowHeight: number | undefined } | undefined;
 }
 
 export function isPrimitiveSnapshotContent(snapshot: CellDisplaySnapshot | undefined): snapshot is CellDisplaySnapshot {
@@ -359,15 +363,14 @@ export function resolveScrollCellPresentation<TRowData>(
 		hasScrollImpostorCapability && !isEditing && !isFocused && snapshot && snapshot.contentMode === 'fallback' ? snapshot : undefined;
 	if (portalImpostorSnapshot) {
 		const currentRowHeight = deps.getRowHeight(rowIndex);
-		const frozenHtmlValid =
-			portalImpostorSnapshot.frozenHtml &&
-			(portalImpostorSnapshot.frozenRowHeight === undefined || portalImpostorSnapshot.frozenRowHeight === currentRowHeight);
+		const frozenHtml = deps.getFrozenHtmlSnapshot(node.id, col.field, input.rowVersion);
+		const frozenHtmlValid = frozenHtml && (frozenHtml.rowHeight === undefined || frozenHtml.rowHeight === currentRowHeight);
 		const releaseStalePortal = !!cellSlot.lastPortalKey;
 		if (frozenHtmlValid) {
 			return {
 				kind: 'impostor-html',
 				className: cellClassName,
-				frozenHtml: portalImpostorSnapshot.frozenHtml!,
+				frozenHtml: frozenHtml.html,
 				releaseStalePortal,
 				recordVersionsFrom: portalImpostorSnapshot,
 				title: portalImpostorSnapshot.title || null,

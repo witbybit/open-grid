@@ -71,6 +71,7 @@ import type { GridCommitResult as InternalGridCommitResult } from './GridChangeA
 import { GridDomainSubscriptionHub } from './GridDomainSubscriptionHub.js';
 import { GridEngineRenderBridge } from './GridEngineRenderBridge.js';
 import { CellDisplaySnapshotStore, type CellDisplaySnapshot } from '../renderer/cellDisplaySnapshot.js';
+import { HtmlScrollSnapshotStore } from '../renderer/htmlScrollSnapshotStore.js';
 
 export type ManagedRowDragBlockReason =
 	| 'unsupported-row-model'
@@ -216,6 +217,7 @@ export class GridEngine<TRowData = unknown> {
 	// Per-row version map for zero-allocation mutation tracking.
 	public readonly rowVersions = new Map<string, number>();
 	public readonly cellDisplaySnapshots = new CellDisplaySnapshotStore();
+	public readonly htmlScrollSnapshots = new HtmlScrollSnapshotStore();
 
 	private _scrollStateProvider: { isScrolling(): boolean; phase: string } | null = null;
 

@@ -22,14 +22,6 @@ export interface CellDisplaySnapshot extends VisualFreshness {
 	formattedValue: string;
 	title: string;
 	validationError?: string;
-	/** Captured innerHTML of the portal host after the last fidelity render. Present only when the
-	 *  column opts in via `cellRendererCapabilities.scrollSnapshot: 'html'`. Injected as a static
-	 *  visual clone during scroll so the cell looks settled rather than showing plain text. */
-	frozenHtml?: string;
-	/** Row height (px) at the moment frozenHtml was captured. Used to invalidate the snapshot if
-	 *  the row has been resized since — a mismatched height means the captured HTML was laid out
-	 *  for a different container and would render incorrectly as an impostor. */
-	frozenRowHeight?: number;
 }
 
 export interface CellDecorationSnapshotMetadata {
@@ -90,8 +82,6 @@ export interface CreateCellDisplaySnapshotOptions extends VisualFreshness {
 	formattedValue: string;
 	title: string;
 	validationError?: string;
-	frozenHtml?: string;
-	frozenRowHeight?: number;
 }
 
 export function createCellDisplaySnapshot(options: CreateCellDisplaySnapshotOptions): CellDisplaySnapshot {
@@ -118,8 +108,6 @@ export function createCellDisplaySnapshot(options: CreateCellDisplaySnapshotOpti
 		formattedValue: options.formattedValue,
 		title: options.title,
 		validationError: options.validationError,
-		frozenHtml: options.frozenHtml,
-		frozenRowHeight: options.frozenRowHeight,
 	};
 }
 

@@ -33,6 +33,7 @@ function makeDeps(overrides: Partial<ScrollCellPresentationDeps> = {}): ScrollCe
 		getCellPortalHost: vi.fn(() => null),
 		getRowHeight: vi.fn(() => 40),
 		getCheapDisplayValue: vi.fn(() => ''),
+		getFrozenHtmlSnapshot: vi.fn(() => undefined),
 		...overrides,
 	};
 }
@@ -128,6 +129,79 @@ describe('resolveScrollCellPresentation', () => {
 		expect(presentation.kind).toBe('impostor-text');
 		if (presentation.kind !== 'impostor-text') throw new Error('unreachable');
 		expect(presentation.formattedValue).toBe('Fallback name');
+	});
+
+	it('resolves to impostor-html when a matching frozen HTML snapshot is available for this identity', () => {
+		const snapshot = {
+			rowId: 'r1',
+			colField: 'name',
+			rowVersion: 3,
+			globalVersion: 7,
+			insightVersion: 0,
+			styleVersion: 0,
+			loadingVersion: 0,
+			selectionVersion: 0,
+			baseClassName: 'og-cell',
+			stateClassName: '',
+			decorationClassName: '',
+			classTokens: ['og-cell'],
+			className: 'og-cell',
+			contentKind: 'impostor' as const,
+			contentMode: 'fallback' as const,
+			formattedValue: 'Fallback name',
+			title: '',
+		};
+		const deps = makeDeps({
+			getRowHeight: () => 40,
+			getFrozenHtmlSnapshot: (rowId, colField, rowVersion) =>
+				rowId === 'r1' && colField === 'name' && rowVersion === 3 ? { html: '<span>frozen</span>', rowHeight: 40 } : undefined,
+		});
+		const presentation = resolveScrollCellPresentation(
+			deps,
+			baseInput({
+				col: { field: 'name', cellRenderer: () => null } as any,
+				ctx: { ...baseInput().ctx, plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] } } as any,
+				snapshot,
+			})
+		);
+		expect(presentation.kind).toBe('impostor-html');
+		if (presentation.kind !== 'impostor-html') throw new Error('unreachable');
+		expect(presentation.frozenHtml).toBe('<span>frozen</span>');
+	});
+
+	it('falls back to impostor-text when the frozen HTML snapshot exists but its captured row height no longer matches', () => {
+		const snapshot = {
+			rowId: 'r1',
+			colField: 'name',
+			rowVersion: 3,
+			globalVersion: 7,
+			insightVersion: 0,
+			styleVersion: 0,
+			loadingVersion: 0,
+			selectionVersion: 0,
+			baseClassName: 'og-cell',
+			stateClassName: '',
+			decorationClassName: '',
+			classTokens: ['og-cell'],
+			className: 'og-cell',
+			contentKind: 'impostor' as const,
+			contentMode: 'fallback' as const,
+			formattedValue: 'Fallback name',
+			title: '',
+		};
+		const deps = makeDeps({
+			getRowHeight: () => 60, // row has been resized since the HTML was captured at height 40
+			getFrozenHtmlSnapshot: () => ({ html: '<span>frozen</span>', rowHeight: 40 }),
+		});
+		const presentation = resolveScrollCellPresentation(
+			deps,
+			baseInput({
+				col: { field: 'name', cellRenderer: () => null } as any,
+				ctx: { ...baseInput().ctx, plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] } } as any,
+				snapshot,
+			})
+		);
+		expect(presentation.kind).toBe('impostor-text');
 	});
 
 	it('BLOCKER: never mounts a cold portal-capable cell during normal (non-editing, non-focused) active scroll', () => {

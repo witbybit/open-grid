@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { CellSlot } from './cellSlot.js';
 import { bindCellDuringScroll, bindCellFull, type RowCellBinderDeps } from './rowCellBinder.js';
 import { createCellInstanceRendererKey } from './identityKeys.js';
+import { HtmlScrollSnapshotStore } from './htmlScrollSnapshotStore.js';
 
 describe('bindCellDuringScroll', () => {
 	it('shows text impostor for custom-mode portal cells during scroll without mounting the portal', () => {
@@ -840,6 +841,7 @@ describe('bindCellDuringScroll', () => {
 					get: vi.fn(() => undefined),
 					set: snapshotSet,
 				},
+				htmlScrollSnapshots: { get: vi.fn(() => undefined), set: vi.fn() } as any,
 			} as any,
 			cellRenderer: { showPortalContent: vi.fn() } as any,
 			portalMountManager: {
@@ -934,6 +936,7 @@ describe('bindCellDuringScroll', () => {
 					get: vi.fn(() => undefined),
 					set: snapshotSet,
 				},
+				htmlScrollSnapshots: { get: vi.fn(() => undefined), set: vi.fn() } as any,
 			} as any,
 			cellRenderer: { showPortalContent: vi.fn() } as any,
 			portalMountManager: {
@@ -1705,6 +1708,7 @@ describe('bindCellDuringScroll', () => {
 					get: vi.fn(() => undefined),
 					set: snapshotSet,
 				},
+				htmlScrollSnapshots: { get: vi.fn(() => undefined), set: vi.fn() } as any,
 				insights: {
 					getCellDecorations: vi.fn(() => [
 						{
@@ -1805,6 +1809,7 @@ describe('bindCellDuringScroll', () => {
 					get: vi.fn(() => undefined),
 					set: snapshotSet,
 				},
+				htmlScrollSnapshots: { get: vi.fn(() => undefined), set: vi.fn() } as any,
 				insights: {
 					getCellDecorations: vi.fn(() => [
 						{
@@ -2022,6 +2027,7 @@ describe('bindCellDuringScroll', () => {
 					get: vi.fn(() => undefined),
 					set: snapshotSet,
 				},
+				htmlScrollSnapshots: { get: vi.fn(() => undefined), set: vi.fn() } as any,
 			} as any,
 			cellRenderer: { showPortalContent } as any,
 			portalMountManager: {
@@ -2236,6 +2242,7 @@ describe('bindCellDuringScroll', () => {
 						validationError: 'Needs review',
 					})),
 				},
+				htmlScrollSnapshots: { get: vi.fn(() => undefined), set: vi.fn() },
 			} as any,
 			cellRenderer: { showPortalContent } as any,
 			portalMountManager: {
@@ -2307,6 +2314,7 @@ describe('bindCellDuringScroll', () => {
 		const dirty = vi.fn();
 		const showPortalContent = vi.fn();
 		const snapshotSet = vi.fn();
+		const htmlSnapshotSet = vi.fn();
 		const cellSlot = new CellSlot(document.createElement('div'));
 		const portalKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
 		const host = document.createElement('div');
@@ -2350,6 +2358,7 @@ describe('bindCellDuringScroll', () => {
 					get: vi.fn(() => existingSnapshot),
 					set: snapshotSet,
 				},
+				htmlScrollSnapshots: { get: vi.fn(() => undefined), set: htmlSnapshotSet },
 			} as any,
 			cellRenderer: { showPortalContent } as any,
 			portalMountManager: { isCellMounted: vi.fn(() => true), mountCellImmediately: vi.fn() } as any,
@@ -2408,10 +2417,8 @@ describe('bindCellDuringScroll', () => {
 			isInVisibleContent: true,
 		});
 
-		// Snapshot should be patched with captured innerHTML
-		expect(snapshotSet).toHaveBeenCalledWith(
-			expect.objectContaining({ rowId: 'r1', colField: 'name', frozenHtml: '<span class="badge">INFO</span>' })
-		);
+		// HTML snapshot store should be patched with captured innerHTML
+		expect(htmlSnapshotSet).toHaveBeenCalledWith('r1', 'name', '<span class="badge">INFO</span>', 2, undefined);
 		// Cell stays frozen — portal content visible, no remount
 		expect(showPortalContent).toHaveBeenCalledWith(cellSlot.element);
 	});
@@ -2452,8 +2459,11 @@ describe('bindCellDuringScroll', () => {
 						classTokens: ['og-cell'],
 						className: 'og-cell',
 						title: '',
-						frozenHtml: '<div class="badge badge-info">INFO</div>',
 					})),
+				},
+				htmlScrollSnapshots: {
+					get: vi.fn(() => ({ html: '<div class="badge badge-info">INFO</div>', rowVersion: 5, rowHeight: undefined })),
+					set: vi.fn(),
 				},
 			} as any,
 			cellRenderer: { showPortalContent } as any,
@@ -2558,6 +2568,7 @@ describe('bindCellDuringScroll', () => {
 						// frozenHtml intentionally absent — cell has never had a fidelity render
 					})),
 				},
+				htmlScrollSnapshots: { get: vi.fn(() => undefined), set: vi.fn() },
 			} as any,
 			cellRenderer: { showPortalContent } as any,
 			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately } as any,
@@ -2721,6 +2732,7 @@ describe('bindCellFull', () => {
 		cellSlot.element.appendChild(portalHost);
 
 		const snapshotStore = new Map<string, any>();
+		const htmlScrollSnapshots = new HtmlScrollSnapshotStore();
 		const engine = {
 			cellAccess: {
 				get: vi.fn(() => ({ isFocused: false, isSelected: false, isEditing: false, isLoading: false, value: 'INFO', rawValue: 'INFO' })),
@@ -2732,6 +2744,7 @@ describe('bindCellFull', () => {
 				get: vi.fn((rowId: string, colField: string) => snapshotStore.get(`${rowId}:${colField}`)),
 				set: vi.fn((snapshot: any) => snapshotStore.set(`${snapshot.rowId}:${snapshot.colField}`, snapshot)),
 			},
+			htmlScrollSnapshots,
 			geometry: { rowHeights: [40] },
 			getCheapDisplayValue: vi.fn(() => 'INFO'),
 		};
@@ -2777,7 +2790,7 @@ describe('bindCellFull', () => {
 		// First full bind: portal has never been mounted, nothing exists to capture yet.
 		bindCellFull(deps, baseRequest);
 		expect(cellSlot.lastPortalKey).toBe(stableKey);
-		expect(snapshotStore.get('r1:name').frozenHtml).toBeUndefined();
+		expect(htmlScrollSnapshots.get('r1', 'name', 3)).toBeUndefined();
 
 		// Simulate React having committed the portal's real content sometime after that first bind.
 		portalHost.innerHTML = '<div class="badge badge-info">INFO</div>';
@@ -2786,8 +2799,7 @@ describe('bindCellFull', () => {
 		// selection change elsewhere) — not a scroll, and not the cell's own data changing.
 		bindCellFull(deps, { ...baseRequest, state: { globalVersion: 2, styleRules: undefined } as any });
 
-		expect(snapshotStore.get('r1:name').frozenHtml).toBe('<div class="badge badge-info">INFO</div>');
-		expect(snapshotStore.get('r1:name').frozenRowHeight).toBe(40);
+		expect(htmlScrollSnapshots.get('r1', 'name', 3)).toEqual({ html: '<div class="badge badge-info">INFO</div>', rowVersion: 3, rowHeight: 40 });
 	});
 
 	it("does not fall back to a rebound slot's previous row text when the cache misses during a scroll-adjacent full bind", () => {
@@ -2807,6 +2819,7 @@ describe('bindCellFull', () => {
 			selectionVersion: 0,
 			rowVersions: { get: vi.fn(() => 1) },
 			cellDisplaySnapshots: { get: vi.fn(() => undefined), set: vi.fn() },
+			htmlScrollSnapshots: { get: vi.fn(() => undefined), set: vi.fn() } as any,
 			data: { getCachedDisplayValue: vi.fn(() => undefined) },
 			hasFormula: vi.fn(() => false),
 			getCheapDisplayValue: vi.fn(() => ''),
