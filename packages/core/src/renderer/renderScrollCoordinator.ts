@@ -25,7 +25,6 @@ import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules
 import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
-import type { InternalColumnDef } from '../columnDef.js';
 import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
 
 function isCellSelected(rowIndex: number, colIndex: number, selectionBounds: GridCellRangeBounds | null | undefined): boolean {
