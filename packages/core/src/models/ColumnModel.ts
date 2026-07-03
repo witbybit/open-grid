@@ -5,9 +5,33 @@
 	type ColumnRenderPlan,
 	type ColumnRenderMode,
 	type CompiledGridPlan,
+	type CellRendererCapabilities,
+	type NormalizedCellRendererCapabilities,
 } from '../columnDef.js';
 import type { ColumnModelRuntime } from '../engine/runtimePorts.js';
 import { IndexMapper } from './IndexMapper.js';
+
+/**
+ * Normalizes a renderer's capabilities to a concrete scroll presentation mode and validates that
+ * only the config matching that mode was supplied — an ambiguous combination (e.g. `live` config
+ * on a `text-impostor` column) fails fast at column-definition time instead of silently poisoning
+ * the scroll-time resolver with a config the active mode never reads.
+ */
+export function normalizeRendererCapabilities(cap: CellRendererCapabilities | undefined): NormalizedCellRendererCapabilities {
+	const mode = cap?.scrollPresentation ?? 'freeze';
+
+	if (mode !== 'live' && cap?.live) {
+		throw new Error("Open Grid: capabilities.live is only valid with scrollPresentation:'live'.");
+	}
+	if (mode !== 'text-impostor' && cap?.textImpostor) {
+		throw new Error("Open Grid: capabilities.textImpostor is only valid with scrollPresentation:'text-impostor'.");
+	}
+	if (mode !== 'html-snapshot' && cap?.htmlSnapshot) {
+		throw new Error("Open Grid: capabilities.htmlSnapshot is only valid with scrollPresentation:'html-snapshot'.");
+	}
+
+	return { ...cap, scrollPresentation: mode };
+}
 
 export class ColumnModel<TRowData = unknown> {
 	private columnMap = new Map<string, InternalColumnDef<TRowData>>();
@@ -72,12 +96,10 @@ export class ColumnModel<TRowData = unknown> {
 				let mode: ColumnRenderMode = 'primitive';
 				if (col.cellRenderer) {
 					const caps = col.cellRendererCapabilities;
-					if (caps?.imperativeUpdate) {
-						mode = 'custom-imperative';
-					} else if (isDomCellRenderer(col.cellRenderer)) {
+					if (isDomCellRenderer(col.cellRenderer)) {
 						mode = 'custom-dom';
-					} else if (caps?.scrollBehavior === 'live') {
-						mode = 'custom-live';
+					} else if (caps?.scrollPresentation === 'live') {
+						mode = caps.live?.update === 'imperative' ? 'custom-imperative' : 'custom-live';
 					} else {
 						mode = 'custom';
 					}
@@ -112,33 +134,25 @@ export class ColumnModel<TRowData = unknown> {
 			return {
 				...column,
 				cellRenderer: renderer.renderer,
-				cellRendererCapabilities: {
-					...renderer.renderer.capabilities,
-					...renderer.capabilities,
-					scrollBehavior: renderer.capabilities?.scrollBehavior ?? 'live',
-				},
+				cellRendererCapabilities: normalizeRendererCapabilities({ ...renderer.renderer.capabilities, ...renderer.capabilities }),
 			};
 		}
 		if (renderer.kind === 'imperativeReact') {
 			return {
 				...column,
 				cellRenderer: renderer.component as InternalColumnDef<TRowData>['cellRenderer'],
-				cellRendererCapabilities: {
-					scrollBehavior: 'live',
+				cellRendererCapabilities: normalizeRendererCapabilities({
 					...renderer.capabilities,
-					imperativeUpdate: true,
-				},
+					scrollPresentation: 'live',
+					live: { ...renderer.capabilities?.live, update: 'imperative' },
+				}),
 			};
 		}
-		// kind === 'react': default to defer (full portal, frozen during scroll)
+		// kind === 'react': default to 'freeze' (full portal, frozen/impostor'd during scroll)
 		return {
 			...column,
 			cellRenderer: renderer.component as InternalColumnDef<TRowData>['cellRenderer'],
-			cellRendererCapabilities: {
-				scrollBehavior: 'defer',
-				...renderer.capabilities,
-				imperativeUpdate: false,
-			},
+			cellRendererCapabilities: normalizeRendererCapabilities(renderer.capabilities),
 		};
 	}
 

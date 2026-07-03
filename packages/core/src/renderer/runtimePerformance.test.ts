@@ -47,7 +47,7 @@ function createWideGrid(options: { rows?: number; cols?: number; custom?: boolea
 		...(options.custom && index % 4 === 0
 			? {
 					cellRenderer: () => `Rendered ${index}`,
-					cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+					cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 				}
 			: {}),
 		...(options.valueGetter && index % 5 === 0
@@ -439,7 +439,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 				header: 'Name',
 				width: 120,
 				cellRenderer: () => 'Rendered',
-				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 		];
 		const store = new GridStore<{ id: string; name: string }>({

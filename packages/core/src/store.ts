@@ -230,6 +230,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			themeOverrides: initialState.themeOverrides,
 			rowOverscanPx: initialState.rowOverscanPx ?? 400,
 			colBuffer: initialState.colBuffer ?? 2,
+			rendererOptions: initialState.rendererOptions,
 			// Always normalize runtimeLimits so all callers can assume it exists.
 			runtimeLimits: {
 				maxRenderedRows: 500,

@@ -1,7 +1,7 @@
 import type { FilterModel, QuickFilterModel, SortDirection, SortModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
-import type { ColumnDef, GridStyleRule } from '../columnDef.js';
+import type { ColumnDef, GridStyleRule, GridRendererOptions } from '../columnDef.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { GridSelectionState, ActiveEditState, RowSelectionOptions } from '../api/GridApi.js';
@@ -82,6 +82,8 @@ export interface GridModelState<TRowData = unknown> {
 
 	// Render tuning config
 	styleRules?: GridStyleRule<TRowData>[];
+	/** Grid-wide scroll presentation policy — see columnDef.ts's GridRendererOptions. Initial-only. */
+	rendererOptions?: GridRendererOptions;
 	rowOverscanPx?: number;
 	/**
 	 * Number of off-screen columns to pre-render on each side of the visible range.

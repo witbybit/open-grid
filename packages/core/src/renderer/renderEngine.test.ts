@@ -1684,7 +1684,7 @@ describe('RenderEngine', () => {
 				header: 'A',
 				width: 120,
 				cellRenderer: () => null,
-				cellRendererCapabilities: { scrollBehavior: 'live' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 		];
 		const store = new GridStore<{ id: string; a: string }>({
@@ -1925,7 +1925,13 @@ describe('RenderEngine', () => {
 
 		const columns = [
 			{ field: 'id', header: 'ID', width: 120 },
-			{ field: 'name', header: 'Name', width: 120, cellRenderer: () => null, cellRendererCapabilities: { scrollBehavior: 'live' as const } },
+			{
+				field: 'name',
+				header: 'Name',
+				width: 120,
+				cellRenderer: () => null,
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
+			},
 		];
 		const store = new GridStore<{ id: string; name: string }>({
 			columns,
@@ -3318,7 +3324,7 @@ describe('RenderEngine', () => {
 			...(index === 2
 				? {
 						cellRenderer: ({ value }: { value: string }) => `Portal ${value}`,
-						cellRendererCapabilities: { scrollBehavior: 'live' as const },
+						cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 					}
 				: {}),
 		}));
@@ -3827,14 +3833,14 @@ describe('RenderEngine', () => {
 				header: 'Col 2',
 				width: 100,
 				cellRenderer: () => 'Col2Rendered',
-				cellRendererCapabilities: { scrollBehavior: 'live' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 			{
 				field: 'col3',
 				header: 'Col 3',
 				width: 100,
 				cellRenderer: () => 'Col3Rendered',
-				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 		];
 
@@ -3917,14 +3923,14 @@ describe('RenderEngine', () => {
 				header: 'Live',
 				width: 100,
 				cellRenderer: () => 'LiveRendered',
-				cellRendererCapabilities: { scrollBehavior: 'live' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 			{
 				field: 'defer',
 				header: 'Defer',
 				width: 100,
 				cellRenderer: () => 'DeferRendered',
-				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 				valueGetterDependencies: ['defer'],
 				valueGetter: ({ row }: any) => `Snapshot ${row.defer}`,
 			},
@@ -3933,7 +3939,7 @@ describe('RenderEngine', () => {
 				header: 'Fallback',
 				width: 100,
 				cellRenderer: () => 'FallbackRendered',
-				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 		];
 
@@ -4013,7 +4019,7 @@ describe('RenderEngine', () => {
 				header: 'Defer',
 				width: 120,
 				cellRenderer: () => 'DeferRendered',
-				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 		];
 

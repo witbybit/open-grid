@@ -27,6 +27,7 @@ import {
 } from './cellDisplaySnapshot.js';
 import { isVisualFresh } from './visualFreshness.js';
 import { resolveScrollCellPresentation, type ScrollCellPresentation, type ScrollCellPresentationDeps } from './scrollCellPresentation.js';
+import { isHtmlSnapshotPresentation, isTextImpostorPresentation } from './scrollPresentationMode.js';
 
 function buildCellPinClass(lane: 'left' | 'center' | 'right'): string {
 	if (lane === 'left') return 'og-cell og-cell-pinned-left';
@@ -112,6 +113,14 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	incrementCellSlotRebinds?: () => void;
 	incrementIntegrityComputesDuringScroll?: () => void;
 	incrementForceLiveMountsDuringScroll?: () => void;
+	/** scrollPresentation:'live' mounts/updates during scroll — distinct from the rare
+	 *  forceLiveMountsDuringScroll interactive exception (see scrollCellPresentation.ts). */
+	incrementLiveReactMountsDuringScroll?: () => void;
+	incrementHtmlSnapshotHitsDuringScroll?: () => void;
+	incrementHtmlSnapshotMissesDuringScroll?: () => void;
+	incrementTextImpostorUsesDuringScroll?: () => void;
+	/** Grid-level defaults for scrollPresentation:'html-snapshot' columns that don't override them. */
+	getHtmlSnapshotDefaults?: () => { allowShellWhenMissing: boolean; allowTextFallbackWhenMissing: boolean };
 	getSnapshotVisualVersions: () => SnapshotVisualVersions;
 	/** Live column-reorder preview offset (px) for a displayed column index.
 	 *  0 outside an active header drag. Only consulted on the full-bind path. */
@@ -417,15 +426,15 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	let contentMode: CellContentMode = 'empty';
 	let formattedValue = '';
 	let portalImpostorValue = '';
-	const hasScrollSnapshotHtmlCap = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollSnapshot === 'html';
-	// scrollSnapshot: 'html' — capture the committed HTML of an already-live portal on every full
+	const isHtmlSnapshotCol = isHtmlSnapshotPresentation(col);
+	// html-snapshot mode — capture the committed HTML of an already-live portal on every full
 	// (non-scroll) bind, not just the scroll freeze-in-place moment. Without this, a cell only ever
 	// gets a frozen clone after surviving one prior scroll-while-visible cycle; any normal re-render
 	// (selection, focus, unrelated repaint elsewhere in the grid) settles this cell's portal without
 	// ever reading its committed DOM, so the very first scroll after that settle still falls back to
 	// plain text. Reading here — before this bind decides whether to release/remount the portal —
 	// means the cell already "looks frozen" the first time it is ever scrolled.
-	if (hasScrollSnapshotHtmlCap && cellSlot.lastPortalKey === stableKey && deps.portalMountManager.isCellMounted(stableKey)) {
+	if (isHtmlSnapshotCol && cellSlot.lastPortalKey === stableKey && deps.portalMountManager.isCellMounted(stableKey)) {
 		const existingHost = deps.getCellPortalHost(cellSlot.element);
 		if (existingHost && existingHost.childElementCount > 0) {
 			deps.engine.htmlScrollSnapshots.set(
@@ -447,10 +456,12 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 				: access.value != null
 					? String(access.value)
 					: deps.engine.getCheapDisplayValue(node.id, col.field);
-		const scrollImpostorFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollImpostor;
+		const textImpostorRender = isTextImpostorPresentation(col)
+			? (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.textImpostor?.render
+			: undefined;
 		portalImpostorValue =
-			scrollImpostorFn != null
-				? scrollImpostorFn({ value: access.value, formattedValue: formattedForImpostor }) || formattedForImpostor
+			textImpostorRender != null
+				? textImpostorRender({ value: access.value, formattedValue: formattedForImpostor }) || formattedForImpostor
 				: formattedForImpostor;
 		if (cellSlot.lastPortalKey !== stableKey || !deps.portalMountManager.isCellMounted(stableKey)) {
 			if (cellSlot.lastPortalKey) {
@@ -641,6 +652,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		getCheapDisplayValue: (rowId, colField) => deps.engine.getCheapDisplayValue?.(rowId, colField),
 		getFrozenHtmlSnapshot: (rowId, colField, expected, rowHeight, colWidth) =>
 			deps.engine.htmlScrollSnapshots?.get(rowId, colField, expected, { rowHeight, colWidth }),
+		getHtmlSnapshotDefaults: deps.getHtmlSnapshotDefaults,
 	};
 	const presentation = resolveScrollCellPresentation(scrollPresentationDeps, {
 		cellSlot,
@@ -671,7 +683,7 @@ function applyScrollCellPresentation<TRowData>(
 ): void {
 	const { cellSlot, node, rowIndex, colIndex, col, ctx, pooledRowId, left, right, width, isRowLoading } = request;
 
-	const stampMountedVersions = (source: CellDisplaySnapshot): void => {
+	const stampMountedVersions = (source: CellDisplaySnapshot | import('./visualFreshness.js').VisualFreshness): void => {
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
 		recordCellSlotMountedVisualVersions(cellSlot, source);
@@ -747,7 +759,7 @@ function applyScrollCellPresentation<TRowData>(
 			}
 			if (presentation.shouldMarkDirty) deps.markCellDirtyAfterScroll(cellSlot.element);
 
-			// scrollSnapshot: 'html' — the portal host has live committed React content right now.
+			// scrollPresentation: 'html-snapshot' — the portal host has live committed React content right now.
 			// Capture its innerHTML into the HTML snapshot store so future impostor renders for this
 			// row can replay the styled HTML instead of falling back to plain text. React commits
 			// async, so this freeze moment is the only reliable place to read committed DOM content.
@@ -785,6 +797,7 @@ function applyScrollCellPresentation<TRowData>(
 		}
 
 		case 'impostor-html': {
+			deps.incrementHtmlSnapshotHitsDuringScroll?.();
 			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 			deps.markCellDirtyAfterScroll(cellSlot.element);
 			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
@@ -816,6 +829,7 @@ function applyScrollCellPresentation<TRowData>(
 		}
 
 		case 'impostor-text': {
+			if (isHtmlSnapshotPresentation(col)) deps.incrementHtmlSnapshotMissesDuringScroll?.();
 			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 			deps.markCellDirtyAfterScroll(cellSlot.element);
 			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
@@ -834,6 +848,60 @@ function applyScrollCellPresentation<TRowData>(
 				undefined
 			);
 			stampMountedVersions(presentation.recordVersionsFrom);
+			if (didWrite) deps.incrementCurrentScrollCellsWritten();
+			deps.incrementCellsBoundDuringScroll();
+			return;
+		}
+
+		case 'text-impostor': {
+			deps.incrementTextImpostorUsesDuringScroll?.();
+			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
+			deps.markCellDirtyAfterScroll(cellSlot.element);
+			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
+			const didWrite = cellSlot.update(
+				colIndex,
+				col.field,
+				rowIndex,
+				node.id,
+				left,
+				right,
+				width,
+				presentation.className,
+				presentation.contentMode,
+				undefined,
+				presentation.formattedValue,
+				undefined
+			);
+			cellSlot.lastMountedRowVersion = rowVersion;
+			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
+			recordCellSlotMountedVisualVersions(cellSlot, presentation.recordVersions);
+			if (didWrite) deps.incrementCurrentScrollCellsWritten();
+			deps.incrementCellsBoundDuringScroll();
+			return;
+		}
+
+		case 'html-snapshot-pending': {
+			deps.incrementHtmlSnapshotMissesDuringScroll?.();
+			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
+			deps.markCellDirtyAfterScroll(cellSlot.element);
+			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
+			const didWrite = cellSlot.update(
+				colIndex,
+				col.field,
+				rowIndex,
+				node.id,
+				left,
+				right,
+				width,
+				presentation.className,
+				'pending',
+				undefined,
+				'',
+				undefined
+			);
+			cellSlot.lastMountedRowVersion = rowVersion;
+			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
+			recordCellSlotMountedVisualVersions(cellSlot, presentation.recordVersions);
 			if (didWrite) deps.incrementCurrentScrollCellsWritten();
 			deps.incrementCellsBoundDuringScroll();
 			return;
@@ -922,6 +990,57 @@ function applyScrollCellPresentation<TRowData>(
 				// exception), unlike ordinary 'scroll'-phase mounts which never occur during active
 				// scroll. A renderer that special-cases scrolling deserves to know it's really scrolling.
 				phase: 'scroll-force-live',
+				isScrolling: true,
+				isFocused: presentation.isFocused,
+				isSelected: false,
+			});
+			cellSlot.lastMountedRowVersion = rowVersion;
+			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
+			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
+			const didWrite = cellSlot.update(
+				colIndex,
+				col.field,
+				rowIndex,
+				node.id,
+				left,
+				right,
+				width,
+				presentation.className,
+				'portal',
+				undefined,
+				'',
+				presentation.portalCellKey
+			);
+			if (presentation.recordVersionsFrom) stampMountedVersions(presentation.recordVersionsFrom);
+			if (didWrite) deps.incrementCurrentScrollCellsWritten();
+			deps.incrementCellsBoundDuringScroll();
+			return;
+		}
+
+		case 'live-mount': {
+			// scrollPresentation:'live' — mounts/updates the real renderer on every scroll frame this
+			// cell is bound. Expected to fire continuously for these columns; see incrementForceLive-
+			// MountsDuringScroll for the separate, rare freeze-mode interactive exception.
+			deps.incrementLiveReactMountsDuringScroll?.();
+			if (presentation.releasePriorPortal) deps.releaseCellPortal(cellSlot.element, undefined, 'scrolled-out');
+			deps.markCellDirtyAfterScroll(cellSlot.element);
+			const ensuredPortalHost = deps.ensureCellPortalHost(cellSlot.element);
+			deps.portalMountManager.mountCellImmediately({
+				cellKey: presentation.portalCellKey,
+				container: ensuredPortalHost,
+				value: getScrollMountValue(deps, node, col, cellSlot),
+				node,
+				col,
+				rowIndex,
+				colIndex,
+				rowSlotId: pooledRowId,
+				slotGeneration: request.pooledRowGeneration,
+				cellRowBindingGeneration: cellSlot.rowBindingGeneration,
+				cellInstanceId: cellSlot.cellInstanceId,
+				portalHostId: cellSlot.portalHostId,
+				isEditing: presentation.isEditing,
+				isLoading: isRowLoading,
+				phase: 'scroll-live',
 				isScrolling: true,
 				isFocused: presentation.isFocused,
 				isSelected: false,

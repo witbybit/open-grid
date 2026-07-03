@@ -438,12 +438,12 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			if (visualRow?.kind !== 'data') return true;
 			const col = columns[colIndex];
 			if (!col) return true;
-			const isCustomLive = compiledPlan.columnPlans[colIndex]?.mode === 'custom-live';
+			const isImpostorEligible = compiledPlan.columnPlans[colIndex]?.mode === 'custom';
 			const rowId = visualRow.node.id;
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
 			const shouldPrimeFormula = typeof rawValue === 'string' && rawValue.startsWith('=');
 			const hasRegisteredFormula = this.deps.engine.hasFormula(rowId, col.field);
-			const shouldPrimeDisplayValue = col.valueGetter || shouldPrimeFormula || hasRegisteredFormula || isCustomLive;
+			const shouldPrimeDisplayValue = col.valueGetter || shouldPrimeFormula || hasRegisteredFormula || isImpostorEligible;
 			if (!shouldPrimeDisplayValue) return true;
 			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
 			const hasInsightDecorations = cellDecorations.length > 0;
@@ -463,8 +463,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 				recordWork();
 				this.deps.renderStats.prewarmedDisplayValues++;
 				if (plainSnapshotEligible) {
-					const snapshotContentKind = isCustomLive && displayValue !== '' ? 'impostor' : displayValue !== '' ? 'text' : 'empty';
-					const snapshotContentMode = isCustomLive && displayValue !== '' ? 'fallback' : displayValue !== '' ? 'text' : 'empty';
+					const snapshotContentKind = isImpostorEligible && displayValue !== '' ? 'impostor' : displayValue !== '' ? 'text' : 'empty';
+					const snapshotContentMode = isImpostorEligible && displayValue !== '' ? 'fallback' : displayValue !== '' ? 'text' : 'empty';
 					this.deps.engine.cellDisplaySnapshots.set(
 						createCellDisplaySnapshot({
 							rowId,
@@ -531,8 +531,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 										value: rawValue ?? displayValue,
 									})
 							: null;
-					const snapshotContentKind = isCustomLive && displayValue !== '' ? 'impostor' : displayValue !== '' ? 'text' : 'empty';
-					const snapshotContentMode = isCustomLive && displayValue !== '' ? 'fallback' : displayValue !== '' ? 'text' : 'empty';
+					const snapshotContentKind = isImpostorEligible && displayValue !== '' ? 'impostor' : displayValue !== '' ? 'text' : 'empty';
+					const snapshotContentMode = isImpostorEligible && displayValue !== '' ? 'fallback' : displayValue !== '' ? 'text' : 'empty';
 					this.deps.engine.cellDisplaySnapshots.set(
 						createCellDisplaySnapshot({
 							rowId,
@@ -565,7 +565,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			if (visualRow?.kind !== 'data') return true;
 			const col = columns[colIndex];
 			if (!col) return true;
-			const isCustomLive = compiledPlan.columnPlans[colIndex]?.mode === 'custom-live';
+			const isImpostorEligible = compiledPlan.columnPlans[colIndex]?.mode === 'custom';
 			const rowId = visualRow.node.id;
 			if (hasFreshSnapshot(rowId, col.field)) return true;
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
@@ -626,8 +626,10 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 					: null;
 			recordWork();
 			const snapshotFormattedValue = primedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field);
-			const snapshotContentKind = isCustomLive && snapshotFormattedValue !== '' ? 'impostor' : snapshotFormattedValue !== '' ? 'text' : 'empty';
-			const snapshotContentMode = isCustomLive && snapshotFormattedValue !== '' ? 'fallback' : snapshotFormattedValue !== '' ? 'text' : 'empty';
+			const snapshotContentKind =
+				isImpostorEligible && snapshotFormattedValue !== '' ? 'impostor' : snapshotFormattedValue !== '' ? 'text' : 'empty';
+			const snapshotContentMode =
+				isImpostorEligible && snapshotFormattedValue !== '' ? 'fallback' : snapshotFormattedValue !== '' ? 'text' : 'empty';
 			this.deps.engine.cellDisplaySnapshots.set(
 				createCellDisplaySnapshot({
 					rowId,

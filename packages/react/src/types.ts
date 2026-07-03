@@ -28,6 +28,8 @@ import type {
 	LoadingVisualRow,
 	HeaderMenuRendererProps,
 	CellRendererCapabilities,
+	CellScrollPresentation,
+	GridRendererOptions,
 	CellRendererPhase,
 	DomCellRenderer,
 	DomCellRendererHandle,
@@ -103,6 +105,8 @@ export type {
 	LoadingVisualRow,
 	HeaderMenuRendererProps,
 	CellRendererCapabilities,
+	CellScrollPresentation,
+	GridRendererOptions,
 	CellRendererPhase,
 	DomCellRenderer,
 	DomCellRendererHandle,
@@ -149,7 +153,10 @@ export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from '@open-grid/core';
  * Grid component. Sourced from the canonical GridInitialState type so these never drift
  * out of sync with the core.
  */
-type GridRenderOptions<TRowData> = Pick<GridInitialState<TRowData>, 'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits'>;
+type GridRenderOptions<TRowData> = Pick<
+	GridInitialState<TRowData>,
+	'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits' | 'rendererOptions'
+>;
 
 export interface GridReadyEvent<TRowData = unknown> {
 	api: GridApi<TRowData>;

@@ -46,6 +46,11 @@ export interface RenderRuntimeStats {
 	styleHookCallsDuringScroll: number;
 	integrityComputesDuringScroll: number;
 	forceLiveMountsDuringScroll: number;
+	/** scrollPresentation:'live' mounts/updates during scroll — see renderer/rowCellBinder.ts. */
+	liveReactMountsDuringScroll: number;
+	htmlSnapshotHitsDuringScroll: number;
+	htmlSnapshotMissesDuringScroll: number;
+	textImpostorUsesDuringScroll: number;
 	cellSlotsRetained: number;
 	cellSlotsEvictedDuringTopology: number;
 	cellSlotsCreatedDuringTopology: number;
@@ -125,6 +130,10 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		styleHookCallsDuringScroll: 0,
 		integrityComputesDuringScroll: 0,
 		forceLiveMountsDuringScroll: 0,
+		liveReactMountsDuringScroll: 0,
+		htmlSnapshotHitsDuringScroll: 0,
+		htmlSnapshotMissesDuringScroll: 0,
+		textImpostorUsesDuringScroll: 0,
 		cellSlotsRetained: 0,
 		cellSlotsEvictedDuringTopology: 0,
 		cellSlotsCreatedDuringTopology: 0,
@@ -228,6 +237,10 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		styleHookCallsDuringScroll: deps.runtimeStats.styleHookCallsDuringScroll,
 		integrityComputesDuringScroll: deps.runtimeStats.integrityComputesDuringScroll,
 		forceLiveMountsDuringScroll: deps.runtimeStats.forceLiveMountsDuringScroll,
+		liveReactMountsDuringScroll: deps.runtimeStats.liveReactMountsDuringScroll,
+		htmlSnapshotHitsDuringScroll: deps.runtimeStats.htmlSnapshotHitsDuringScroll,
+		htmlSnapshotMissesDuringScroll: deps.runtimeStats.htmlSnapshotMissesDuringScroll,
+		textImpostorUsesDuringScroll: deps.runtimeStats.textImpostorUsesDuringScroll,
 		cellSlotsRetained: deps.runtimeStats.cellSlotsRetained,
 		cellSlotsEvictedDuringTopology: deps.runtimeStats.cellSlotsEvictedDuringTopology,
 		cellSlotsCreatedDuringTopology: deps.runtimeStats.cellSlotsCreatedDuringTopology,

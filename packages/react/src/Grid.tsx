@@ -40,6 +40,8 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	colBuffer?: number;
 	overscanAdaptive?: boolean;
 	runtimeLimits?: GridInitialState<TRowData>['runtimeLimits'];
+	/** Grid-wide scroll presentation policy — live-mode budgets, html-snapshot cache limits, text-impostor defaults. Initial-only. */
+	rendererOptions?: GridInitialState<TRowData>['rendererOptions'];
 	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
 	styleRules?: StyleRule<TRowData>[];
 	/** Unified Data Integrity pipeline — validation, quality, diff, live stream, conflict resolution. */
@@ -102,12 +104,13 @@ function createInitialState<TRowData>(
 		rowDragMode?: 'managed' | 'unmanaged';
 	}
 ) {
-	const { initialState, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits } = base;
+	const { initialState, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits, rendererOptions } = base;
 	const merged: Partial<GridInitialState<TRowData>> = {
 		rowOverscanPx,
 		overscanAdaptive,
 		colBuffer,
 		runtimeLimits,
+		rendererOptions,
 		...initialState,
 	};
 	if (extras.detailRowHeight != null) merged.detailRowHeight = extras.detailRowHeight;
@@ -145,6 +148,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		colBuffer,
 		overscanAdaptive,
 		runtimeLimits,
+		rendererOptions,
 		pagination,
 		showStatusBar,
 		showFilterChipBar,
@@ -183,6 +187,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		rowOverscanPx,
 		overscanAdaptive,
 		runtimeLimits,
+		rendererOptions,
 		dataIntegrity,
 		capabilities,
 		detailRowHeight,
@@ -207,6 +212,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				colBuffer,
 				overscanAdaptive,
 				runtimeLimits,
+				rendererOptions,
 				columnTypes,
 				styleRules,
 			},
@@ -320,6 +326,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			['rowOverscanPx', initialOnlyProps.rowOverscanPx, rowOverscanPx],
 			['overscanAdaptive', initialOnlyProps.overscanAdaptive, overscanAdaptive],
 			['runtimeLimits', initialOnlyProps.runtimeLimits, runtimeLimits],
+			['rendererOptions', initialOnlyProps.rendererOptions, rendererOptions],
 			['dataIntegrity', initialOnlyProps.dataIntegrity, dataIntegrity],
 			['capabilities', initialOnlyProps.capabilities, capabilities],
 			['detailRowHeight', initialOnlyProps.detailRowHeight, detailRowHeight],
@@ -346,6 +353,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		rowOverscanPx,
 		overscanAdaptive,
 		runtimeLimits,
+		rendererOptions,
 		dataIntegrity,
 		capabilities,
 		detailRowHeight,

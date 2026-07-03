@@ -160,8 +160,12 @@ describe('resolveScrollCellPresentation', () => {
 		const presentation = resolveScrollCellPresentation(
 			deps,
 			baseInput({
-				col: { field: 'name', cellRenderer: () => null } as any,
-				ctx: { ...baseInput().ctx, plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] } } as any,
+				col: {
+					field: 'name',
+					cellRenderer: () => null,
+					cellRendererCapabilities: { scrollPresentation: 'html-snapshot' },
+				} as any,
+				ctx: { ...baseInput().ctx, plan: { columnPlans: [{ isCustom: true, mode: 'custom' }] } } as any,
 				snapshot,
 			})
 		);
@@ -170,7 +174,7 @@ describe('resolveScrollCellPresentation', () => {
 		expect(presentation.frozenHtml).toBe('<span>frozen</span>');
 	});
 
-	it('falls back to impostor-text when the frozen HTML snapshot exists but its captured row height no longer matches', () => {
+	it('falls back to impostor-text when the frozen HTML snapshot is missing and allowTextFallbackWhenMissing is set', () => {
 		const snapshot = {
 			rowId: 'r1',
 			colField: 'name',
@@ -200,12 +204,52 @@ describe('resolveScrollCellPresentation', () => {
 		const presentation = resolveScrollCellPresentation(
 			deps,
 			baseInput({
-				col: { field: 'name', cellRenderer: () => null } as any,
-				ctx: { ...baseInput().ctx, plan: { columnPlans: [{ isCustom: true, mode: 'custom-live' }] } } as any,
+				col: {
+					field: 'name',
+					cellRenderer: () => null,
+					cellRendererCapabilities: { scrollPresentation: 'html-snapshot', htmlSnapshot: { allowTextFallbackWhenMissing: true } },
+				} as any,
+				ctx: { ...baseInput().ctx, plan: { columnPlans: [{ isCustom: true, mode: 'custom' }] } } as any,
 				snapshot,
 			})
 		);
 		expect(presentation.kind).toBe('impostor-text');
+	});
+
+	it('shows a pending shell, not raw text, when the frozen HTML snapshot is missing by default', () => {
+		const snapshot = {
+			rowId: 'r1',
+			colField: 'name',
+			rowVersion: 3,
+			globalVersion: 7,
+			insightVersion: 0,
+			styleVersion: 0,
+			loadingVersion: 0,
+			selectionVersion: 0,
+			baseClassName: 'og-cell',
+			stateClassName: '',
+			decorationClassName: '',
+			classTokens: ['og-cell'],
+			className: 'og-cell',
+			contentKind: 'impostor' as const,
+			contentMode: 'fallback' as const,
+			formattedValue: 'Fallback name',
+			title: '',
+		};
+		const deps = makeDeps({ getFrozenHtmlSnapshot: () => undefined });
+		const presentation = resolveScrollCellPresentation(
+			deps,
+			baseInput({
+				col: {
+					field: 'name',
+					cellRenderer: () => null,
+					cellRendererCapabilities: { scrollPresentation: 'html-snapshot' },
+				} as any,
+				ctx: { ...baseInput().ctx, plan: { columnPlans: [{ isCustom: true, mode: 'custom' }] } } as any,
+				snapshot,
+			})
+		);
+		expect(presentation.kind).toBe('html-snapshot-pending');
 	});
 
 	it('BLOCKER: never mounts a cold portal-capable cell during normal (non-editing, non-focused) active scroll', () => {

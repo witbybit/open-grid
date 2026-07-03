@@ -202,7 +202,7 @@ function hashIndex(str: string): number {
  *   renderer: {
  *     kind: 'react',
  *     component: CheckboxCellRenderer,
- *     capabilities: { scrollBehavior: 'live', estimatedCost: 'cheap', interactive: true },
+ *     capabilities: { scrollPresentation: 'freeze' },
  *   },
  * }];
  * ```
@@ -1270,7 +1270,7 @@ export const BUILTIN_COLUMN_TYPES: Record<string, ColumnTypeDefinition<any>> = {
  */
 export function numberColumnType(opts?: NumberCellRendererOptions & NumberCellEditorOptions): ColumnTypeDefinition<any> {
 	return {
-		renderer: { kind: 'react', component: createNumberCellRenderer(opts), capabilities: { scrollBehavior: 'live' } },
+		renderer: { kind: 'react', component: createNumberCellRenderer(opts) },
 		cellEditor: createNumberCellEditor(opts),
 	};
 }
@@ -1305,7 +1305,7 @@ export function multiSelectColumnType(options: string[], maxVisible = 2): Column
  */
 export function dropdownColumnType(options: DropdownOption[]): ColumnTypeDefinition<any> {
 	return {
-		renderer: { kind: 'react', component: createDropdownCellRenderer(options), capabilities: { scrollBehavior: 'live' } },
+		renderer: { kind: 'react', component: createDropdownCellRenderer(options) },
 		cellEditor: createDropdownCellEditor(options),
 	};
 }

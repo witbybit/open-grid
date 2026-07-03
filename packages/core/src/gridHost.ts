@@ -14,7 +14,8 @@ import { asGroupMetaCapableRowModel } from './rowModel.js';
 import { resolveGridHostComposition } from './internal/apiInternalBridge.js';
 
 export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {
-	return (column as InternalColumnDef<TRowData>).cellRendererCapabilities?.imperativeUpdate === true;
+	const caps = (column as InternalColumnDef<TRowData>).cellRendererCapabilities;
+	return caps?.scrollPresentation === 'live' && caps.live?.update === 'imperative';
 }
 
 export interface GridCellContentAdapter<TRowData = unknown> {

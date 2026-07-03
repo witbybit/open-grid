@@ -15,7 +15,7 @@ import type {
 	RowSelectionGestureSource,
 	RowSelectionScope,
 } from '../api/GridApi.js';
-import type { ColumnDef } from '../columnDef.js';
+import type { ColumnDef, GridRendererOptions } from '../columnDef.js';
 import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
 import {
 	asAllDataNodesCapableRowModel,
@@ -217,7 +217,9 @@ export class GridEngine<TRowData = unknown> {
 	// Per-row version map for zero-allocation mutation tracking.
 	public readonly rowVersions = new Map<string, number>();
 	public readonly cellDisplaySnapshots = new CellDisplaySnapshotStore();
-	public readonly htmlScrollSnapshots = new HtmlScrollSnapshotStore();
+	public readonly htmlScrollSnapshots: HtmlScrollSnapshotStore;
+	/** Grid-wide scroll presentation policy — see columnDef.ts's GridRendererOptions. */
+	public readonly rendererOptions: GridRendererOptions | undefined;
 
 	private _scrollStateProvider: { isScrolling(): boolean; phase: string } | null = null;
 
@@ -251,6 +253,11 @@ export class GridEngine<TRowData = unknown> {
 
 	constructor(config: GridEngineConfig<TRowData>) {
 		this.getContainerElement = config.getContainerElement ?? (() => null);
+		this.rendererOptions = config.rendererOptions;
+		this.htmlScrollSnapshots = new HtmlScrollSnapshotStore(config.rendererOptions?.htmlSnapshot?.maxTotalBytes, {
+			maxEntries: config.rendererOptions?.htmlSnapshot?.maxSnapshots,
+			maxSingleEntryBytes: config.rendererOptions?.htmlSnapshot?.maxSingleSnapshotBytes,
+		});
 		this.eventBus = new EventBus<TRowData>();
 		this.runtimeFaults = new RuntimeFaultReporter<TRowData>({
 			emit: (fault) => this.eventBus.dispatchEvent(GridEventName.runtimeFault, fault),

@@ -59,14 +59,14 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Microservice',
 			width: 140,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'live' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 		},
 		{
 			field: 'rendererLive',
 			header: 'Live Rebind',
 			width: 170,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'live' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 			valueGetter: ({ row }) => `live|${row.service}`,
 		},
 		{
@@ -74,7 +74,7 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Defer Stable',
 			width: 170,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'defer' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 			valueGetterDependencies: ['severity'],
 			valueGetter: ({ row }) => `defer|${row.severity}`,
 		},
@@ -83,14 +83,14 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Severity',
 			width: 120,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'defer' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 		},
 		{
 			field: 'rendererFallback',
 			header: 'Fallback Cache',
 			width: 175,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'defer' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 			valueGetterDependencies: ['latencyMs'],
 			valueGetter: ({ row }) => `fallback|${row.latencyMs}ms`,
 		},
@@ -99,7 +99,7 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Destroy Recycle',
 			width: 180,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'defer' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 			valueGetterDependencies: ['ipAddress'],
 			valueGetter: ({ row }) => `destroy|${row.ipAddress}`,
 		},
@@ -116,7 +116,7 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			...(index % 7 === 0
 				? {
 						cellRenderer: renderer,
-						cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+						cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 					}
 				: {}),
 			...(index % 11 === 0
@@ -1175,13 +1175,12 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		// portalMountsDuringScroll and customRendererMountsDuringScroll would both have been > 0.
 		// After: every scroll frame is portal-free. Portals mount in the fidelity idle lane instead.
 		const columns = Array.from({ length: 80 }, (_, i): ColumnDef<AuditPerfRow> => {
-			const mode = i % 3 === 0 ? ('live' as const) : ('defer' as const);
 			return {
 				field: i === 0 ? 'id' : `auditMetric_${i + 100}`,
 				header: `Col ${i}`,
 				width: 120 + (i % 4) * 20,
 				cellRenderer: () => null,
-				cellRendererCapabilities: { scrollBehavior: mode },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 				valueGetter: i % 5 === 0 ? ({ row }: { row: AuditPerfRow }) => `m${i}|${row.severity}` : undefined,
 			};
 		});

@@ -59,13 +59,28 @@ function matchesFreshness(entry: VisualFreshness, expected: VisualFreshness, mod
 
 const DEFAULT_MAX_BYTES = 4 * 1024 * 1024;
 
+export interface HtmlScrollSnapshotStoreOptions {
+	/** Max entry count, independent of the byte budget. Undefined = unbounded by count. */
+	maxEntries?: number;
+	/** A single capture larger than this is never stored — see GridRendererOptions.htmlSnapshot.maxSingleSnapshotBytes. */
+	maxSingleEntryBytes?: number;
+}
+
 export class HtmlScrollSnapshotStore {
 	private readonly entries = new Map<string, HtmlScrollSnapshot>();
 	private bytesRetained = 0;
 	private evictions = 0;
 	private sequence = 0;
+	private readonly maxEntries: number | undefined;
+	private readonly maxSingleEntryBytes: number | undefined;
 
-	constructor(private readonly maxBytes: number = DEFAULT_MAX_BYTES) {}
+	constructor(
+		private readonly maxBytes: number = DEFAULT_MAX_BYTES,
+		options?: HtmlScrollSnapshotStoreOptions
+	) {
+		this.maxEntries = options?.maxEntries;
+		this.maxSingleEntryBytes = options?.maxSingleEntryBytes;
+	}
 
 	/** Returns the captured snapshot only if it still matches the expected identity — a stale capture
 	 *  from a since-changed row must never be replayed as if it were current. Also invalidated if the
@@ -98,6 +113,7 @@ export class HtmlScrollSnapshotStore {
 		rowHeight: number | undefined,
 		colWidth: number | undefined
 	): void {
+		if (this.maxSingleEntryBytes !== undefined && html.length > this.maxSingleEntryBytes) return;
 		const key = buildKey(rowId, colField);
 		this.deleteByKey(key);
 		const seq = ++this.sequence;
@@ -135,7 +151,10 @@ export class HtmlScrollSnapshotStore {
 	}
 
 	private evictWhileOverBudget(): void {
-		while (this.bytesRetained > this.maxBytes && this.entries.size > 1) {
+		while (
+			(this.bytesRetained > this.maxBytes || (this.maxEntries !== undefined && this.entries.size > this.maxEntries)) &&
+			this.entries.size > 1
+		) {
 			const oldestKey = this.entries.keys().next().value;
 			if (oldestKey === undefined) break;
 			this.deleteByKey(oldestKey);

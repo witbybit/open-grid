@@ -210,6 +210,37 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 						(this.deps.stateHost.renderStats.forceLiveMountsDuringScroll || 0) + 1;
 				}
 			},
+			incrementLiveReactMountsDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.liveReactMountsDuringScroll =
+						(this.deps.stateHost.renderStats.liveReactMountsDuringScroll || 0) + 1;
+				}
+			},
+			incrementHtmlSnapshotHitsDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.htmlSnapshotHitsDuringScroll =
+						(this.deps.stateHost.renderStats.htmlSnapshotHitsDuringScroll || 0) + 1;
+				}
+			},
+			incrementHtmlSnapshotMissesDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.htmlSnapshotMissesDuringScroll =
+						(this.deps.stateHost.renderStats.htmlSnapshotMissesDuringScroll || 0) + 1;
+				}
+			},
+			incrementTextImpostorUsesDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.textImpostorUsesDuringScroll =
+						(this.deps.stateHost.renderStats.textImpostorUsesDuringScroll || 0) + 1;
+				}
+			},
+			getHtmlSnapshotDefaults: () => {
+				const opts = this.deps.engine.rendererOptions?.htmlSnapshot;
+				return {
+					allowShellWhenMissing: opts?.allowShellWhenMissing ?? true,
+					allowTextFallbackWhenMissing: opts?.allowTextFallbackWhenMissing ?? false,
+				};
+			},
 			getSnapshotVisualVersions: () => ({
 				styleVersion: (this.deps.stateHost as unknown as { styleVersion?: number }).styleVersion ?? 0,
 				loadingVersion: (this.deps.stateHost as unknown as { loadingVersion?: number }).loadingVersion ?? 0,

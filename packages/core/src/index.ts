@@ -86,6 +86,8 @@ export type {
 	CellCopyParams,
 	CellPasteParams,
 	CellRendererCapabilities,
+	CellScrollPresentation,
+	GridRendererOptions,
 	CellRendererPhase,
 	ColumnDef,
 	ColumnRendererSpec,

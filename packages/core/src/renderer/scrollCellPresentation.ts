@@ -5,6 +5,7 @@ import type { CellSlot, CellContentMode } from './cellSlot.js';
 import type { CellDisplaySnapshot } from './cellDisplaySnapshot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { hasMountedDataVersionDrifted, type VisualFreshness } from './visualFreshness.js';
+import { getCellScrollPresentation } from './scrollPresentationMode.js';
 
 /**
  * Narrow, purpose-built dependency surface for the scroll presentation resolver — deliberately
@@ -33,6 +34,10 @@ export interface ScrollCellPresentationDeps {
 		rowHeight: number | undefined,
 		colWidth: number | undefined
 	): { html: string } | undefined;
+	/** Read-only: grid-level defaults for the html-snapshot mode's missing-capture behavior — see
+	 *  GridRendererOptions.htmlSnapshot. Column-level `htmlSnapshot` capabilities take priority.
+	 *  Omitted defaults to `{ allowShellWhenMissing: true, allowTextFallbackWhenMissing: false }`. */
+	getHtmlSnapshotDefaults?(): { allowShellWhenMissing: boolean; allowTextFallbackWhenMissing: boolean };
 }
 
 export function isPrimitiveSnapshotContent(snapshot: CellDisplaySnapshot | undefined): snapshot is CellDisplaySnapshot {
@@ -134,7 +139,7 @@ export type ScrollCellPresentation =
 			className: string;
 			frozenHtml: string;
 			releaseStalePortal: boolean;
-			recordVersionsFrom: CellDisplaySnapshot;
+			recordVersionsFrom: CellDisplaySnapshot | VisualFreshness;
 			title: string | null;
 			validationError: string | undefined;
 	  }
@@ -144,7 +149,49 @@ export type ScrollCellPresentation =
 			contentMode: CellContentMode;
 			formattedValue: string;
 			releaseStalePortal: boolean;
-			recordVersionsFrom: CellDisplaySnapshot;
+			recordVersionsFrom: CellDisplaySnapshot | VisualFreshness;
+			title: string | null;
+			validationError: string | undefined;
+	  }
+	| {
+			/** The only mode allowed to use `capabilities.textImpostor.render` — an explicit, always-on
+			 * text/chip stand-in for `scrollPresentation: 'text-impostor'` columns. Unlike `impostor-text`
+			 * (freeze mode's implicit fallback), this fires unconditionally during scroll for this mode,
+			 * regardless of whether a live portal is currently mounted. */
+			kind: 'text-impostor';
+			className: string;
+			contentMode: CellContentMode;
+			formattedValue: string;
+			releaseStalePortal: boolean;
+			recordVersions: VisualFreshness;
+			title: string | null;
+			validationError: string | undefined;
+	  }
+	| {
+			/** `scrollPresentation: 'html-snapshot'` with no fresh capture available and
+			 * `allowTextFallbackWhenMissing` not set — shows a stable shell/pending placeholder rather
+			 * than raw text, per the html-snapshot contract. */
+			kind: 'html-snapshot-pending';
+			className: string;
+			releaseStalePortal: boolean;
+			recordVersions: VisualFreshness;
+			title: string | null;
+			validationError: string | undefined;
+	  }
+	| {
+			/**
+			 * The real renderer is mounted/updated on every scroll frame — the entire point of
+			 * `scrollPresentation: 'live'`. Counted under `liveReactMountsDuringScroll`, distinct from
+			 * `force-live-interactive-exception` (which fires rarely, only for freeze-mode cells that
+			 * are actively focused/editing).
+			 */
+			kind: 'live-mount';
+			className: string;
+			portalCellKey: string;
+			releasePriorPortal: boolean;
+			isEditing: boolean;
+			isFocused: boolean;
+			recordVersionsFrom: CellDisplaySnapshot | undefined;
 			title: string | null;
 			validationError: string | undefined;
 	  }
@@ -320,7 +367,60 @@ export function resolveScrollCellPresentation<TRowData>(
 	const portalCellKey = isEditing ? createEditRendererKey(node.id, col.field) : cellKey;
 	const scrollMode = compiledPlan?.mode;
 	const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
-	const hasScrollImpostorCapability = scrollMode === 'custom-live' || scrollMode === 'custom-imperative' || scrollMode === 'custom';
+	const isDomRenderer = scrollMode === 'custom-dom';
+	const presentation = isDomRenderer ? 'freeze' : getCellScrollPresentation(col);
+
+	const versionsFromCtx = (): VisualFreshness => ({
+		rowVersion: input.rowVersion,
+		globalVersion: ctx.globalVersion,
+		insightVersion: ctx.insightVersion,
+		styleVersion: ctx.styleVersion,
+		loadingVersion: ctx.loadingVersion,
+		selectionVersion: ctx.selectionVersion,
+	});
+
+	// 'live' — the real renderer is mounted/updated on every scroll frame, unconditionally. No
+	// freeze, no impostor, no snapshot fallback: this must come before every other decision below.
+	if (presentation === 'live') {
+		return {
+			kind: 'live-mount',
+			className: cellClassName,
+			portalCellKey,
+			releasePriorPortal: !!cellSlot.lastPortalKey && cellSlot.lastPortalKey !== portalCellKey,
+			isEditing,
+			isFocused,
+			recordVersionsFrom: snapshot,
+			title: snapshot?.title || null,
+			validationError: snapshot?.validationError,
+		};
+	}
+
+	// 'text-impostor' — always shows the explicit text/chip stand-in during scroll, regardless of
+	// whether a live portal happens to be mounted. The only mode allowed to use textImpostor.render.
+	if (presentation === 'text-impostor') {
+		const genericCheap = deps.getCheapDisplayValue(node.id, col.field) ?? '';
+		const renderFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.textImpostor?.render;
+		const cheapValue = renderFn != null ? renderFn({ value: undefined, formattedValue: genericCheap }) || genericCheap : genericCheap;
+		const syntheticMode: CellContentMode = cheapValue !== '' ? 'fallback' : 'empty';
+		return {
+			kind: 'text-impostor',
+			className: cellClassName,
+			contentMode: syntheticMode,
+			formattedValue: cheapValue,
+			releaseStalePortal: !!cellSlot.lastPortalKey,
+			recordVersions: snapshot ?? versionsFromCtx(),
+			title: snapshot?.title || null,
+			validationError: snapshot?.validationError,
+		};
+	}
+
+	// From here on, presentation is 'freeze' or 'html-snapshot' (or the cell is a DOM renderer,
+	// which is excluded from the freeze/impostor mechanism entirely — DomCellRenderer manages its
+	// own mount/update lifecycle without React portal overhead).
+	const isHtmlSnapshotMode = presentation === 'html-snapshot';
+	const htmlSnapshotCaps = isHtmlSnapshotMode ? (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.htmlSnapshot : undefined;
+	const htmlSnapshotDefaults = deps.getHtmlSnapshotDefaults?.() ?? { allowShellWhenMissing: true, allowTextFallbackWhenMissing: false };
+	const allowTextFallbackWhenMissing = htmlSnapshotCaps?.allowTextFallbackWhenMissing ?? htmlSnapshotDefaults.allowTextFallbackWhenMissing;
 
 	// Compute live-content guard BEFORE any impostor path. If the cell is already showing rendered
 	// portal content for this exact row+key, freeze it in place during scroll rather than replacing
@@ -331,18 +431,11 @@ export function resolveScrollCellPresentation<TRowData>(
 	const hasExistingLivePortalContent = canFreezeExistingPortalForIdentity(deps, cellSlot, portalCellKey, isRowRebind);
 
 	// A prewarm snapshot that explicitly says 'fallback' (impostor) takes authority over the freeze
-	// path, except for scrollSnapshot:'html' columns, where the freeze moment is the only reliable
-	// place to capture committed React DOM as frozenHtml.
+	// path, except for html-snapshot columns, where the freeze moment is the only reliable place to
+	// capture committed React DOM as frozenHtml.
 	const snapshotDemandsImpostor = snapshot?.contentMode === 'fallback';
-	const hasScrollSnapshotHtml = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollSnapshot === 'html';
 
-	if (
-		hasScrollImpostorCapability &&
-		hasExistingLivePortalContent &&
-		!isEditing &&
-		!isFocused &&
-		(!snapshotDemandsImpostor || hasScrollSnapshotHtml)
-	) {
+	if (!isDomRenderer && hasExistingLivePortalContent && !isEditing && !isFocused && (!snapshotDemandsImpostor || isHtmlSnapshotMode)) {
 		const { globalChanged, rowChanged } = hasMountedDataVersionDrifted(cellSlot, {
 			rowVersion: input.rowVersion,
 			globalVersion: ctx.globalVersion,
@@ -361,37 +454,52 @@ export function resolveScrollCellPresentation<TRowData>(
 			title: snapshot?.title || null,
 			validationError: snapshot?.validationError,
 			shouldMarkDirty: shouldDirtyFrozen,
-			captureFrozenHtml: hasScrollSnapshotHtml,
+			captureFrozenHtml: isHtmlSnapshotMode,
 			snapshotForCapture: snapshot,
 		};
 	}
 
 	// Impostor paths — only reached when the slot has no live portal content for the current row/key.
 	const portalImpostorSnapshot =
-		hasScrollImpostorCapability && !isEditing && !isFocused && snapshot && snapshot.contentMode === 'fallback' ? snapshot : undefined;
+		!isDomRenderer && !isEditing && !isFocused && snapshot && snapshot.contentMode === 'fallback' ? snapshot : undefined;
 	if (portalImpostorSnapshot) {
-		const frozenHtml = deps.getFrozenHtmlSnapshot(
-			node.id,
-			col.field,
-			{
-				rowVersion: input.rowVersion,
-				globalVersion: ctx.globalVersion,
-				insightVersion: ctx.insightVersion,
-				styleVersion: ctx.styleVersion,
-				loadingVersion: ctx.loadingVersion,
-				selectionVersion: ctx.selectionVersion,
-			},
-			deps.getRowHeight(rowIndex),
-			deps.getColWidth(colIndex)
-		);
-		const releaseStalePortal = !!cellSlot.lastPortalKey;
-		if (frozenHtml) {
+		if (isHtmlSnapshotMode) {
+			const frozenHtml = deps.getFrozenHtmlSnapshot(
+				node.id,
+				col.field,
+				versionsFromCtx(),
+				deps.getRowHeight(rowIndex),
+				deps.getColWidth(colIndex)
+			);
+			const releaseStalePortal = !!cellSlot.lastPortalKey;
+			if (frozenHtml) {
+				return {
+					kind: 'impostor-html',
+					className: cellClassName,
+					frozenHtml: frozenHtml.html,
+					releaseStalePortal,
+					recordVersionsFrom: portalImpostorSnapshot,
+					title: portalImpostorSnapshot.title || null,
+					validationError: portalImpostorSnapshot.validationError,
+				};
+			}
+			if (allowTextFallbackWhenMissing) {
+				return {
+					kind: 'impostor-text',
+					className: cellClassName,
+					contentMode: portalImpostorSnapshot.contentMode,
+					formattedValue: portalImpostorSnapshot.formattedValue,
+					releaseStalePortal,
+					recordVersionsFrom: portalImpostorSnapshot,
+					title: portalImpostorSnapshot.title || null,
+					validationError: portalImpostorSnapshot.validationError,
+				};
+			}
 			return {
-				kind: 'impostor-html',
+				kind: 'html-snapshot-pending',
 				className: cellClassName,
-				frozenHtml: frozenHtml.html,
 				releaseStalePortal,
-				recordVersionsFrom: portalImpostorSnapshot,
+				recordVersions: portalImpostorSnapshot,
 				title: portalImpostorSnapshot.title || null,
 				validationError: portalImpostorSnapshot.validationError,
 			};
@@ -401,7 +509,7 @@ export function resolveScrollCellPresentation<TRowData>(
 			className: cellClassName,
 			contentMode: portalImpostorSnapshot.contentMode,
 			formattedValue: portalImpostorSnapshot.formattedValue,
-			releaseStalePortal,
+			releaseStalePortal: !!cellSlot.lastPortalKey,
 			recordVersionsFrom: portalImpostorSnapshot,
 			title: portalImpostorSnapshot.title || null,
 			validationError: portalImpostorSnapshot.validationError,
@@ -414,18 +522,56 @@ export function resolveScrollCellPresentation<TRowData>(
 		(snapshot.contentKind === 'portal-live' || snapshot.contentKind === 'portal-frozen') &&
 		hasAuthoritativePortalHostContent(deps, cellSlot, portalCellKey);
 
-	// Synthesis impostor: no snapshot, no live content, no freeze path — show cheap text stand-in
-	// so the scroll frame stays portal-free. Fidelity lane mounts the real portal post-scroll.
-	if (hasScrollImpostorCapability && !isEditing && !isFocused && !canFreezePortal) {
+	// Synthesis impostor: no snapshot, no live content, no freeze path — show a stand-in so the
+	// scroll frame stays portal-free. Fidelity lane mounts the real portal post-scroll.
+	if (!isDomRenderer && !isEditing && !isFocused && !canFreezePortal) {
+		if (isHtmlSnapshotMode) {
+			const frozenHtml = deps.getFrozenHtmlSnapshot(
+				node.id,
+				col.field,
+				versionsFromCtx(),
+				deps.getRowHeight(rowIndex),
+				deps.getColWidth(colIndex)
+			);
+			const releaseStalePortal = !!cellSlot.lastPortalKey;
+			if (frozenHtml) {
+				return {
+					kind: 'impostor-html',
+					className: cellClassName,
+					frozenHtml: frozenHtml.html,
+					releaseStalePortal,
+					recordVersionsFrom: snapshot ?? versionsFromCtx(),
+					title: snapshot?.title || null,
+					validationError: snapshot?.validationError,
+				};
+			}
+			if (allowTextFallbackWhenMissing) {
+				const genericCheap = deps.getCheapDisplayValue(node.id, col.field) ?? '';
+				const warmSyntheticText = canReuseWarmTextForIdentity(cellSlot, isWarmBindingVersionFresh);
+				const cheapValue = warmSyntheticText && warmSyntheticText.contentMode !== 'portal' ? warmSyntheticText.formattedValue : genericCheap;
+				return {
+					kind: 'impostor-text',
+					className: cellClassName,
+					contentMode: cheapValue !== '' ? 'fallback' : 'empty',
+					formattedValue: cheapValue,
+					releaseStalePortal,
+					recordVersionsFrom: snapshot ?? versionsFromCtx(),
+					title: snapshot?.title || null,
+					validationError: snapshot?.validationError,
+				};
+			}
+			return {
+				kind: 'html-snapshot-pending',
+				className: cellClassName,
+				releaseStalePortal,
+				recordVersions: snapshot ?? versionsFromCtx(),
+				title: snapshot?.title || null,
+				validationError: snapshot?.validationError,
+			};
+		}
 		const genericCheap = deps.getCheapDisplayValue(node.id, col.field) ?? '';
-		const scrollImpostorFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollImpostor;
 		const warmSyntheticText = canReuseWarmTextForIdentity(cellSlot, isWarmBindingVersionFresh);
-		const cheapValue =
-			warmSyntheticText && warmSyntheticText.contentMode !== 'portal'
-				? warmSyntheticText.formattedValue
-				: scrollImpostorFn != null
-					? scrollImpostorFn({ value: undefined, formattedValue: genericCheap }) || genericCheap
-					: genericCheap;
+		const cheapValue = warmSyntheticText && warmSyntheticText.contentMode !== 'portal' ? warmSyntheticText.formattedValue : genericCheap;
 		const syntheticMode: CellContentMode = cheapValue !== '' ? 'fallback' : 'empty';
 		return {
 			kind: 'impostor-synthetic',
@@ -433,14 +579,7 @@ export function resolveScrollCellPresentation<TRowData>(
 			contentMode: syntheticMode,
 			formattedValue: cheapValue,
 			releaseStalePortal: !!cellSlot.lastPortalKey,
-			recordVersions: snapshot ?? {
-				rowVersion: input.rowVersion,
-				globalVersion: ctx.globalVersion,
-				insightVersion: ctx.insightVersion,
-				styleVersion: ctx.styleVersion,
-				loadingVersion: ctx.loadingVersion,
-				selectionVersion: ctx.selectionVersion,
-			},
+			recordVersions: snapshot ?? versionsFromCtx(),
 			title: snapshot?.title || null,
 			validationError: snapshot?.validationError,
 		};
@@ -460,15 +599,12 @@ export function resolveScrollCellPresentation<TRowData>(
 			(!snapshot || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll));
 
 	if (isPortalFrozen || isStaleFrozen) {
-		// Mutually exclusive in the original: a custom-live frozen cell only refreshes its version
-		// stamp and is never separately marked dirty, even when shouldDirtyFrozenPortal is also true.
-		const keepVersionFresh = isPortalFrozen && scrollMode === 'custom-live';
 		return {
 			kind: 'portal-frozen',
 			className: cellClassName,
 			portalCellKey,
-			markDirty: !keepVersionFresh && (!isPortalFrozen || shouldDirtyFrozenPortal),
-			keepVersionFresh,
+			markDirty: !isPortalFrozen || shouldDirtyFrozenPortal,
+			keepVersionFresh: false,
 			recordVersionsFrom: snapshot,
 			title: snapshot?.title || null,
 			validationError: snapshot?.validationError,
@@ -494,20 +630,14 @@ export function resolveScrollCellPresentation<TRowData>(
 		};
 	}
 
-	// Not editing, not focused, no snapshot, no live content to freeze, no impostor capability
-	// declared for this column's renderer mode (e.g. 'custom-dom', which sits outside the
-	// custom-live/custom-imperative/custom impostor-capable set) — this is exactly the case that used
-	// to fall through to a synchronous cold mount. Show the same cheap deterministic stand-in the
-	// impostor-capable path already uses, and let the fidelity lane mount the real renderer later.
+	// Not editing, not focused, no snapshot, no live content to freeze — only reachable for
+	// DOM renderers, which sit outside the freeze/impostor mechanism entirely (isDomRenderer above).
+	// This is exactly the case that used to fall through to a synchronous cold mount. Show the same
+	// cheap deterministic stand-in the freeze path already uses, and let the fidelity lane mount the
+	// real renderer later.
 	const genericCheap = deps.getCheapDisplayValue(node.id, col.field) ?? '';
-	const fallbackScrollImpostorFn = (col as InternalColumnDef<TRowData>).cellRendererCapabilities?.scrollImpostor;
 	const warmFallbackText = canReuseWarmTextForIdentity(cellSlot, isWarmBindingVersionFresh);
-	const fallbackCheapValue =
-		warmFallbackText && warmFallbackText.contentMode !== 'portal'
-			? warmFallbackText.formattedValue
-			: fallbackScrollImpostorFn != null
-				? fallbackScrollImpostorFn({ value: undefined, formattedValue: genericCheap }) || genericCheap
-				: genericCheap;
+	const fallbackCheapValue = warmFallbackText && warmFallbackText.contentMode !== 'portal' ? warmFallbackText.formattedValue : genericCheap;
 	const fallbackSyntheticMode: CellContentMode = fallbackCheapValue !== '' ? 'fallback' : 'empty';
 	return {
 		kind: 'impostor-synthetic',
