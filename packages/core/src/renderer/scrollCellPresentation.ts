@@ -26,7 +26,13 @@ export interface ScrollCellPresentationDeps {
 	/** Read-only: a previously-captured frozen HTML clone for this exact cell identity, freshness-
 	 *  and size-gated — see htmlScrollSnapshotStore.ts. Returns undefined if nothing was captured, the
 	 *  row's data has changed since, or the row/column has been resized since capture. */
-	getFrozenHtmlSnapshot(rowId: string, colField: string, expected: VisualFreshness, rowHeight: number | undefined, colWidth: number | undefined): { html: string } | undefined;
+	getFrozenHtmlSnapshot(
+		rowId: string,
+		colField: string,
+		expected: VisualFreshness,
+		rowHeight: number | undefined,
+		colWidth: number | undefined
+	): { html: string } | undefined;
 }
 
 export function isPrimitiveSnapshotContent(snapshot: CellDisplaySnapshot | undefined): snapshot is CellDisplaySnapshot {

@@ -398,7 +398,10 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	const getWarmVisibleCellStatus = (cellSlot: CellSlot<TRowData>) => {
 		if (!ctx) return { needsImmediateWake: false, needsDeferredRefresh: false };
 		return resolveWarmVisibleCellStatus(
-			{ getCellPortalHost: deps.cellBinderDeps.getCellPortalHost, isCellMounted: (key) => deps.cellBinderDeps.portalMountManager.isCellMounted(key) },
+			{
+				getCellPortalHost: deps.cellBinderDeps.getCellPortalHost,
+				isCellMounted: (key) => deps.cellBinderDeps.portalMountManager.isCellMounted(key),
+			},
 			cellSlot,
 			{
 				currentRowVersion,
