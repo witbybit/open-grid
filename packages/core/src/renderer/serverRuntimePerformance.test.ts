@@ -670,6 +670,15 @@ describe('Server demo ruthless runtime performance contracts', () => {
 			expect(stats.cellClassComputesDuringScroll).toBe(0);
 			expect(stats.integrityComputesDuringScroll).toBe(0);
 			expect(stats.focusCallsDuringScroll).toBe(0);
+			// Locked in from the blocker-killing pass: the generic scroll-time portal-mount counter
+			// (blocker #1, the critical fix) and its narrow force-live-interactive-exception sibling
+			// (neither editing nor focus occurs anywhere in this scroll sequence, so this must stay 0).
+			expect(stats.portalMountsDuringScroll).toBe(0);
+			expect(stats.forceLiveMountsDuringScroll).toBe(0);
+			// Locked in from the blocker-killing pass: column TOPOLOGY (pin/unpin/reorder) never changes
+			// during routine scrolling in this test — only the render window shifts — so the topology-
+			// delta computation (computeColumnWindowDelta) must never fire mid-scroll here.
+			expect(stats.columnTopologyDeltaComputationsDuringScroll).toBe(0);
 		}
 
 		// Vertical
