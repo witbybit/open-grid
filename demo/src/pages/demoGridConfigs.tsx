@@ -363,7 +363,16 @@ export function createCustomColumns(): ColumnDef<CustomShowcaseRow>[] {
 	return [
 		{ field: 'id', header: 'Asset ID', width: 100 },
 		{ field: 'name', header: 'Premium Asset', width: 180 },
-		{ field: 'price', header: 'Acquisition Cost ($)', width: 150, renderer: { kind: 'react', component: PriceBadgeRenderer } },
+		{
+			field: 'price',
+			header: 'Acquisition Cost ($)',
+			width: 150,
+			renderer: {
+				kind: 'react',
+				component: PriceBadgeRenderer,
+				capabilities: { scrollPresentation: 'live', live: { priority: 'high', allowEmergencyShell: true, update: 'react' } },
+			},
+		},
 		{
 			field: 'rating',
 			header: 'Client Rating',
@@ -378,14 +387,22 @@ export function createCustomColumns(): ColumnDef<CustomShowcaseRow>[] {
 			field: 'progress',
 			header: 'Deployment Status',
 			width: 170,
-			renderer: { kind: 'react', component: ProgressBarRenderer },
+			renderer: {
+				kind: 'react',
+				component: ProgressBarRenderer,
+				capabilities: { scrollPresentation: 'live', live: { priority: 'high', allowEmergencyShell: true, update: 'react' } },
+			},
 			cellEditor: ProgressSliderEditor,
 		},
 		{
 			field: 'status',
 			header: 'Operational Status',
 			width: 140,
-			renderer: { kind: 'react', component: StatusBadgeRenderer },
+			renderer: {
+				kind: 'react',
+				component: StatusBadgeRenderer,
+				capabilities: { scrollPresentation: 'live', live: { priority: 'high', allowEmergencyShell: true, update: 'react' } },
+			},
 			cellEditor: StatusDropdownEditor,
 			headerMenuComponent: StatusHeaderFilter,
 		},
