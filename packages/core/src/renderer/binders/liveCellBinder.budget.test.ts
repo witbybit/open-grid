@@ -166,7 +166,7 @@ describe('liveCellBinder — LiveFrameBudget branching', () => {
 		expect(deps.incrementLiveReactMountsDuringScroll).toHaveBeenCalledTimes(1);
 	});
 
-	it('over budget + already mounted: skips this frame\'s update, leaves DOM untouched', () => {
+	it("over budget + already mounted: skips this frame's update, leaves DOM untouched", () => {
 		const deps = makeDeps({
 			portalMountManager: { isCellMounted: vi.fn(() => true), mountCellImmediately: vi.fn() } as any,
 			tryConsumeLiveBudget: vi.fn(() => false),
