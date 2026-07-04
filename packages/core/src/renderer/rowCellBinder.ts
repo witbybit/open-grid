@@ -20,7 +20,7 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, type CellDisplaySnapshot } from './cellDisplaySnapshot.js';
-import { isVisualFresh, type VisualFreshness } from './visualFreshness.js';
+import { isVisualFresh, mountedCellFreshness } from './visualFreshness.js';
 import { resolveScrollCellPresentation, type ScrollCellPresentationDeps } from './scrollCellPresentation.js';
 import { isHtmlSnapshotPresentation, isTextImpostorPresentation } from './scrollPresentationMode.js';
 import { dispatchCellPresentation } from './binders/cellPresentationDispatcher.js';
@@ -282,11 +282,17 @@ function attachCellCtrl<TRowData>(
 	return cellCtrl;
 }
 
-/** Stamps the freshness/content-mode this resolution actually produced — pure bookkeeping, read
- *  from cellSlot.lastContentMode immediately after cellSlot.update() has just written it, so this
- *  is a same-call-frame read of a just-written value, not a stale cache reused later. */
-function stampCellCtrlResolution<TRowData>(cellCtrl: CellCtrl, cellSlot: CellSlot<TRowData>, freshness: VisualFreshness): void {
-	cellCtrl.lastResolvedFreshness = freshness;
+/**
+ * Mirrors cellCtrl.lastResolvedFreshness/lastResolvedContentMode from cellSlot's just-written
+ * lastMounted* fields — a same-call-frame read of values cellSlot.update()/stampMountedVersions()
+ * have already written, not a stale cache. Reading FROM cellSlot (rather than reconstructing the
+ * frame's freshness independently) matters: several scroll-time binder branches only conditionally
+ * call stampMountedVersions (e.g. when a presentation's `recordVersionsFrom` is undefined, cellSlot's
+ * stamps are deliberately left unchanged). Mirroring cellSlot's actual post-dispatch state keeps
+ * CellCtrl truthful in exactly those cases instead of silently diverging from what's really mounted.
+ */
+function stampCellCtrlResolution<TRowData>(cellCtrl: CellCtrl, cellSlot: CellSlot<TRowData>): void {
+	cellCtrl.lastResolvedFreshness = mountedCellFreshness(cellSlot);
 	cellCtrl.lastResolvedContentMode = cellSlot.lastContentMode;
 }
 
@@ -425,7 +431,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = state.globalVersion;
 		recordCellSlotMountedVisualVersions(cellSlot, currentVisualVersions);
-		stampCellCtrlResolution(cellCtrl, cellSlot, { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions });
+		stampCellCtrlResolution(cellCtrl, cellSlot);
 		return;
 	}
 
@@ -602,7 +608,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	cellSlot.lastMountedRowVersion = rowVersion;
 	cellSlot.lastMountedGlobalVersion = state.globalVersion;
 	recordCellSlotMountedVisualVersions(cellSlot, currentVisualVersions);
-	stampCellCtrlResolution(cellCtrl, cellSlot, { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions });
+	stampCellCtrlResolution(cellCtrl, cellSlot);
 }
 
 export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellDuringScrollRequest<TRowData>): void {
@@ -686,12 +692,5 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 
 	// 3. Dispatch to the mode-specific binder — enqueues fidelity work, updates mounted slot bookkeeping.
 	dispatchCellPresentation(deps, request, presentation, rowVersion);
-	stampCellCtrlResolution(cellCtrl, cellSlot, {
-		rowVersion,
-		globalVersion: ctx.globalVersion,
-		insightVersion: ctx.insightVersion,
-		styleVersion: ctx.styleVersion,
-		loadingVersion: ctx.loadingVersion,
-		selectionVersion: ctx.selectionVersion,
-	});
+	stampCellCtrlResolution(cellCtrl, cellSlot);
 }
