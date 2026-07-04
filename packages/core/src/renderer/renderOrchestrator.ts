@@ -89,6 +89,18 @@ export interface RenderStats {
 	lastInvalidationReasons: string[];
 	lastInvalidations: GridInvalidation[];
 	portalMounts?: { cells: number; rows: number; menus: number; custom?: any };
+	/** Controller-layer lifecycle counts — see renderer/controllers/RowCtrlStore.ts. Read live from
+	 *  the store at snapshot time (same pattern as portalMounts above), not accumulated separately. */
+	controllers?: {
+		rowCtrlsCreated: number;
+		rowCtrlsReused: number;
+		rowCtrlsEvicted: number;
+		cellCtrlsCreated: number;
+		cellCtrlsReused: number;
+		/** Reserved for the async stale-guard token (see controllers/controllerWorkToken.ts) — 0
+		 *  until that work lands; present now so consumers don't need a shape migration later. */
+		staleControllerWorkDiscarded: number;
+	};
 	getCellValueCallsDuringScroll?: number;
 	valueGetterCallsDuringScroll?: number;
 	formulaCallsDuringScroll?: number;
@@ -190,6 +202,7 @@ export function createEmptyRenderStats(): RenderStats {
 		lastInvalidationReasons: [],
 		lastInvalidations: [],
 		portalMounts: { cells: 0, rows: 0, menus: 0, custom: { active: 0, warm: 0, cold: 0, hydrationQueue: 0, completedChunks: 0 } },
+		controllers: { rowCtrlsCreated: 0, rowCtrlsReused: 0, rowCtrlsEvicted: 0, cellCtrlsCreated: 0, cellCtrlsReused: 0, staleControllerWorkDiscarded: 0 },
 		getCellValueCallsDuringScroll: 0,
 		valueGetterCallsDuringScroll: 0,
 		formulaCallsDuringScroll: 0,

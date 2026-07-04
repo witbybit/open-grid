@@ -4,6 +4,11 @@ export interface RowCtrlStoreStats {
 	created: number;
 	reused: number;
 	evicted: number;
+	/** CellCtrl attach/reuse counts — incremented by rowCellBinder.ts's attachCellCtrl, which owns
+	 *  the getOrCreateCellCtrl() call and therefore knows whether it created or reused. Tracked here
+	 *  rather than on a separate store since CellCtrl lifecycle is entirely a function of RowCtrl. */
+	cellCtrlsCreated: number;
+	cellCtrlsReused: number;
 }
 
 /**
@@ -22,7 +27,13 @@ export interface RowCtrlStoreStats {
  */
 export class RowCtrlStore<TRowData = unknown> {
 	private readonly byRowId = new Map<string, RowCtrl<TRowData>>();
-	public readonly stats: RowCtrlStoreStats = { created: 0, reused: 0, evicted: 0 };
+	public stats: RowCtrlStoreStats = { created: 0, reused: 0, evicted: 0, cellCtrlsCreated: 0, cellCtrlsReused: 0 };
+
+	/** Resets all counters to zero — mirrors resetRenderTelemetry()'s Object.assign(stats,
+	 *  createXStats()) convention used for RenderRuntimeStats elsewhere in the renderer. */
+	public resetStats(): void {
+		this.stats = { created: 0, reused: 0, evicted: 0, cellCtrlsCreated: 0, cellCtrlsReused: 0 };
+	}
 
 	public getOrCreate(rowId: string): RowCtrl<TRowData> {
 		let ctrl = this.byRowId.get(rowId);

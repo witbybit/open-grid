@@ -281,6 +281,14 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 			...deps.portalMountManager.getStats(),
 			custom: deps.portalMountManager.customRendererManager.getStats(),
 		},
+		controllers: {
+			rowCtrlsCreated: deps.engine.rowCtrls.stats.created,
+			rowCtrlsReused: deps.engine.rowCtrls.stats.reused,
+			rowCtrlsEvicted: deps.engine.rowCtrls.stats.evicted,
+			cellCtrlsCreated: deps.engine.rowCtrls.stats.cellCtrlsCreated,
+			cellCtrlsReused: deps.engine.rowCtrls.stats.cellCtrlsReused,
+			staleControllerWorkDiscarded: 0,
+		},
 	};
 }
 
@@ -310,6 +318,7 @@ export function resetRenderTelemetry<TRowData>(
 	engine.customRendererHydrationChunks = 0;
 	engine.customRendererWarmHits = 0;
 	engine.customRendererWarmMisses = 0;
+	engine.rowCtrls.resetStats();
 	resetCellSlotWriteStats();
 	resetRowSlotWriteStats();
 }

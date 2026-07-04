@@ -255,7 +255,11 @@ function attachCellCtrl<TRowData>(
 	// ever triggers in tests, producing a throwaway, unshared RowCtrl rather than crashing.
 	const rowCtrl = request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl<TRowData>(node.id);
 	const instanceId = (col as InternalColumnDef<TRowData>).instanceId;
-	const { cellCtrl } = getOrCreateCellCtrl(rowCtrl, col.field, instanceId);
+	const { cellCtrl, created } = getOrCreateCellCtrl(rowCtrl, col.field, instanceId);
+	if (deps.engine.rowCtrls) {
+		if (created) deps.engine.rowCtrls.stats.cellCtrlsCreated++;
+		else deps.engine.rowCtrls.stats.cellCtrlsReused++;
+	}
 	cellCtrl.attachedSlotInstanceId = cellSlot.cellInstanceId;
 	cellCtrl.attachedRowBindingGeneration = cellSlot.rowBindingGeneration;
 	cellCtrl.isEditing = isEditing;
