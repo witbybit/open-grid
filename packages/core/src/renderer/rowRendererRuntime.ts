@@ -30,6 +30,8 @@ import type { RowSlot } from './rowSlot.js';
 import type { RenderWindow } from './renderWindow.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { reportRendererFault } from './rendererFaults.js';
+import type { ViewportPlan } from './viewportPlanner.js';
+import type { ColumnInstanceId } from '../columnDef.js';
 
 export interface RowRendererRuntimeArgs<TRowData = unknown> {
 	engine: GridEngine<TRowData>;
@@ -86,6 +88,9 @@ export interface RowRendererRuntimeStateHost<TRowData = unknown> {
 	currentScrollPortalOps: number;
 	postScrollDirtyCellsDecorated: number;
 	dirtyCellsMarkedDuringScroll: number;
+	/** This frame's ViewportPlan (see viewportPlanner.ts), populated by RowRenderer.recycleViewport
+	 *  before the bind loop runs. Null before the first frame. */
+	currentViewportPlan?: ViewportPlan | null;
 }
 
 export interface RowRendererRuntimeBridgeDeps<TRowData = unknown> {
@@ -233,6 +238,12 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 					this.deps.stateHost.renderStats.textImpostorUsesDuringScroll =
 						(this.deps.stateHost.renderStats.textImpostorUsesDuringScroll || 0) + 1;
 				}
+			},
+			onLiveCellResolved: (rowId: string, columnInstanceId: ColumnInstanceId) => {
+				const plan = this.deps.stateHost.currentViewportPlan;
+				if (!plan) return;
+				plan.liveRows.add(rowId);
+				plan.liveCenterColumns.add(columnInstanceId);
 			},
 			getHtmlSnapshotDefaults: () => {
 				const opts = this.deps.engine.rendererOptions?.htmlSnapshot;

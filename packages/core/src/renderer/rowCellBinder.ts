@@ -1,7 +1,7 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import { createEditRendererKey, createCellInstanceRendererKey } from './identityKeys.js';
 import { reportRendererFault } from './rendererFaults.js';
-import type { CellRendererPhase, ColumnDef, GridCellClassParams, InternalColumnDef } from '../columnDef.js';
+import type { CellRendererPhase, ColumnDef, ColumnInstanceId, GridCellClassParams, InternalColumnDef } from '../columnDef.js';
 import type { GridCellPointer } from '../api/GridApi.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { InternalGridState } from '../state/GridState.js';
@@ -102,6 +102,10 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	/** Live column-reorder preview offset (px) for a displayed column index.
 	 *  0 outside an active header drag. Only consulted on the full-bind path. */
 	getColumnShift?: (colIndex: number) => number;
+	/** Called once per cell whose resolved presentation this frame was 'live-mount' — lets the
+	 *  caller's ViewportPlan.liveRows/liveCenterColumns (see viewportPlanner.ts) reflect what the
+	 *  resolver actually decided, without this binder needing to know about ViewportPlan itself. */
+	onLiveCellResolved?: (rowId: string, columnInstanceId: ColumnInstanceId) => void;
 }
 
 export interface BindCellFullRequest<TRowData = unknown> {

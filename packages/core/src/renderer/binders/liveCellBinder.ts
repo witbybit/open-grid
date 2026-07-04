@@ -1,3 +1,4 @@
+import type { InternalColumnDef } from '../../columnDef.js';
 import type { RowCellBinderDeps, BindCellDuringScrollRequest } from '../rowCellBinder.js';
 import type { ScrollCellPresentation } from '../scrollCellPresentation.js';
 import { applyCellTitlesAndValidation, getScrollMountValue, stampMountedVersions } from './binderShared.js';
@@ -76,6 +77,7 @@ export function applyLiveCellPresentation<TRowData>(
 	// frame this cell is bound. Expected to fire continuously for these columns; see
 	// incrementForceLiveMountsDuringScroll above for the separate, rare freeze-mode exception.
 	deps.incrementLiveReactMountsDuringScroll?.();
+	deps.onLiveCellResolved?.(node.id, (col as InternalColumnDef<TRowData>).instanceId);
 	if (presentation.releasePriorPortal) deps.releaseCellPortal(cellSlot.element, undefined, 'scrolled-out');
 	deps.markCellDirtyAfterScroll(cellSlot.element);
 	const ensuredPortalHost = deps.ensureCellPortalHost(cellSlot.element);

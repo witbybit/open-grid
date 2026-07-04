@@ -30,6 +30,7 @@ import {
 import type { SlotRuntimeStats } from './slotRuntimeStats.js';
 import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
 import { computeRowWindowRetention } from './rowWindowRetention.js';
+import { ViewportPlanner, type ViewportPlan } from './viewportPlanner.js';
 
 export class RowRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -153,6 +154,11 @@ export class RowRenderer<TRowData = unknown> {
 	private readonly runtime: RowRendererRuntimeBridge<TRowData>;
 	private readonly pinnedContainers = new PinnedContainerManager<TRowData>();
 	private readonly columnTopologyCoordinator = new ColumnTopologyCoordinator<TRowData>();
+	private readonly viewportPlanner = new ViewportPlanner<TRowData>();
+	/** This frame's ViewportPlan, read by RowCellBinderDeps.onLiveCellResolved (via stateHost: this
+	 *  in RowRendererRuntimeBridge) to record which cells actually resolved 'live-mount'. Null before
+	 *  the first recycleViewport call. */
+	public currentViewportPlan: ViewportPlan | null = null;
 	/** Live column-reorder preview source, wired by RenderEngine to the
 	 *  ColumnInteractionController. Returns 0 outside an active header drag. */
 	public columnShiftSource: ((colIndex: number) => number) | null = null;
@@ -356,6 +362,12 @@ export class RowRenderer<TRowData = unknown> {
 		const focusedRowIndex = focusedCellPointer && rowModel ? rowModel.getVisualIndexByRowId(focusedCellPointer.rowId) : undefined;
 		const editingRowIndex = activeEditCell && rowModel ? rowModel.getVisualIndexByRowId(activeEditCell.rowId) : undefined;
 		const { retainedRowIndices } = computeRowWindowRetention({ renderWindow: nextWindow, focusedRowIndex, editingRowIndex });
+
+		// ── Viewport plan ──────────────────────────────────────────────────────────────
+		// Computed before the bind loop so RowCellBinderDeps.onLiveCellResolved (invoked from the
+		// live-mount binder case) has somewhere to record which cells actually resolved 'live' this
+		// frame. liveRows/liveCenterColumns start empty and are populated as the bind loop below runs.
+		this.currentViewportPlan = this.viewportPlanner.computePlan(nextWindow, columnTopology, retainedRowIndices);
 
 		// ── Slot count management ─────────────────────────────────────────────────────
 		const sortedRows = getRowIndices(nextWindow, this._rowIndicesScratch, retainedRowIndices);
