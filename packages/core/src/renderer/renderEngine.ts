@@ -419,6 +419,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (scrollViewport) {
 			scrollViewport.addEventListener('mouseover', this.onRowMouseOver);
 			scrollViewport.addEventListener('mouseleave', this.onRowMouseLeave);
+			scrollViewport.addEventListener('click', this.rowRenderer.selectionPaint.onViewportClick);
+			scrollViewport.addEventListener('mousedown', this.rowRenderer.selectionPaint.onViewportMouseDown);
 			this.scrollEngine.bind(scrollViewport, this.onScroll);
 		}
 
@@ -508,6 +510,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (scrollViewport) {
 			scrollViewport.removeEventListener('mouseover', this.onRowMouseOver);
 			scrollViewport.removeEventListener('mouseleave', this.onRowMouseLeave);
+			scrollViewport.removeEventListener('click', this.rowRenderer.selectionPaint.onViewportClick);
+			scrollViewport.removeEventListener('mousedown', this.rowRenderer.selectionPaint.onViewportMouseDown);
 		}
 		this.columnInteractions.cleanup();
 		this.columnInteractions.setGroupPanel(null);

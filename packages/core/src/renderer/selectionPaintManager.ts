@@ -24,8 +24,6 @@ export class SelectionPaintManager<TRowData> {
 	public rowCheckboxAnchorId: string | null = null;
 	private lastSelectedRowIdsRef: string[] | null = null;
 
-	private readonly rowSelectionClickCells = new WeakSet<HTMLElement>();
-
 	private readonly rowClassScratch: GridRowClassParams<TRowData> = {
 		row: null as unknown as TRowData,
 		rowId: '',
@@ -36,12 +34,62 @@ export class SelectionPaintManager<TRowData> {
 		selection: null as unknown,
 	} as GridRowClassParams<TRowData>;
 
-	public readonly onDataCellClick = (e: MouseEvent): void => {
+	/**
+	 * Single delegated listener for the viewport container — replaces what used to be a per-cell
+	 * `click` listener (attachClickListenerIfNeeded) plus a separate per-checkbox `click` listener
+	 * created in rowCellBinder.ts. Both were already identity-agnostic at fire time (resolving the
+	 * row/cell from the DOM target, not a closured value), so delegating them here is behavior-
+	 * preserving — see checkbox-vs-cell mutual exclusion below, which mirrors the old
+	 * checkbox-listener's stopPropagation() (the checkbox is itself an <input>, which
+	 * isRowSelectionIgnoredTarget already excludes from cell-click handling).
+	 */
+	public readonly onViewportClick = (e: MouseEvent): void => {
 		if (e.defaultPrevented || e.button !== 0) return;
 		const target = e.target as HTMLElement | null;
+		if (!target) return;
+		const checkbox = target.closest<HTMLInputElement>('input.og-row-checkbox');
+		if (checkbox) {
+			this.handleCheckboxClick(e, checkbox);
+			return;
+		}
 		if (this.isRowSelectionIgnoredTarget(target)) return;
+		const cellEl = target.closest<HTMLDivElement>('.og-cell');
+		if (!cellEl) return;
+		this.onDataCellClick(e, cellEl);
+	};
 
-		const cellSlot = CellSlot.fromElement(e.currentTarget as HTMLDivElement);
+	/** Single delegated listener for the viewport container's `mousedown` — replaces the per-handle
+	 *  `mousedown` listener rowCellBinder.ts used to attach to each `.og-drag-handle` element. Pure
+	 *  event suppression (prevents the mousedown from starting a range-selection drag), so delegation
+	 *  is trivially equivalent. */
+	public readonly onViewportMouseDown = (e: MouseEvent): void => {
+		const handle = (e.target as HTMLElement | null)?.closest('.og-drag-handle');
+		if (handle) e.stopPropagation();
+	};
+
+	private handleCheckboxClick(e: MouseEvent, checkbox: HTMLInputElement): void {
+		e.stopPropagation();
+		const id = checkbox.dataset.rowId;
+		if (!id) return;
+		const shouldSelect = checkbox.checked;
+		const state = this.engine.stateManager.getState();
+		const isMultiple = state.rowSelection?.mode !== 'single';
+		if (isMultiple && e.shiftKey && this.rowCheckboxAnchorId) {
+			const rangeIds = this.getDataRowIdsBetween(this.rowCheckboxAnchorId, id);
+			if (rangeIds.length > 0) {
+				if (shouldSelect) this.engine.selectRowIds(rangeIds, 'checkbox');
+				else this.engine.deselectRowIds(rangeIds, 'checkbox');
+			}
+		} else if (!isMultiple && shouldSelect) {
+			this.engine.replaceRowIds([id], 'checkbox');
+		} else {
+			this.engine.toggleRowId(id, 'checkbox');
+		}
+		this.rowCheckboxAnchorId = id;
+	}
+
+	private readonly onDataCellClick = (e: MouseEvent, cellEl: HTMLDivElement): void => {
+		const cellSlot = CellSlot.fromElement(cellEl);
 		if (!cellSlot.rowId || !cellSlot.colField) return;
 
 		const state = this.engine.stateManager.getState();
@@ -87,13 +135,6 @@ export class SelectionPaintManager<TRowData> {
 			this.rebuildSelection(selectedRowIds);
 		}
 		return this.selectedRowIdSet;
-	}
-
-	public attachClickListenerIfNeeded(el: HTMLElement): void {
-		if (!this.rowSelectionClickCells.has(el)) {
-			this.rowSelectionClickCells.add(el);
-			el.addEventListener('click', this.onDataCellClick);
-		}
 	}
 
 	public isRowSelectionIgnoredTarget(el: Element | null): boolean {

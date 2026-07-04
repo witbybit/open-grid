@@ -194,7 +194,6 @@ export class RowRenderer<TRowData = unknown> {
 			stateHost: this,
 			initCell: (el) => {
 				this.cellRenderer.initializeCell(el);
-				this.selectionPaint.attachClickListenerIfNeeded(el);
 			},
 			releaseCellFn: (cell) => {
 				if (cell.lastPortalKey) this.runtime.releaseCellPortal(cell.element, false, 'destroyed');

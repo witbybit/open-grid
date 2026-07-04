@@ -390,32 +390,15 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		const rowId = node.id;
 		const isChecked = !!deps.selectionPaint.getSelectedRowIdSet(state.selectedRowIds)?.has(rowId);
 		cellClassName += ' og-cell-row-selector';
+		// Click handling is centralized: a single delegated listener on the viewport container
+		// (SelectionPaintManager.onViewportClick) resolves checkbox vs. cell clicks from the DOM
+		// target at fire time — see its doc comment for why moving off a per-checkbox listener here
+		// is behavior-preserving.
 		let checkbox = cell.querySelector<HTMLInputElement>('input[type="checkbox"].og-row-checkbox');
 		if (!checkbox) {
 			checkbox = document.createElement('input');
 			checkbox.type = 'checkbox';
 			checkbox.className = 'og-row-checkbox';
-			checkbox.addEventListener('click', (e) => {
-				e.stopPropagation();
-				const input = e.currentTarget as HTMLInputElement;
-				const id = input.dataset.rowId;
-				if (!id) return;
-				const shouldSelect = input.checked;
-				const currentState = deps.engine.stateManager.getState();
-				const isMultiple = currentState.rowSelection?.mode !== 'single';
-				if (isMultiple && (e as MouseEvent).shiftKey && deps.selectionPaint.rowCheckboxAnchorId) {
-					const rangeIds = deps.selectionPaint.getDataRowIdsBetween(deps.selectionPaint.rowCheckboxAnchorId, id);
-					if (rangeIds.length > 0) {
-						if (shouldSelect) deps.engine.selectRowIds(rangeIds, 'checkbox');
-						else deps.engine.deselectRowIds(rangeIds, 'checkbox');
-					}
-				} else if (!isMultiple && shouldSelect) {
-					deps.engine.replaceRowIds([id], 'checkbox');
-				} else {
-					deps.engine.toggleRowId(id, 'checkbox');
-				}
-				deps.selectionPaint.rowCheckboxAnchorId = id;
-			});
 			cell.textContent = '';
 			cell.appendChild(checkbox);
 		}
@@ -605,10 +588,9 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			handle.className = 'og-drag-handle';
 			handle.innerHTML =
 				'<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><circle cx="5" cy="4" r="1.4"/><circle cx="11" cy="4" r="1.4"/><circle cx="5" cy="8" r="1.4"/><circle cx="11" cy="8" r="1.4"/><circle cx="5" cy="12" r="1.4"/><circle cx="11" cy="12" r="1.4"/></svg>';
-			// Pointer events handle drag; stop mousedown propagation to prevent range selection.
-			handle.addEventListener('mousedown', (e) => {
-				e.stopPropagation();
-			});
+			// Pointer events handle drag; the viewport's delegated mousedown listener
+			// (SelectionPaintManager.onViewportMouseDown) stops propagation for .og-drag-handle
+			// targets to prevent range selection.
 			el.appendChild(handle);
 			el._dragHandle = handle;
 		}
