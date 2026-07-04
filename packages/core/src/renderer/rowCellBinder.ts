@@ -90,9 +90,22 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	incrementCellSlotRebinds?: () => void;
 	incrementIntegrityComputesDuringScroll?: () => void;
 	incrementForceLiveMountsDuringScroll?: () => void;
-	/** scrollPresentation:'live' mounts/updates during scroll — distinct from the rare
-	 *  forceLiveMountsDuringScroll interactive exception (see scrollCellPresentation.ts). */
+	/** scrollPresentation:'live' fresh portal mounts during scroll — distinct from the rare
+	 *  forceLiveMountsDuringScroll interactive exception (see scrollCellPresentation.ts), and from
+	 *  incrementLiveReactUpdatesDuringScroll (re-renders of an already-mounted live cell). */
 	incrementLiveReactMountsDuringScroll?: () => void;
+	/** A live cell already mounted (React re-render, not a fresh portal mount) — budgeted separately
+	 *  from incrementLiveReactMountsDuringScroll by liveFrameBudget.ts. */
+	incrementLiveReactUpdatesDuringScroll?: () => void;
+	/** A live-mount was deferred to a shell/pending placeholder because the frame's mount budget was
+	 *  exhausted (see liveFrameBudget.ts, GridRendererOptions.liveReact). */
+	incrementLiveReactEmergencyShellsDuringScroll?: () => void;
+	/** Returns false when this frame's live-mode budget for `kind` is exhausted. Omitted (or a
+	 *  caller-side default of always-true) means unlimited — see liveFrameBudget.ts. */
+	tryConsumeLiveBudget?: (kind: 'mount' | 'update') => boolean;
+	/** Whether an over-budget fresh mount may fall back to an emergency shell instead of mounting
+	 *  anyway. Omitted defaults to true (shell allowed). */
+	allowLiveEmergencyShell?: () => boolean;
 	incrementHtmlSnapshotHitsDuringScroll?: () => void;
 	incrementHtmlSnapshotMissesDuringScroll?: () => void;
 	incrementTextImpostorUsesDuringScroll?: () => void;

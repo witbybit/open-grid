@@ -31,6 +31,7 @@ import type { SlotRuntimeStats } from './slotRuntimeStats.js';
 import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
 import { computeRowWindowRetention } from './rowWindowRetention.js';
 import { ViewportPlanner, type ViewportPlan } from './viewportPlanner.js';
+import { LiveFrameBudget } from './liveFrameBudget.js';
 
 export class RowRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -159,6 +160,10 @@ export class RowRenderer<TRowData = unknown> {
 	 *  in RowRendererRuntimeBridge) to record which cells actually resolved 'live-mount'. Null before
 	 *  the first recycleViewport call. */
 	public currentViewportPlan: ViewportPlan | null = null;
+	/** Per-frame live-mode mount/update budget (see liveFrameBudget.ts), read by
+	 *  RowCellBinderDeps.tryConsumeLiveBudget/allowLiveEmergencyShell via stateHost: this. Reset each
+	 *  recycleViewport call; reconfigured whenever GridRendererOptions.liveReact may have changed. */
+	public readonly liveFrameBudget = new LiveFrameBudget();
 	/** Live column-reorder preview source, wired by RenderEngine to the
 	 *  ColumnInteractionController. Returns 0 outside an active header drag. */
 	public columnShiftSource: ((colIndex: number) => number) | null = null;
@@ -368,6 +373,12 @@ export class RowRenderer<TRowData = unknown> {
 		// live-mount binder case) has somewhere to record which cells actually resolved 'live' this
 		// frame. liveRows/liveCenterColumns start empty and are populated as the bind loop below runs.
 		this.currentViewportPlan = this.viewportPlanner.computePlan(nextWindow, columnTopology, retainedRowIndices);
+
+		// ── Live-mode frame budget ────────────────────────────────────────────────────
+		// rendererOptions is immutable for the engine's lifetime, so reconfiguring every frame is
+		// redundant but cheap — simpler than special-casing "only on first frame".
+		this.liveFrameBudget.configure(this.engine.rendererOptions?.liveReact);
+		this.liveFrameBudget.resetFrame();
 
 		// ── Slot count management ─────────────────────────────────────────────────────
 		const sortedRows = getRowIndices(nextWindow, this._rowIndicesScratch, retainedRowIndices);

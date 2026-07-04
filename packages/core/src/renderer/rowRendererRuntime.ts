@@ -32,6 +32,7 @@ import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { reportRendererFault } from './rendererFaults.js';
 import type { ViewportPlan } from './viewportPlanner.js';
 import type { ColumnInstanceId } from '../columnDef.js';
+import type { LiveFrameBudget } from './liveFrameBudget.js';
 
 export interface RowRendererRuntimeArgs<TRowData = unknown> {
 	engine: GridEngine<TRowData>;
@@ -91,6 +92,9 @@ export interface RowRendererRuntimeStateHost<TRowData = unknown> {
 	/** This frame's ViewportPlan (see viewportPlanner.ts), populated by RowRenderer.recycleViewport
 	 *  before the bind loop runs. Null before the first frame. */
 	currentViewportPlan?: ViewportPlan | null;
+	/** Per-frame live-mode mount/update budget (see liveFrameBudget.ts), configured from
+	 *  GridRendererOptions.liveReact and reset by RowRenderer.recycleViewport each frame. */
+	liveFrameBudget?: LiveFrameBudget | null;
 }
 
 export interface RowRendererRuntimeBridgeDeps<TRowData = unknown> {
@@ -220,6 +224,26 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 					this.deps.stateHost.renderStats.liveReactMountsDuringScroll =
 						(this.deps.stateHost.renderStats.liveReactMountsDuringScroll || 0) + 1;
 				}
+			},
+			incrementLiveReactUpdatesDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.liveReactUpdatesDuringScroll =
+						(this.deps.stateHost.renderStats.liveReactUpdatesDuringScroll || 0) + 1;
+				}
+			},
+			incrementLiveReactEmergencyShellsDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.liveReactEmergencyShellsDuringScroll =
+						(this.deps.stateHost.renderStats.liveReactEmergencyShellsDuringScroll || 0) + 1;
+				}
+			},
+			tryConsumeLiveBudget: (kind: 'mount' | 'update') => {
+				const budget = this.deps.stateHost.liveFrameBudget;
+				return budget ? budget.tryConsume(kind) : true;
+			},
+			allowLiveEmergencyShell: () => {
+				const budget = this.deps.stateHost.liveFrameBudget;
+				return budget ? budget.allowEmergencyShell : true;
 			},
 			incrementHtmlSnapshotHitsDuringScroll: () => {
 				if (this.deps.stateHost.renderStats) {

@@ -48,6 +48,12 @@ export interface RenderRuntimeStats {
 	forceLiveMountsDuringScroll: number;
 	/** scrollPresentation:'live' mounts/updates during scroll — see renderer/rowCellBinder.ts. */
 	liveReactMountsDuringScroll: number;
+	/** Same cellKey already mounted — a React re-render, not a fresh portal mount. Budgeted
+	 *  separately from liveReactMountsDuringScroll by liveFrameBudget.ts. */
+	liveReactUpdatesDuringScroll: number;
+	/** A live-mount was deferred to a shell/pending placeholder because maxMountsPerFrame was
+	 *  exhausted this frame (see liveFrameBudget.ts, GridRendererOptions.liveReact). */
+	liveReactEmergencyShellsDuringScroll: number;
 	htmlSnapshotHitsDuringScroll: number;
 	htmlSnapshotMissesDuringScroll: number;
 	textImpostorUsesDuringScroll: number;
@@ -131,6 +137,8 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		integrityComputesDuringScroll: 0,
 		forceLiveMountsDuringScroll: 0,
 		liveReactMountsDuringScroll: 0,
+		liveReactUpdatesDuringScroll: 0,
+		liveReactEmergencyShellsDuringScroll: 0,
 		htmlSnapshotHitsDuringScroll: 0,
 		htmlSnapshotMissesDuringScroll: 0,
 		textImpostorUsesDuringScroll: 0,
@@ -238,6 +246,8 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		integrityComputesDuringScroll: deps.runtimeStats.integrityComputesDuringScroll,
 		forceLiveMountsDuringScroll: deps.runtimeStats.forceLiveMountsDuringScroll,
 		liveReactMountsDuringScroll: deps.runtimeStats.liveReactMountsDuringScroll,
+		liveReactUpdatesDuringScroll: deps.runtimeStats.liveReactUpdatesDuringScroll,
+		liveReactEmergencyShellsDuringScroll: deps.runtimeStats.liveReactEmergencyShellsDuringScroll,
 		htmlSnapshotHitsDuringScroll: deps.runtimeStats.htmlSnapshotHitsDuringScroll,
 		htmlSnapshotMissesDuringScroll: deps.runtimeStats.htmlSnapshotMissesDuringScroll,
 		textImpostorUsesDuringScroll: deps.runtimeStats.textImpostorUsesDuringScroll,
