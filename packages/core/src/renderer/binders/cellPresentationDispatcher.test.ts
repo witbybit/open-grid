@@ -206,3 +206,106 @@ describe('cellPresentationDispatcher — one golden test per mode per lane', () 
 		});
 	}
 });
+
+/**
+ * Beyond the 15 golden mode x lane tests above, these cover the editing/focused/loading/rebind
+ * dimensions where a binder's DOM-write behavior is actually distinct — not the full 5 x 3 x 2 x 2 x
+ * 2 x 2 combinatorial product (most of those cells are identical to a already-covered case; the pure
+ * resolver's own exhaustive tests in scrollCellPresentation.test.ts already cover which *presentation*
+ * gets chosen for a given editing/focused/rebind combination). What's tested here is narrower and
+ * complementary: given a presentation the resolver already decided on, does the binder correctly
+ * thread isEditing/isFocused/isLoading into the actual portal mount call, and does
+ * freeze-live-portal's rebind-driven shouldMarkDirty flag actually gate markCellDirtyAfterScroll.
+ */
+describe('cellPresentationDispatcher — editing/focused/loading/rebind flag threading', () => {
+	it('live-mount forwards isEditing/isFocused/isRowLoading through to the portal mount call', () => {
+		const deps = makeDeps();
+		const request = makeRequest('center', { isRowLoading: true });
+		const presentation: ScrollCellPresentation = {
+			kind: 'live-mount',
+			className: laneClass.center,
+			portalCellKey: 'ck1',
+			releasePriorPortal: false,
+			isEditing: true,
+			isFocused: true,
+			recordVersionsFrom: undefined,
+			title: null,
+			validationError: undefined,
+		};
+		dispatchCellPresentation(deps, request, presentation, 1);
+		expect(deps.portalMountManager.mountCellImmediately).toHaveBeenCalledWith(
+			expect.objectContaining({ isEditing: true, isFocused: true, isLoading: true })
+		);
+	});
+
+	it('force-live-interactive-exception (the rebind-independent editing/focused override) forwards the same flags and its own counter', () => {
+		const deps = makeDeps();
+		const request = makeRequest('center', { isRowRebind: true });
+		const presentation: ScrollCellPresentation = {
+			kind: 'force-live-interactive-exception',
+			className: laneClass.center,
+			portalCellKey: 'ck1',
+			releasePriorPortal: true,
+			isEditing: true,
+			isFocused: false,
+			recordVersionsFrom: undefined,
+			title: null,
+			validationError: undefined,
+		};
+		dispatchCellPresentation(deps, request, presentation, 1);
+		expect(deps.incrementForceLiveMountsDuringScroll).toHaveBeenCalledTimes(1);
+		expect(deps.incrementLiveReactMountsDuringScroll).not.toHaveBeenCalled();
+		expect(deps.portalMountManager.mountCellImmediately).toHaveBeenCalledWith(expect.objectContaining({ isEditing: true, isFocused: false }));
+	});
+
+	it('freeze-live-portal with shouldMarkDirty:true (driven by a rebind/version-drift the resolver detected) marks the cell dirty', () => {
+		const deps = makeDeps();
+		const request = makeRequest('center', { isRowRebind: true });
+		const presentation: ScrollCellPresentation = {
+			kind: 'freeze-live-portal',
+			className: laneClass.center,
+			portalCellKey: 'ck1',
+			title: null,
+			validationError: undefined,
+			shouldMarkDirty: true,
+			captureFrozenHtml: false,
+			snapshotForCapture: undefined,
+		};
+		dispatchCellPresentation(deps, request, presentation, 1);
+		expect(deps.markCellDirtyAfterScroll).toHaveBeenCalledWith(request.cellSlot.element);
+	});
+
+	it('freeze-live-portal with shouldMarkDirty:false does not mark the cell dirty', () => {
+		const deps = makeDeps();
+		const request = makeRequest('center');
+		const presentation: ScrollCellPresentation = {
+			kind: 'freeze-live-portal',
+			className: laneClass.center,
+			portalCellKey: 'ck1',
+			title: null,
+			validationError: undefined,
+			shouldMarkDirty: false,
+			captureFrozenHtml: false,
+			snapshotForCapture: undefined,
+		};
+		dispatchCellPresentation(deps, request, presentation, 1);
+		expect(deps.markCellDirtyAfterScroll).not.toHaveBeenCalled();
+	});
+
+	it('html-snapshot-pending (the loading-adjacent no-capture-yet case) writes a pending shell, not the frozen-HTML portal path', () => {
+		const deps = makeDeps();
+		const request = makeRequest('center', { isRowLoading: true });
+		const presentation: ScrollCellPresentation = {
+			kind: 'html-snapshot-pending',
+			className: laneClass.center,
+			title: null,
+			validationError: undefined,
+			releaseStalePortal: false,
+			recordVersions: { rowVersion: 1, globalVersion: 1, insightVersion: 0, styleVersion: 0, loadingVersion: 0, selectionVersion: 0 },
+		};
+		dispatchCellPresentation(deps, request, presentation, 1);
+		expect(deps.incrementHtmlSnapshotMissesDuringScroll).toHaveBeenCalledTimes(1);
+		expect(request.cellSlot.lastContentMode).toBe('pending');
+		expect(deps.portalMountManager.mountCellImmediately).not.toHaveBeenCalled();
+	});
+});
