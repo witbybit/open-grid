@@ -1,10 +1,11 @@
 import { GridMetric, type GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
+import type { ColumnInstanceId } from '../columnDef.js';
 import type { CellSlot } from './cellSlot.js';
 import type { RowSlot } from './rowSlot.js';
 
 /**
- * Bounds how many cell slots a single row slot's `cellsByColumnId` map may retain once columns
- * scroll out of the visible+approach-band window. Without this, `reconcileCellTopologyForScroll`
+ * Bounds how many cell slots a single row slot's `cellsByColumnInstanceId` map may retain once
+ * columns scroll out of the visible+approach-band window. Without this, `reconcileCellTopologyForScroll`
  * (which deliberately never evicts, to keep the scroll hot path free of teardown work) lets the
  * map grow to one entry per distinct column ever visited — unbounded on a wide grid.
  *
@@ -29,12 +30,12 @@ export interface CellSlotRetentionResult {
 }
 
 /**
- * Enforces the retention policy on one row slot's `cellsByColumnId` map.
+ * Enforces the retention policy on one row slot's `cellsByColumnInstanceId` map.
  *
- * `keepFields` must contain every column field this frame's render window requires to stay
+ * `keepInstanceIds` must contain every column instance this frame's render window requires to stay
  * correct right now — visible columns, horizontal approach-band columns, pinned-left/right
- * columns, and the currently focused/edited column. Every entry in `keepFields` is guaranteed to
- * survive this call unconditionally; eviction only ever touches columns outside that set.
+ * columns, and the currently focused/edited column. Every entry in `keepInstanceIds` is guaranteed
+ * to survive this call unconditionally; eviction only ever touches columns outside that set.
  *
  * Deterministic and safe to call every scroll frame: it never removes a column that is still
  * needed, and evicted cells are plain CellSlot objects with no snapshot/version references left
@@ -42,44 +43,44 @@ export interface CellSlotRetentionResult {
  */
 export function applyCellSlotRetentionPolicy<TRowData>(
 	slot: RowSlot<TRowData>,
-	keepFields: ReadonlySet<string>,
+	keepInstanceIds: ReadonlySet<ColumnInstanceId>,
 	releaseFn: (cell: CellSlot<TRowData>) => void,
 	instrumentation?: GridInstrumentation
 ): CellSlotRetentionResult {
-	const cells = slot.cellsByColumnId;
+	const cells = slot.cellsByColumnInstanceId;
 
-	// Touch every kept field so it moves to the most-recently-used end of the map's iteration
+	// Touch every kept instance so it moves to the most-recently-used end of the map's iteration
 	// order (Map preserves insertion order; delete+set re-inserts at the end). Anything left
 	// un-touched ages toward the front, which is exactly the eviction candidate pool below.
-	for (const field of keepFields) {
-		const cell = cells.get(field);
+	for (const instanceId of keepInstanceIds) {
+		const cell = cells.get(instanceId);
 		if (cell) {
-			cells.delete(field);
-			cells.set(field, cell);
+			cells.delete(instanceId);
+			cells.set(instanceId, cell);
 		}
 	}
 
 	const totalBudget =
-		Math.max(CELL_SLOT_RETENTION_CONFIG.maxRetainedCenterCellsPerRowSlot, keepFields.size) +
+		Math.max(CELL_SLOT_RETENTION_CONFIG.maxRetainedCenterCellsPerRowSlot, keepInstanceIds.size) +
 		CELL_SLOT_RETENTION_CONFIG.maxRecentlyExitedColumnsPerRowSlot;
 
 	let evicted = 0;
 	if (cells.size > totalBudget) {
 		const overBudget = cells.size - totalBudget;
-		const evictable: string[] = [];
-		for (const field of cells.keys()) {
-			if (!keepFields.has(field)) evictable.push(field);
+		const evictable: ColumnInstanceId[] = [];
+		for (const instanceId of cells.keys()) {
+			if (!keepInstanceIds.has(instanceId)) evictable.push(instanceId);
 		}
 
 		const ordered = CELL_SLOT_RETENTION_CONFIG.preferEvictPortalCells ? stablePartitionPortalFirst(evictable, cells) : evictable;
 
 		for (let i = 0; i < overBudget && i < ordered.length; i++) {
-			const field = ordered[i];
-			const cell = cells.get(field);
+			const instanceId = ordered[i];
+			const cell = cells.get(instanceId);
 			if (!cell) continue;
 			releaseFn(cell);
 			if (cell.element.parentNode) cell.element.remove();
-			cells.delete(field);
+			cells.delete(instanceId);
 			instrumentation?.increment(GridMetric.CELL_VIEW_DESTROYED);
 			evicted++;
 		}
@@ -89,13 +90,16 @@ export function applyCellSlotRetentionPolicy<TRowData>(
 }
 
 /** Stable partition: portal-mode cells first (in their original relative order), then the rest. */
-function stablePartitionPortalFirst<TRowData>(fields: string[], cells: ReadonlyMap<string, CellSlot<TRowData>>): string[] {
-	const portalFields: string[] = [];
-	const otherFields: string[] = [];
-	for (const field of fields) {
-		const cell = cells.get(field);
-		if (cell?.lastContentMode === 'portal') portalFields.push(field);
-		else otherFields.push(field);
+function stablePartitionPortalFirst<TRowData>(
+	instanceIds: ColumnInstanceId[],
+	cells: ReadonlyMap<ColumnInstanceId, CellSlot<TRowData>>
+): ColumnInstanceId[] {
+	const portalIds: ColumnInstanceId[] = [];
+	const otherIds: ColumnInstanceId[] = [];
+	for (const instanceId of instanceIds) {
+		const cell = cells.get(instanceId);
+		if (cell?.lastContentMode === 'portal') portalIds.push(instanceId);
+		else otherIds.push(instanceId);
 	}
-	return [...portalFields, ...otherFields];
+	return [...portalIds, ...otherIds];
 }

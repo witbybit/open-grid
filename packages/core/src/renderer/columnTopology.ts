@@ -1,4 +1,4 @@
-import type { CompiledGridPlan, InternalColumnDef } from '../columnDef.js';
+import type { ColumnInstanceId, CompiledGridPlan, InternalColumnDef } from '../columnDef.js';
 
 // ── Public interfaces ──────────────────────────────────────────────────────────
 
@@ -9,7 +9,11 @@ import type { CompiledGridPlan, InternalColumnDef } from '../columnDef.js';
  * coordinates are required (e.g. body rows that place cells in the full-width row).
  */
 export interface ColumnPlacement {
-	readonly columnId: string;
+	/** Renderer/topology lifecycle identity — see ColumnInstanceId. Stable across pin/unpin/reorder
+	 *  of an equivalent column; changes only when the column at this field is semantically replaced. */
+	readonly columnId: ColumnInstanceId;
+	/** Logical field name — for consumers that need the display/DOM name (headers, floating filters). */
+	readonly field: string;
 	readonly lane: 'left' | 'center' | 'right';
 	readonly laneIndex: number;
 	readonly absoluteIndex: number;
@@ -49,8 +53,8 @@ export interface CompiledColumnTopology {
 	readonly version: number;
 	/** All placements in display order. */
 	readonly placements: readonly ColumnPlacement[];
-	/** O(1) lookup by column field. */
-	readonly byColumnId: ReadonlyMap<string, ColumnPlacement>;
+	/** O(1) lookup by column instance id. */
+	readonly byColumnId: ReadonlyMap<ColumnInstanceId, ColumnPlacement>;
 	readonly left: readonly ColumnPlacement[];
 	readonly center: readonly ColumnPlacement[];
 	readonly right: readonly ColumnPlacement[];
@@ -159,7 +163,7 @@ export function compileColumnTopology<TRowData>(plan: CompiledGridPlan<TRowData>
 		plan;
 
 	const placements: ColumnPlacement[] = [];
-	const byColumnId = new Map<string, ColumnPlacement>();
+	const byColumnId = new Map<ColumnInstanceId, ColumnPlacement>();
 	const leftPlacements: ColumnPlacement[] = [];
 	const centerPlacements: ColumnPlacement[] = [];
 	const rightPlacements: ColumnPlacement[] = [];
@@ -191,10 +195,19 @@ export function compileColumnTopology<TRowData>(plan: CompiledGridPlan<TRowData>
 			laneOffset = absoluteLeft - pinLeftWidth;
 		}
 
-		const placement: ColumnPlacement = { columnId: col.field, lane, laneIndex, absoluteIndex: i, absoluteLeft, laneOffset, width };
+		const placement: ColumnPlacement = {
+			columnId: col.instanceId,
+			field: col.field,
+			lane,
+			laneIndex,
+			absoluteIndex: i,
+			absoluteLeft,
+			laneOffset,
+			width,
+		};
 
 		placements.push(placement);
-		byColumnId.set(col.field, placement);
+		byColumnId.set(col.instanceId, placement);
 		if (lane === 'left') leftPlacements.push(placement);
 		else if (lane === 'center') centerPlacements.push(placement);
 		else rightPlacements.push(placement);

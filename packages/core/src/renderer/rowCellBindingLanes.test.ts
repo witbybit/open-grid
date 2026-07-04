@@ -7,7 +7,7 @@
  *  2. Lane changes relocate a CellSlot; they do not destroy or recreate it.
  *  3. React/portal identity (cellInstanceId) survives pinning, unpinning, and lane moves.
  *  4. Structural acquire/release only occurs when columns genuinely enter/exit.
- *  5. reconcileCellTopologyForScroll never calls releaseFn and keeps cellsByColumnId authoritative.
+ *  5. reconcileCellTopologyForScroll never calls releaseFn and keeps cellsByColumnInstanceId authoritative.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { RowSlot } from './rowSlot.js';
@@ -19,8 +19,11 @@ import { createCellInstanceRendererKey } from './identityKeys.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+// instanceId defaults to the field string itself — these tests exercise lane/reconciliation logic,
+// not the field-vs-instance-id distinction, so using the field as a stand-in instanceId keeps every
+// existing `.columnInstanceId`/`.get(field)` assertion valid unchanged.
 function makeCol(field: string): ColumnDef<unknown> {
-	return { field } as ColumnDef<unknown>;
+	return { field, instanceId: field } as unknown as ColumnDef<unknown>;
 }
 
 function makeRowSlot(id = 'slot-1'): RowSlot<unknown> {
@@ -82,9 +85,9 @@ describe('reconcileTopology — WS2 columnId ownership', () => {
 		const aCols = [makeCol('a'), makeCol('b'), makeCol('c')];
 		reconcileTopology(slot, makeTopology(aCols, 0, 0, 3), null, 0, 3, null, aCols, initCell, vi.fn());
 
-		expect(slot.cellsByColumnId.get('a')!.columnId).toBe('a');
-		expect(slot.cellsByColumnId.get('b')!.columnId).toBe('b');
-		expect(slot.cellsByColumnId.get('c')!.columnId).toBe('c');
+		expect(slot.cellsByColumnInstanceId.get('a')!.columnInstanceId).toBe('a');
+		expect(slot.cellsByColumnInstanceId.get('b')!.columnInstanceId).toBe('b');
+		expect(slot.cellsByColumnInstanceId.get('c')!.columnInstanceId).toBe('c');
 	});
 
 	it('columnId survives lane relocation — same cell, same id', () => {
@@ -92,8 +95,8 @@ describe('reconcileTopology — WS2 columnId ownership', () => {
 		const cols = [makeCol('name'), makeCol('price'), makeCol('qty')];
 		reconcileTopology(slot, makeTopology(cols, 0, 0, 3), null, 0, 3, null, cols, initCell, vi.fn());
 
-		const cell = slot.cellsByColumnId.get('name')!;
-		expect(cell.columnId).toBe('name');
+		const cell = slot.cellsByColumnInstanceId.get('name')!;
+		expect(cell.columnInstanceId).toBe('name');
 
 		// Pin name to left
 		const left = makeContainer();
@@ -101,8 +104,8 @@ describe('reconcileTopology — WS2 columnId ownership', () => {
 		reconcileTopology(slot, makeTopology(cols, 1, 0, 3), left, 1, 2, null, cols, initCell, vi.fn());
 
 		// Same cell — columnId unchanged
-		expect(cell.columnId).toBe('name');
-		expect(slot.cellsByColumnId.get('name')).toBe(cell);
+		expect(cell.columnInstanceId).toBe('name');
+		expect(slot.cellsByColumnInstanceId.get('name')).toBe(cell);
 	});
 
 	it('columnId is not set for pre-existing cells (idempotent)', () => {
@@ -113,8 +116,8 @@ describe('reconcileTopology — WS2 columnId ownership', () => {
 		// Second reconcile — cells already exist, columnId should still be correct
 		reconcileTopology(slot, makeTopology(xyCols, 0, 0, 2), null, 0, 2, null, xyCols, initCell, vi.fn());
 
-		expect(slot.cellsByColumnId.get('x')!.columnId).toBe('x');
-		expect(slot.cellsByColumnId.get('y')!.columnId).toBe('y');
+		expect(slot.cellsByColumnInstanceId.get('x')!.columnInstanceId).toBe('x');
+		expect(slot.cellsByColumnInstanceId.get('y')!.columnInstanceId).toBe('y');
 	});
 });
 
@@ -199,7 +202,7 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 		const slot = makeRowSlot();
 		run(slot, { centerColCount: 3 });
 
-		expect(slot.cellsByColumnId.size).toBe(3);
+		expect(slot.cellsByColumnInstanceId.size).toBe(3);
 		expect(slot.centerCells).toHaveLength(3);
 		expect(slot.leftCells).toHaveLength(0);
 		expect(slot.rightCells).toHaveLength(0);
@@ -208,13 +211,13 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 	it('does not create duplicate cells after a second reconciliation with unchanged topology', () => {
 		const slot = makeRowSlot();
 		run(slot, { centerColCount: 3 });
-		const idsAfterFirst = [...slot.cellsByColumnId.values()].map((c) => c.cellInstanceId);
+		const idsAfterFirst = [...slot.cellsByColumnInstanceId.values()].map((c) => c.cellInstanceId);
 
 		run(slot, { centerColCount: 3 });
-		const idsAfterSecond = [...slot.cellsByColumnId.values()].map((c) => c.cellInstanceId);
+		const idsAfterSecond = [...slot.cellsByColumnInstanceId.values()].map((c) => c.cellInstanceId);
 
 		expect(idsAfterSecond).toEqual(idsAfterFirst);
-		expect(slot.cellsByColumnId.size).toBe(3);
+		expect(slot.cellsByColumnInstanceId.size).toBe(3);
 	});
 
 	// ── Invariant 2: lane change relocates, does not recreate ─────────────────
@@ -223,7 +226,7 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 		const slot = makeRowSlot();
 		// Initial: all 3 center
 		run(slot, { centerColCount: 3 });
-		const originalId = slot.cellsByColumnId.get('name')!.cellInstanceId;
+		const originalId = slot.cellsByColumnInstanceId.get('name')!.cellInstanceId;
 
 		// Pin column 0 to left
 		const leftContainer = makeContainer();
@@ -235,7 +238,7 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 			centerColCount: 2,
 		});
 
-		const cell = slot.cellsByColumnId.get('name')!;
+		const cell = slot.cellsByColumnInstanceId.get('name')!;
 		expect(cell.cellInstanceId).toBe(originalId);
 		expect(slot.leftCells[0]).toBe(cell);
 		expect(slot.centerCells).toHaveLength(2);
@@ -253,12 +256,12 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 			centerColStart: 1,
 			centerColCount: 2,
 		});
-		const pinnedId = slot.cellsByColumnId.get('name')!.cellInstanceId;
+		const pinnedId = slot.cellsByColumnInstanceId.get('name')!.cellInstanceId;
 
 		// Unpin
 		run(slot, { centerColCount: 3 });
 
-		const cell = slot.cellsByColumnId.get('name')!;
+		const cell = slot.cellsByColumnInstanceId.get('name')!;
 		expect(cell.cellInstanceId).toBe(pinnedId);
 		expect(slot.leftCells).toHaveLength(0);
 		expect(slot.centerCells[0]).toBe(cell);
@@ -270,24 +273,24 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 
 		// All center
 		reconcileTopology(slot, makeTopology(cols, 0, 0, 3), null, 0, 3, null, cols, initCell, vi.fn());
-		const idA = slot.cellsByColumnId.get('a')!.cellInstanceId;
+		const idA = slot.cellsByColumnInstanceId.get('a')!.cellInstanceId;
 
 		// Pin 'a' left
 		const left = makeContainer();
 		slot.element.appendChild(left);
 		reconcileTopology(slot, makeTopology(cols, 1, 0, 3), left, 1, 2, null, cols, initCell, vi.fn());
-		expect(slot.cellsByColumnId.get('a')!.cellInstanceId).toBe(idA);
+		expect(slot.cellsByColumnInstanceId.get('a')!.cellInstanceId).toBe(idA);
 
 		// Now 'a' to right (simulate by making it the last column with pin-right)
 		const right = makeContainer();
 		slot.element.appendChild(right);
 		const colsReordered = [makeCol('b'), makeCol('c'), makeCol('a')];
 		reconcileTopology(slot, makeTopology(colsReordered, 0, 1, 2), null, 0, 2, right, colsReordered, initCell, vi.fn());
-		expect(slot.cellsByColumnId.get('a')!.cellInstanceId).toBe(idA);
+		expect(slot.cellsByColumnInstanceId.get('a')!.cellInstanceId).toBe(idA);
 
 		// Back to center
 		reconcileTopology(slot, makeTopology(cols, 0, 0, 3), null, 0, 3, null, cols, initCell, vi.fn());
-		expect(slot.cellsByColumnId.get('a')!.cellInstanceId).toBe(idA);
+		expect(slot.cellsByColumnInstanceId.get('a')!.cellInstanceId).toBe(idA);
 	});
 
 	// ── Invariant 3: relocation moves DOM element, preserves portal host ──────
@@ -299,7 +302,7 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 
 		run(slot, { centerColCount: 3 });
 		// Initially center
-		const cell = slot.cellsByColumnId.get('name')!;
+		const cell = slot.cellsByColumnInstanceId.get('name')!;
 		expect(cell.element.parentNode).toBe(slot.element);
 
 		// Pin to left
@@ -318,7 +321,7 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 		slot.element.appendChild(leftContainer);
 
 		run(slot, { centerColCount: 3 });
-		const cell = slot.cellsByColumnId.get('name')!;
+		const cell = slot.cellsByColumnInstanceId.get('name')!;
 		const portalHost = cell.getOrCreatePortalHost();
 
 		// Pin to left
@@ -360,12 +363,12 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 		const releaseFn = vi.fn();
 
 		run(slot, { centerColCount: 3 }); // [name, price, qty]
-		const qtyCell = slot.cellsByColumnId.get('qty')!;
+		const qtyCell = slot.cellsByColumnInstanceId.get('qty')!;
 		run(slot, { centerColCount: 2, releaseFn }); // [name, price] only — qty exits
 
 		expect(releaseFn).toHaveBeenCalledTimes(1);
 		expect(releaseFn.mock.calls[0][0]).toBe(qtyCell);
-		expect(slot.cellsByColumnId.has('qty')).toBe(false);
+		expect(slot.cellsByColumnInstanceId.has('qty')).toBe(false);
 	});
 
 	it('releaseFn is not called when pinning an existing column', () => {
@@ -388,15 +391,15 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 		expect(releaseFn).not.toHaveBeenCalled();
 	});
 
-	// ── Invariant 5: cellsByColumnId is the lifecycle owner ──────────────────
+	// ── Invariant 5: cellsByColumnInstanceId is the lifecycle owner ──────────────────
 
-	it('lane arrays are derived views — cellsByColumnId is the source of truth', () => {
+	it('lane arrays are derived views — cellsByColumnInstanceId is the source of truth', () => {
 		const slot = makeRowSlot();
 		const leftContainer = makeContainer();
 		slot.element.appendChild(leftContainer);
 
 		run(slot, { centerColCount: 3 });
-		const nameCellFromMap = slot.cellsByColumnId.get('name')!;
+		const nameCellFromMap = slot.cellsByColumnInstanceId.get('name')!;
 
 		// Pin name to left
 		run(slot, {
@@ -407,7 +410,7 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 		});
 
 		// Map still has the same cell
-		expect(slot.cellsByColumnId.get('name')).toBe(nameCellFromMap);
+		expect(slot.cellsByColumnInstanceId.get('name')).toBe(nameCellFromMap);
 		// Lane array also has the same cell
 		expect(slot.leftCells[0]).toBe(nameCellFromMap);
 	});
@@ -423,20 +426,20 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 			// Full paint: establish 3 center cells [0,1,2]
 			reconcileTopology(slot, topo, null, 0, 3, null, cols5, initCell, vi.fn());
 
-			const cellA = slot.cellsByColumnId.get('a')!;
-			const cellB = slot.cellsByColumnId.get('b')!;
+			const cellA = slot.cellsByColumnInstanceId.get('a')!;
+			const cellB = slot.cellsByColumnInstanceId.get('b')!;
 
 			// Scroll to [2,3,4] — cols [0,1] exit the window, col [4] enters
 			reconcileCellTopologyForScroll(slot, topo, null, 2, 3, null, cols5, initCell);
 
-			// Exited columns stay in cellsByColumnId (lifecycle ownership preserved)
-			expect(slot.cellsByColumnId.has('a')).toBe(true);
-			expect(slot.cellsByColumnId.has('b')).toBe(true);
+			// Exited columns stay in cellsByColumnInstanceId (lifecycle ownership preserved)
+			expect(slot.cellsByColumnInstanceId.has('a')).toBe(true);
+			expect(slot.cellsByColumnInstanceId.has('b')).toBe(true);
 			// Their DOM elements are detached (no DOM bloat during scroll)
 			expect(cellA.element.parentNode).toBeNull();
 			expect(cellB.element.parentNode).toBeNull();
 			// New column entered the window and was created
-			expect(slot.cellsByColumnId.has('e')).toBe(true);
+			expect(slot.cellsByColumnInstanceId.has('e')).toBe(true);
 		});
 
 		it('reuses existing cell instances for columns scrolling back into view', () => {
@@ -444,8 +447,8 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 			const topo = makeTopology(cols5, 0, 0, 5);
 			reconcileTopology(slot, topo, null, 0, 3, null, cols5, initCell, vi.fn());
 
-			const instanceA = slot.cellsByColumnId.get('a')!;
-			const instanceB = slot.cellsByColumnId.get('b')!;
+			const instanceA = slot.cellsByColumnInstanceId.get('a')!;
+			const instanceB = slot.cellsByColumnInstanceId.get('b')!;
 
 			// Scroll forward past a and b
 			reconcileCellTopologyForScroll(slot, topo, null, 2, 3, null, cols5, initCell);
@@ -453,11 +456,11 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 			reconcileCellTopologyForScroll(slot, topo, null, 0, 3, null, cols5, initCell);
 
 			// Same instances reused — no new allocations
-			expect(slot.cellsByColumnId.get('a')).toBe(instanceA);
-			expect(slot.cellsByColumnId.get('b')).toBe(instanceB);
+			expect(slot.cellsByColumnInstanceId.get('a')).toBe(instanceA);
+			expect(slot.cellsByColumnInstanceId.get('b')).toBe(instanceB);
 		});
 
-		it('cellsByColumnId stays authoritative — lane array is a derived view', () => {
+		it('cellsByColumnInstanceId stays authoritative — lane array is a derived view', () => {
 			const slot = makeRowSlot();
 			const topo = makeTopology(cols5, 0, 0, 5);
 			reconcileTopology(slot, topo, null, 0, 3, null, cols5, initCell, vi.fn());
@@ -466,9 +469,9 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 
 			// centerCells is the current window [b,c,d]
 			expect(slot.centerCells).toHaveLength(3);
-			expect(slot.centerCells[0]).toBe(slot.cellsByColumnId.get('b'));
-			expect(slot.centerCells[1]).toBe(slot.cellsByColumnId.get('c'));
-			expect(slot.centerCells[2]).toBe(slot.cellsByColumnId.get('d'));
+			expect(slot.centerCells[0]).toBe(slot.cellsByColumnInstanceId.get('b'));
+			expect(slot.centerCells[1]).toBe(slot.cellsByColumnInstanceId.get('c'));
+			expect(slot.centerCells[2]).toBe(slot.cellsByColumnInstanceId.get('d'));
 		});
 
 		it('pinned cells are always included regardless of center window', () => {
@@ -479,18 +482,18 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 			const topo = makeTopology(cols4, 1, 0, 4);
 			reconcileTopology(slot, topo, left, 1, 2, null, cols4, initCell, vi.fn());
 
-			const pinCell = slot.cellsByColumnId.get('pin')!;
+			const pinCell = slot.cellsByColumnInstanceId.get('pin')!;
 
 			// Scroll center window
 			reconcileCellTopologyForScroll(slot, topo, left, 2, 1, null, cols4, initCell);
 
 			// Pinned cell survives in both map and leftCells
-			expect(slot.cellsByColumnId.get('pin')).toBe(pinCell);
+			expect(slot.cellsByColumnInstanceId.get('pin')).toBe(pinCell);
 			expect(slot.leftCells[0]).toBe(pinCell);
 		});
 	});
 
-	// ── destroyCold with cellsByColumnId ──────────────────────────────────────
+	// ── destroyCold with cellsByColumnInstanceId ──────────────────────────────────────
 
 	describe('RowSlot.destroyCold() with stable ownership', () => {
 		it('unbinds cells from both map and lane arrays via defensive union', () => {
@@ -504,7 +507,7 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 			const driftCell = new CellSlot(document.createElement('div'));
 			driftCell.colField = 'drift';
 			slot.centerCells.push(driftCell);
-			// cellsByColumnId does NOT contain driftCell
+			// cellsByColumnInstanceId does NOT contain driftCell
 
 			const unbindSpy = vi.spyOn(driftCell, 'unbindCold');
 
@@ -512,7 +515,7 @@ describe('reconcileTopology — Plan 118 core invariants', () => {
 
 			// Even the drift cell (not in map) must be unbound
 			expect(unbindSpy).toHaveBeenCalled();
-			expect(slot.cellsByColumnId.size).toBe(0);
+			expect(slot.cellsByColumnInstanceId.size).toBe(0);
 			expect(slot.leftCells).toHaveLength(0);
 			expect(slot.centerCells).toHaveLength(0);
 			expect(slot.rightCells).toHaveLength(0);
@@ -543,8 +546,8 @@ describe('reconcileCellTopologyForScroll — horizontal scroll topology stabilit
 
 		expect(slot.leftCells[0]).toBe(leftCell);
 		expect(slot.rightCells[0]).toBe(rightCell);
-		expect(slot.leftCells[0].columnId).toBe('pin-l');
-		expect(slot.rightCells[0].columnId).toBe('pin-r');
+		expect(slot.leftCells[0].columnInstanceId).toBe('pin-l');
+		expect(slot.rightCells[0].columnInstanceId).toBe('pin-r');
 	});
 
 	it('center cells update to reflect the new window; out-of-window cells are detached but retained in map', () => {
@@ -554,8 +557,8 @@ describe('reconcileCellTopologyForScroll — horizontal scroll topology stabilit
 		reconcileTopology(slot, topo, null, 0, 3, null, cols5, initCell, vi.fn());
 
 		// Cells a,b,c are in the window
-		const cellA = slot.cellsByColumnId.get('a')!;
-		const cellC = slot.cellsByColumnId.get('c')!;
+		const cellA = slot.cellsByColumnInstanceId.get('a')!;
+		const cellC = slot.cellsByColumnInstanceId.get('c')!;
 
 		// Scroll forward: window becomes [c, d, e]
 		reconcileCellTopologyForScroll(slot, topo, null, 2, 3, null, cols5, initCell);
@@ -563,11 +566,11 @@ describe('reconcileCellTopologyForScroll — horizontal scroll topology stabilit
 		// centerCells reflects new window exactly
 		expect(slot.centerCells).toHaveLength(3);
 		expect(slot.centerCells[0]).toBe(cellC);
-		expect(slot.centerCells[1]).toBe(slot.cellsByColumnId.get('d'));
-		expect(slot.centerCells[2]).toBe(slot.cellsByColumnId.get('e'));
+		expect(slot.centerCells[1]).toBe(slot.cellsByColumnInstanceId.get('d'));
+		expect(slot.centerCells[2]).toBe(slot.cellsByColumnInstanceId.get('e'));
 
 		// Out-of-window cell 'a' is still owned
-		expect(slot.cellsByColumnId.get('a')).toBe(cellA);
+		expect(slot.cellsByColumnInstanceId.get('a')).toBe(cellA);
 		// But detached from DOM (no parent)
 		expect(cellA.element.parentNode).toBeNull();
 	});
@@ -598,16 +601,16 @@ describe('reconcileTopology — unrelated column stability', () => {
 		const slot = makeRowSlot();
 
 		reconcileTopology(slot, makeTopology(cols, 0, 0, 3), null, 0, 3, null, cols, initCell, vi.fn());
-		const idB = slot.cellsByColumnId.get('b')!.cellInstanceId;
-		const idC = slot.cellsByColumnId.get('c')!.cellInstanceId;
+		const idB = slot.cellsByColumnInstanceId.get('b')!.cellInstanceId;
+		const idC = slot.cellsByColumnInstanceId.get('c')!.cellInstanceId;
 
 		// Pin 'a' — 'b' and 'c' should be unaffected
 		const left = makeContainer();
 		slot.element.appendChild(left);
 		reconcileTopology(slot, makeTopology(cols, 1, 0, 3), left, 1, 2, null, cols, initCell, vi.fn());
 
-		expect(slot.cellsByColumnId.get('b')!.cellInstanceId).toBe(idB);
-		expect(slot.cellsByColumnId.get('c')!.cellInstanceId).toBe(idC);
+		expect(slot.cellsByColumnInstanceId.get('b')!.cellInstanceId).toBe(idB);
+		expect(slot.cellsByColumnInstanceId.get('c')!.cellInstanceId).toBe(idC);
 	});
 });
 

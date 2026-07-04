@@ -1,4 +1,5 @@
 import { CellSlot, toPx } from './cellSlot.js';
+import type { ColumnInstanceId } from '../columnDef.js';
 
 export const rowSlotWriteStats = {
 	rowClassWrites: 0,
@@ -44,13 +45,15 @@ export class RowSlot<TRowData = unknown> {
 	public pinLeftContainerWidth = -1;
 	public pinRightContainerWidth = -1;
 
-	// ── Stable cell ownership — keyed by column field ───────────────────────────────
+	// ── Stable cell ownership — keyed by column instance id ─────────────────────────
 	// This map is the lifecycle owner for all cell slots in this row slot.
 	// Lane arrays below are derived placement views rebuilt each frame by reconcileTopology.
 	// A column moving between lanes relocates its CellSlot — it does not destroy and recreate it.
-	public readonly cellsByColumnId: Map<string, CellSlot<TRowData>> = new Map();
+	// Keyed by ColumnInstanceId, not field — a field that is semantically replaced (different
+	// renderer/valueGetter reusing the same field) gets a new instance id and therefore a fresh cell.
+	public readonly cellsByColumnInstanceId: Map<ColumnInstanceId, CellSlot<TRowData>> = new Map();
 
-	// ── Lane-based cell slots (derived from cellsByColumnId) ─────────────────────────
+	// ── Lane-based cell slots (derived from cellsByColumnInstanceId) ─────────────────
 	// Three ordered arrays — one per pin lane. Rebuilt each frame by reconcileTopology.
 	// During normal scroll none of these change length, so zero cell DOM append/remove occurs.
 	//
@@ -207,15 +210,15 @@ export class RowSlot<TRowData = unknown> {
 		this.pinLeftCount = 0;
 		this.pinRightStart = Number.MAX_SAFE_INTEGER;
 
-		// Unbind all cell slots. cellsByColumnId is authoritative, but lane arrays are
+		// Unbind all cell slots. cellsByColumnInstanceId is authoritative, but lane arrays are
 		// unioned defensively in case external callers have pushed to them directly.
 		const allCells = new Set<CellSlot<TRowData>>();
-		for (const cell of this.cellsByColumnId.values()) allCells.add(cell);
+		for (const cell of this.cellsByColumnInstanceId.values()) allCells.add(cell);
 		for (const cell of this.leftCells) allCells.add(cell);
 		for (const cell of this.centerCells) allCells.add(cell);
 		for (const cell of this.rightCells) allCells.add(cell);
 		for (const cell of allCells) cell.unbindCold();
-		this.cellsByColumnId.clear();
+		this.cellsByColumnInstanceId.clear();
 		this.leftCells.length = 0;
 		this.centerCells.length = 0;
 		this.rightCells.length = 0;

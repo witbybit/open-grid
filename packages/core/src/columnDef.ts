@@ -184,6 +184,26 @@ export function isDomCellRenderer<TRowData = unknown>(renderer: unknown): render
 	return typeof renderer === 'object' && renderer !== null && typeof (renderer as DomCellRenderer).mount === 'function';
 }
 
+// ─── Column instance identity ─────────────────────────────────────────────────
+
+/**
+ * Opaque, monotonic identity for a column DEFINITION INSTANCE — distinct from `field` (data access
+ * identity) and `colId` (user/API column identity), which both name a logical column slot that may
+ * be re-populated by a semantically different definition over time (e.g. a column removed and
+ * re-added with a different renderer, same field). `instanceId` never changes for a column that is
+ * merely re-normalized with an equivalent shape, and never gets reused after a column is replaced —
+ * this is what lets renderer lifecycle (CellSlot/CellCtrl ownership, HTML/portal caches) key off
+ * "is this semantically the same column" rather than "does this field string match."
+ */
+export type ColumnInstanceId = string & { readonly __brand: 'ColumnInstanceId' };
+
+let _columnInstanceCounter = 0;
+
+/** @internal Only ColumnModel.normalizeColumn() should call this. */
+export function createColumnInstanceId(): ColumnInstanceId {
+	return `coli${++_columnInstanceCounter}` as ColumnInstanceId;
+}
+
 // ─── Column renderer spec ─────────────────────────────────────────────────────
 
 export type ColumnRendererSpec<TRowData = unknown> =
@@ -204,7 +224,9 @@ export type ColumnRenderMode =
 	| 'loading'; // Loading skeleton row
 
 export interface ColumnRenderPlan<TData = unknown> {
-	colId: string;
+	/** Renderer/topology lifecycle identity — see ColumnInstanceId. Previously just an alias for
+	 *  `field`; now a real distinct identity assigned by ColumnModel. */
+	colId: ColumnInstanceId;
 	field: string;
 	mode: ColumnRenderMode;
 	/** True when the column uses a custom cell renderer (mode starts with 'custom'). Pre-computed to avoid string.startsWith on the hot scroll path. */
@@ -395,6 +417,10 @@ export interface ColumnDef<TRowData = unknown> {
 export interface InternalColumnDef<TRowData = unknown> extends ColumnDef<TRowData> {
 	cellRenderer?: ((props: CellRendererProps<TRowData>) => unknown) | DomCellRenderer<TRowData>;
 	cellRendererCapabilities?: NormalizedCellRendererCapabilities;
+	/** @internal Assigned by ColumnModel.normalizeColumn/updateColumns; never set by user-authored
+	 *  ColumnDef. Stable across re-normalization of an equivalent column, minted fresh when a field
+	 *  is semantically replaced (different renderer/valueGetter) — see ColumnInstanceId. */
+	instanceId: ColumnInstanceId;
 }
 
 // ─── Style slots ──────────────────────────────────────────────────────────────

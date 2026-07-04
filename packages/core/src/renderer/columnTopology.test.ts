@@ -4,8 +4,11 @@ import type { CompiledGridPlan, InternalColumnDef } from '../columnDef.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+// instanceId defaults to the field string itself — these tests exercise lane/topology logic, not
+// the field-vs-instance-id distinction, so using the field as a stand-in instanceId keeps every
+// existing `.columnId`/`.get(field)` assertion valid unchanged.
 function makeCol(field: string, width = 100, opts: Partial<InternalColumnDef<unknown>> = {}): InternalColumnDef<unknown> {
-	return { field, width, ...opts } as unknown as InternalColumnDef<unknown>;
+	return { field, width, instanceId: field, ...opts } as unknown as InternalColumnDef<unknown>;
 }
 
 function makePlan(cols: InternalColumnDef<unknown>[], pinLeftCount: number, pinRightCount: number, version = 1): CompiledGridPlan<unknown> {

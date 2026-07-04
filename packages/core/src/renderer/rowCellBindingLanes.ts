@@ -1,5 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { CellRendererPhase, ColumnDef } from '../columnDef.js';
+import type { CellRendererPhase, ColumnDef, ColumnInstanceId, InternalColumnDef } from '../columnDef.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import { CellSlot, recordCellSlotMountedVisualVersions } from './cellSlot.js';
@@ -11,6 +11,7 @@ import { GridMetric, type GridInstrumentation } from '../diagnostics/GridInstrum
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot } from './cellDisplaySnapshot.js';
 import { applyCellSlotRetentionPolicy } from './cellSlotRetention.js';
 import { resolveWarmVisibleCellStatus } from './warmCellStatus.js';
+import { createRowCtrl } from './controllers/RowCtrl.js';
 
 /** Minimal mutable sink for cell-slot retention counters — see renderTelemetry.ts RenderRuntimeStats. */
 export interface CellSlotRetentionTelemetrySink {
@@ -125,39 +126,39 @@ function reconcileTopology<TRowData>(
 	instrumentation?: GridInstrumentation,
 	retentionStats?: CellSlotRetentionTelemetrySink
 ): void {
-	// Build the set of column fields in the new rendered topology.
-	const newFields = new Set<string>();
-	for (const p of topology.left) if (p.columnId) newFields.add(p.columnId);
+	// Build the set of column instance ids in the new rendered topology.
+	const newInstanceIds = new Set<ColumnInstanceId>();
+	for (const p of topology.left) if (p.columnId) newInstanceIds.add(p.columnId);
 	for (const p of topology.center) {
 		if (p.absoluteIndex >= centerColStart && p.absoluteIndex < centerColStart + centerColCount) {
-			if (p.columnId) newFields.add(p.columnId);
+			if (p.columnId) newInstanceIds.add(p.columnId);
 		}
 	}
-	for (const p of topology.right) if (p.columnId) newFields.add(p.columnId);
+	for (const p of topology.right) if (p.columnId) newInstanceIds.add(p.columnId);
 
 	// Step 1 — destroy cells for columns that exited the rendered set. This path already evicts
-	// everything outside newFields unconditionally, so no bounded-retention policy is needed here —
-	// only the same telemetry counters as the scroll-frame path, for a consistent picture.
-	for (const [field, cell] of slot.cellsByColumnId) {
-		if (!newFields.has(field)) {
+	// everything outside newInstanceIds unconditionally, so no bounded-retention policy is needed
+	// here — only the same telemetry counters as the scroll-frame path, for a consistent picture.
+	for (const [instanceId, cell] of slot.cellsByColumnInstanceId) {
+		if (!newInstanceIds.has(instanceId)) {
 			releaseFn(cell);
 			if (cell.element.parentNode) cell.element.remove();
-			slot.cellsByColumnId.delete(field);
+			slot.cellsByColumnInstanceId.delete(instanceId);
 			instrumentation?.increment(GridMetric.CELL_VIEW_DESTROYED);
 			if (retentionStats) retentionStats.cellSlotsEvictedDuringTopology++;
 		}
 	}
 
-	// columnId is set at construction time — the cell's permanent column identity.
-	// colField mirrors this and is guarded-written by update() in the bind loop.
-	function ensureCell(field: string): CellSlot<TRowData> {
-		let cell = slot.cellsByColumnId.get(field);
+	// columnInstanceId is set at construction time — the cell's permanent column identity.
+	// colField mirrors the display name and is guarded-written by update() in the bind loop.
+	function ensureCell(instanceId: ColumnInstanceId): CellSlot<TRowData> {
+		let cell = slot.cellsByColumnInstanceId.get(instanceId);
 		if (!cell) {
 			const el = document.createElement('div');
 			initFn(el);
 			cell = CellSlot.fromElement<TRowData>(el);
-			cell.columnId = field;
-			slot.cellsByColumnId.set(field, cell);
+			cell.columnInstanceId = instanceId;
+			slot.cellsByColumnInstanceId.set(instanceId, cell);
 			instrumentation?.increment(GridMetric.CELL_VIEW_CREATED);
 			if (retentionStats) retentionStats.cellSlotsCreatedDuringTopology++;
 		} else if (retentionStats) {
@@ -171,8 +172,8 @@ function reconcileTopology<TRowData>(
 	if (pinLeftContainer) {
 		for (const p of topology.left) {
 			const col = columns[p.absoluteIndex];
-			if (!col?.field) continue;
-			const cell = ensureCell(col.field);
+			if (!col?.field || !p.columnId) continue;
+			const cell = ensureCell(p.columnId);
 			if (cell.element.parentNode !== pinLeftContainer) {
 				pinLeftContainer.appendChild(cell.element);
 				instrumentation?.increment(GridMetric.CELL_VIEW_RELOCATED);
@@ -186,8 +187,8 @@ function reconcileTopology<TRowData>(
 		const c = p.absoluteIndex;
 		if (c < centerColStart || c >= centerColStart + centerColCount) continue;
 		const col = columns[c];
-		if (!col?.field) continue;
-		const cell = ensureCell(col.field);
+		if (!col?.field || !p.columnId) continue;
+		const cell = ensureCell(p.columnId);
 		if (cell.element.parentNode !== slot.element) {
 			slot.element.appendChild(cell.element);
 			instrumentation?.increment(GridMetric.CELL_VIEW_RELOCATED);
@@ -199,8 +200,8 @@ function reconcileTopology<TRowData>(
 	if (pinRightContainer) {
 		for (const p of topology.right) {
 			const col = columns[p.absoluteIndex];
-			if (!col?.field) continue;
-			const cell = ensureCell(col.field);
+			if (!col?.field || !p.columnId) continue;
+			const cell = ensureCell(p.columnId);
 			if (cell.element.parentNode !== pinRightContainer) {
 				pinRightContainer.appendChild(cell.element);
 				instrumentation?.increment(GridMetric.CELL_VIEW_RELOCATED);
@@ -217,9 +218,9 @@ function reconcileTopology<TRowData>(
 /**
  * Topology-owned scroll reconciliation: updates lane arrays to match the new center
  * window WITHOUT calling releaseFn for any cell. Columns that leave the center window
- * remain in `cellsByColumnId` and are reused when they scroll back into view.
+ * remain in `cellsByColumnInstanceId` and are reused when they scroll back into view.
  *
- * Invariant: `cellsByColumnId` is authoritative at all times — no drift is possible
+ * Invariant: `cellsByColumnInstanceId` is authoritative at all times — no drift is possible
  * because this path never allocates by count or recycles cells to different columns.
  */
 function reconcileCellTopologyForScroll<TRowData>(
@@ -232,52 +233,49 @@ function reconcileCellTopologyForScroll<TRowData>(
 	columns: readonly ColumnDef<TRowData>[],
 	initFn: (el: HTMLDivElement) => void,
 	releaseFn?: (cell: CellSlot<TRowData>) => void,
-	focusedColumnField?: string,
+	focusedColumnInstanceId?: ColumnInstanceId,
 	instrumentation?: GridInstrumentation,
 	retentionStats?: CellSlotRetentionTelemetrySink
 ): void {
-	// Compute the set of column fields visible in this frame.
-	const visibleFields = new Set<string>();
+	// Compute the set of column instance ids visible in this frame.
+	const visibleInstanceIds = new Set<ColumnInstanceId>();
 	if (pinLeftContainer) {
 		for (const p of topology.left) {
-			const col = columns[p.absoluteIndex];
-			if (col?.field) visibleFields.add(col.field);
+			if (columns[p.absoluteIndex]?.field && p.columnId) visibleInstanceIds.add(p.columnId);
 		}
 	}
 	for (const p of topology.center) {
 		const c = p.absoluteIndex;
 		if (c >= centerColStart && c < centerColStart + centerColCount) {
-			const col = columns[c];
-			if (col?.field) visibleFields.add(col.field);
+			if (columns[c]?.field && p.columnId) visibleInstanceIds.add(p.columnId);
 		}
 	}
 	if (pinRightContainer) {
 		for (const p of topology.right) {
-			const col = columns[p.absoluteIndex];
-			if (col?.field) visibleFields.add(col.field);
+			if (columns[p.absoluteIndex]?.field && p.columnId) visibleInstanceIds.add(p.columnId);
 		}
 	}
 	// The currently focused/edited column must survive retention even if a horizontal scroll has
 	// carried it outside the rendered window (e.g. mid-edit elsewhere in a wide grid).
-	if (focusedColumnField) visibleFields.add(focusedColumnField);
+	if (focusedColumnInstanceId) visibleInstanceIds.add(focusedColumnInstanceId);
 
 	// Detach DOM elements for cells that left the visible window. The CellSlot itself
-	// stays in cellsByColumnId so it can be reused when the column scrolls back in —
+	// stays in cellsByColumnInstanceId so it can be reused when the column scrolls back in —
 	// no releaseFn call, no portal teardown.
-	for (const [field, cell] of slot.cellsByColumnId) {
-		if (!visibleFields.has(field) && cell.element.parentNode) {
+	for (const [instanceId, cell] of slot.cellsByColumnInstanceId) {
+		if (!visibleInstanceIds.has(instanceId) && cell.element.parentNode) {
 			cell.element.remove();
 		}
 	}
 
-	function ensureCell(field: string): CellSlot<TRowData> {
-		let cell = slot.cellsByColumnId.get(field);
+	function ensureCell(instanceId: ColumnInstanceId): CellSlot<TRowData> {
+		let cell = slot.cellsByColumnInstanceId.get(instanceId);
 		if (!cell) {
 			const el = document.createElement('div');
 			initFn(el);
 			cell = CellSlot.fromElement<TRowData>(el);
-			cell.columnId = field;
-			slot.cellsByColumnId.set(field, cell);
+			cell.columnInstanceId = instanceId;
+			slot.cellsByColumnInstanceId.set(instanceId, cell);
 			instrumentation?.increment(GridMetric.CELL_VIEW_CREATED);
 			if (retentionStats) retentionStats.cellSlotsCreatedDuringTopology++;
 		} else if (retentionStats) {
@@ -290,8 +288,8 @@ function reconcileCellTopologyForScroll<TRowData>(
 	if (pinLeftContainer) {
 		for (const p of topology.left) {
 			const col = columns[p.absoluteIndex];
-			if (!col?.field) continue;
-			const cell = ensureCell(col.field);
+			if (!col?.field || !p.columnId) continue;
+			const cell = ensureCell(p.columnId);
 			if (cell.element.parentNode !== pinLeftContainer) pinLeftContainer.appendChild(cell.element);
 			slot.leftCells.push(cell);
 		}
@@ -302,8 +300,8 @@ function reconcileCellTopologyForScroll<TRowData>(
 		const c = p.absoluteIndex;
 		if (c < centerColStart || c >= centerColStart + centerColCount) continue;
 		const col = columns[c];
-		if (!col?.field) continue;
-		const cell = ensureCell(col.field);
+		if (!col?.field || !p.columnId) continue;
+		const cell = ensureCell(p.columnId);
 		if (cell.element.parentNode !== slot.element) slot.element.appendChild(cell.element);
 		slot.centerCells.push(cell);
 	}
@@ -312,8 +310,8 @@ function reconcileCellTopologyForScroll<TRowData>(
 	if (pinRightContainer) {
 		for (const p of topology.right) {
 			const col = columns[p.absoluteIndex];
-			if (!col?.field) continue;
-			const cell = ensureCell(col.field);
+			if (!col?.field || !p.columnId) continue;
+			const cell = ensureCell(p.columnId);
 			if (cell.element.parentNode !== pinRightContainer) pinRightContainer.appendChild(cell.element);
 			slot.rightCells.push(cell);
 		}
@@ -323,13 +321,13 @@ function reconcileCellTopologyForScroll<TRowData>(
 	slot.pinLeftCount = topology.left.length;
 	slot.pinRightStart = topology.left.length + topology.center.length;
 
-	// Bounded retention: cellsByColumnId must never grow unbounded just because scroll-frame
+	// Bounded retention: cellsByColumnInstanceId must never grow unbounded just because scroll-frame
 	// reconciliation never evicts on its own. Runs AFTER this frame's cells are ensured (not
 	// before) so newly-entered columns are already accounted for in the budget check — otherwise
 	// eviction would trim to budget using the OLD visible set and then this frame's newly-entered
 	// columns would push it back over on every window shift.
 	if (releaseFn) {
-		const { retainedAfter, evicted } = applyCellSlotRetentionPolicy(slot, visibleFields, releaseFn, instrumentation);
+		const { retainedAfter, evicted } = applyCellSlotRetentionPolicy(slot, visibleInstanceIds, releaseFn, instrumentation);
 		if (retentionStats) {
 			retentionStats.cellSlotsEvictedDuringTopology += evicted;
 			retentionStats.cellSlotsRetained += retainedAfter;
@@ -395,6 +393,16 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	const visibleColStart = ctx?.visibleColRange?.startIdx ?? centerColStart;
 	const visibleColEnd = ctx?.visibleColRange?.endIdx ?? centerColStart + centerColCount - 1;
 	const currentRowVersion = ctx?.rowVersions?.get(node.id);
+	// Attach/reuse this row's RowCtrl once per row (not once per cell) — CellCtrl attach happens
+	// per cell inside bindCellFull/bindCellDuringScroll via the rowCtrl passed down below.
+	// isEditing/isFocused reset to false here and are rolled back to true by whichever cell (if any)
+	// is the active edit/focus target this frame — see attachCellCtrl in rowCellBinder.ts.
+	const rowCtrl = deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl<TRowData>(node.id);
+	rowCtrl.attachedSlotId = slot.id;
+	rowCtrl.attachedGeneration = slot.generation;
+	if (currentRowVersion !== undefined) rowCtrl.rowVersion = currentRowVersion;
+	rowCtrl.isEditing = false;
+	rowCtrl.isFocused = false;
 	const getWarmVisibleCellStatus = (cellSlot: CellSlot<TRowData>) => {
 		if (!ctx) return { needsImmediateWake: false, needsDeferredRefresh: false };
 		return resolveWarmVisibleCellStatus(
@@ -436,7 +444,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 
 	if (!isScrollFrameActive) {
 		// Full paint: topology-aware reconciliation — retains cells across lane changes.
-		// cellsByColumnId is authoritative; no drift repair needed.
+		// cellsByColumnInstanceId is authoritative; no drift repair needed.
 		reconcileTopology(
 			slot,
 			columnTopology,
@@ -452,8 +460,11 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		);
 	} else {
 		// Scroll frame: topology-owned reconciliation — bounded retention, no full releaseFn sweep.
-		// cellsByColumnId stays authoritative; cells leaving the visible+approach-band window are
-		// retained as a small LRU (cellSlotRetention.ts) and reused when they scroll back into view.
+		// cellsByColumnInstanceId stays authoritative; cells leaving the visible+approach-band window
+		// are retained as a small LRU (cellSlotRetention.ts) and reused when they scroll back into view.
+		const focusedColumnInstanceId = ctx?.focusedCell?.colField
+			? (columns.find((c) => c.field === ctx.focusedCell!.colField) as InternalColumnDef<TRowData> | undefined)?.instanceId
+			: undefined;
 		reconcileCellTopologyForScroll(
 			slot,
 			columnTopology,
@@ -464,7 +475,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 			columns,
 			deps.initCell,
 			deps.releaseCellFn,
-			ctx?.focusedCell?.colField,
+			focusedColumnInstanceId,
 			deps.engine.instrumentation,
 			deps.retentionStats
 		);
@@ -502,6 +513,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				isRowRebind,
 				isRowLoading,
 				isInVisibleContent: isVisibleContent,
+				rowCtrl,
 			});
 		} else {
 			bindCellFull(deps.cellBinderDeps, {
@@ -517,6 +529,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				plan,
 				state,
 				ctx,
+				rowCtrl,
 			});
 		}
 	}
@@ -553,6 +566,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				isRowRebind,
 				isRowLoading,
 				isInVisibleContent: isVisibleContent,
+				rowCtrl,
 			});
 		} else {
 			bindCellFull(deps.cellBinderDeps, {
@@ -568,6 +582,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				plan,
 				state,
 				ctx,
+				rowCtrl,
 			});
 		}
 	}
@@ -606,6 +621,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				isRowRebind,
 				isRowLoading,
 				isInVisibleContent: isVisibleContent,
+				rowCtrl,
 			});
 		} else {
 			bindCellFull(deps.cellBinderDeps, {
@@ -621,6 +637,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				plan,
 				state,
 				ctx,
+				rowCtrl,
 			});
 		}
 	}

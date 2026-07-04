@@ -153,7 +153,7 @@ function buildHeaderBands<TRowData>(
 		const col = columns[placement.absoluteIndex];
 		return {
 			id: placement.columnId,
-			field: placement.columnId,
+			field: placement.field,
 			label: col.header ?? col.field,
 			depth: maxGroupDepth,
 			colStart: placement.absoluteIndex,

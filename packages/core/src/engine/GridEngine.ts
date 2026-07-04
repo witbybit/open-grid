@@ -72,6 +72,7 @@ import { GridDomainSubscriptionHub } from './GridDomainSubscriptionHub.js';
 import { GridEngineRenderBridge } from './GridEngineRenderBridge.js';
 import { CellDisplaySnapshotStore, type CellDisplaySnapshot } from '../renderer/cellDisplaySnapshot.js';
 import { HtmlScrollSnapshotStore } from '../renderer/htmlScrollSnapshotStore.js';
+import { RowCtrlStore } from '../renderer/controllers/RowCtrlStore.js';
 
 export type ManagedRowDragBlockReason =
 	| 'unsupported-row-model'
@@ -218,6 +219,8 @@ export class GridEngine<TRowData = unknown> {
 	public readonly rowVersions = new Map<string, number>();
 	public readonly cellDisplaySnapshots = new CellDisplaySnapshotStore();
 	public readonly htmlScrollSnapshots: HtmlScrollSnapshotStore;
+	/** Owns RowCtrl/CellCtrl semantic identity — see controllers/RowCtrlStore.ts. */
+	public readonly rowCtrls = new RowCtrlStore<TRowData>();
 	/** Grid-wide scroll presentation policy — see columnDef.ts's GridRendererOptions. */
 	public readonly rendererOptions: GridRendererOptions | undefined;
 

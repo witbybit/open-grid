@@ -1,6 +1,8 @@
 ﻿import {
 	isDomCellRenderer,
+	createColumnInstanceId,
 	type ColumnDef,
+	type ColumnInstanceId,
 	type InternalColumnDef,
 	type ColumnRenderPlan,
 	type ColumnRenderMode,
@@ -33,11 +35,32 @@ export function normalizeRendererCapabilities(cap: CellRendererCapabilities | un
 	return { ...cap, scrollPresentation: mode };
 }
 
+/**
+ * Structural fingerprint deciding whether a re-normalized column at the same `field` is still the
+ * "same" column instance (stable instanceId) or has been semantically replaced (mint a new one).
+ * Deliberately reference equality, not deep-equality: deep-equality would mint a spurious new
+ * instanceId on every capabilities-object recreation from caller-side spreads/memo boundaries, and
+ * would be too expensive to run on every updateColumns() call (which can run once per keystroke in
+ * interactive column-config UIs). Reference equality on the two fields that most often change under
+ * a genuine renderer swap (cellRenderer, valueGetter) is enough to catch the real cases this exists
+ * for — e.g. a text column swapped for a react custom renderer at the same field.
+ */
+function isSameColumnInstance<TRowData>(
+	prev: Pick<InternalColumnDef<TRowData>, 'cellRenderer' | 'valueGetter'>,
+	next: Pick<InternalColumnDef<TRowData>, 'cellRenderer' | 'valueGetter'>
+): boolean {
+	return prev.cellRenderer === next.cellRenderer && prev.valueGetter === next.valueGetter;
+}
+
 export class ColumnModel<TRowData = unknown> {
 	private columnMap = new Map<string, InternalColumnDef<TRowData>>();
 	private displayedColumns: InternalColumnDef<TRowData>[] = [];
 	private valueGetterDependents = new Map<string, string[]>();
-	private indexMapper = new IndexMapper<string>();
+	private indexMapper = new IndexMapper<ColumnInstanceId>();
+	/** Bridges the field-keyed public API surface (getColumnIndex(colField), etc.) to the
+	 *  instanceId-keyed IndexMapper. Rebuilt every updateColumns() call. */
+	private fieldToInstanceId = new Map<string, ColumnInstanceId>();
+	private instanceIdToField = new Map<ColumnInstanceId, string>();
 	private defaultColWidth = 100;
 	private columnPlans = new Map<string, ColumnRenderPlan<TRowData>>();
 	private planVersion = 0;
@@ -52,17 +75,27 @@ export class ColumnModel<TRowData = unknown> {
 		if (defaultColWidth !== undefined) {
 			this.defaultColWidth = defaultColWidth;
 		}
-		const normalizedColumns = columns.map((column) => this.normalizeColumn(column));
-		this.columnMap.clear();
+		const previousColumnMap = this.columnMap;
+		const normalizedColumns = columns.map((column) => {
+			const normalized = this.normalizeColumn(column);
+			const prev = normalized.field ? previousColumnMap.get(normalized.field) : undefined;
+			const instanceId = prev && isSameColumnInstance(prev, normalized) ? prev.instanceId : createColumnInstanceId();
+			return { ...normalized, instanceId } as InternalColumnDef<TRowData>;
+		});
+		this.columnMap = new Map();
+		this.fieldToInstanceId = new Map();
+		this.instanceIdToField = new Map();
 		this.valueGetterDependents.clear();
-		this.indexMapper.setIds(normalizedColumns.map((column) => column.field));
+		this.indexMapper.setIds(normalizedColumns.map((column) => column.instanceId));
 		for (const column of normalizedColumns) {
-			this.indexMapper.setVisible(column.field, column.hide !== true);
+			this.indexMapper.setVisible(column.instanceId, column.hide !== true);
 		}
 
 		for (const col of normalizedColumns) {
 			if (col.field) {
 				this.columnMap.set(col.field, col);
+				this.fieldToInstanceId.set(col.field, col.instanceId);
+				this.instanceIdToField.set(col.instanceId, col.field);
 				if (col.valueGetter && col.valueGetterDependencies) {
 					for (const dependency of col.valueGetterDependencies) {
 						const dependents = this.valueGetterDependents.get(dependency);
@@ -108,7 +141,7 @@ export class ColumnModel<TRowData = unknown> {
 				}
 
 				const plan: ColumnRenderPlan<TRowData> = {
-					colId: col.field,
+					colId: col.instanceId,
 					field: col.field,
 					mode,
 					isCustom: mode !== 'primitive' && mode !== 'primitive-formatted',
@@ -124,8 +157,8 @@ export class ColumnModel<TRowData = unknown> {
 		this.compiledPlan = null;
 	}
 
-	private normalizeColumn(column: ColumnDef<TRowData>): InternalColumnDef<TRowData> {
-		if (!column.renderer) return column as InternalColumnDef<TRowData>;
+	private normalizeColumn(column: ColumnDef<TRowData>): Omit<InternalColumnDef<TRowData>, 'instanceId'> {
+		if (!column.renderer) return column;
 		const renderer = column.renderer;
 		if (renderer.kind === 'text') {
 			return { ...column, cellRenderer: undefined, cellRendererCapabilities: undefined };
@@ -223,18 +256,21 @@ export class ColumnModel<TRowData = unknown> {
 	}
 
 	public getColumnIndex(colField: string): number {
-		return this.indexMapper.idToVisualIndex(colField);
+		const instanceId = this.fieldToInstanceId.get(colField);
+		return instanceId ? this.indexMapper.idToVisualIndex(instanceId) : -1;
 	}
 
 	public getColumnField(colIdx: number): string | null {
-		return this.indexMapper.visualIndexToId(colIdx);
+		const instanceId = this.indexMapper.visualIndexToId(colIdx);
+		return instanceId ? (this.instanceIdToField.get(instanceId) ?? null) : null;
 	}
 
 	public getPhysicalColumnIndex(colField: string): number {
-		return this.indexMapper.idToPhysicalIndex(colField);
+		const instanceId = this.fieldToInstanceId.get(colField);
+		return instanceId ? this.indexMapper.idToPhysicalIndex(instanceId) : -1;
 	}
 
-	public getIndexMapper(): IndexMapper<string> {
+	public getIndexMapper(): IndexMapper<ColumnInstanceId> {
 		return this.indexMapper;
 	}
 
@@ -244,10 +280,12 @@ export class ColumnModel<TRowData = unknown> {
 
 	public getDisplayedColumns(columns?: ColumnDef<TRowData>[]): ColumnDef<TRowData>[] {
 		if (!columns) return this.displayedColumns;
-		const columnByField = new Map(columns.map((column) => [column.field, column]));
+		// Only called internally (updateColumns, below) with the just-normalized array, whose
+		// instanceIds are exactly what indexMapper.setIds() was just given — safe to match by instanceId.
+		const columnByInstanceId = new Map(columns.map((column) => [(column as InternalColumnDef<TRowData>).instanceId, column]));
 		return this.indexMapper
 			.getVisibleIds()
-			.map((field) => columnByField.get(field))
+			.map((instanceId) => columnByInstanceId.get(instanceId))
 			.filter((column): column is ColumnDef<TRowData> => !!column);
 	}
 

@@ -29,6 +29,7 @@ import {
 } from './renderWindow.js';
 import type { SlotRuntimeStats } from './slotRuntimeStats.js';
 import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
+import { computeRowWindowRetention } from './rowWindowRetention.js';
 
 export class RowRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -347,8 +348,17 @@ export class RowRenderer<TRowData = unknown> {
 		const columns = plan.displayedColumns;
 		const loading = ctx ? ctx.loadingVersion > 0 : state.loading;
 
+		// ── Vertical focus/edit row retention ─────────────────────────────────────────
+		// Mirrors the existing horizontal focused-column guard (reconcileCellTopologyForScroll) —
+		// a focused/editing row must never be virtualized fully out of the row-slot pool.
+		const focusedCellPointer = ctx?.focusedCell ?? state.selection.focus;
+		const activeEditCell = ctx?.activeEdit ?? state.activeEdit;
+		const focusedRowIndex = focusedCellPointer && rowModel ? rowModel.getVisualIndexByRowId(focusedCellPointer.rowId) : undefined;
+		const editingRowIndex = activeEditCell && rowModel ? rowModel.getVisualIndexByRowId(activeEditCell.rowId) : undefined;
+		const { retainedRowIndices } = computeRowWindowRetention({ renderWindow: nextWindow, focusedRowIndex, editingRowIndex });
+
 		// ── Slot count management ─────────────────────────────────────────────────────
-		const sortedRows = getRowIndices(nextWindow, this._rowIndicesScratch);
+		const sortedRows = getRowIndices(nextWindow, this._rowIndicesScratch, retainedRowIndices);
 		const totalSlots = sortedRows.length;
 
 		this.rowSlotPool.resetScrollStats();

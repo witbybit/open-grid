@@ -5,6 +5,7 @@ import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
 import { diffRenderWindow, getColIndices, getRowIndices, type RenderWindow } from './renderWindow.js';
+import { computeRowWindowRetention } from './rowWindowRetention.js';
 import { CellSlot } from './cellSlot.js';
 import { CORE_STYLES } from './styles.js';
 
@@ -258,12 +259,25 @@ function cleanupGrid(grid: AuditGrid): void {
 function assertNoStaleOrOverlappingDom(grid: AuditGrid): void {
 	const rows = Array.from(grid.container.querySelectorAll<HTMLElement>('.og-row'));
 	const currentWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
-	const expectedRowIndices = new Set(getRowIndices(currentWindow));
+	// A focused/editing row is deliberately retained outside the normal window (vertical retention,
+	// mirroring the existing horizontal focused-column guard) — account for it here too, the same
+	// way rowRenderer.ts itself resolves it, so a legitimately-retained row isn't flagged as stray.
+	const state = grid.store.getState();
+	const rowModel = grid.store.engine.getVisualRowModel();
+	const focusedCellPointer = state.selection.focus;
+	const activeEditCell = state.activeEdit;
+	const focusedRowIndex = focusedCellPointer && rowModel ? rowModel.getVisualIndexByRowId(focusedCellPointer.rowId) : undefined;
+	const editingRowIndex = activeEditCell && rowModel ? rowModel.getVisualIndexByRowId(activeEditCell.rowId) : undefined;
+	const { retainedRowIndices } = computeRowWindowRetention({ renderWindow: currentWindow, focusedRowIndex, editingRowIndex });
+	const expectedRowIndices = new Set(getRowIndices(currentWindow, undefined, retainedRowIndices));
 	const activeRowIndices = new Set(grid.renderer.rowRenderer.activeRows.keys());
+	// +2 tolerance: a focused row and an actively-editing row may each be retained outside the
+	// normal window (vertical retention) as extra slots beyond the base budget.
+	const retentionTolerance = retainedRowIndices.size;
 	expect(grid.renderer.rowRenderer.activeRows.size).toBeGreaterThan(0);
-	expect(grid.renderer.rowRenderer.activeRows.size).toBeLessThanOrEqual(28);
+	expect(grid.renderer.rowRenderer.activeRows.size).toBeLessThanOrEqual(28 + retentionTolerance);
 	expect(rows.length).toBeGreaterThan(0);
-	expect(rows.length).toBeLessThanOrEqual(28 * 3);
+	expect(rows.length).toBeLessThanOrEqual((28 + retentionTolerance) * 3);
 	for (const [rowIndex, slot] of grid.renderer.rowRenderer.activeRows) {
 		expect(expectedRowIndices.has(rowIndex)).toBe(true);
 		expect(slot.cellCount).toBeGreaterThan(0);
@@ -564,7 +578,14 @@ function assertScrollStatsAreRuthless(grid: AuditGrid, prevWindow: RenderWindow 
 	const stats = grid.renderer.getRenderStats();
 	const window = grid.renderer.rowRenderer.currentWindow as RenderWindow;
 	const visibleCols = getColIndices(window).length;
-	const activeRows = getRowIndices(window).length;
+	// A focused/editing row retained outside the normal window (vertical retention) is bound every
+	// scroll frame just like any other active row — account for it in the expected cell budget.
+	const state = grid.store.getState();
+	const rowModel = grid.store.engine.getVisualRowModel();
+	const focusedRowIndex = state.selection.focus && rowModel ? rowModel.getVisualIndexByRowId(state.selection.focus.rowId) : undefined;
+	const editingRowIndex = state.activeEdit && rowModel ? rowModel.getVisualIndexByRowId(state.activeEdit.rowId) : undefined;
+	const { retainedRowIndices } = computeRowWindowRetention({ renderWindow: window, focusedRowIndex, editingRowIndex });
+	const activeRows = getRowIndices(window, undefined, retainedRowIndices).length;
 	const delta = prevWindow ? diffRenderWindow(prevWindow, window) : null;
 	// Slot model visits all slots x all visible cols each frame (JS cache skips writes for stable cells).
 	const maxExpectedCells = Math.max(activeRows * visibleCols, visibleCols, 1);

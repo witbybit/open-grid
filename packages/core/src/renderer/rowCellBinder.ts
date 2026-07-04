@@ -19,43 +19,20 @@ import type { PortalMountManager } from './portalMountManager.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
-import {
-	collectCellDecorationSnapshotMetadata,
-	createCellDisplaySnapshot,
-	mergeCellSnapshotTitle,
-	type CellDisplaySnapshot,
-} from './cellDisplaySnapshot.js';
-import { isVisualFresh } from './visualFreshness.js';
-import { resolveScrollCellPresentation, type ScrollCellPresentation, type ScrollCellPresentationDeps } from './scrollCellPresentation.js';
+import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, type CellDisplaySnapshot } from './cellDisplaySnapshot.js';
+import { isVisualFresh, type VisualFreshness } from './visualFreshness.js';
+import { resolveScrollCellPresentation, type ScrollCellPresentationDeps } from './scrollCellPresentation.js';
 import { isHtmlSnapshotPresentation, isTextImpostorPresentation } from './scrollPresentationMode.js';
-
-function buildCellPinClass(lane: 'left' | 'center' | 'right'): string {
-	if (lane === 'left') return 'og-cell og-cell-pinned-left';
-	if (lane === 'right') return 'og-cell og-cell-pinned-right';
-	return 'og-cell';
-}
+import { dispatchCellPresentation } from './binders/cellPresentationDispatcher.js';
+import { buildCellPinClass, applyCellTitlesAndValidation } from './binders/binderShared.js';
+import { getOrCreateCellCtrl, createRowCtrl, type RowCtrl } from './controllers/RowCtrl.js';
+import type { CellCtrl } from './controllers/CellCtrl.js';
 
 function subtractNormalizedClassName(fullClassName: string, baseClassName: string): string {
 	const fullTokens = fullClassName.trim().split(/\s+/).filter(Boolean);
 	if (fullTokens.length === 0) return '';
 	const baseTokenSet = new Set(baseClassName.trim().split(/\s+/).filter(Boolean));
 	return fullTokens.filter((token) => !baseTokenSet.has(token)).join(' ');
-}
-
-function applyCellTitlesAndValidation(element: HTMLDivElement, tooltipText: string | null, insightTitle: string, validationError?: string): void {
-	const prevValidationAttr = element.dataset.validationError;
-	if (validationError) {
-		if (prevValidationAttr !== validationError) element.dataset.validationError = validationError;
-	} else if (prevValidationAttr !== undefined) {
-		delete element.dataset.validationError;
-	}
-
-	const title = mergeCellSnapshotTitle(tooltipText, insightTitle);
-	if (title) {
-		element.title = title;
-	} else if (element.title) {
-		element.removeAttribute('title');
-	}
 }
 
 function getFreshCellSnapshot<TRowData>(
@@ -142,6 +119,10 @@ export interface BindCellFullRequest<TRowData = unknown> {
 	state: InternalGridState<TRowData>;
 	ctx?: ScrollRenderContext<TRowData>;
 	phase?: CellRendererPhase;
+	/** Attached RowCtrl for this row, when the caller already resolved one this frame (bindAllDataCells
+	 *  resolves it once per row, not once per cell). Falls back to engine.rowCtrls.getOrCreate(node.id)
+	 *  when omitted — kept optional so existing direct callers/tests are unaffected. */
+	rowCtrl?: RowCtrl<TRowData>;
 }
 
 export interface BindCellDuringScrollRequest<TRowData = unknown> {
@@ -161,6 +142,9 @@ export interface BindCellDuringScrollRequest<TRowData = unknown> {
 	isRowRebind: boolean;
 	isRowLoading: boolean;
 	isInVisibleContent: boolean;
+	/** Attached RowCtrl for this row, when the caller already resolved one this frame. Falls back to
+	 *  engine.rowCtrls.getOrCreate(node.id) when omitted. */
+	rowCtrl?: RowCtrl<TRowData>;
 }
 
 function applyValueFormatter<TRowData>(col: ColumnDef<TRowData>, value: unknown, node: RowNode<TRowData>): string {
@@ -193,24 +177,6 @@ function getCheapCellText<TRowData>(
 	}
 	const raw = node.data ? (node.data as Record<string, unknown>)[col.field] : undefined;
 	return applyValueFormatter(col, raw, node);
-}
-
-function getScrollMountValue<TRowData>(
-	deps: RowCellBinderDeps<TRowData>,
-	node: RowNode<TRowData>,
-	col: ColumnDef<TRowData>,
-	cellSlot?: CellSlot<TRowData>
-): unknown {
-	const cachedVal = deps.engine.data.getCachedDisplayValue(node.id, col.field);
-	if (cachedVal !== undefined) return cachedVal;
-	if (col.valueGetter || deps.engine.hasFormula(node.id, col.field)) {
-		return '';
-	}
-	if (node.data) return (node.data as Record<string, unknown>)[col.field];
-	// No row data at all (e.g. a loading placeholder row) — warm DOM may only stand in for this
-	// exact row/column identity, never for whatever row previously occupied this slot.
-	const isSameIdentity = !!cellSlot && cellSlot.rowId === node.id && cellSlot.colField === col.field;
-	return isSameIdentity ? (cellSlot!.lastFormattedValue ?? '') : '';
 }
 
 /**
@@ -265,6 +231,44 @@ function assignRendererHandle<TRowData>(cellSlot: CellSlot<TRowData>, contentMod
 	}
 }
 
+/**
+ * Attaches/reuses the CellCtrl for this (rowId, columnInstanceId), stamping its physical-slot
+ * bookkeeping and editing/focus state. Deliberately does NOT feed the resolver — CellCtrl is
+ * populated alongside resolveScrollCellPresentation's existing decision tree, not injected into it
+ * (see controllers/CellCtrl.ts doc comment). Also rolls the row-level isEditing/isFocused flags on
+ * RowCtrl into `true` when this cell is the active edit/focus target — the row-level reset back to
+ * `false` happens once per row in bindAllDataCells, not here.
+ */
+function attachCellCtrl<TRowData>(
+	deps: RowCellBinderDeps<TRowData>,
+	request: { cellSlot: CellSlot<TRowData>; node: RowNode<TRowData>; col: ColumnDef<TRowData>; rowCtrl?: RowCtrl<TRowData> },
+	isEditing: boolean,
+	isFocused: boolean
+): CellCtrl {
+	const { cellSlot, node, col } = request;
+	// Defensive fallback for lightweight test doubles that construct a partial `engine` mock without
+	// a real RowCtrlStore — a real GridEngine always has `rowCtrls` (see GridEngine.ts), so this only
+	// ever triggers in tests, producing a throwaway, unshared RowCtrl rather than crashing.
+	const rowCtrl = request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl<TRowData>(node.id);
+	const instanceId = (col as InternalColumnDef<TRowData>).instanceId;
+	const { cellCtrl } = getOrCreateCellCtrl(rowCtrl, col.field, instanceId);
+	cellCtrl.attachedSlotInstanceId = cellSlot.cellInstanceId;
+	cellCtrl.attachedRowBindingGeneration = cellSlot.rowBindingGeneration;
+	cellCtrl.isEditing = isEditing;
+	cellCtrl.isFocused = isFocused;
+	if (isEditing) rowCtrl.isEditing = true;
+	if (isFocused) rowCtrl.isFocused = true;
+	return cellCtrl;
+}
+
+/** Stamps the freshness/content-mode this resolution actually produced — pure bookkeeping, read
+ *  from cellSlot.lastContentMode immediately after cellSlot.update() has just written it, so this
+ *  is a same-call-frame read of a just-written value, not a stale cache reused later. */
+function stampCellCtrlResolution<TRowData>(cellCtrl: CellCtrl, cellSlot: CellSlot<TRowData>, freshness: VisualFreshness): void {
+	cellCtrl.lastResolvedFreshness = freshness;
+	cellCtrl.lastResolvedContentMode = cellSlot.lastContentMode;
+}
+
 export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellFullRequest<TRowData>): void {
 	deps.incrementFullCellBinds?.();
 	deps.incrementCellSlotRebinds?.();
@@ -278,6 +282,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		loadingVersion: snapshotVisualVersions.loadingVersion,
 		selectionVersion: deps.engine.selectionVersion,
 	};
+	const cellCtrl = attachCellCtrl(deps, request, access.isEditing, access.isFocused);
 
 	const baseCellClassName = buildCellPinClass(lane);
 	let cellClassName = baseCellClassName;
@@ -416,6 +421,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = state.globalVersion;
 		recordCellSlotMountedVisualVersions(cellSlot, currentVisualVersions);
+		stampCellCtrlResolution(cellCtrl, cellSlot, { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions });
 		return;
 	}
 
@@ -593,6 +599,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	cellSlot.lastMountedRowVersion = rowVersion;
 	cellSlot.lastMountedGlobalVersion = state.globalVersion;
 	recordCellSlotMountedVisualVersions(cellSlot, currentVisualVersions);
+	stampCellCtrlResolution(cellCtrl, cellSlot, { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions });
 }
 
 export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellDuringScrollRequest<TRowData>): void {
@@ -617,6 +624,9 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		});
 	const cellKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, col.field);
 	const snapshot = getFreshCellSnapshot(deps, node.id, col.field, ctx);
+	const isFocused = !!(ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field);
+	const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
+	const cellCtrl = attachCellCtrl(deps, request, isEditing, isFocused);
 
 	// Focus tab-index bookkeeping is independent of which presentation gets resolved below —
 	// it applies whenever this cell is the focused cell, regardless of content.
@@ -671,401 +681,14 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		cellKey,
 	});
 
-	// 3. Apply the resolved presentation, enqueue fidelity work, update mounted slot bookkeeping.
-	applyScrollCellPresentation(deps, request, presentation, rowVersion);
-}
-
-function applyScrollCellPresentation<TRowData>(
-	deps: RowCellBinderDeps<TRowData>,
-	request: BindCellDuringScrollRequest<TRowData>,
-	presentation: ScrollCellPresentation,
-	rowVersion: number
-): void {
-	const { cellSlot, node, rowIndex, colIndex, col, ctx, pooledRowId, left, right, width, isRowLoading } = request;
-
-	const stampMountedVersions = (source: CellDisplaySnapshot | import('./visualFreshness.js').VisualFreshness): void => {
-		cellSlot.lastMountedRowVersion = rowVersion;
-		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-		recordCellSlotMountedVisualVersions(cellSlot, source);
-	};
-
-	switch (presentation.kind) {
-		case 'checkbox-selector': {
-			if (presentation.markDirty) deps.markCellDirtyAfterScroll(cellSlot.element);
-			cellSlot.update(colIndex, col.field, rowIndex, node.id, left, right, width, presentation.className, 'custom', undefined, '', undefined);
-			cellSlot.lastMountedRowVersion = rowVersion;
-			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-			recordCellSlotMountedVisualVersions(cellSlot, {
-				insightVersion: ctx.insightVersion,
-				styleVersion: ctx.styleVersion,
-				loadingVersion: ctx.loadingVersion,
-				selectionVersion: ctx.selectionVersion,
-			});
-			return;
-		}
-
-		case 'buffered': {
-			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
-			const didWrite = cellSlot.update(
-				colIndex,
-				col.field,
-				rowIndex,
-				node.id,
-				left,
-				right,
-				width,
-				presentation.className,
-				presentation.contentMode,
-				undefined,
-				presentation.formattedValue,
-				presentation.portalKey
-			);
-			if (presentation.recordVersionsFrom) stampMountedVersions(presentation.recordVersionsFrom);
-			if (didWrite) deps.incrementCurrentScrollCellsWritten();
-			deps.incrementCellsBoundDuringScroll();
-			return;
-		}
-
-		case 'primitive': {
-			if (presentation.markDirty) deps.markCellDirtyAfterScroll(cellSlot.element);
-			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
-			const didWrite = cellSlot.update(
-				colIndex,
-				col.field,
-				rowIndex,
-				node.id,
-				left,
-				right,
-				width,
-				presentation.className,
-				presentation.contentMode,
-				undefined,
-				presentation.formattedValue,
-				undefined
-			);
-			if (presentation.recordVersionsFrom) stampMountedVersions(presentation.recordVersionsFrom);
-			if (didWrite) deps.incrementCurrentScrollCellsWritten();
-			deps.incrementCellsBoundDuringScroll();
-			return;
-		}
-
-		case 'freeze-live-portal': {
-			// Freeze: keep existing portal content visible during scroll without remounting it.
-			deps.cellRenderer.showPortalContent(cellSlot.element);
-			if (presentation.snapshotForCapture) {
-				applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
-			}
-			if (presentation.shouldMarkDirty) deps.markCellDirtyAfterScroll(cellSlot.element);
-
-			// scrollPresentation: 'html-snapshot' — the portal host has live committed React content right now.
-			// Capture its innerHTML into the HTML snapshot store so future impostor renders for this
-			// row can replay the styled HTML instead of falling back to plain text. React commits
-			// async, so this freeze moment is the only reliable place to read committed DOM content.
-			if (presentation.captureFrozenHtml && presentation.snapshotForCapture) {
-				const snapshot = presentation.snapshotForCapture;
-				const portalHost = deps.getCellPortalHost(cellSlot.element);
-				const html = portalHost?.innerHTML;
-				// `snapshot` (a CellDisplaySnapshot) already extends VisualFreshness — pass it directly
-				// as the freshness stamp rather than re-deriving it.
-				const existing = deps.engine.htmlScrollSnapshots.get(snapshot.rowId, snapshot.colField, snapshot);
-				if (html && html !== existing?.html) {
-					const capturedRowHeight = deps.engine.geometry?.rowHeights?.[rowIndex];
-					const capturedColWidth = ctx.plan?.colWidths?.[colIndex];
-					deps.engine.htmlScrollSnapshots.set(snapshot.rowId, snapshot.colField, html, snapshot, capturedRowHeight, capturedColWidth);
-				}
-			}
-
-			const didWrite = cellSlot.update(
-				colIndex,
-				col.field,
-				rowIndex,
-				node.id,
-				left,
-				right,
-				width,
-				presentation.className,
-				'portal',
-				undefined,
-				'',
-				presentation.portalCellKey
-			);
-			if (didWrite) deps.incrementCurrentScrollCellsWritten();
-			deps.incrementCellsBoundDuringScroll();
-			return;
-		}
-
-		case 'impostor-html': {
-			deps.incrementHtmlSnapshotHitsDuringScroll?.();
-			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-			deps.markCellDirtyAfterScroll(cellSlot.element);
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
-			// HTML snapshot path: inject the static clone of the last fidelity render into the
-			// portal host so the cell looks identical to its settled state during scroll. The host
-			// is inert — no React fiber, no event handlers — and the fidelity lane will replace it
-			// with the live portal on the next post-scroll pass.
-			const portalHost = deps.ensureCellPortalHost(cellSlot.element);
-			portalHost.innerHTML = presentation.frozenHtml;
-			deps.cellRenderer.showPortalContent(cellSlot.element);
-			const didWrite = cellSlot.update(
-				colIndex,
-				col.field,
-				rowIndex,
-				node.id,
-				left,
-				right,
-				width,
-				presentation.className,
-				'portal',
-				undefined,
-				'',
-				undefined
-			);
-			stampMountedVersions(presentation.recordVersionsFrom);
-			if (didWrite) deps.incrementCurrentScrollCellsWritten();
-			deps.incrementCellsBoundDuringScroll();
-			return;
-		}
-
-		case 'impostor-text': {
-			if (isHtmlSnapshotPresentation(col)) deps.incrementHtmlSnapshotMissesDuringScroll?.();
-			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-			deps.markCellDirtyAfterScroll(cellSlot.element);
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
-			const didWrite = cellSlot.update(
-				colIndex,
-				col.field,
-				rowIndex,
-				node.id,
-				left,
-				right,
-				width,
-				presentation.className,
-				presentation.contentMode,
-				undefined,
-				presentation.formattedValue,
-				undefined
-			);
-			stampMountedVersions(presentation.recordVersionsFrom);
-			if (didWrite) deps.incrementCurrentScrollCellsWritten();
-			deps.incrementCellsBoundDuringScroll();
-			return;
-		}
-
-		case 'text-impostor': {
-			deps.incrementTextImpostorUsesDuringScroll?.();
-			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-			deps.markCellDirtyAfterScroll(cellSlot.element);
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
-			const didWrite = cellSlot.update(
-				colIndex,
-				col.field,
-				rowIndex,
-				node.id,
-				left,
-				right,
-				width,
-				presentation.className,
-				presentation.contentMode,
-				undefined,
-				presentation.formattedValue,
-				undefined
-			);
-			cellSlot.lastMountedRowVersion = rowVersion;
-			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-			recordCellSlotMountedVisualVersions(cellSlot, presentation.recordVersions);
-			if (didWrite) deps.incrementCurrentScrollCellsWritten();
-			deps.incrementCellsBoundDuringScroll();
-			return;
-		}
-
-		case 'html-snapshot-pending': {
-			deps.incrementHtmlSnapshotMissesDuringScroll?.();
-			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-			deps.markCellDirtyAfterScroll(cellSlot.element);
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
-			const didWrite = cellSlot.update(
-				colIndex,
-				col.field,
-				rowIndex,
-				node.id,
-				left,
-				right,
-				width,
-				presentation.className,
-				'pending',
-				undefined,
-				'',
-				undefined
-			);
-			cellSlot.lastMountedRowVersion = rowVersion;
-			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-			recordCellSlotMountedVisualVersions(cellSlot, presentation.recordVersions);
-			if (didWrite) deps.incrementCurrentScrollCellsWritten();
-			deps.incrementCellsBoundDuringScroll();
-			return;
-		}
-
-		case 'impostor-synthetic': {
-			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-			deps.markCellDirtyAfterScroll(cellSlot.element);
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
-			const didWrite = cellSlot.update(
-				colIndex,
-				col.field,
-				rowIndex,
-				node.id,
-				left,
-				right,
-				width,
-				presentation.className,
-				presentation.contentMode,
-				undefined,
-				presentation.formattedValue,
-				undefined
-			);
-			cellSlot.lastMountedRowVersion = rowVersion;
-			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-			recordCellSlotMountedVisualVersions(cellSlot, presentation.recordVersions);
-			if (didWrite) deps.incrementCurrentScrollCellsWritten();
-			deps.incrementCellsBoundDuringScroll();
-			return;
-		}
-
-		case 'portal-frozen': {
-			deps.cellRenderer.showPortalContent(cellSlot.element);
-			if (presentation.keepVersionFresh) {
-				cellSlot.lastMountedRowVersion = rowVersion;
-				cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-			} else if (presentation.markDirty) {
-				deps.markCellDirtyAfterScroll(cellSlot.element);
-			}
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
-			const didWrite = cellSlot.update(
-				colIndex,
-				col.field,
-				rowIndex,
-				node.id,
-				left,
-				right,
-				width,
-				presentation.className,
-				'portal',
-				undefined,
-				'',
-				presentation.portalCellKey
-			);
-			if (presentation.recordVersionsFrom) stampMountedVersions(presentation.recordVersionsFrom);
-			if (didWrite) deps.incrementCurrentScrollCellsWritten();
-			deps.incrementCellsBoundDuringScroll();
-			return;
-		}
-
-		case 'force-live-interactive-exception': {
-			// The sole exception permitted to mount live during active scroll — see the type comment on
-			// ScrollCellPresentation. Counted separately from every other mount/portal metric on purpose:
-			// if this ever fires for a cell that isn't actively editing/focused, that's a regression, and
-			// folding it into a generic counter would hide it.
-			deps.incrementForceLiveMountsDuringScroll?.();
-			if (presentation.releasePriorPortal) deps.releaseCellPortal(cellSlot.element, undefined, 'scrolled-out');
-			deps.markCellDirtyAfterScroll(cellSlot.element);
-			const ensuredPortalHost = deps.ensureCellPortalHost(cellSlot.element);
-			deps.portalMountManager.mountCellImmediately({
-				cellKey: presentation.portalCellKey,
-				container: ensuredPortalHost,
-				value: getScrollMountValue(deps, node, col, cellSlot),
-				node,
-				col,
-				rowIndex,
-				colIndex,
-				rowSlotId: pooledRowId,
-				slotGeneration: request.pooledRowGeneration,
-				cellRowBindingGeneration: cellSlot.rowBindingGeneration,
-				cellInstanceId: cellSlot.cellInstanceId,
-				portalHostId: cellSlot.portalHostId,
-				isEditing: presentation.isEditing,
-				isLoading: isRowLoading,
-				// Honest phase/isScrolling: this mount genuinely happens mid-scroll (the sole force-live
-				// exception), unlike ordinary 'scroll'-phase mounts which never occur during active
-				// scroll. A renderer that special-cases scrolling deserves to know it's really scrolling.
-				phase: 'scroll-force-live',
-				isScrolling: true,
-				isFocused: presentation.isFocused,
-				isSelected: false,
-			});
-			cellSlot.lastMountedRowVersion = rowVersion;
-			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
-			const didWrite = cellSlot.update(
-				colIndex,
-				col.field,
-				rowIndex,
-				node.id,
-				left,
-				right,
-				width,
-				presentation.className,
-				'portal',
-				undefined,
-				'',
-				presentation.portalCellKey
-			);
-			if (presentation.recordVersionsFrom) stampMountedVersions(presentation.recordVersionsFrom);
-			if (didWrite) deps.incrementCurrentScrollCellsWritten();
-			deps.incrementCellsBoundDuringScroll();
-			return;
-		}
-
-		case 'live-mount': {
-			// scrollPresentation:'live' — mounts/updates the real renderer on every scroll frame this
-			// cell is bound. Expected to fire continuously for these columns; see incrementForceLive-
-			// MountsDuringScroll for the separate, rare freeze-mode interactive exception.
-			deps.incrementLiveReactMountsDuringScroll?.();
-			if (presentation.releasePriorPortal) deps.releaseCellPortal(cellSlot.element, undefined, 'scrolled-out');
-			deps.markCellDirtyAfterScroll(cellSlot.element);
-			const ensuredPortalHost = deps.ensureCellPortalHost(cellSlot.element);
-			deps.portalMountManager.mountCellImmediately({
-				cellKey: presentation.portalCellKey,
-				container: ensuredPortalHost,
-				value: getScrollMountValue(deps, node, col, cellSlot),
-				node,
-				col,
-				rowIndex,
-				colIndex,
-				rowSlotId: pooledRowId,
-				slotGeneration: request.pooledRowGeneration,
-				cellRowBindingGeneration: cellSlot.rowBindingGeneration,
-				cellInstanceId: cellSlot.cellInstanceId,
-				portalHostId: cellSlot.portalHostId,
-				isEditing: presentation.isEditing,
-				isLoading: isRowLoading,
-				phase: 'scroll-live',
-				isScrolling: true,
-				isFocused: presentation.isFocused,
-				isSelected: false,
-			});
-			cellSlot.lastMountedRowVersion = rowVersion;
-			cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
-			const didWrite = cellSlot.update(
-				colIndex,
-				col.field,
-				rowIndex,
-				node.id,
-				left,
-				right,
-				width,
-				presentation.className,
-				'portal',
-				undefined,
-				'',
-				presentation.portalCellKey
-			);
-			if (presentation.recordVersionsFrom) stampMountedVersions(presentation.recordVersionsFrom);
-			if (didWrite) deps.incrementCurrentScrollCellsWritten();
-			deps.incrementCellsBoundDuringScroll();
-			return;
-		}
-	}
+	// 3. Dispatch to the mode-specific binder — enqueues fidelity work, updates mounted slot bookkeeping.
+	dispatchCellPresentation(deps, request, presentation, rowVersion);
+	stampCellCtrlResolution(cellCtrl, cellSlot, {
+		rowVersion,
+		globalVersion: ctx.globalVersion,
+		insightVersion: ctx.insightVersion,
+		styleVersion: ctx.styleVersion,
+		loadingVersion: ctx.loadingVersion,
+		selectionVersion: ctx.selectionVersion,
+	});
 }

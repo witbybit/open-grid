@@ -70,7 +70,7 @@ function cleanup(grid: ReturnType<typeof mountWideGrid>): void {
 }
 
 describe('horizontal cell-slot retention pressure (bounded by cellSlotRetention.ts)', () => {
-	it('bounds cellsByColumnId per row slot even after scrolling through far more distinct columns than the bound', () => {
+	it('bounds cellsByColumnInstanceId per row slot even after scrolling through far more distinct columns than the bound', () => {
 		// 3000 columns at 100px each — far more than fit in any single horizontal window.
 		const totalCols = 3000;
 		const grid = mountWideGrid(30, totalCols);
@@ -80,7 +80,7 @@ describe('horizontal cell-slot retention pressure (bounded by cellSlotRetention.
 
 		const [firstSlot] = grid.renderer.rowRenderer.activeRows.values();
 		expect(firstSlot).toBeDefined();
-		const initialCellCount = firstSlot.cellsByColumnId.size;
+		const initialCellCount = firstSlot.cellsByColumnInstanceId.size;
 		expect(initialCellCount).toBeGreaterThan(0);
 		// Sanity: nowhere near the full column set is retained after initial mount.
 		expect(initialCellCount).toBeLessThan(totalCols / 2);
@@ -95,11 +95,11 @@ describe('horizontal cell-slot retention pressure (bounded by cellSlotRetention.
 		}
 
 		const [slotAfterScroll] = grid.renderer.rowRenderer.activeRows.values();
-		const cellCountAfterScroll = slotAfterScroll.cellsByColumnId.size;
+		const cellCountAfterScroll = slotAfterScroll.cellsByColumnInstanceId.size;
 
 		// Without eviction, 20 non-overlapping windows would have retained on the order of
 		// 20 * initialCellCount (100+) distinct CellSlot objects forever. cellSlotRetention.ts
-		// bounds cellsByColumnId to the currently-needed set (visible + approach-band + pinned +
+		// bounds cellsByColumnInstanceId to the currently-needed set (visible + approach-band + pinned +
 		// focused) plus a small LRU tail of recently-exited columns — never the full history.
 		const bound = CELL_SLOT_RETENTION_CONFIG.maxRetainedCenterCellsPerRowSlot + CELL_SLOT_RETENTION_CONFIG.maxRecentlyExitedColumnsPerRowSlot;
 		expect(cellCountAfterScroll).toBeLessThanOrEqual(bound);
@@ -117,7 +117,7 @@ describe('horizontal cell-slot retention pressure (bounded by cellSlotRetention.
 		const [slot] = grid.renderer.rowRenderer.activeRows.values();
 		expect(slot).toBeDefined();
 		// Viewport is 500px wide at 100px/col ⇒ ~5 visible columns, plus colBuffer on each side.
-		expect(slot.cellsByColumnId.size).toBeLessThan(20);
+		expect(slot.cellsByColumnInstanceId.size).toBeLessThan(20);
 		cleanup(grid);
 	});
 
@@ -126,9 +126,12 @@ describe('horizontal cell-slot retention pressure (bounded by cellSlotRetention.
 		const grid = mountWideGrid(30, totalCols, (store) => store.setPinnedColumns({ left: 1, right: 1 }));
 
 		const scrollViewport = grid.container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		const instanceIdOf = (field: string) => (grid.store.engine.columns.getColumnDef(field) as { instanceId: string } | undefined)?.instanceId;
+		const firstInstanceId = instanceIdOf('c0');
+		const lastInstanceId = instanceIdOf(`c${totalCols - 1}`);
 		const [slot] = grid.renderer.rowRenderer.activeRows.values();
-		expect(slot.cellsByColumnId.has('c0')).toBe(true); // pinned-left
-		expect(slot.cellsByColumnId.has(`c${totalCols - 1}`)).toBe(true); // pinned-right
+		expect(slot.cellsByColumnInstanceId.has(firstInstanceId as any)).toBe(true); // pinned-left
+		expect(slot.cellsByColumnInstanceId.has(lastInstanceId as any)).toBe(true); // pinned-right
 
 		// Scroll far enough, across enough distinct windows, to blow well past the retention
 		// budget for ordinary center columns.
@@ -139,8 +142,8 @@ describe('horizontal cell-slot retention pressure (bounded by cellSlotRetention.
 		}
 
 		const [slotAfterScroll] = grid.renderer.rowRenderer.activeRows.values();
-		expect(slotAfterScroll.cellsByColumnId.has('c0')).toBe(true);
-		expect(slotAfterScroll.cellsByColumnId.has(`c${totalCols - 1}`)).toBe(true);
+		expect(slotAfterScroll.cellsByColumnInstanceId.has(firstInstanceId as any)).toBe(true);
+		expect(slotAfterScroll.cellsByColumnInstanceId.has(lastInstanceId as any)).toBe(true);
 		// And they're still the correct physical cells for their pinned lane, not stale/recreated
 		// with the wrong identity.
 		expect(slotAfterScroll.leftCells[0]?.colField).toBe('c0');

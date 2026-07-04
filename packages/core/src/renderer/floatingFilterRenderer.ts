@@ -133,7 +133,7 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 
 		for (let c = 0; c < colCount; c++) {
 			const col = columns[c];
-			const placement = topology.byColumnId.get(col.field);
+			const placement = topology.byColumnId.get(col.instanceId);
 			if (!placement) continue;
 
 			const isPinLeft = placement.lane === 'left';

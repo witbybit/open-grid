@@ -12,8 +12,10 @@ export class HeaderRenderer<TRowData = unknown> {
 	private readonly columnInteractionsGetter: () => ColumnInteractionController<TRowData>;
 	private readonly showHeaderMenu: (cell: HTMLElement, colField: string) => void;
 
-	// Keyed by cell.id — leaf: column field; group: "grp:depth:firstField:lastField".
-	// Stable across pin/unpin so the DOM element is relocated rather than destroyed+recreated.
+	// Keyed by cell.id — leaf: the column's instance id (columnInstanceId, not field — stable across
+	// pin/unpin/reorder of an equivalent column, changes only if the column is semantically replaced);
+	// group: "grp:depth:firstField:lastField". Stable identity so the DOM element is relocated
+	// rather than destroyed+recreated.
 	private headerCells = new Map<string, HTMLDivElement>();
 	private headerLayer: HTMLDivElement | null = null;
 	private headerLeftLayer: HTMLDivElement | null = null;

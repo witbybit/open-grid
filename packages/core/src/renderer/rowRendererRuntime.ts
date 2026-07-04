@@ -443,7 +443,7 @@ export function bindFullWidthRow<TRowData>(args: RowRendererRuntimeArgs<TRowData
 		visualRow,
 		(s) => {
 			// Clear all data cells via reconcileTopology with an empty topology.
-			// This properly removes cells from cellsByColumnId and calls releaseFn on each.
+			// This properly removes cells from cellsByColumnInstanceId and calls releaseFn on each.
 			const pinLeftContainer = args.ensurePinnedContainer(s, 'left', 0);
 			const pinRightContainer = args.ensurePinnedContainer(s, 'right', 0);
 			reconcileTopology(s, EMPTY_TOPOLOGY, pinLeftContainer, 0, 0, pinRightContainer, [], args.initCell, args.releaseCellFn);

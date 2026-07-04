@@ -93,8 +93,8 @@ describe('RowSlot & CellSlot Controllers', () => {
 		const row = new RowSlot('row-1', rowEl);
 		const cellEl = document.createElement('div');
 		const cell = new CellSlot(cellEl);
-		cell.columnId = 'name';
-		row.cellsByColumnId.set('name', cell);
+		cell.columnInstanceId = 'name' as any;
+		row.cellsByColumnInstanceId.set('name' as any, cell);
 		row.centerCells.push(cell);
 		rowEl.appendChild(cellEl);
 
@@ -102,7 +102,7 @@ describe('RowSlot & CellSlot Controllers', () => {
 
 		expect(rowEl.style.visibility).toBe('hidden');
 		expect(cellEl.parentNode).toBe(rowEl);
-		expect(row.cellsByColumnId.get('name')).toBe(cell);
+		expect(row.cellsByColumnInstanceId.get('name' as any)).toBe(cell);
 	});
 
 	it('unbindHot() preserves warm row dataset mirrors for same-row rebound', () => {

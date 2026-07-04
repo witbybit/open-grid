@@ -1,5 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { CellRendererPhase, ColumnDef } from '../columnDef.js';
+import type { CellRendererPhase, ColumnDef, InternalColumnDef } from '../columnDef.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import type { CellRenderer } from './cellRenderer.js';
@@ -91,7 +91,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 			if (!columns[c].checkboxSelection) continue;
 			const cellSlot = slot.getCellForCol(c);
 			if (!cellSlot) continue;
-			const lane = columnTopology.byColumnId.get(columns[c].field)?.lane ?? 'center';
+			const lane = columnTopology.byColumnId.get((columns[c] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
 			deps.bindCellFull({
 				cellSlot,
 				slotId: slot.id,
@@ -122,7 +122,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 			if (colIndex < 0) continue;
 			const cellSlot = slot.getCellForCol(colIndex);
 			if (!cellSlot) continue;
-			const lane = columnTopology.byColumnId.get(colField)?.lane ?? 'center';
+			const lane = columnTopology.byColumnId.get((columns[colIndex] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
 			deps.bindCellFull({
 				cellSlot,
 				slotId: slot.id,
@@ -144,7 +144,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 	for (const colField of frame.columns) {
 		const colIndex = deps.engine.columns.getColumnIndex(colField);
 		if (colIndex < 0) continue;
-		const lane = columnTopology.byColumnId.get(colField)?.lane ?? 'center';
+		const lane = columnTopology.byColumnId.get((columns[colIndex] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
 		for (const [rowIndex, slot] of deps.activeRows) {
 			const row = rowModel.getVisualRow(rowIndex);
 			if (row?.kind !== 'data') continue;
@@ -259,7 +259,8 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 				const cellSlot = slot.getCellForCol(colIndex);
 				if (!cellSlot || cellSlot.element !== cell) continue;
 
-				const lane = columnTopology.byColumnId.get(columns[colIndex]?.field ?? '')?.lane ?? 'center';
+				const laneCol = columns[colIndex] as InternalColumnDef<TRowData> | undefined;
+				const lane = (laneCol ? columnTopology.byColumnId.get(laneCol.instanceId) : undefined)?.lane ?? 'center';
 				deps.bindCellFull({
 					cellSlot,
 					slotId: slot.id,

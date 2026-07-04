@@ -2,6 +2,7 @@ export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallbac
 
 import type { CellRendererHandle, CellPlacement } from './cellRendererHandle.js';
 import { isMountedCellVisuallyFresh } from './visualFreshness.js';
+import type { ColumnInstanceId } from '../columnDef.js';
 
 export interface CellSlotMountedVisualVersions {
 	insightVersion: number;
@@ -120,9 +121,11 @@ export class CellSlot<TRowData = unknown> {
 	/**
 	 * Stable column association. Set once by reconcileTopology when the cell is first
 	 * created for a column. Never changes across row rebinds or lane relocations —
-	 * this cell is permanently associated with this column field for its lifetime.
+	 * this cell is permanently associated with this column instance for its lifetime.
+	 * Renderer/topology lifecycle identity — see ColumnInstanceId. `colField` (below) mirrors the
+	 * display/DOM field name; this is the identity that decides cell reuse.
 	 */
-	public columnId = '';
+	public columnInstanceId: ColumnInstanceId | '' = '';
 	/**
 	 * Active renderer handle. Null when the cell is unbound or showing no content.
 	 * Set by the bind loop when content mode changes; destroy() is called on the

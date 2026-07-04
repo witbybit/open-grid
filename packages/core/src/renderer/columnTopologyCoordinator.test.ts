@@ -3,7 +3,7 @@ import { ColumnTopologyCoordinator, type ColumnTopologyDeltaTelemetrySink } from
 import type { CompiledGridPlan, InternalColumnDef } from '../columnDef.js';
 
 function makeCol(field: string, width = 100): InternalColumnDef<unknown> {
-	return { field, width } as unknown as InternalColumnDef<unknown>;
+	return { field, width, instanceId: field } as unknown as InternalColumnDef<unknown>;
 }
 
 function makePlan(cols: InternalColumnDef<unknown>[], pinLeftCount: number, pinRightCount: number, version: number): CompiledGridPlan<unknown> {
