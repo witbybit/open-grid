@@ -97,9 +97,6 @@ export interface RenderStats {
 		rowCtrlsEvicted: number;
 		cellCtrlsCreated: number;
 		cellCtrlsReused: number;
-		/** Reserved for the async stale-guard token (see controllers/controllerWorkToken.ts) — 0
-		 *  until that work lands; present now so consumers don't need a shape migration later. */
-		staleControllerWorkDiscarded: number;
 	};
 	getCellValueCallsDuringScroll?: number;
 	valueGetterCallsDuringScroll?: number;
@@ -210,7 +207,6 @@ export function createEmptyRenderStats(): RenderStats {
 			rowCtrlsEvicted: 0,
 			cellCtrlsCreated: 0,
 			cellCtrlsReused: 0,
-			staleControllerWorkDiscarded: 0,
 		},
 		getCellValueCallsDuringScroll: 0,
 		valueGetterCallsDuringScroll: 0,

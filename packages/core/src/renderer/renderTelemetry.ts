@@ -297,7 +297,6 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 			rowCtrlsEvicted: deps.engine.rowCtrls.stats.evicted,
 			cellCtrlsCreated: deps.engine.rowCtrls.stats.cellCtrlsCreated,
 			cellCtrlsReused: deps.engine.rowCtrls.stats.cellCtrlsReused,
-			staleControllerWorkDiscarded: 0,
 		},
 	};
 }
