@@ -2,6 +2,12 @@ import type { ColumnInstanceId } from '../../columnDef.js';
 import type { CellContentMode } from '../cellSlot.js';
 import type { VisualFreshness } from '../visualFreshness.js';
 
+export type CellControllerKey = string & { readonly __brand: 'CellControllerKey' };
+
+export function createCellControllerKey(rowId: string, columnInstanceId: ColumnInstanceId): CellControllerKey {
+	return `${rowId}::${columnInstanceId}` as CellControllerKey;
+}
+
 /**
  * Semantic identity + freshness for one logical (rowId, columnInstanceId) cell — independent of
  * which physical CellSlot currently renders it. Owns the bookkeeping the binder/resolver pipeline
@@ -13,6 +19,7 @@ import type { VisualFreshness } from '../visualFreshness.js';
  * existing VisualFreshness model and CellContentMode union rather than inventing new ones.
  */
 export interface CellCtrl {
+	readonly key: CellControllerKey;
 	readonly rowId: string;
 	readonly columnInstanceId: ColumnInstanceId;
 	/** Convenience denormalization — avoids a ColumnModel lookup on every hot-path read. */
@@ -46,6 +53,7 @@ export interface CellCtrl {
 
 export function createCellCtrl(rowId: string, columnInstanceId: ColumnInstanceId, field: string): CellCtrl {
 	return {
+		key: createCellControllerKey(rowId, columnInstanceId),
 		rowId,
 		columnInstanceId,
 		field,

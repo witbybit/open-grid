@@ -1,4 +1,4 @@
-import type { ColumnDef, CellRendererPhase } from '../columnDef.js';
+import { getColumnInstanceIdentity, type ColumnDef, type CellRendererPhase } from '../columnDef.js';
 import type { RowNode } from '../rowNode.js';
 import type { GridCellContentMount, GridCellContentUnmount, RendererLifecycleOperation } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
@@ -152,14 +152,15 @@ export class CustomRendererManager<TRowData = unknown> {
 	}
 
 	public getRendererKey(col: ColumnDef<TRowData>, rowId: string, rowIndex: number, colIndex: number, isEditing: boolean): string {
+		const columnInstanceId = getColumnInstanceIdentity(col);
 		if (isEditing) {
-			return createEditRendererKey(rowId, col.field);
+			return createEditRendererKey(rowId, columnInstanceId);
 		}
 		const pooledRow = (this.engine as any)?.rowRenderer?.activeRows.get(rowIndex);
 		if (pooledRow?.id) {
-			return createSlotRendererKey(pooledRow.id, col.field);
+			return createSlotRendererKey(pooledRow.id, columnInstanceId);
 		}
-		return createIndexRendererKey(rowIndex, colIndex, col.field);
+		return createIndexRendererKey(rowIndex, colIndex, columnInstanceId);
 	}
 
 	public acquire(params: AcquireRendererParams<TRowData>): RendererInstance<TRowData> {

@@ -2,6 +2,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import { createEditRendererKey, createCellInstanceRendererKey } from './identityKeys.js';
 import { reportRendererFault } from './rendererFaults.js';
 import type { CellRendererPhase, ColumnDef, ColumnInstanceId, GridCellClassParams, InternalColumnDef } from '../columnDef.js';
+import { getColumnInstanceIdentity } from '../columnDef.js';
 import type { GridCellPointer } from '../api/GridApi.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { InternalGridState } from '../state/GridState.js';
@@ -27,6 +28,9 @@ import { dispatchCellPresentation } from './binders/cellPresentationDispatcher.j
 import { buildCellPinClass, applyCellTitlesAndValidation } from './binders/binderShared.js';
 import { getOrCreateCellCtrl, createRowCtrl, type RowCtrl } from './controllers/RowCtrl.js';
 import type { CellCtrl } from './controllers/CellCtrl.js';
+import { CellCtrlStore } from './controllers/CellCtrlStore.js';
+
+const fallbackCellCtrlStores = new WeakMap<object, CellCtrlStore<any>>();
 
 function subtractNormalizedClassName(fullClassName: string, baseClassName: string): string {
 	const fullTokens = fullClassName.trim().split(/\s+/).filter(Boolean);
@@ -267,8 +271,16 @@ function attachCellCtrl<TRowData>(
 	// a real RowCtrlStore — a real GridEngine always has `rowCtrls` (see GridEngine.ts), so this only
 	// ever triggers in tests, producing a throwaway, unshared RowCtrl rather than crashing.
 	const rowCtrl = request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl<TRowData>(node.id);
-	const instanceId = (col as InternalColumnDef<TRowData>).instanceId;
-	const { cellCtrl, created } = getOrCreateCellCtrl(rowCtrl, col.field, instanceId);
+	const instanceId = getColumnInstanceIdentity(col);
+	const existingCellCtrlStore = deps.engine.rowCtrls?.cellCtrls ?? fallbackCellCtrlStores.get(rowCtrl as object);
+	const cellCtrlStore =
+		existingCellCtrlStore ??
+		(() => {
+			const store = new CellCtrlStore<TRowData>();
+			fallbackCellCtrlStores.set(rowCtrl as object, store);
+			return store;
+		})();
+	const { cellCtrl, created } = getOrCreateCellCtrl(rowCtrl, cellCtrlStore, col.field, instanceId);
 	if (deps.engine.rowCtrls) {
 		if (created) deps.engine.rowCtrls.stats.cellCtrlsCreated++;
 		else deps.engine.rowCtrls.stats.cellCtrlsReused++;
@@ -436,8 +448,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	}
 
 	const stableKey = access.isEditing
-		? createEditRendererKey(node.id, col.field)
-		: createCellInstanceRendererKey(cellSlot.cellInstanceId, col.field);
+		? createEditRendererKey(node.id, getColumnInstanceIdentity(col))
+		: createCellInstanceRendererKey(cellSlot.cellInstanceId, getColumnInstanceIdentity(col));
 	const scrollMode = plan.columnPlans[colIndex]?.mode;
 	let contentMode: CellContentMode = 'empty';
 	let formattedValue = '';
@@ -454,12 +466,15 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		const existingHost = deps.getCellPortalHost(cellSlot.element);
 		if (existingHost && existingHost.childElementCount > 0) {
 			deps.engine.htmlScrollSnapshots.set(
-				node.id,
-				col.field,
-				existingHost.innerHTML,
-				{ rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions },
-				deps.engine.geometry?.rowHeights?.[rowIndex],
-				plan.colWidths?.[colIndex]
+				deps.engine.htmlScrollSnapshots.createSnapshot({
+					rowId: node.id,
+					columnInstanceId: getColumnInstanceIdentity(col),
+					colField: col.field,
+					html: existingHost.innerHTML,
+					freshness: { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions },
+					rowHeight: deps.engine.geometry?.rowHeights?.[rowIndex],
+					colWidth: plan.colWidths?.[colIndex],
+				})
 			);
 		}
 	}
@@ -631,7 +646,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 				selectionVersion: ctx.selectionVersion,
 			},
 		});
-	const cellKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, col.field);
+	const cellKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, getColumnInstanceIdentity(col));
 	const snapshot = getFreshCellSnapshot(deps, node.id, col.field, ctx);
 	const isFocused = !!(ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field);
 	const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
@@ -669,8 +684,29 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		getRowHeight: (idx) => deps.engine.geometry?.rowHeights?.[idx],
 		getColWidth: (idx) => ctx.plan?.colWidths?.[idx],
 		getCheapDisplayValue: (rowId, colField) => deps.engine.getCheapDisplayValue?.(rowId, colField),
-		getFrozenHtmlSnapshot: (rowId, colField, expected, rowHeight, colWidth) =>
-			deps.engine.htmlScrollSnapshots?.get(rowId, colField, expected, { rowHeight, colWidth }),
+		getFrozenHtmlSnapshot: (rowId, columnInstanceId, expected, rowHeight, colWidth) => {
+			const store = deps.engine.htmlScrollSnapshots as
+				| {
+						getFresh?: (input: {
+							rowId: string;
+							columnInstanceId: ColumnInstanceId;
+							expectedFreshness: any;
+							rowHeight?: number;
+							colWidth?: number;
+							policy: 'visual';
+						}) => any;
+						get?: (
+							rowId: string,
+							columnInstanceId: ColumnInstanceId | string,
+							expected: any,
+							options?: { rowHeight?: number; colWidth?: number; mode?: 'visual' }
+						) => any;
+				  }
+				| undefined;
+			return store?.getFresh
+				? store.getFresh({ rowId, columnInstanceId, expectedFreshness: expected, rowHeight, colWidth, policy: 'visual' })
+				: store?.get?.(rowId, columnInstanceId, expected, { rowHeight, colWidth, mode: 'visual' });
+		},
 		getHtmlSnapshotDefaults: deps.getHtmlSnapshotDefaults,
 	};
 	const presentation = resolveScrollCellPresentation(scrollPresentationDeps, {

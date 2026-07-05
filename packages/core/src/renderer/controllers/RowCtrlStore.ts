@@ -1,4 +1,5 @@
 import { createRowCtrl, type RowCtrl } from './RowCtrl.js';
+import { CellCtrlStore } from './CellCtrlStore.js';
 
 export interface RowCtrlStoreStats {
 	created: number;
@@ -27,6 +28,7 @@ export interface RowCtrlStoreStats {
  */
 export class RowCtrlStore<TRowData = unknown> {
 	private readonly byRowId = new Map<string, RowCtrl<TRowData>>();
+	public readonly cellCtrls = new CellCtrlStore<TRowData>();
 	public stats: RowCtrlStoreStats = { created: 0, reused: 0, evicted: 0, cellCtrlsCreated: 0, cellCtrlsReused: 0 };
 
 	/** Resets all counters to zero — mirrors resetRenderTelemetry()'s Object.assign(stats,
@@ -55,6 +57,7 @@ export class RowCtrlStore<TRowData = unknown> {
 	 *  merely virtualized out of the render window (those stay warm; see class doc above). */
 	public delete(rowId: string): boolean {
 		const removed = this.byRowId.delete(rowId);
+		if (removed) this.cellCtrls.destroyRow(rowId);
 		if (removed) this.stats.evicted++;
 		return removed;
 	}
@@ -67,6 +70,7 @@ export class RowCtrlStore<TRowData = unknown> {
 		for (const rowId of this.byRowId.keys()) {
 			if (!liveRowIds.has(rowId)) {
 				this.byRowId.delete(rowId);
+				this.cellCtrls.destroyRow(rowId);
 				evicted++;
 			}
 		}
@@ -80,5 +84,6 @@ export class RowCtrlStore<TRowData = unknown> {
 
 	public clear(): void {
 		this.byRowId.clear();
+		this.cellCtrls.clear();
 	}
 }

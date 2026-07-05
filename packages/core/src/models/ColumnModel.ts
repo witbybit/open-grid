@@ -53,16 +53,15 @@ function isSameColumnInstance<TRowData>(
 }
 
 export class ColumnModel<TRowData = unknown> {
-	private columnMap = new Map<string, InternalColumnDef<TRowData>>();
+	private columnsByInstanceId = new Map<ColumnInstanceId, InternalColumnDef<TRowData>>();
+	private columnsByColId = new Map<string, InternalColumnDef<TRowData>>();
 	private displayedColumns: InternalColumnDef<TRowData>[] = [];
 	private valueGetterDependents = new Map<string, string[]>();
 	private indexMapper = new IndexMapper<ColumnInstanceId>();
-	/** Bridges the field-keyed public API surface (getColumnIndex(colField), etc.) to the
-	 *  instanceId-keyed IndexMapper. Rebuilt every updateColumns() call. */
-	private fieldToInstanceId = new Map<string, ColumnInstanceId>();
-	private instanceIdToField = new Map<ColumnInstanceId, string>();
+	private instanceIdsByField = new Map<string, ColumnInstanceId[]>();
+	private fieldByInstanceId = new Map<ColumnInstanceId, string>();
 	private defaultColWidth = 100;
-	private columnPlans = new Map<string, ColumnRenderPlan<TRowData>>();
+	private columnPlans = new Map<ColumnInstanceId, ColumnRenderPlan<TRowData>>();
 	private planVersion = 0;
 	private compiledPlan: CompiledGridPlan<TRowData> | null = null;
 	private compiledPlanPinLeft = -1;
@@ -75,16 +74,18 @@ export class ColumnModel<TRowData = unknown> {
 		if (defaultColWidth !== undefined) {
 			this.defaultColWidth = defaultColWidth;
 		}
-		const previousColumnMap = this.columnMap;
+		const previousColumnsByColId = this.columnsByColId;
 		const normalizedColumns = columns.map((column) => {
 			const normalized = this.normalizeColumn(column);
-			const prev = normalized.field ? previousColumnMap.get(normalized.field) : undefined;
+			const prevColId = normalized.colId ?? normalized.field;
+			const prev = prevColId ? previousColumnsByColId.get(prevColId) : undefined;
 			const instanceId = prev && isSameColumnInstance(prev, normalized) ? prev.instanceId : createColumnInstanceId();
 			return { ...normalized, instanceId } as InternalColumnDef<TRowData>;
 		});
-		this.columnMap = new Map();
-		this.fieldToInstanceId = new Map();
-		this.instanceIdToField = new Map();
+		this.columnsByInstanceId = new Map();
+		this.columnsByColId = new Map();
+		this.instanceIdsByField = new Map();
+		this.fieldByInstanceId = new Map();
 		this.valueGetterDependents.clear();
 		this.indexMapper.setIds(normalizedColumns.map((column) => column.instanceId));
 		for (const column of normalizedColumns) {
@@ -93,9 +94,12 @@ export class ColumnModel<TRowData = unknown> {
 
 		for (const col of normalizedColumns) {
 			if (col.field) {
-				this.columnMap.set(col.field, col);
-				this.fieldToInstanceId.set(col.field, col.instanceId);
-				this.instanceIdToField.set(col.instanceId, col.field);
+				this.columnsByInstanceId.set(col.instanceId, col);
+				this.columnsByColId.set(col.colId ?? col.field, col);
+				const idsForField = this.instanceIdsByField.get(col.field);
+				if (idsForField) idsForField.push(col.instanceId);
+				else this.instanceIdsByField.set(col.field, [col.instanceId]);
+				this.fieldByInstanceId.set(col.instanceId, col.field);
 				if (col.valueGetter && col.valueGetterDependencies) {
 					for (const dependency of col.valueGetterDependencies) {
 						const dependents = this.valueGetterDependents.get(dependency);
@@ -151,7 +155,7 @@ export class ColumnModel<TRowData = unknown> {
 					canUseCachedDisplayValue: hasValueGetter || hasFormulaSupport || !!col.cellRenderer,
 				};
 
-				this.columnPlans.set(col.field, plan);
+				this.columnPlans.set(col.instanceId, plan);
 			}
 		}
 		this.compiledPlan = null;
@@ -204,7 +208,7 @@ export class ColumnModel<TRowData = unknown> {
 		}
 
 		const displayedColumns = this.displayedColumns;
-		const columnPlans = displayedColumns.map((column) => this.columnPlans.get(column.field)!);
+		const columnPlans = displayedColumns.map((column) => this.columnPlans.get(column.instanceId)!);
 		const totalWidth = this.runtime.geometry.getTotalWidth(this.defaultColWidth);
 		const colLefts = this.runtime.geometry.colLefts.slice(0, displayedColumns.length);
 		const colWidths = this.runtime.geometry.colWidths.slice(0, displayedColumns.length);
@@ -214,7 +218,7 @@ export class ColumnModel<TRowData = unknown> {
 		const pinRightWidth = Math.max(0, totalWidth - pinRightBaseLeft);
 		const next: CompiledGridPlan<TRowData> = {
 			version: ++this.planVersion,
-			columns: Array.from(this.columnMap.values()),
+			columns: Array.from(this.columnsByInstanceId.values()),
 			displayedColumns,
 			columnPlans,
 			colFields: displayedColumns.map((column) => column.field),
@@ -248,7 +252,8 @@ export class ColumnModel<TRowData = unknown> {
 	}
 
 	public getColumnPlan(colField: string): ColumnRenderPlan<TRowData> | undefined {
-		return this.columnPlans.get(colField);
+		const instanceId = this.getColumnInstanceIdsByField(colField)[0];
+		return instanceId ? this.columnPlans.get(instanceId) : undefined;
 	}
 
 	public getColumnPlans(): ColumnRenderPlan<TRowData>[] {
@@ -256,17 +261,17 @@ export class ColumnModel<TRowData = unknown> {
 	}
 
 	public getColumnIndex(colField: string): number {
-		const instanceId = this.fieldToInstanceId.get(colField);
+		const instanceId = this.getColumnInstanceIdsByField(colField)[0];
 		return instanceId ? this.indexMapper.idToVisualIndex(instanceId) : -1;
 	}
 
 	public getColumnField(colIdx: number): string | null {
 		const instanceId = this.indexMapper.visualIndexToId(colIdx);
-		return instanceId ? (this.instanceIdToField.get(instanceId) ?? null) : null;
+		return instanceId ? (this.fieldByInstanceId.get(instanceId) ?? null) : null;
 	}
 
 	public getPhysicalColumnIndex(colField: string): number {
-		const instanceId = this.fieldToInstanceId.get(colField);
+		const instanceId = this.getColumnInstanceIdsByField(colField)[0];
 		return instanceId ? this.indexMapper.idToPhysicalIndex(instanceId) : -1;
 	}
 
@@ -275,7 +280,7 @@ export class ColumnModel<TRowData = unknown> {
 	}
 
 	public getColumnDef(colField: string): ColumnDef<TRowData> | undefined {
-		return this.columnMap.get(colField);
+		return this.getPrimaryColumnByField(colField);
 	}
 
 	public getDisplayedColumns(columns?: ColumnDef<TRowData>[]): ColumnDef<TRowData>[] {
@@ -294,7 +299,7 @@ export class ColumnModel<TRowData = unknown> {
 	}
 
 	public hasValueGetter(colField: string): boolean {
-		return !!this.columnMap.get(colField)?.valueGetter;
+		return !!this.getPrimaryColumnByField(colField)?.valueGetter;
 	}
 
 	public getValueGetterDependents(changedField: string): string[] {
@@ -311,5 +316,22 @@ export class ColumnModel<TRowData = unknown> {
 
 	public getTotalWidth(): number {
 		return this.runtime.geometry.getTotalWidth(this.defaultColWidth);
+	}
+
+	public getColumnByInstanceId(instanceId: ColumnInstanceId): InternalColumnDef<TRowData> | undefined {
+		return this.columnsByInstanceId.get(instanceId);
+	}
+
+	public getColumnByColId(colId: string): InternalColumnDef<TRowData> | undefined {
+		return this.columnsByColId.get(colId);
+	}
+
+	public getColumnInstanceIdsByField(field: string): ColumnInstanceId[] {
+		return this.instanceIdsByField.get(field) ?? [];
+	}
+
+	public getPrimaryColumnByField(field: string): InternalColumnDef<TRowData> | undefined {
+		const instanceId = this.getColumnInstanceIdsByField(field)[0];
+		return instanceId ? this.columnsByInstanceId.get(instanceId) : undefined;
 	}
 }

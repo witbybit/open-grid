@@ -2581,8 +2581,8 @@ describe('Column and row validation', () => {
 			expect(() => validateColumns([{ field: '' }])).toThrow('non-empty field');
 		});
 
-		it('throws on duplicate field', () => {
-			expect(() => validateColumns([{ field: 'id' }, { field: 'name' }, { field: 'id' }])).toThrow('duplicate column field "id"');
+		it('allows duplicate fields when renderer identity is carried by distinct column instances', () => {
+			expect(() => validateColumns([{ field: 'id' }, { field: 'name' }, { field: 'id' }])).not.toThrow();
 		});
 
 		it('throws on zero width', () => {
@@ -2626,18 +2626,18 @@ describe('Column and row validation', () => {
 	});
 
 	describe('GridStore validation integration', () => {
-		it('throws on construction with duplicate column fields', () => {
+		it('allows construction with duplicate column fields', () => {
 			expect(
 				() =>
 					new GridStore({
 						columns: [{ field: 'id' }, { field: 'id' }],
 					})
-			).toThrow('duplicate column field "id"');
+			).not.toThrow();
 		});
 
-		it('throws on setColumns() with duplicate fields', () => {
+		it('allows setColumns() with duplicate fields', () => {
 			const store = new GridStore({ columns: [{ field: 'id' }] });
-			expect(() => store.setColumns([{ field: 'name' }, { field: 'name' }])).toThrow('duplicate column field "name"');
+			expect(() => store.setColumns([{ field: 'name' }, { field: 'name' }])).not.toThrow();
 		});
 
 		it('accepts valid column updates via setColumns()', () => {

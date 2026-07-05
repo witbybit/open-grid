@@ -7,7 +7,7 @@ import type {
 	GridRowContentUnmount,
 } from './IGridRenderer.js';
 import type { InternalColumnDef, DomCellRenderer } from '../columnDef.js';
-import { isDomCellRenderer } from '../columnDef.js';
+import { getColumnInstanceIdentity, isDomCellRenderer } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
@@ -181,6 +181,7 @@ export class PortalMountManager<TRowData = unknown> {
 			cellRowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
 		});
 		const col = mount.col as InternalColumnDef<TRowData>;
+		const columnInstanceId = getColumnInstanceIdentity(col);
 		const isCustom = !!(col.cellRenderer || mount.isEditing);
 
 		this.engine?.instrumentation.increment(GridMetric.CELL_RENDERER_MOUNTED);
@@ -197,7 +198,9 @@ export class PortalMountManager<TRowData = unknown> {
 
 		// DOM renderer — zero React overhead, direct DOM manipulation
 		if (!mount.isEditing && isDomCellRenderer(col.cellRenderer)) {
-			const rendererKey = rowSlotId ? createDomSlotRendererKey(rowSlotId, col.field) : createDomIndexRendererKey(rowIndex, colIndex, col.field);
+			const rendererKey = rowSlotId
+				? createDomSlotRendererKey(rowSlotId, columnInstanceId)
+				: createDomIndexRendererKey(rowIndex, colIndex, columnInstanceId);
 
 			this.domCellRendererManager.acquire({
 				rendererKey,
@@ -218,11 +221,11 @@ export class PortalMountManager<TRowData = unknown> {
 
 		// React renderer — goes through portal store
 		const rendererKey = mount.isEditing
-			? createEditRendererKey(node.id, col.field)
+			? createEditRendererKey(node.id, columnInstanceId)
 			: mount.cellInstanceId
-				? createCellInstanceRendererKey(mount.cellInstanceId, col.field)
+				? createCellInstanceRendererKey(mount.cellInstanceId, columnInstanceId)
 				: rowSlotId
-					? createSlotRendererKey(rowSlotId, col.field)
+					? createSlotRendererKey(rowSlotId, columnInstanceId)
 					: this.customRendererManager.getRendererKey(col, node.id, rowIndex, colIndex, mount.isEditing);
 
 		this.customRendererManager.acquire({

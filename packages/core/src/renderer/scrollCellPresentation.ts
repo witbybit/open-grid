@@ -1,4 +1,4 @@
-import type { InternalColumnDef, ColumnDef } from '../columnDef.js';
+import { getColumnInstanceIdentity, type InternalColumnDef, type ColumnDef, type ColumnInstanceId } from '../columnDef.js';
 import type { RowNode } from '../rowNode.js';
 import { createEditRendererKey } from './identityKeys.js';
 import type { CellSlot, CellContentMode } from './cellSlot.js';
@@ -29,7 +29,7 @@ export interface ScrollCellPresentationDeps {
 	 *  row's data has changed since, or the row/column has been resized since capture. */
 	getFrozenHtmlSnapshot(
 		rowId: string,
-		colField: string,
+		columnInstanceId: ColumnInstanceId,
 		expected: VisualFreshness,
 		rowHeight: number | undefined,
 		colWidth: number | undefined
@@ -364,7 +364,7 @@ export function resolveScrollCellPresentation<TRowData>(
 	// rendererKind is 'portal' or 'loading' from here on — both go through the portal decision
 	// tree. A loading row with a custom-renderer column lets that renderer show its own loading
 	// state via portal mount (isLoading is threaded into the mount request below).
-	const portalCellKey = isEditing ? createEditRendererKey(node.id, col.field) : cellKey;
+	const portalCellKey = isEditing ? createEditRendererKey(node.id, getColumnInstanceIdentity(col)) : cellKey;
 	const scrollMode = compiledPlan?.mode;
 	const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
 	const isDomRenderer = scrollMode === 'custom-dom';
@@ -466,7 +466,7 @@ export function resolveScrollCellPresentation<TRowData>(
 		if (isHtmlSnapshotMode) {
 			const frozenHtml = deps.getFrozenHtmlSnapshot(
 				node.id,
-				col.field,
+				getColumnInstanceIdentity(col),
 				versionsFromCtx(),
 				deps.getRowHeight(rowIndex),
 				deps.getColWidth(colIndex)
@@ -528,7 +528,7 @@ export function resolveScrollCellPresentation<TRowData>(
 		if (isHtmlSnapshotMode) {
 			const frozenHtml = deps.getFrozenHtmlSnapshot(
 				node.id,
-				col.field,
+				getColumnInstanceIdentity(col),
 				versionsFromCtx(),
 				deps.getRowHeight(rowIndex),
 				deps.getColWidth(colIndex)

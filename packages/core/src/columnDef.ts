@@ -91,6 +91,7 @@ export interface CellRendererCapabilities {
 	/** Only valid for `scrollPresentation: 'html-snapshot'`. */
 	htmlSnapshot?: {
 		strict?: boolean;
+		freshness?: 'row-version-only' | 'visual';
 		allowShellWhenMissing?: boolean;
 		allowTextFallbackWhenMissing?: boolean;
 		invalidateOnWidthChange?: boolean;
@@ -287,6 +288,7 @@ export interface ValueFormatterParams<TRowData = unknown> {
 
 export interface ColumnDef<TRowData = unknown> {
 	field: string;
+	colId?: string;
 	header: string;
 	width?: number;
 	/** Named column type registered via `columnTypes` on the grid options. Resolved in the React layer. */
@@ -421,6 +423,12 @@ export interface InternalColumnDef<TRowData = unknown> extends ColumnDef<TRowDat
 	 *  ColumnDef. Stable across re-normalization of an equivalent column, minted fresh when a field
 	 *  is semantically replaced (different renderer/valueGetter) — see ColumnInstanceId. */
 	instanceId: ColumnInstanceId;
+}
+
+export function getColumnInstanceIdentity<TRowData = unknown>(
+	column: Pick<ColumnDef<TRowData>, 'field'> & Partial<Pick<InternalColumnDef<TRowData>, 'instanceId'>>
+): ColumnInstanceId {
+	return (column.instanceId ?? column.field) as ColumnInstanceId;
 }
 
 // ─── Style slots ──────────────────────────────────────────────────────────────
@@ -562,10 +570,6 @@ export function validateColumns<TRowData>(columns: ColumnDef<TRowData>[]): void 
 
 		if (!id) {
 			throw new Error('Open Grid: every column must have a non-empty field.');
-		}
-
-		if (seen.has(id)) {
-			throw new Error(`Open Grid: duplicate column field "${id}". Each column must have a unique field.`);
 		}
 
 		seen.add(id);

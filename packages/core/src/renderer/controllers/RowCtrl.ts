@@ -1,23 +1,14 @@
 import type { ColumnInstanceId } from '../../columnDef.js';
-import { createCellCtrl, type CellCtrl } from './CellCtrl.js';
+import { createCellCtrl, type CellControllerKey, type CellCtrl } from './CellCtrl.js';
+import { CellCtrlStore } from './CellCtrlStore.js';
 
-/**
- * Semantic identity for one logical row — independent of which physical RowSlot currently renders
- * it. Owns a per-row index of CellCtrl (keyed by field, since cell identity is only ever meaningful
- * in the context of its row — this deliberately avoids a second global cell-controller map to keep
- * in sync with RowCtrlStore).
- */
 export interface RowCtrl<TRowData = unknown> {
 	readonly rowId: string;
 	rowVersion: number;
-	/** RowSlot.id, when this row is currently mounted into a physical slot. Undefined when
-	 *  virtualized out — the RowCtrl itself survives virtualization (see RowCtrlStore). */
 	attachedSlotId: string | undefined;
-	/** Mirrors RowSlot.generation at last attach — reused stale-guard, not reinvented. */
 	attachedGeneration: number;
 	cells: Map<string, CellCtrl>;
-	/** True while any cell in this row is the active edit target. Consulted by vertical row-window
-	 *  retention so an editing row is never virtualized fully out of the render window. */
+	cellKeysByColumnInstanceId: Map<ColumnInstanceId, CellControllerKey>;
 	isEditing: boolean;
 	isFocused: boolean;
 }
@@ -29,23 +20,47 @@ export function createRowCtrl<TRowData = unknown>(rowId: string): RowCtrl<TRowDa
 		attachedSlotId: undefined,
 		attachedGeneration: -1,
 		cells: new Map(),
+		cellKeysByColumnInstanceId: new Map(),
 		isEditing: false,
 		isFocused: false,
 	};
 }
 
-/** Get-or-create the CellCtrl for (rowCtrl.rowId, columnInstanceId), keyed by field within the row. */
 export function getOrCreateCellCtrl<TRowData>(
 	rowCtrl: RowCtrl<TRowData>,
 	field: string,
 	columnInstanceId: ColumnInstanceId
+): { cellCtrl: CellCtrl; created: boolean };
+export function getOrCreateCellCtrl<TRowData>(
+	rowCtrl: RowCtrl<TRowData>,
+	cellCtrls: CellCtrlStore<TRowData>,
+	field: string,
+	columnInstanceId: ColumnInstanceId
+): { cellCtrl: CellCtrl; created: boolean };
+export function getOrCreateCellCtrl<TRowData>(
+	rowCtrl: RowCtrl<TRowData>,
+	second: string | CellCtrlStore<TRowData>,
+	third: string | ColumnInstanceId,
+	fourth?: ColumnInstanceId
 ): { cellCtrl: CellCtrl; created: boolean } {
+	const usingStore = typeof second !== 'string';
+	const cellCtrls = usingStore ? second : null;
+	const field = usingStore ? (third as string) : second;
+	const columnInstanceId = usingStore ? (fourth as ColumnInstanceId) : (third as ColumnInstanceId);
+
+	if (cellCtrls) {
+		const result = cellCtrls.getOrCreate(rowCtrl.rowId, columnInstanceId, field);
+		rowCtrl.cells.set(field, result.cellCtrl);
+		rowCtrl.cellKeysByColumnInstanceId.set(columnInstanceId, result.cellCtrl.key);
+		return result;
+	}
+
 	const existing = rowCtrl.cells.get(field);
 	if (existing && existing.columnInstanceId === columnInstanceId) {
 		return { cellCtrl: existing, created: false };
 	}
-	// Missing, or present under a stale (semantically-replaced) columnInstanceId — mint fresh.
 	const cellCtrl = createCellCtrl(rowCtrl.rowId, columnInstanceId, field);
 	rowCtrl.cells.set(field, cellCtrl);
+	rowCtrl.cellKeysByColumnInstanceId.set(columnInstanceId, cellCtrl.key);
 	return { cellCtrl, created: true };
 }

@@ -371,7 +371,13 @@ export class RowRenderer<TRowData = unknown> {
 		// Computed before the bind loop so RowCellBinderDeps.onLiveCellResolved (invoked from the
 		// live-mount binder case) has somewhere to record which cells actually resolved 'live' this
 		// frame. liveRows/liveCenterColumns start empty and are populated as the bind loop below runs.
-		this.currentViewportPlan = this.viewportPlanner.computePlan(nextWindow, columnTopology, retainedRowIndices);
+		this.currentViewportPlan = this.viewportPlanner.computePlan(
+			nextWindow,
+			columnTopology,
+			retainedRowIndices,
+			plan,
+			this.engine.rendererOptions
+		);
 
 		// ── Live-mode frame budget ────────────────────────────────────────────────────
 		// rendererOptions is immutable for the engine's lifetime, so reconfiguring every frame is

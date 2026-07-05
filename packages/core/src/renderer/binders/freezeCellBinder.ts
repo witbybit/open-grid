@@ -2,6 +2,7 @@ import { recordCellSlotMountedVisualVersions } from '../cellSlot.js';
 import type { RowCellBinderDeps, BindCellDuringScrollRequest } from '../rowCellBinder.js';
 import type { ScrollCellPresentation } from '../scrollCellPresentation.js';
 import { applyCellTitlesAndValidation, stampMountedVersions } from './binderShared.js';
+import { getColumnInstanceIdentity } from '../../columnDef.js';
 
 /**
  * scrollPresentation: 'freeze' — an existing live portal may remain visually frozen during scroll;
@@ -50,11 +51,33 @@ export function applyFreezeCellPresentation<TRowData>(
 				const html = portalHost?.innerHTML;
 				// `snapshot` (a CellDisplaySnapshot) already extends VisualFreshness — pass it directly
 				// as the freshness stamp rather than re-deriving it.
-				const existing = deps.engine.htmlScrollSnapshots.get(snapshot.rowId, snapshot.colField, snapshot);
+				const columnInstanceId = getColumnInstanceIdentity(col);
+				const existing = deps.engine.htmlScrollSnapshots.getFresh
+					? deps.engine.htmlScrollSnapshots.getFresh({
+							rowId: snapshot.rowId,
+							columnInstanceId,
+							expectedFreshness: snapshot,
+							policy: 'visual',
+						})
+					: deps.engine.htmlScrollSnapshots.get?.(snapshot.rowId, columnInstanceId, snapshot, { mode: 'visual' });
 				if (html && html !== existing?.html) {
 					const capturedRowHeight = deps.engine.geometry?.rowHeights?.[rowIndex];
 					const capturedColWidth = ctx.plan?.colWidths?.[colIndex];
-					deps.engine.htmlScrollSnapshots.set(snapshot.rowId, snapshot.colField, html, snapshot, capturedRowHeight, capturedColWidth);
+					if (deps.engine.htmlScrollSnapshots.createSnapshot) {
+						deps.engine.htmlScrollSnapshots.set(
+							deps.engine.htmlScrollSnapshots.createSnapshot({
+								rowId: snapshot.rowId,
+								columnInstanceId,
+								colField: snapshot.colField,
+								html,
+								freshness: snapshot,
+								rowHeight: capturedRowHeight,
+								colWidth: capturedColWidth,
+							})
+						);
+					} else {
+						deps.engine.htmlScrollSnapshots.set(snapshot.rowId, columnInstanceId, html, snapshot, capturedRowHeight, capturedColWidth);
+					}
 				}
 			}
 
