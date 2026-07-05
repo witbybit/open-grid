@@ -1,5 +1,6 @@
 import type { CellContentMode } from './cellSlot.js';
 import type { GridCellDecoration } from '../insights/insightTypes.js';
+import type { ColumnInstanceId } from '../columnDef.js';
 import type { VisualFreshness } from './visualFreshness.js';
 
 export type CellDisplayContentKind = CellContentMode | 'portal-live' | 'portal-frozen' | 'impostor';
@@ -11,6 +12,7 @@ export type CellDisplayContentKind = CellContentMode | 'portal-live' | 'portal-f
  */
 export interface CellDisplaySnapshot extends VisualFreshness {
 	rowId: string;
+	columnInstanceId: ColumnInstanceId;
 	colField: string;
 	baseClassName: string;
 	stateClassName: string;
@@ -73,6 +75,7 @@ export function joinCellSnapshotClassNameParts(...parts: Array<string | undefine
 
 export interface CreateCellDisplaySnapshotOptions extends VisualFreshness {
 	rowId: string;
+	columnInstanceId?: ColumnInstanceId;
 	colField: string;
 	baseClassName: string;
 	stateClassName?: string;
@@ -91,6 +94,7 @@ export function createCellDisplaySnapshot(options: CreateCellDisplaySnapshotOpti
 	const { className, classTokens } = joinCellSnapshotClassNameParts(baseClassName, stateClassName, decorationClassName);
 	return {
 		rowId: options.rowId,
+		columnInstanceId: options.columnInstanceId ?? (options.colField as ColumnInstanceId),
 		colField: options.colField,
 		rowVersion: options.rowVersion,
 		globalVersion: options.globalVersion,
@@ -111,23 +115,23 @@ export function createCellDisplaySnapshot(options: CreateCellDisplaySnapshotOpti
 	};
 }
 
-function buildCellSnapshotKey(rowId: string, colField: string): string {
-	return `${rowId}\0${colField}`;
+function buildCellSnapshotKey(rowId: string, columnInstanceId: ColumnInstanceId | string): string {
+	return `${rowId}\0${columnInstanceId}`;
 }
 
 export class CellDisplaySnapshotStore {
 	private readonly snapshots = new Map<string, CellDisplaySnapshot>();
 
-	public get(rowId: string, colField: string): CellDisplaySnapshot | undefined {
-		return this.snapshots.get(buildCellSnapshotKey(rowId, colField));
+	public get(rowId: string, columnInstanceId: ColumnInstanceId | string): CellDisplaySnapshot | undefined {
+		return this.snapshots.get(buildCellSnapshotKey(rowId, columnInstanceId));
 	}
 
 	public set(snapshot: CellDisplaySnapshot): void {
-		this.snapshots.set(buildCellSnapshotKey(snapshot.rowId, snapshot.colField), snapshot);
+		this.snapshots.set(buildCellSnapshotKey(snapshot.rowId, snapshot.columnInstanceId), snapshot);
 	}
 
-	public delete(rowId: string, colField: string): void {
-		this.snapshots.delete(buildCellSnapshotKey(rowId, colField));
+	public delete(rowId: string, columnInstanceId: ColumnInstanceId | string): void {
+		this.snapshots.delete(buildCellSnapshotKey(rowId, columnInstanceId));
 	}
 
 	public clear(): void {

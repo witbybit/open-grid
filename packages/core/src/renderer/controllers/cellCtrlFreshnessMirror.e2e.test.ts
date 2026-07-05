@@ -53,7 +53,9 @@ describe('CellCtrl.lastResolvedFreshness — mirrors CellSlot, not an independen
 
 		const rowCtrl = store.engine.rowCtrls.get('row-0');
 		expect(rowCtrl).toBeDefined();
-		const cellCtrl = rowCtrl!.cells.get('name');
+		const column = store.engine.columns.getPrimaryColumnByField('name');
+		expect(column).toBeDefined();
+		const cellCtrl = store.engine.rowCtrls.cellCtrls.getByRowAndColumn('row-0', column!.instanceId);
 		expect(cellCtrl).toBeDefined();
 		expect(cellCtrl!.lastResolvedFreshness).not.toBeUndefined();
 

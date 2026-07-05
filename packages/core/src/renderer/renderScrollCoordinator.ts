@@ -26,6 +26,7 @@ import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
 import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
+import { getColumnInstanceIdentity } from '../columnDef.js';
 
 function isCellSelected(rowIndex: number, colIndex: number, selectionBounds: GridCellRangeBounds | null | undefined): boolean {
 	return (
@@ -468,6 +469,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 					this.deps.engine.cellDisplaySnapshots.set(
 						createCellDisplaySnapshot({
 							rowId,
+							columnInstanceId: getColumnInstanceIdentity(col),
 							colField: col.field,
 							rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
 							globalVersion: state.globalVersion,
@@ -536,6 +538,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 					this.deps.engine.cellDisplaySnapshots.set(
 						createCellDisplaySnapshot({
 							rowId,
+							columnInstanceId: getColumnInstanceIdentity(col),
 							colField: col.field,
 							rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
 							globalVersion: state.globalVersion,
@@ -633,6 +636,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			this.deps.engine.cellDisplaySnapshots.set(
 				createCellDisplaySnapshot({
 					rowId,
+					columnInstanceId: getColumnInstanceIdentity(col),
 					colField: col.field,
 					rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
 					globalVersion: state.globalVersion,

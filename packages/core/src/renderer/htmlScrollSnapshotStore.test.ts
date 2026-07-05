@@ -12,10 +12,10 @@ describe('HtmlScrollSnapshotStore', () => {
 		expect(store.get('r1', 'name', freshness())).toBeUndefined();
 	});
 
-	it('returns the captured html when freshness matches (row-version-only mode by default)', () => {
+	it('returns the captured html when visual freshness matches by default', () => {
 		const store = new HtmlScrollSnapshotStore();
-		store.set('r1', 'name', '<span>hi</span>', freshness({ rowVersion: 1 }), 40, 100);
-		const result = store.get('r1', 'name', freshness({ rowVersion: 1 }));
+		store.set('r1', 'name', '<span>hi</span>', freshness({ rowVersion: 1, styleVersion: 2 }), 40, 100);
+		const result = store.get('r1', 'name', freshness({ rowVersion: 1, styleVersion: 2 }));
 		expect(result?.html).toBe('<span>hi</span>');
 		expect(result?.rowHeight).toBe(40);
 		expect(result?.colWidth).toBe(100);
@@ -30,16 +30,29 @@ describe('HtmlScrollSnapshotStore', () => {
 	it('row-version-only mode ignores other freshness dimensions by design', () => {
 		const store = new HtmlScrollSnapshotStore();
 		store.set('r1', 'name', '<span>hi</span>', freshness({ rowVersion: 1, globalVersion: 1, styleVersion: 0 }), 40, 100);
-		// globalVersion/styleVersion diverge wildly — must still hit, since only rowVersion is checked.
-		const result = store.get('r1', 'name', freshness({ rowVersion: 1, globalVersion: 999, styleVersion: 999 }));
+		const result = store.get('r1', 'name', freshness({ rowVersion: 1, globalVersion: 999, styleVersion: 999 }), {
+			mode: 'row-version-only',
+		});
 		expect(result?.html).toBe('<span>hi</span>');
 	});
 
-	it('full mode requires every freshness dimension to match', () => {
+	it('default visual mode rejects drift in every visual freshness dimension', () => {
 		const store = new HtmlScrollSnapshotStore();
-		store.set('r1', 'name', '<span>hi</span>', freshness({ rowVersion: 1, styleVersion: 2 }), 40, 100);
-		expect(store.get('r1', 'name', freshness({ rowVersion: 1, styleVersion: 2 }), { mode: 'full' })?.html).toBe('<span>hi</span>');
-		expect(store.get('r1', 'name', freshness({ rowVersion: 1, styleVersion: 3 }), { mode: 'full' })).toBeUndefined();
+		const captured = freshness({
+			rowVersion: 1,
+			globalVersion: 2,
+			insightVersion: 3,
+			styleVersion: 4,
+			loadingVersion: 5,
+			selectionVersion: 6,
+		});
+		store.set('r1', 'name', '<span>hi</span>', captured, 40, 100);
+		expect(store.get('r1', 'name', captured)?.html).toBe('<span>hi</span>');
+		expect(store.get('r1', 'name', freshness({ ...captured, globalVersion: 99 }))).toBeUndefined();
+		expect(store.get('r1', 'name', freshness({ ...captured, insightVersion: 99 }))).toBeUndefined();
+		expect(store.get('r1', 'name', freshness({ ...captured, styleVersion: 99 }))).toBeUndefined();
+		expect(store.get('r1', 'name', freshness({ ...captured, loadingVersion: 99 }))).toBeUndefined();
+		expect(store.get('r1', 'name', freshness({ ...captured, selectionVersion: 99 }))).toBeUndefined();
 	});
 
 	it('invalidates a capture when the row has been resized since', () => {
@@ -56,7 +69,7 @@ describe('HtmlScrollSnapshotStore', () => {
 		expect(store.get('r1', 'name', freshness(), { colWidth: 150 })).toBeUndefined();
 	});
 
-	it('does not invalidate on height/width when the captured dimension is unknown (undefined)', () => {
+	it('does not invalidate on height/width when the captured dimension is unknown', () => {
 		const store = new HtmlScrollSnapshotStore();
 		store.set('r1', 'name', '<span>hi</span>', freshness(), undefined, undefined);
 		expect(store.get('r1', 'name', freshness(), { rowHeight: 999, colWidth: 999 })?.html).toBe('<span>hi</span>');
@@ -108,12 +121,8 @@ describe('HtmlScrollSnapshotStore', () => {
 		const store = new HtmlScrollSnapshotStore(20);
 		store.set('r1', 'name', 'a'.repeat(10), freshness(), undefined, undefined);
 		store.set('r2', 'name', 'b'.repeat(10), freshness(), undefined, undefined);
-		// 20 bytes retained, at budget — no eviction yet. getStats() is read-only, unlike get(), so
-		// checking entry count here doesn't disturb LRU order.
 		expect(store.getStats().entries).toBe(2);
 		store.set('r3', 'name', 'c'.repeat(10), freshness(), undefined, undefined);
-		// Now 30 bytes would be retained — the oldest (r1, never touched since its initial set) must
-		// be evicted to get back under budget.
 		expect(store.get('r1', 'name', freshness())).toBeUndefined();
 		expect(store.get('r2', 'name', freshness())).toBeDefined();
 		expect(store.get('r3', 'name', freshness())).toBeDefined();
@@ -124,9 +133,9 @@ describe('HtmlScrollSnapshotStore', () => {
 		const store = new HtmlScrollSnapshotStore(20);
 		store.set('r1', 'name', 'a'.repeat(10), freshness(), undefined, undefined);
 		store.set('r2', 'name', 'b'.repeat(10), freshness(), undefined, undefined);
-		store.get('r1', 'name', freshness()); // touch r1 — now r2 is the least-recently-used
+		store.get('r1', 'name', freshness());
 		store.set('r3', 'name', 'c'.repeat(10), freshness(), undefined, undefined);
-		expect(store.get('r2', 'name', freshness())).toBeUndefined(); // evicted, not r1
+		expect(store.get('r2', 'name', freshness())).toBeUndefined();
 		expect(store.get('r1', 'name', freshness())).toBeDefined();
 		expect(store.get('r3', 'name', freshness())).toBeDefined();
 	});
@@ -135,9 +144,9 @@ describe('HtmlScrollSnapshotStore', () => {
 		const store = new HtmlScrollSnapshotStore(20);
 		store.set('r1', 'name', 'a'.repeat(10), freshness({ rowVersion: 1 }), undefined, undefined);
 		store.set('r2', 'name', 'b'.repeat(10), freshness(), undefined, undefined);
-		store.set('r1', 'name', 'a'.repeat(10), freshness({ rowVersion: 2 }), undefined, undefined); // refresh r1
+		store.set('r1', 'name', 'a'.repeat(10), freshness({ rowVersion: 2 }), undefined, undefined);
 		store.set('r3', 'name', 'c'.repeat(10), freshness(), undefined, undefined);
-		expect(store.get('r2', 'name', freshness())).toBeUndefined(); // evicted, not r1
+		expect(store.get('r2', 'name', freshness())).toBeUndefined();
 		expect(store.get('r1', 'name', freshness({ rowVersion: 2 }))).toBeDefined();
 		expect(store.get('r3', 'name', freshness())).toBeDefined();
 	});

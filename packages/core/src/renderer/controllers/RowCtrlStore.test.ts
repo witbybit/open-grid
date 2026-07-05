@@ -7,7 +7,7 @@ describe('RowCtrlStore', () => {
 		const store = new RowCtrlStore();
 		const ctrl = store.getOrCreate('r1');
 		expect(ctrl.rowId).toBe('r1');
-		expect(ctrl.cells.size).toBe(0);
+		expect(ctrl.cellKeysByColumnInstanceId.size).toBe(0);
 		expect(store.stats.created).toBe(1);
 	});
 
@@ -51,55 +51,56 @@ describe('RowCtrlStore', () => {
 		const store = new RowCtrlStore();
 		const ctrl = store.getOrCreate('r1');
 		ctrl.attachedSlotId = 'rsp-0';
-		// Simulate scrolling the row out of the render window — caller clears attachedSlotId but
-		// must NOT call delete() for a merely-virtualized row.
 		ctrl.attachedSlotId = undefined;
 		expect(store.get('r1')).toBe(ctrl);
 	});
 });
 
 describe('getOrCreateCellCtrl', () => {
-	it('creates a CellCtrl keyed by field within the row', () => {
+	it('creates a CellCtrl keyed by columnInstanceId within the row', () => {
 		const store = new RowCtrlStore();
 		const rowCtrl = store.getOrCreate('r1');
-		const { cellCtrl, created } = getOrCreateCellCtrl(rowCtrl, 'price', 'coli1' as any);
+		const { cellCtrl, created } = getOrCreateCellCtrl(rowCtrl, store.cellCtrls, 'coli1' as any, { colField: 'price' });
 		expect(created).toBe(true);
 		expect(cellCtrl.rowId).toBe('r1');
 		expect(cellCtrl.field).toBe('price');
 		expect(cellCtrl.columnInstanceId).toBe('coli1');
+		expect(rowCtrl.cellKeysByColumnInstanceId.get('coli1' as any)).toBe(cellCtrl.key);
 	});
 
 	it('reuses the same CellCtrl object across frames for the same (rowId, columnInstanceId)', () => {
 		const store = new RowCtrlStore();
 		const rowCtrl = store.getOrCreate('r1');
-		const first = getOrCreateCellCtrl(rowCtrl, 'price', 'coli1' as any);
-		const second = getOrCreateCellCtrl(rowCtrl, 'price', 'coli1' as any);
+		const first = getOrCreateCellCtrl(rowCtrl, store.cellCtrls, 'coli1' as any, { colField: 'price' });
+		const second = getOrCreateCellCtrl(rowCtrl, store.cellCtrls, 'coli1' as any, { colField: 'price' });
 		expect(second.cellCtrl).toBe(first.cellCtrl);
 		expect(second.created).toBe(false);
 	});
 
-	it('same field, different columnInstanceId (semantic replacement) — mints a fresh CellCtrl, does not reuse the stale one', () => {
+	it('same field, different columnInstanceId mints a fresh CellCtrl, does not reuse the stale one', () => {
 		const store = new RowCtrlStore();
 		const rowCtrl = store.getOrCreate('r1');
-		const before = getOrCreateCellCtrl(rowCtrl, 'price', 'coli1' as any);
+		const before = getOrCreateCellCtrl(rowCtrl, store.cellCtrls, 'coli1' as any, { colField: 'price' });
 		before.cellCtrl.lastResolvedContentMode = 'portal';
 
-		const after = getOrCreateCellCtrl(rowCtrl, 'price', 'coli2' as any);
+		const after = getOrCreateCellCtrl(rowCtrl, store.cellCtrls, 'coli2' as any, { colField: 'price' });
 		expect(after.created).toBe(true);
 		expect(after.cellCtrl).not.toBe(before.cellCtrl);
 		expect(after.cellCtrl.lastResolvedContentMode).toBeUndefined();
 		expect(after.cellCtrl.columnInstanceId).toBe('coli2');
+		expect(rowCtrl.cellKeysByColumnInstanceId.get('coli1' as any)).toBe(before.cellCtrl.key);
+		expect(rowCtrl.cellKeysByColumnInstanceId.get('coli2' as any)).toBe(after.cellCtrl.key);
 	});
 
 	it('row rebind: CellCtrls for the old row are not visible from the new RowCtrl at the same field', () => {
 		const store = new RowCtrlStore();
 		const rowA = store.getOrCreate('rowA');
-		getOrCreateCellCtrl(rowA, 'price', 'coli1' as any).cellCtrl.lastResolvedContentMode = 'text';
+		getOrCreateCellCtrl(rowA, store.cellCtrls, 'coli1' as any, { colField: 'price' }).cellCtrl.lastResolvedContentMode = 'text';
 
-		// A different logical row reuses the same physical slot conceptually, but RowCtrlStore keys
-		// by rowId, not slot — rowB's CellCtrl map starts empty regardless of rowA's state.
+		// A different logical row may reuse the same physical slot conceptually, but CellCtrlStore keys
+		// by rowId and columnInstanceId, not slot.
 		const rowB = store.getOrCreate('rowB');
-		const { cellCtrl, created } = getOrCreateCellCtrl(rowB, 'price', 'coli1' as any);
+		const { cellCtrl, created } = getOrCreateCellCtrl(rowB, store.cellCtrls, 'coli1' as any, { colField: 'price' });
 		expect(created).toBe(true);
 		expect(cellCtrl.lastResolvedContentMode).toBeUndefined();
 	});

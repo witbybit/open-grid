@@ -798,8 +798,9 @@ export class GridEngine<TRowData = unknown> {
 	public primeDisplayValue(rowId: string, colField: string): string | undefined {
 		return this.data.primeDisplayValue(rowId, colField);
 	}
-	public getCellDisplaySnapshot(rowId: string, colField: string): CellDisplaySnapshot | undefined {
-		return this.cellDisplaySnapshots.get(rowId, colField);
+	public getCellDisplaySnapshot(rowId: string, colFieldOrInstanceId: string): CellDisplaySnapshot | undefined {
+		const column = this.columns.getPrimaryColumnByField(colFieldOrInstanceId);
+		return this.cellDisplaySnapshots.get(rowId, column?.instanceId ?? colFieldOrInstanceId);
 	}
 	public getCheapDisplayValue(rowId: string, colField: string): string {
 		return this.data.getCheapDisplayValue(rowId, colField);

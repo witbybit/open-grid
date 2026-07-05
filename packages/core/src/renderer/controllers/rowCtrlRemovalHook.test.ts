@@ -23,7 +23,12 @@ describe('RowCtrlStore — row-removal hook wired into GridEngine', () => {
 		// Simulate a controller having attached RowCtrl/CellCtrl identity for r1 (as bindCellFull/
 		// bindCellDuringScroll would during a real render pass).
 		const rowCtrl = store.engine.rowCtrls.getOrCreate('r1');
-		rowCtrl.cells.set('name', { rowId: 'r1', columnInstanceId: 'x' as any, field: 'name' } as any);
+		const cellCtrl = store.engine.rowCtrls.cellCtrls.getOrCreate({
+			rowId: 'r1',
+			columnInstanceId: 'x' as any,
+			colField: 'name',
+		}).cellCtrl;
+		rowCtrl.cellKeysByColumnInstanceId.set('x' as any, cellCtrl.key);
 		expect(store.engine.rowCtrls.get('r1')).toBeDefined();
 
 		store.applyTransaction({ remove: [{ id: 'r1', name: 'A' }] });

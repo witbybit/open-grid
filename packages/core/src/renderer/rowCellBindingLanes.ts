@@ -1,5 +1,6 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { CellRendererPhase, ColumnDef, ColumnInstanceId, InternalColumnDef } from '../columnDef.js';
+import { getColumnInstanceIdentity } from '../columnDef.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import { CellSlot, recordCellSlotMountedVisualVersions } from './cellSlot.js';
@@ -709,6 +710,7 @@ export function bindAllLoadingCells<TRowData>(deps: RowCellBindingLaneDeps<TRowD
 		deps.engine.cellDisplaySnapshots.set(
 			createCellDisplaySnapshot({
 				rowId,
+				columnInstanceId: getColumnInstanceIdentity(col),
 				colField: col.field,
 				rowVersion: -1,
 				globalVersion,

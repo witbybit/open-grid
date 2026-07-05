@@ -1,4 +1,4 @@
-import type { ColumnInstanceId } from '../../columnDef.js';
+import type { CellScrollPresentation, ColumnInstanceId } from '../../columnDef.js';
 import type { CellContentMode } from '../cellSlot.js';
 import type { VisualFreshness } from '../visualFreshness.js';
 
@@ -8,55 +8,145 @@ export function createCellControllerKey(rowId: string, columnInstanceId: ColumnI
 	return `${rowId}::${columnInstanceId}` as CellControllerKey;
 }
 
-/**
- * Semantic identity + freshness for one logical (rowId, columnInstanceId) cell — independent of
- * which physical CellSlot currently renders it. Owns the bookkeeping the binder/resolver pipeline
- * needs to reason about identity and staleness; owns none of the DOM.
- *
- * Deliberately does NOT replace resolveScrollCellPresentation's decision tree (see
- * scrollCellPresentation.ts) — this is populated by an attach/reuse step that runs alongside the
- * existing resolver, not instead of it. `lastResolvedFreshness`/`lastResolvedContentMode` reuse the
- * existing VisualFreshness model and CellContentMode union rather than inventing new ones.
- */
+export interface ControllerWorkToken {
+	epoch: number;
+	cellControllerKey: CellControllerKey;
+	rowId: string;
+	columnInstanceId: ColumnInstanceId;
+	freshness: VisualFreshness;
+}
+
+export function isControllerWorkStillValid(input: {
+	token: ControllerWorkToken;
+	cellCtrl: CellCtrl | undefined;
+	attachedSlotInstanceId?: string;
+}): boolean {
+	const { token, cellCtrl, attachedSlotInstanceId } = input;
+	if (!cellCtrl || cellCtrl.lifecycle.destroyed || cellCtrl.lifecycle.stale) return false;
+	if (cellCtrl.key !== token.cellControllerKey) return false;
+	if (cellCtrl.rowId !== token.rowId || cellCtrl.columnInstanceId !== token.columnInstanceId) return false;
+	if (attachedSlotInstanceId !== undefined && cellCtrl.lifecycle.attachedSlotInstanceId !== attachedSlotInstanceId) return false;
+	return true;
+}
+
 export interface CellCtrl {
 	readonly key: CellControllerKey;
 	readonly rowId: string;
+	rowIndex: number;
+	rowCtrlKey: string;
 	readonly columnInstanceId: ColumnInstanceId;
-	/** Convenience denormalization — avoids a ColumnModel lookup on every hot-path read. */
+	readonly colId: string;
 	readonly field: string;
+	readonly colField: string;
+	colIndex: number;
+	scrollPresentation: CellScrollPresentation;
+	freshness: VisualFreshness | undefined;
 
-	/** Freshness this controller's presentation was last resolved against. Compared via
-	 *  isVisualFresh (visualFreshness.ts) — no new freshness model invented. */
+	valueState: {
+		value: unknown;
+		formattedValue: string;
+		displayText: string;
+		loading: boolean;
+		empty: boolean;
+	};
+
+	visualState: {
+		className: string;
+		title?: string | null;
+		validationError?: string;
+		selected: boolean;
+		focused: boolean;
+		editing: boolean;
+		readOnly: boolean;
+		diff?: unknown;
+		conflict?: unknown;
+		quality?: unknown;
+	};
+
+	rendererState: {
+		mode: 'none' | 'primitive' | 'live' | 'frozen' | 'text-impostor' | 'html-snapshot' | 'html-pending' | 'shell' | 'loading';
+		portalKey?: string;
+		htmlSnapshotKey?: string;
+		mountedSlotInstanceId?: string;
+		mountedHost?: HTMLElement;
+		mountedFreshness?: VisualFreshness;
+		pendingWorkToken?: ControllerWorkToken;
+		lastCommitEpoch?: number;
+		lastBindEpoch?: number;
+	};
+
+	lifecycle: {
+		retainedBecause?: string;
+		attachedSlotInstanceId?: string;
+		destroyed: boolean;
+		stale: boolean;
+	};
+
 	lastResolvedFreshness: VisualFreshness | undefined;
-
-	/** Which physical CellSlot (by CellSlot.cellInstanceId) is currently rendering this logical
-	 *  cell. Undefined when virtualized out. Read-only pointer — CellCtrl does not own CellSlot
-	 *  lifecycle (RowSlot/RowSlotPool do); this exists so a re-attach can find its own prior state. */
 	attachedSlotInstanceId: string | undefined;
-
-	/** Mirrors CellSlot.rowBindingGeneration at last attach — reuses the existing generation-counter
-	 *  stale-guard (see cellSlot.ts, portalMountManager.ts's isSamePhysicalIdentity) rather than
-	 *  inventing a second one. A deferred async op capturing this value can compare it later to
-	 *  detect the slot was recycled to a different row in between. */
 	attachedRowBindingGeneration: number;
-
-	/** Last resolved ScrollCellPresentation's effective content mode — for controller-reuse tests
-	 *  and telemetry. Not a cache of the full presentation object; that stays cheap to recompute. */
 	lastResolvedContentMode: CellContentMode | undefined;
-
-	/** Mirrors the same ctx.activeEdit / ctx.focusedCell checks the binder already performs —
-	 *  denormalized here so vertical row retention and future dispatch logic don't need the full
-	 *  ScrollRenderContext threaded through them. */
 	isEditing: boolean;
 	isFocused: boolean;
 }
 
-export function createCellCtrl(rowId: string, columnInstanceId: ColumnInstanceId, field: string): CellCtrl {
+export interface CreateCellCtrlInput {
+	rowId: string;
+	rowIndex?: number;
+	rowCtrlKey?: string;
+	columnInstanceId: ColumnInstanceId;
+	colId?: string;
+	colField: string;
+	colIndex?: number;
+	scrollPresentation?: CellScrollPresentation;
+	freshness?: VisualFreshness;
+}
+
+export function createCellCtrl(input: CreateCellCtrlInput): CellCtrl;
+export function createCellCtrl(rowId: string, columnInstanceId: ColumnInstanceId, field: string): CellCtrl;
+export function createCellCtrl(inputOrRowId: CreateCellCtrlInput | string, columnInstanceIdArg?: ColumnInstanceId, fieldArg?: string): CellCtrl {
+	const input =
+		typeof inputOrRowId === 'string'
+			? {
+					rowId: inputOrRowId,
+					columnInstanceId: columnInstanceIdArg!,
+					colField: fieldArg!,
+				}
+			: inputOrRowId;
 	return {
-		key: createCellControllerKey(rowId, columnInstanceId),
-		rowId,
-		columnInstanceId,
-		field,
+		key: createCellControllerKey(input.rowId, input.columnInstanceId),
+		rowId: input.rowId,
+		rowIndex: input.rowIndex ?? -1,
+		rowCtrlKey: input.rowCtrlKey ?? input.rowId,
+		columnInstanceId: input.columnInstanceId,
+		colId: input.colId ?? input.colField,
+		field: input.colField,
+		colField: input.colField,
+		colIndex: input.colIndex ?? -1,
+		scrollPresentation: input.scrollPresentation ?? 'primitive',
+		freshness: input.freshness,
+		valueState: {
+			value: undefined,
+			formattedValue: '',
+			displayText: '',
+			loading: false,
+			empty: true,
+		},
+		visualState: {
+			className: '',
+			title: null,
+			selected: false,
+			focused: false,
+			editing: false,
+			readOnly: false,
+		},
+		rendererState: {
+			mode: 'none',
+		},
+		lifecycle: {
+			destroyed: false,
+			stale: false,
+		},
 		lastResolvedFreshness: undefined,
 		attachedSlotInstanceId: undefined,
 		attachedRowBindingGeneration: -1,

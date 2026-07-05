@@ -23,7 +23,7 @@ import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, type CellDisplaySnapshot } from './cellDisplaySnapshot.js';
 import { isVisualFresh, mountedCellFreshness } from './visualFreshness.js';
 import { resolveScrollCellPresentation, type ScrollCellPresentationDeps } from './scrollCellPresentation.js';
-import { isHtmlSnapshotPresentation, isTextImpostorPresentation } from './scrollPresentationMode.js';
+import { getCellScrollPresentation, isHtmlSnapshotPresentation, isTextImpostorPresentation } from './scrollPresentationMode.js';
 import { dispatchCellPresentation } from './binders/cellPresentationDispatcher.js';
 import { buildCellPinClass, applyCellTitlesAndValidation } from './binders/binderShared.js';
 import { getOrCreateCellCtrl, createRowCtrl, type RowCtrl } from './controllers/RowCtrl.js';
@@ -42,14 +42,15 @@ function subtractNormalizedClassName(fullClassName: string, baseClassName: strin
 function getFreshCellSnapshot<TRowData>(
 	deps: RowCellBinderDeps<TRowData>,
 	rowId: string,
-	colField: string,
+	col: ColumnDef<TRowData>,
 	ctx?: ScrollRenderContext<TRowData>
 ): CellDisplaySnapshot | undefined {
 	const snapshotLookup = deps.engine as GridEngine<TRowData> & {
-		getCellDisplaySnapshot?: (rowId: string, colField: string) => CellDisplaySnapshot | undefined;
-		cellDisplaySnapshots?: { get: (rowId: string, colField: string) => CellDisplaySnapshot | undefined };
+		getCellDisplaySnapshot?: (rowId: string, columnInstanceId: ColumnInstanceId | string) => CellDisplaySnapshot | undefined;
+		cellDisplaySnapshots?: { get: (rowId: string, columnInstanceId: ColumnInstanceId | string) => CellDisplaySnapshot | undefined };
 	};
-	const snapshot = snapshotLookup.getCellDisplaySnapshot?.(rowId, colField) ?? snapshotLookup.cellDisplaySnapshots?.get(rowId, colField);
+	const snapshotKey = getColumnInstanceIdentity(col);
+	const snapshot = snapshotLookup.getCellDisplaySnapshot?.(rowId, snapshotKey) ?? snapshotLookup.cellDisplaySnapshots?.get(rowId, snapshotKey);
 	if (!snapshot || !ctx) return snapshot;
 	const currentRowVersion = ctx.rowVersions?.get(rowId) ?? -1;
 	const isFresh = isVisualFresh(snapshot, {
@@ -262,7 +263,14 @@ function assignRendererHandle<TRowData>(cellSlot: CellSlot<TRowData>, contentMod
  */
 function attachCellCtrl<TRowData>(
 	deps: RowCellBinderDeps<TRowData>,
-	request: { cellSlot: CellSlot<TRowData>; node: RowNode<TRowData>; col: ColumnDef<TRowData>; rowCtrl?: RowCtrl<TRowData> },
+	request: {
+		cellSlot: CellSlot<TRowData>;
+		node: RowNode<TRowData>;
+		col: ColumnDef<TRowData>;
+		rowCtrl?: RowCtrl<TRowData>;
+		rowIndex?: number;
+		colIndex?: number;
+	},
 	isEditing: boolean,
 	isFocused: boolean
 ): CellCtrl {
@@ -280,15 +288,25 @@ function attachCellCtrl<TRowData>(
 			fallbackCellCtrlStores.set(rowCtrl as object, store);
 			return store;
 		})();
-	const { cellCtrl, created } = getOrCreateCellCtrl(rowCtrl, cellCtrlStore, col.field, instanceId);
+	const { cellCtrl, created } = getOrCreateCellCtrl(rowCtrl, cellCtrlStore, instanceId, {
+		rowIndex: request.rowIndex,
+		rowCtrlKey: rowCtrl.rowId,
+		colId: col.colId ?? col.field,
+		colField: col.field,
+		colIndex: request.colIndex,
+		scrollPresentation: getCellScrollPresentation(col as InternalColumnDef<TRowData>),
+	});
 	if (deps.engine.rowCtrls) {
 		if (created) deps.engine.rowCtrls.stats.cellCtrlsCreated++;
 		else deps.engine.rowCtrls.stats.cellCtrlsReused++;
 	}
 	cellCtrl.attachedSlotInstanceId = cellSlot.cellInstanceId;
+	cellCtrl.lifecycle.attachedSlotInstanceId = cellSlot.cellInstanceId;
 	cellCtrl.attachedRowBindingGeneration = cellSlot.rowBindingGeneration;
 	cellCtrl.isEditing = isEditing;
 	cellCtrl.isFocused = isFocused;
+	cellCtrl.visualState.editing = isEditing;
+	cellCtrl.visualState.focused = isFocused;
 	if (isEditing) rowCtrl.isEditing = true;
 	if (isFocused) rowCtrl.isFocused = true;
 	return cellCtrl;
@@ -306,6 +324,31 @@ function attachCellCtrl<TRowData>(
 function stampCellCtrlResolution<TRowData>(cellCtrl: CellCtrl, cellSlot: CellSlot<TRowData>): void {
 	cellCtrl.lastResolvedFreshness = mountedCellFreshness(cellSlot);
 	cellCtrl.lastResolvedContentMode = cellSlot.lastContentMode;
+	cellCtrl.freshness = cellCtrl.lastResolvedFreshness;
+	cellCtrl.valueState.formattedValue = cellSlot.lastFormattedValue ?? '';
+	cellCtrl.valueState.displayText = cellSlot.lastFormattedValue ?? '';
+	cellCtrl.valueState.empty = !cellSlot.lastFormattedValue;
+	cellCtrl.visualState.className = cellSlot.lastClassName ?? '';
+	cellCtrl.rendererState.mode =
+		cellSlot.lastContentMode === 'portal'
+			? cellCtrl.scrollPresentation === 'live'
+				? 'live'
+				: cellCtrl.scrollPresentation === 'html-snapshot'
+					? 'html-snapshot'
+					: 'frozen'
+			: cellSlot.lastContentMode === 'loading'
+				? 'loading'
+				: cellSlot.lastContentMode === 'pending'
+					? 'html-pending'
+					: cellSlot.lastContentMode === 'fallback'
+						? 'text-impostor'
+						: cellSlot.lastContentMode === 'text'
+							? 'primitive'
+							: 'none';
+	cellCtrl.rendererState.portalKey = cellSlot.lastPortalKey;
+	cellCtrl.rendererState.mountedSlotInstanceId = cellSlot.cellInstanceId;
+	cellCtrl.rendererState.mountedFreshness = cellCtrl.lastResolvedFreshness;
+	cellCtrl.rendererState.lastBindEpoch = (cellCtrl.rendererState.lastBindEpoch ?? 0) + 1;
 }
 
 export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellFullRequest<TRowData>): void {
@@ -579,6 +622,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	deps.engine.cellDisplaySnapshots.set(
 		createCellDisplaySnapshot({
 			rowId: node.id,
+			columnInstanceId: getColumnInstanceIdentity(col),
 			colField: col.field,
 			rowVersion,
 			globalVersion: state.globalVersion,
@@ -647,7 +691,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			},
 		});
 	const cellKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, getColumnInstanceIdentity(col));
-	const snapshot = getFreshCellSnapshot(deps, node.id, col.field, ctx);
+	const snapshot = getFreshCellSnapshot(deps, node.id, col, ctx);
 	const isFocused = !!(ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field);
 	const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
 	const cellCtrl = attachCellCtrl(deps, request, isEditing, isFocused);

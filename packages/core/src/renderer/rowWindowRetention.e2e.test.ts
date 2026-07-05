@@ -63,7 +63,9 @@ describe('vertical focus/edit row retention — end to end', () => {
 
 		const rowCtrlBefore = grid.store.engine.rowCtrls.get('row-5');
 		expect(rowCtrlBefore).toBeDefined();
-		const cellCtrlBefore = rowCtrlBefore!.cells.get('name');
+		const column = grid.store.engine.columns.getPrimaryColumnByField('name');
+		expect(column).toBeDefined();
+		const cellCtrlBefore = grid.store.engine.rowCtrls.cellCtrls.getByRowAndColumn('row-5', column!.instanceId);
 		expect(cellCtrlBefore).toBeDefined();
 
 		// Scroll far enough that row-5 falls well outside the normal render window.
@@ -85,7 +87,7 @@ describe('vertical focus/edit row retention — end to end', () => {
 
 		const rowCtrlAfter = grid.store.engine.rowCtrls.get('row-5');
 		expect(rowCtrlAfter).toBe(rowCtrlBefore);
-		const cellCtrlAfter = rowCtrlAfter!.cells.get('name');
+		const cellCtrlAfter = grid.store.engine.rowCtrls.cellCtrls.getByRowAndColumn('row-5', column!.instanceId);
 		expect(cellCtrlAfter).toBe(cellCtrlBefore);
 
 		cleanup(grid);

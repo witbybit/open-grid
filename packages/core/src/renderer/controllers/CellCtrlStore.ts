@@ -1,5 +1,5 @@
 import type { ColumnInstanceId } from '../../columnDef.js';
-import { createCellControllerKey, createCellCtrl, type CellControllerKey, type CellCtrl } from './CellCtrl.js';
+import { createCellControllerKey, createCellCtrl, type CellControllerKey, type CellCtrl, type CreateCellCtrlInput } from './CellCtrl.js';
 
 export class CellCtrlStore<TRowData = unknown> {
 	private readonly byKey = new Map<CellControllerKey, CellCtrl>();
@@ -14,11 +14,33 @@ export class CellCtrlStore<TRowData = unknown> {
 		return this.byKey.get(createCellControllerKey(rowId, columnInstanceId));
 	}
 
-	public getOrCreate(rowId: string, columnInstanceId: ColumnInstanceId, field: string): { cellCtrl: CellCtrl; created: boolean } {
+	public getOrCreate(input: CreateCellCtrlInput): { cellCtrl: CellCtrl; created: boolean };
+	public getOrCreate(rowId: string, columnInstanceId: ColumnInstanceId, field: string): { cellCtrl: CellCtrl; created: boolean };
+	public getOrCreate(
+		inputOrRowId: CreateCellCtrlInput | string,
+		columnInstanceIdArg?: ColumnInstanceId,
+		fieldArg?: string
+	): { cellCtrl: CellCtrl; created: boolean } {
+		const input =
+			typeof inputOrRowId === 'string'
+				? {
+						rowId: inputOrRowId,
+						columnInstanceId: columnInstanceIdArg!,
+						colField: fieldArg!,
+					}
+				: inputOrRowId;
+		const { rowId, columnInstanceId } = input;
 		const key = createCellControllerKey(rowId, columnInstanceId);
 		const existing = this.byKey.get(key);
-		if (existing) return { cellCtrl: existing, created: false };
-		const cellCtrl = createCellCtrl(rowId, columnInstanceId, field);
+		if (existing) {
+			existing.rowIndex = input.rowIndex ?? existing.rowIndex;
+			existing.rowCtrlKey = input.rowCtrlKey ?? existing.rowCtrlKey;
+			existing.colIndex = input.colIndex ?? existing.colIndex;
+			existing.scrollPresentation = input.scrollPresentation ?? existing.scrollPresentation;
+			existing.freshness = input.freshness ?? existing.freshness;
+			return { cellCtrl: existing, created: false };
+		}
+		const cellCtrl = createCellCtrl(input);
 		this.byKey.set(key, cellCtrl);
 		let rowKeys = this.keysByRowId.get(rowId);
 		if (!rowKeys) {

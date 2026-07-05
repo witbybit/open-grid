@@ -2900,7 +2900,8 @@ describe('bindCellFull', () => {
 		// already made available — it never captures fresh HTML itself. Before this fix, frozenHtml
 		// was only ever produced by a scroll freeze, so the first-ever scroll always missed it.
 		const cellSlot = new CellSlot<{ id: string; name: string }>(document.createElement('div'));
-		const stableKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, 'name');
+		const columnInstanceId = 'coli-name' as any;
+		const stableKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, columnInstanceId);
 		const portalHost = document.createElement('div');
 		cellSlot.element.appendChild(portalHost);
 
@@ -2914,8 +2915,8 @@ describe('bindCellFull', () => {
 			selectionVersion: 0,
 			rowVersions: { get: vi.fn(() => 3) },
 			cellDisplaySnapshots: {
-				get: vi.fn((rowId: string, colField: string) => snapshotStore.get(`${rowId}:${colField}`)),
-				set: vi.fn((snapshot: any) => snapshotStore.set(`${snapshot.rowId}:${snapshot.colField}`, snapshot)),
+				get: vi.fn((rowId: string, snapshotColumnInstanceId: string) => snapshotStore.get(`${rowId}:${snapshotColumnInstanceId}`)),
+				set: vi.fn((snapshot: any) => snapshotStore.set(`${snapshot.rowId}:${snapshot.columnInstanceId}`, snapshot)),
 			},
 			htmlScrollSnapshots,
 			geometry: { rowHeights: [40] },
@@ -2953,7 +2954,12 @@ describe('bindCellFull', () => {
 			node: { id: 'r1', data: { id: 'r1', name: 'Name 1' } } as any,
 			rowIndex: 0,
 			colIndex: 0,
-			col: { field: 'name', cellRenderer: () => null, cellRendererCapabilities: { scrollPresentation: 'html-snapshot' as const } } as any,
+			col: {
+				field: 'name',
+				instanceId: columnInstanceId,
+				cellRenderer: () => null,
+				cellRendererCapabilities: { scrollPresentation: 'html-snapshot' as const },
+			} as any,
 			lane: 'center' as const,
 			pinRightBaseLeft: 0,
 			plan: { colLefts: [0], colWidths: [100], columnPlans: [{ isCustom: true, mode: 'custom' }] } as any,
@@ -2962,12 +2968,13 @@ describe('bindCellFull', () => {
 
 		// Only rowVersion is checked by default ('row-version-only' mode) — the other dimensions here
 		// are placeholders, not asserted against.
-		const expectedFreshness = { rowVersion: 3, globalVersion: 0, insightVersion: 0, styleVersion: 0, loadingVersion: 0, selectionVersion: 0 };
+		const initialFreshness = { rowVersion: 3, globalVersion: 1, insightVersion: 0, styleVersion: 0, loadingVersion: 0, selectionVersion: 0 };
+		const expectedFreshness = { rowVersion: 3, globalVersion: 2, insightVersion: 0, styleVersion: 0, loadingVersion: 0, selectionVersion: 0 };
 
 		// First full bind: portal has never been mounted, nothing exists to capture yet.
 		bindCellFull(deps, baseRequest);
 		expect(cellSlot.lastPortalKey).toBe(stableKey);
-		expect(htmlScrollSnapshots.get('r1', 'name', expectedFreshness)).toBeUndefined();
+		expect(htmlScrollSnapshots.get('r1', columnInstanceId, initialFreshness)).toBeUndefined();
 
 		// Simulate React having committed the portal's real content sometime after that first bind.
 		portalHost.innerHTML = '<div class="badge badge-info">INFO</div>';
@@ -2976,7 +2983,7 @@ describe('bindCellFull', () => {
 		// selection change elsewhere) — not a scroll, and not the cell's own data changing.
 		bindCellFull(deps, { ...baseRequest, state: { globalVersion: 2, styleRules: undefined } as any });
 
-		expect(htmlScrollSnapshots.get('r1', 'name', expectedFreshness, { rowHeight: 40, colWidth: 100 })?.html).toBe(
+		expect(htmlScrollSnapshots.get('r1', columnInstanceId, expectedFreshness, { rowHeight: 40, colWidth: 100 })?.html).toBe(
 			'<div class="badge badge-info">INFO</div>'
 		);
 	});

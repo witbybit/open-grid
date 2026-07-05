@@ -88,7 +88,7 @@ export class HtmlScrollSnapshotStore {
 			expectedFreshness,
 			rowHeight: options?.rowHeight,
 			colWidth: options?.colWidth,
-			policy: options?.mode ?? 'row-version-only',
+			policy: options?.mode ?? 'visual',
 		});
 	}
 
