@@ -1091,12 +1091,12 @@ const columns: ColumnDef<TradeRow>[] = [
 
 #### Renderer kinds
 
-| Kind | Use it for |
-| :--- | :--------- |
-| `{ kind: 'text' }` | Force the built-in text path even when a column type might provide a renderer. Fastest path. |
-| `{ kind: 'react', component }` | Normal React cell renderers mounted through grid-owned portals. Best default for custom UI. |
-| `{ kind: 'imperativeReact', component }` | React renderer with an imperative update handle for very hot cells. Use with `live.update: 'imperative'`. |
-| `{ kind: 'dom', renderer }` | Zero-React renderer with `mount(container, params)` and optional `update(params)`. Use when you want direct DOM ownership. |
+| Kind                                     | Use it for                                                                                                                 |
+| :--------------------------------------- | :------------------------------------------------------------------------------------------------------------------------- |
+| `{ kind: 'text' }`                       | Force the built-in text path even when a column type might provide a renderer. Fastest path.                               |
+| `{ kind: 'react', component }`           | Normal React cell renderers mounted through grid-owned portals. Best default for custom UI.                                |
+| `{ kind: 'imperativeReact', component }` | React renderer with an imperative update handle for very hot cells. Use with `live.update: 'imperative'`.                  |
+| `{ kind: 'dom', renderer }`              | Zero-React renderer with `mount(container, params)` and optional `update(params)`. Use when you want direct DOM ownership. |
 
 The older `cellRenderer` examples in this README are kept for compatibility with existing demos. The explicit `renderer` object is the clearer shape when you need scroll capabilities, HTML snapshots, or live-renderer budgets.
 
@@ -1104,13 +1104,13 @@ The older `cellRenderer` examples in this README are kept for compatibility with
 
 `capabilities.scrollPresentation` controls what the cell shows while the viewport is actively scrolling:
 
-| Mode | Behavior | Best for |
-| :--- | :------- | :------- |
-| `'primitive'` | Fast text/class presentation. Non-renderer columns use this automatically. | Plain values, formatted numbers, lightweight cells. |
-| `'freeze'` | Existing mounted renderer can remain visually frozen during scroll; cold cells show a shell/loading state until fidelity catches up. This is the default for custom renderers. | Rich renderers where scroll FPS matters more than live mid-scroll updates. |
-| `'live'` | The real renderer mounts/updates during active scroll. No raw text fallback. Visible cells are highest priority; live overscan settings expand the planning window for cells near the viewport. | Tickers, status lights, active controls that must remain truthful during scroll. |
-| `'text-impostor'` | Shows a cheap text/chip stand-in during scroll via `textImpostor.render`. | Expensive badges/chips where a faithful text stand-in is acceptable. |
-| `'html-snapshot'` | Replays a captured inert HTML snapshot during scroll. Missing or stale snapshots use shell/pending behavior unless explicitly configured otherwise. | Expensive static React renderers with stable markup. |
+| Mode              | Behavior                                                                                                                                                                                        | Best for                                                                         |
+| :---------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------- |
+| `'primitive'`     | Fast text/class presentation. Non-renderer columns use this automatically.                                                                                                                      | Plain values, formatted numbers, lightweight cells.                              |
+| `'freeze'`        | Existing mounted renderer can remain visually frozen during scroll; cold cells show a shell/loading state until fidelity catches up. This is the default for custom renderers.                  | Rich renderers where scroll FPS matters more than live mid-scroll updates.       |
+| `'live'`          | The real renderer mounts/updates during active scroll. No raw text fallback. Visible cells are highest priority; live overscan settings expand the planning window for cells near the viewport. | Tickers, status lights, active controls that must remain truthful during scroll. |
+| `'text-impostor'` | Shows a cheap text/chip stand-in during scroll via `textImpostor.render`.                                                                                                                       | Expensive badges/chips where a faithful text stand-in is acceptable.             |
+| `'html-snapshot'` | Replays a captured inert HTML snapshot during scroll. Missing or stale snapshots use shell/pending behavior unless explicitly configured otherwise.                                             | Expensive static React renderers with stable markup.                             |
 
 If you omit `scrollPresentation` on a custom renderer, Open Grid treats it as `'freeze'`. If a column has no renderer, it uses the primitive path.
 
