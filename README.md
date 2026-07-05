@@ -1044,6 +1044,245 @@ export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorPr
 
 The same `TValue` parameter is available on `CellRendererProps<TRowData, TValue>`.
 
+### 3. Cell Renderer Configuration, Capabilities, and Scroll Behavior
+
+For new columns, prefer the explicit `renderer` object. It tells the engine what kind of renderer you are using and which scroll behavior it is allowed to use.
+
+```tsx
+import { Grid, type CellRendererProps, type ColumnDef } from '@open-grid/react';
+
+interface TradeRow {
+	id: string;
+	symbol: string;
+	price: number;
+	change: number;
+	status: 'open' | 'closed';
+}
+
+function PriceRenderer({ value, formattedValue, isScrolling }: CellRendererProps<TradeRow, number>) {
+	return (
+		<span data-scrolling={isScrolling ? 'true' : 'false'} style={{ fontVariantNumeric: 'tabular-nums' }}>
+			{formattedValue || Number(value).toFixed(2)}
+		</span>
+	);
+}
+
+const columns: ColumnDef<TradeRow>[] = [
+	{
+		field: 'price',
+		header: 'Live Price',
+		width: 120,
+		valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
+		renderer: {
+			kind: 'react',
+			component: PriceRenderer,
+			capabilities: {
+				scrollPresentation: 'live',
+				live: {
+					update: 'react',
+					priority: 'high',
+					allowEmergencyShell: false,
+				},
+			},
+		},
+	},
+];
+```
+
+#### Renderer kinds
+
+| Kind | Use it for |
+| :--- | :--------- |
+| `{ kind: 'text' }` | Force the built-in text path even when a column type might provide a renderer. Fastest path. |
+| `{ kind: 'react', component }` | Normal React cell renderers mounted through grid-owned portals. Best default for custom UI. |
+| `{ kind: 'imperativeReact', component }` | React renderer with an imperative update handle for very hot cells. Use with `live.update: 'imperative'`. |
+| `{ kind: 'dom', renderer }` | Zero-React renderer with `mount(container, params)` and optional `update(params)`. Use when you want direct DOM ownership. |
+
+The older `cellRenderer` examples in this README are kept for compatibility with existing demos. The explicit `renderer` object is the clearer shape when you need scroll capabilities, HTML snapshots, or live-renderer budgets.
+
+#### Scroll presentation modes
+
+`capabilities.scrollPresentation` controls what the cell shows while the viewport is actively scrolling:
+
+| Mode | Behavior | Best for |
+| :--- | :------- | :------- |
+| `'primitive'` | Fast text/class presentation. Non-renderer columns use this automatically. | Plain values, formatted numbers, lightweight cells. |
+| `'freeze'` | Existing mounted renderer can remain visually frozen during scroll; cold cells show a shell/loading state until fidelity catches up. This is the default for custom renderers. | Rich renderers where scroll FPS matters more than live mid-scroll updates. |
+| `'live'` | The real renderer mounts/updates during active scroll. No raw text fallback. Visible cells are highest priority; live overscan settings expand the planning window for cells near the viewport. | Tickers, status lights, active controls that must remain truthful during scroll. |
+| `'text-impostor'` | Shows a cheap text/chip stand-in during scroll via `textImpostor.render`. | Expensive badges/chips where a faithful text stand-in is acceptable. |
+| `'html-snapshot'` | Replays a captured inert HTML snapshot during scroll. Missing or stale snapshots use shell/pending behavior unless explicitly configured otherwise. | Expensive static React renderers with stable markup. |
+
+If you omit `scrollPresentation` on a custom renderer, Open Grid treats it as `'freeze'`. If a column has no renderer, it uses the primitive path.
+
+#### Live renderer options and overscan
+
+Use `rendererOptions.liveReact` on `<Grid>` to tune live renderer work. These are initialization-time options.
+
+```tsx
+<Grid
+	mode='client'
+	rows={rows}
+	columns={columns}
+	getRowId={(row) => row.id}
+	rendererOptions={{
+		liveReact: {
+			rowOverscan: 2,
+			columnOverscan: 1,
+			maxMountsPerFrame: 12,
+			maxUpdatesPerFrame: 80,
+			allowEmergencyShell: false,
+		},
+	}}
+/>
+```
+
+`rowOverscan` and `columnOverscan` extend the live-cell planning window beyond the visible viewport. Visible live cells are prioritized first, and the live budget controls how much live renderer work can be admitted in a frame. `maxMountsPerFrame` limits fresh renderer mounts, while `maxUpdatesPerFrame` limits updates to renderers that already exist. Set `allowEmergencyShell: false` when truthfulness is more important than avoiding jank; in live mode, Open Grid will prefer real renderer work over showing raw or stale text.
+
+#### HTML snapshot options
+
+Use `scrollPresentation: 'html-snapshot'` when the renderer is expensive but its already-rendered DOM can be safely replayed during scroll.
+
+```tsx
+const BadgeRenderer = ({ value }: CellRendererProps<TradeRow>) => <span className='status-badge'>{String(value)}</span>;
+
+const columns: ColumnDef<TradeRow>[] = [
+	{
+		field: 'status',
+		header: 'Status',
+		renderer: {
+			kind: 'react',
+			component: BadgeRenderer,
+			capabilities: {
+				scrollPresentation: 'html-snapshot',
+				htmlSnapshot: {
+					freshness: 'visual',
+					strict: true,
+					allowShellWhenMissing: true,
+					allowTextFallbackWhenMissing: false,
+					invalidateOnWidthChange: true,
+					invalidateOnHeightChange: true,
+				},
+			},
+		},
+	},
+];
+```
+
+Grid-level HTML snapshot limits live under `rendererOptions.htmlSnapshot`:
+
+```tsx
+<Grid
+	mode='client'
+	rows={rows}
+	columns={columns}
+	rendererOptions={{
+		htmlSnapshot: {
+			maxSnapshots: 20_000,
+			maxTotalBytes: 8 * 1024 * 1024,
+			maxSingleSnapshotBytes: 64 * 1024,
+			defaultStrict: true,
+			allowShellWhenMissing: true,
+			allowTextFallbackWhenMissing: false,
+		},
+	}}
+/>
+```
+
+By default, HTML snapshots require full visual freshness: row data, global state, insights, styles, loading state, and selection state must all still match. Use `htmlSnapshot.freshness: 'row-version-only'` only when the renderer output truly depends on row data alone.
+
+#### Text impostors
+
+Use `text-impostor` when a cheap textual/chip representation is good enough during scroll, but the full renderer should return when scrolling settles.
+
+```tsx
+const columns: ColumnDef<TradeRow>[] = [
+	{
+		field: 'change',
+		header: 'Change',
+		valueFormatter: ({ value }) => `${Number(value).toFixed(2)}%`,
+		renderer: {
+			kind: 'react',
+			component: ChangePillRenderer,
+			capabilities: {
+				scrollPresentation: 'text-impostor',
+				textImpostor: {
+					render: ({ formattedValue }) => formattedValue,
+				},
+			},
+		},
+	},
+];
+```
+
+The grid-level fallback switch is:
+
+```tsx
+<Grid
+	mode='client'
+	rows={rows}
+	columns={columns}
+	rendererOptions={{
+		textImpostor: {
+			allowRawValueFallback: false,
+		},
+	}}
+/>
+```
+
+Keep `allowRawValueFallback: false` when raw values would be misleading, such as unformatted currency, percentages, or coded enum values.
+
+#### Imperative live renderers
+
+For very hot cells, a renderer can expose an imperative `update(params)` handle and opt into `live.update: 'imperative'`.
+
+```tsx
+import React from 'react';
+import type { CellRendererProps, ImperativeCellHandle } from '@open-grid/react';
+
+const FastPriceRenderer = React.forwardRef<ImperativeCellHandle<TradeRow>, CellRendererProps<TradeRow, number>>((props, ref) => {
+	const spanRef = React.useRef<HTMLSpanElement>(null);
+
+	React.useImperativeHandle(ref, () => ({
+		update(next) {
+			if (spanRef.current) spanRef.current.textContent = String(next.formattedValue || next.value);
+		},
+	}));
+
+	return <span ref={spanRef}>{props.formattedValue || props.value}</span>;
+});
+
+const columns: ColumnDef<TradeRow>[] = [
+	{
+		field: 'price',
+		header: 'Price',
+		renderer: {
+			kind: 'imperativeReact',
+			component: FastPriceRenderer,
+			capabilities: {
+				scrollPresentation: 'live',
+				live: { update: 'imperative', priority: 'high' },
+			},
+		},
+	},
+];
+```
+
+Use this sparingly. It is excellent for high-frequency visual updates, but your component must keep its DOM update logic correct because it is bypassing normal React reconciliation for the hot path.
+
+#### Renderer identity and duplicate fields
+
+Renderer lifecycle is keyed by `rowId + columnInstanceId`, not just `rowId + field`. That means multiple columns can safely read the same data field while using different renderers:
+
+```tsx
+const columns: ColumnDef<TradeRow>[] = [
+	{ field: 'price', colId: 'rawPrice', header: 'Raw', renderer: { kind: 'react', component: RawPriceRenderer } },
+	{ field: 'price', colId: 'badgePrice', header: 'Badge', renderer: { kind: 'react', component: BadgePriceRenderer } },
+	{ field: 'price', colId: 'sparkPrice', header: 'Spark', renderer: { kind: 'react', component: SparklinePriceRenderer } },
+];
+```
+
+Each column gets a distinct column instance identity, renderer key, HTML snapshot key, and display snapshot key. Use `colId` to give duplicate-field columns stable user/API names; keep `field` as the data-access path.
+
 #### Cell-level validation
 
 Return an error state from `onChange` / `onCommit` flow by keeping local state:
