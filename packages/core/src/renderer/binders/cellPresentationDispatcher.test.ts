@@ -146,8 +146,10 @@ function makeDispatchInput(
 			'markDirty' in presentation ? presentation.markDirty : 'shouldMarkDirty' in presentation ? presentation.shouldMarkDirty : undefined,
 		isEditing: 'isEditing' in presentation ? presentation.isEditing : false,
 		isFocused: 'isFocused' in presentation ? presentation.isFocused : false,
+		forceLiveInteractive: 'forceLiveInteractive' in presentation ? presentation.forceLiveInteractive : undefined,
 		keepVersionFresh: 'keepVersionFresh' in presentation ? presentation.keepVersionFresh : undefined,
 		captureFrozenHtml: 'captureFrozenHtml' in presentation ? presentation.captureFrozenHtml : undefined,
+		textImpostorSource: 'source' in presentation ? presentation.source : undefined,
 		recordVersions:
 			'recordVersionsFrom' in presentation
 				? presentation.recordVersionsFrom
@@ -229,12 +231,13 @@ describe('cellPresentationDispatcher — one golden test per mode per lane', () 
 			const deps = makeDeps();
 			const request = makeRequest(lane);
 			const presentation: ScrollCellPresentation = {
-				kind: 'live-mount',
+				kind: 'live-renderer',
 				className: laneClass[lane],
 				portalCellKey: 'ck1',
 				releasePriorPortal: false,
 				isEditing: false,
 				isFocused: false,
+				forceLiveInteractive: false,
 				recordVersionsFrom: undefined,
 				title: null,
 				validationError: undefined,
@@ -252,14 +255,15 @@ describe('cellPresentationDispatcher — one golden test per mode per lane', () 
 			const deps = makeDeps();
 			const request = makeRequest(lane);
 			const presentation: ScrollCellPresentation = {
-				kind: 'freeze-live-portal',
+				kind: 'frozen-portal',
 				className: laneClass[lane],
 				portalCellKey: 'ck1',
 				title: null,
 				validationError: undefined,
-				shouldMarkDirty: false,
+				markDirty: false,
 				captureFrozenHtml: false,
-				snapshotForCapture: undefined,
+				keepVersionFresh: false,
+				recordVersionsFrom: undefined,
 			};
 			dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 			expect(deps.cellRenderer.showPortalContent).toHaveBeenCalledWith(request.cellSlot.element);
@@ -280,6 +284,7 @@ describe('cellPresentationDispatcher — one golden test per mode per lane', () 
 				recordVersions: { rowVersion: 1, globalVersion: 1, insightVersion: 0, styleVersion: 0, loadingVersion: 0, selectionVersion: 0 },
 				title: null,
 				validationError: undefined,
+				source: 'explicit',
 			};
 			dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 			expect(deps.incrementTextImpostorUsesDuringScroll).toHaveBeenCalledTimes(1);
@@ -292,7 +297,7 @@ describe('cellPresentationDispatcher — one golden test per mode per lane', () 
 			const deps = makeDeps();
 			const request = makeRequest(lane);
 			const presentation: ScrollCellPresentation = {
-				kind: 'impostor-html',
+				kind: 'html-snapshot',
 				className: laneClass[lane],
 				frozenHtml: '<span>frozen</span>',
 				releaseStalePortal: false,
@@ -324,12 +329,13 @@ describe('cellPresentationDispatcher — editing/focused/loading/rebind flag thr
 		const deps = makeDeps();
 		const request = makeRequest('center', { isRowLoading: true });
 		const presentation: ScrollCellPresentation = {
-			kind: 'live-mount',
+			kind: 'live-renderer',
 			className: laneClass.center,
 			portalCellKey: 'ck1',
 			releasePriorPortal: false,
 			isEditing: true,
 			isFocused: true,
+			forceLiveInteractive: false,
 			recordVersionsFrom: undefined,
 			title: null,
 			validationError: undefined,
@@ -344,12 +350,13 @@ describe('cellPresentationDispatcher — editing/focused/loading/rebind flag thr
 		const deps = makeDeps();
 		const request = makeRequest('center', { isRowRebind: true });
 		const presentation: ScrollCellPresentation = {
-			kind: 'force-live-interactive-exception',
+			kind: 'live-renderer',
 			className: laneClass.center,
 			portalCellKey: 'ck1',
 			releasePriorPortal: true,
 			isEditing: true,
 			isFocused: false,
+			forceLiveInteractive: true,
 			recordVersionsFrom: undefined,
 			title: null,
 			validationError: undefined,
@@ -364,14 +371,15 @@ describe('cellPresentationDispatcher — editing/focused/loading/rebind flag thr
 		const deps = makeDeps();
 		const request = makeRequest('center', { isRowRebind: true });
 		const presentation: ScrollCellPresentation = {
-			kind: 'freeze-live-portal',
+			kind: 'frozen-portal',
 			className: laneClass.center,
 			portalCellKey: 'ck1',
 			title: null,
 			validationError: undefined,
-			shouldMarkDirty: true,
+			markDirty: true,
 			captureFrozenHtml: false,
-			snapshotForCapture: undefined,
+			keepVersionFresh: false,
+			recordVersionsFrom: undefined,
 		};
 		dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 		expect(deps.markCellDirtyAfterScroll).toHaveBeenCalledWith(request.cellSlot.element);
@@ -381,14 +389,15 @@ describe('cellPresentationDispatcher — editing/focused/loading/rebind flag thr
 		const deps = makeDeps();
 		const request = makeRequest('center');
 		const presentation: ScrollCellPresentation = {
-			kind: 'freeze-live-portal',
+			kind: 'frozen-portal',
 			className: laneClass.center,
 			portalCellKey: 'ck1',
 			title: null,
 			validationError: undefined,
-			shouldMarkDirty: false,
+			markDirty: false,
 			captureFrozenHtml: false,
-			snapshotForCapture: undefined,
+			keepVersionFresh: false,
+			recordVersionsFrom: undefined,
 		};
 		dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 		expect(deps.markCellDirtyAfterScroll).not.toHaveBeenCalled();
@@ -398,7 +407,7 @@ describe('cellPresentationDispatcher — editing/focused/loading/rebind flag thr
 		const deps = makeDeps();
 		const request = makeRequest('center', { isRowLoading: true });
 		const presentation: ScrollCellPresentation = {
-			kind: 'html-snapshot-pending',
+			kind: 'html-pending',
 			className: laneClass.center,
 			title: null,
 			validationError: undefined,

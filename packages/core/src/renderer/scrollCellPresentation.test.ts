@@ -127,9 +127,10 @@ describe('resolveScrollCellPresentation', () => {
 				snapshot,
 			})
 		);
-		expect(presentation.kind).toBe('impostor-text');
-		if (presentation.kind !== 'impostor-text') throw new Error('unreachable');
+		expect(presentation.kind).toBe('text-impostor');
+		if (presentation.kind !== 'text-impostor') throw new Error('unreachable');
 		expect(presentation.formattedValue).toBe('Fallback name');
+		expect(presentation.source).toBe('fallback');
 	});
 
 	it('resolves to impostor-html when a matching frozen HTML snapshot is available for this identity', () => {
@@ -169,8 +170,8 @@ describe('resolveScrollCellPresentation', () => {
 				snapshot,
 			})
 		);
-		expect(presentation.kind).toBe('impostor-html');
-		if (presentation.kind !== 'impostor-html') throw new Error('unreachable');
+		expect(presentation.kind).toBe('html-snapshot');
+		if (presentation.kind !== 'html-snapshot') throw new Error('unreachable');
 		expect(presentation.frozenHtml).toBe('<span>frozen</span>');
 	});
 
@@ -213,7 +214,9 @@ describe('resolveScrollCellPresentation', () => {
 				snapshot,
 			})
 		);
-		expect(presentation.kind).toBe('impostor-text');
+		expect(presentation.kind).toBe('text-impostor');
+		if (presentation.kind !== 'text-impostor') throw new Error('unreachable');
+		expect(presentation.source).toBe('fallback');
 	});
 
 	it('shows a pending shell, not raw text, when the frozen HTML snapshot is missing by default', () => {
@@ -249,7 +252,7 @@ describe('resolveScrollCellPresentation', () => {
 				snapshot,
 			})
 		);
-		expect(presentation.kind).toBe('html-snapshot-pending');
+		expect(presentation.kind).toBe('html-pending');
 	});
 
 	it('BLOCKER: never mounts a cold portal-capable cell during normal (non-editing, non-focused) active scroll', () => {
@@ -266,9 +269,9 @@ describe('resolveScrollCellPresentation', () => {
 			})
 		);
 		expect(presentation.kind).not.toBe('portal-mount');
-		expect(presentation.kind).not.toBe('force-live-interactive-exception');
+		expect(presentation.kind).not.toBe('live-renderer');
 		// Must degrade to a deterministic, non-mounting placeholder/impostor instead.
-		expect(['impostor-synthetic', 'impostor-text', 'impostor-html', 'primitive']).toContain(presentation.kind);
+		expect(['shell', 'text-impostor', 'html-snapshot', 'primitive']).toContain(presentation.kind);
 	});
 
 	it('BLOCKER: an actively-focused portal-capable cell with no snapshot and no live content uses the explicit force-live exception, not the generic portal-mount case', () => {
@@ -283,7 +286,9 @@ describe('resolveScrollCellPresentation', () => {
 				} as any,
 			})
 		);
-		expect(presentation.kind).toBe('force-live-interactive-exception');
+		expect(presentation.kind).toBe('live-renderer');
+		if (presentation.kind !== 'live-renderer') throw new Error('unreachable');
+		expect(presentation.forceLiveInteractive).toBe(true);
 	});
 
 	it('BLOCKER: an actively-editing portal-capable cell with no snapshot and no live content uses the explicit force-live exception', () => {
@@ -298,7 +303,9 @@ describe('resolveScrollCellPresentation', () => {
 				} as any,
 			})
 		);
-		expect(presentation.kind).toBe('force-live-interactive-exception');
+		expect(presentation.kind).toBe('live-renderer');
+		if (presentation.kind !== 'live-renderer') throw new Error('unreachable');
+		expect(presentation.forceLiveInteractive).toBe(true);
 	});
 
 	it('never calls a semantic read or portal-mount hook — deps deliberately omit them', () => {

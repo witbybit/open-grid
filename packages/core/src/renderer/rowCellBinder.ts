@@ -782,9 +782,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 			cellCtrl,
 			request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl(node.id),
 			rowVersion,
-			cellCtrl.presentationState.kind === 'live-mount' || cellCtrl.presentationState.kind === 'force-live-interactive-exception'
-				? getScrollMountValue(deps, request.node, request.col, request.cellSlot)
-				: undefined
+			cellCtrl.presentationState.kind === 'live-renderer' ? getScrollMountValue(deps, request.node, request.col, request.cellSlot) : undefined
 		)
 	);
 	recordCellCtrlPhysicalBinding(cellCtrl, cellSlot);

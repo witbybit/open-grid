@@ -16,7 +16,7 @@ export function applyTextImpostorCellPresentation<TRowData>(input: DispatchCellP
 	const presentation = cellCtrl.presentationState;
 	const lifecycle = createCellRendererLifecycle(deps);
 
-	if (presentation.kind === 'impostor-text') {
+	if (presentation.textImpostorSource === 'fallback') {
 		if (runtime.mount && isHtmlSnapshotPresentation(runtime.mount.col)) deps.incrementHtmlSnapshotMissesDuringScroll?.();
 		if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 		if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
@@ -40,7 +40,7 @@ export function applyTextImpostorCellPresentation<TRowData>(input: DispatchCellP
 		return;
 	}
 
-	// 'text-impostor'
+	// Explicit text-impostor mode.
 	if (input.phase === 'scroll') deps.incrementTextImpostorUsesDuringScroll?.();
 	if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 	if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);

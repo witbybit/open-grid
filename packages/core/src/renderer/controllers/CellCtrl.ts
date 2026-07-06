@@ -23,15 +23,12 @@ export interface CellCtrlPresentationState {
 		| 'primitive'
 		| 'loading'
 		| 'checkbox-selector'
-		| 'live-mount'
-		| 'force-live-interactive-exception'
-		| 'freeze-live-portal'
-		| 'portal-frozen'
-		| 'impostor-synthetic'
+		| 'live-renderer'
+		| 'frozen-portal'
+		| 'shell'
 		| 'text-impostor'
-		| 'impostor-text'
-		| 'impostor-html'
-		| 'html-snapshot-pending';
+		| 'html-snapshot'
+		| 'html-pending';
 	className: string;
 	title?: string | null;
 	validationError?: string;
@@ -44,8 +41,10 @@ export interface CellCtrlPresentationState {
 	markDirty?: boolean;
 	isEditing?: boolean;
 	isFocused?: boolean;
+	forceLiveInteractive?: boolean;
 	keepVersionFresh?: boolean;
 	captureFrozenHtml?: boolean;
+	textImpostorSource?: 'explicit' | 'fallback';
 	recordVersions?: VisualFreshness | CellDisplaySnapshot;
 	freshness: VisualFreshness;
 }

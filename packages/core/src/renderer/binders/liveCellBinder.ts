@@ -44,7 +44,7 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 	const mountRuntime = runtime.mount;
 	if (!mountRuntime) throw new Error('Live cell presentation requires mount runtime.');
 
-	if (presentation.kind === 'force-live-interactive-exception') {
+	if (presentation.forceLiveInteractive) {
 		if (input.phase === 'scroll') deps.incrementForceLiveMountsDuringScroll?.();
 		if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'scrolled-out', cellElement: cellSlot.element });
 		if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);

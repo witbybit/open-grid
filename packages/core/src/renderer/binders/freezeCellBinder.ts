@@ -55,7 +55,7 @@ export function applyFreezeCellPresentation<TRowData>(input: DispatchCellPresent
 			return;
 		}
 
-		case 'freeze-live-portal': {
+		case 'frozen-portal': {
 			deps.cellRenderer.showPortalContent(cellSlot.element);
 			const portalHost = deps.getCellPortalHost(cellSlot.element);
 			if (portalHost) lifecycle.freeze({ cellCtrl, host: portalHost });
@@ -106,11 +106,18 @@ export function applyFreezeCellPresentation<TRowData>(input: DispatchCellPresent
 				'',
 				presentation.portalKey
 			);
+			if (presentation.keepVersionFresh) {
+				cellSlot.lastMountedRowVersion = rowVersion;
+				cellSlot.lastMountedGlobalVersion = runtime.globalVersion;
+			}
+			if (presentation.recordVersions && 'rowId' in presentation.recordVersions) {
+				stampMountedVersions(cellSlot, rowVersion, runtime.globalVersion, presentation.recordVersions);
+			}
 			recordDispatchWrite(input, didWrite);
 			return;
 		}
 
-		case 'impostor-synthetic': {
+		case 'shell': {
 			if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 			if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 			applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
@@ -132,38 +139,6 @@ export function applyFreezeCellPresentation<TRowData>(input: DispatchCellPresent
 			cellSlot.lastMountedGlobalVersion = runtime.globalVersion;
 			if (presentation.recordVersions && !('rowId' in presentation.recordVersions)) {
 				recordCellSlotMountedVisualVersions(cellSlot, presentation.recordVersions);
-			}
-			recordDispatchWrite(input, didWrite);
-			return;
-		}
-
-		case 'portal-frozen': {
-			deps.cellRenderer.showPortalContent(cellSlot.element);
-			const portalHost = deps.getCellPortalHost(cellSlot.element);
-			if (portalHost) lifecycle.freeze({ cellCtrl, host: portalHost });
-			if (presentation.keepVersionFresh) {
-				cellSlot.lastMountedRowVersion = rowVersion;
-				cellSlot.lastMountedGlobalVersion = runtime.globalVersion;
-			} else if (input.phase === 'scroll' && presentation.markDirty) {
-				deps.markCellDirtyAfterScroll(cellSlot.element);
-			}
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
-			const didWrite = cellSlot.update(
-				geometry.colIndex,
-				cellCtrl.field,
-				geometry.rowIndex,
-				cellCtrl.rowId,
-				geometry.left,
-				geometry.right,
-				geometry.width,
-				presentation.className,
-				'portal',
-				undefined,
-				'',
-				presentation.portalKey
-			);
-			if (presentation.recordVersions && 'rowId' in presentation.recordVersions) {
-				stampMountedVersions(cellSlot, rowVersion, runtime.globalVersion, presentation.recordVersions);
 			}
 			recordDispatchWrite(input, didWrite);
 			return;

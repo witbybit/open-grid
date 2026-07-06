@@ -64,22 +64,19 @@ export function dispatchCellPresentation<TRowData>(input: DispatchCellPresentati
 		case 'loading':
 			return applyPrimitiveCellPresentation(input);
 
-		case 'live-mount':
-		case 'force-live-interactive-exception':
+		case 'live-renderer':
 			return applyLiveCellPresentation(input);
 
 		case 'checkbox-selector':
-		case 'freeze-live-portal':
-		case 'portal-frozen':
-		case 'impostor-synthetic':
+		case 'frozen-portal':
+		case 'shell':
 			return applyFreezeCellPresentation(input);
 
 		case 'text-impostor':
-		case 'impostor-text':
 			return applyTextImpostorCellPresentation(input);
 
-		case 'impostor-html':
-		case 'html-snapshot-pending':
+		case 'html-snapshot':
+		case 'html-pending':
 			return applyHtmlSnapshotCellPresentation(input);
 	}
 }

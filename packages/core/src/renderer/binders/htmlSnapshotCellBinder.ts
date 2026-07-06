@@ -13,7 +13,7 @@ export function applyHtmlSnapshotCellPresentation<TRowData>(input: DispatchCellP
 	const presentation = cellCtrl.presentationState;
 	const lifecycle = createCellRendererLifecycle(deps);
 
-	if (presentation.kind === 'html-snapshot-pending') {
+	if (presentation.kind === 'html-pending') {
 		if (input.phase === 'scroll') deps.incrementHtmlSnapshotMissesDuringScroll?.();
 		if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 		if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
@@ -41,7 +41,7 @@ export function applyHtmlSnapshotCellPresentation<TRowData>(input: DispatchCellP
 		return;
 	}
 
-	// 'impostor-html'
+	// Html snapshot path.
 	if (input.phase === 'scroll') deps.incrementHtmlSnapshotHitsDuringScroll?.();
 	if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 	if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);

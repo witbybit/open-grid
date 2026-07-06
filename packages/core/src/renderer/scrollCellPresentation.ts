@@ -143,17 +143,18 @@ export type ScrollCellPresentation =
 			recordVersionsFrom: CellDisplaySnapshot | undefined;
 	  }
 	| {
-			kind: 'freeze-live-portal';
+			kind: 'frozen-portal';
 			className: string;
 			portalCellKey: string;
 			title: string | null;
 			validationError: string | undefined;
-			shouldMarkDirty: boolean;
+			markDirty: boolean;
 			captureFrozenHtml: boolean;
-			snapshotForCapture: CellDisplaySnapshot | undefined;
+			keepVersionFresh: boolean;
+			recordVersionsFrom: CellDisplaySnapshot | undefined;
 	  }
 	| {
-			kind: 'impostor-html';
+			kind: 'html-snapshot';
 			className: string;
 			frozenHtml: string;
 			releaseStalePortal: boolean;
@@ -162,7 +163,7 @@ export type ScrollCellPresentation =
 			validationError: string | undefined;
 	  }
 	| {
-			kind: 'impostor-text';
+			kind: 'text-impostor';
 			className: string;
 			contentMode: CellContentMode;
 			formattedValue: string;
@@ -170,6 +171,7 @@ export type ScrollCellPresentation =
 			recordVersionsFrom: CellDisplaySnapshot | VisualFreshness;
 			title: string | null;
 			validationError: string | undefined;
+			source: 'fallback';
 	  }
 	| {
 			/** The only mode allowed to use `capabilities.textImpostor.render` — an explicit, always-on
@@ -184,12 +186,13 @@ export type ScrollCellPresentation =
 			recordVersions: VisualFreshness;
 			title: string | null;
 			validationError: string | undefined;
+			source: 'explicit';
 	  }
 	| {
 			/** `scrollPresentation: 'html-snapshot'` with no fresh capture available and
 			 * `allowTextFallbackWhenMissing` not set — shows a stable shell/pending placeholder rather
 			 * than raw text, per the html-snapshot contract. */
-			kind: 'html-snapshot-pending';
+			kind: 'html-pending';
 			className: string;
 			releaseStalePortal: boolean;
 			recordVersions: VisualFreshness;
@@ -203,33 +206,24 @@ export type ScrollCellPresentation =
 			 * `force-live-interactive-exception` (which fires rarely, only for freeze-mode cells that
 			 * are actively focused/editing).
 			 */
-			kind: 'live-mount';
+			kind: 'live-renderer';
 			className: string;
 			portalCellKey: string;
 			releasePriorPortal: boolean;
 			isEditing: boolean;
 			isFocused: boolean;
+			forceLiveInteractive: boolean;
 			recordVersionsFrom: CellDisplaySnapshot | undefined;
 			title: string | null;
 			validationError: string | undefined;
 	  }
 	| {
-			kind: 'impostor-synthetic';
+			kind: 'shell';
 			className: string;
 			contentMode: CellContentMode;
 			formattedValue: string;
 			releaseStalePortal: boolean;
 			recordVersions: VisualFreshness;
-			title: string | null;
-			validationError: string | undefined;
-	  }
-	| {
-			kind: 'portal-frozen';
-			className: string;
-			portalCellKey: string;
-			markDirty: boolean;
-			keepVersionFresh: boolean;
-			recordVersionsFrom: CellDisplaySnapshot | undefined;
 			title: string | null;
 			validationError: string | undefined;
 	  }
@@ -242,12 +236,13 @@ export type ScrollCellPresentation =
 			 * count this separately (`forceLiveMountsDuringScroll`), never fold it into generic
 			 * mount/portal counters, so a regression that makes this fire for normal cells is visible.
 			 */
-			kind: 'force-live-interactive-exception';
+			kind: 'live-renderer';
 			className: string;
 			portalCellKey: string;
 			releasePriorPortal: boolean;
 			isEditing: boolean;
 			isFocused: boolean;
+			forceLiveInteractive: true;
 			recordVersionsFrom: CellDisplaySnapshot | undefined;
 			title: string | null;
 			validationError: string | undefined;
@@ -401,12 +396,13 @@ export function resolveScrollCellPresentation<TRowData>(
 	// freeze, no impostor, no snapshot fallback: this must come before every other decision below.
 	if (presentation === 'live') {
 		return {
-			kind: 'live-mount',
+			kind: 'live-renderer',
 			className: cellClassName,
 			portalCellKey,
 			releasePriorPortal: !!cellSlot.lastPortalKey && cellSlot.lastPortalKey !== portalCellKey,
 			isEditing,
 			isFocused,
+			forceLiveInteractive: false,
 			recordVersionsFrom: snapshot,
 			title: snapshot?.title || null,
 			validationError: snapshot?.validationError,
@@ -429,6 +425,7 @@ export function resolveScrollCellPresentation<TRowData>(
 			recordVersions: snapshot ?? versionsFromCtx(),
 			title: snapshot?.title || null,
 			validationError: snapshot?.validationError,
+			source: 'explicit',
 		};
 	}
 
@@ -466,14 +463,15 @@ export function resolveScrollCellPresentation<TRowData>(
 			(ctx.hasDeferredCellStyleRules &&
 				(!snapshot || ctx.styleChangedDuringScroll || ctx.selectionChangedDuringScroll || ctx.loadingChangedDuringScroll));
 		return {
-			kind: 'freeze-live-portal',
+			kind: 'frozen-portal',
 			className: cellClassName,
 			portalCellKey,
 			title: snapshot?.title || null,
 			validationError: snapshot?.validationError,
-			shouldMarkDirty: shouldDirtyFrozen,
+			markDirty: shouldDirtyFrozen,
 			captureFrozenHtml: isHtmlSnapshotMode,
-			snapshotForCapture: snapshot,
+			keepVersionFresh: false,
+			recordVersionsFrom: snapshot,
 		};
 	}
 
@@ -492,7 +490,7 @@ export function resolveScrollCellPresentation<TRowData>(
 			const releaseStalePortal = !!cellSlot.lastPortalKey;
 			if (frozenHtml) {
 				return {
-					kind: 'impostor-html',
+					kind: 'html-snapshot',
 					className: cellClassName,
 					frozenHtml: frozenHtml.html,
 					releaseStalePortal,
@@ -503,7 +501,7 @@ export function resolveScrollCellPresentation<TRowData>(
 			}
 			if (allowTextFallbackWhenMissing) {
 				return {
-					kind: 'impostor-text',
+					kind: 'text-impostor',
 					className: cellClassName,
 					contentMode: portalImpostorSnapshot.contentMode,
 					formattedValue: portalImpostorSnapshot.formattedValue,
@@ -511,10 +509,11 @@ export function resolveScrollCellPresentation<TRowData>(
 					recordVersionsFrom: portalImpostorSnapshot,
 					title: portalImpostorSnapshot.title || null,
 					validationError: portalImpostorSnapshot.validationError,
+					source: 'fallback',
 				};
 			}
 			return {
-				kind: 'html-snapshot-pending',
+				kind: 'html-pending',
 				className: cellClassName,
 				releaseStalePortal,
 				recordVersions: portalImpostorSnapshot,
@@ -523,7 +522,7 @@ export function resolveScrollCellPresentation<TRowData>(
 			};
 		}
 		return {
-			kind: 'impostor-text',
+			kind: 'text-impostor',
 			className: cellClassName,
 			contentMode: portalImpostorSnapshot.contentMode,
 			formattedValue: portalImpostorSnapshot.formattedValue,
@@ -531,6 +530,7 @@ export function resolveScrollCellPresentation<TRowData>(
 			recordVersionsFrom: portalImpostorSnapshot,
 			title: portalImpostorSnapshot.title || null,
 			validationError: portalImpostorSnapshot.validationError,
+			source: 'fallback',
 		};
 	}
 
@@ -554,7 +554,7 @@ export function resolveScrollCellPresentation<TRowData>(
 			const releaseStalePortal = !!cellSlot.lastPortalKey;
 			if (frozenHtml) {
 				return {
-					kind: 'impostor-html',
+					kind: 'html-snapshot',
 					className: cellClassName,
 					frozenHtml: frozenHtml.html,
 					releaseStalePortal,
@@ -568,7 +568,7 @@ export function resolveScrollCellPresentation<TRowData>(
 				const warmSyntheticText = canReuseWarmTextForIdentity(cellSlot, isWarmBindingVersionFresh);
 				const cheapValue = warmSyntheticText && warmSyntheticText.contentMode !== 'portal' ? warmSyntheticText.formattedValue : genericCheap;
 				return {
-					kind: 'impostor-text',
+					kind: 'text-impostor',
 					className: cellClassName,
 					contentMode: cheapValue !== '' ? 'fallback' : 'empty',
 					formattedValue: cheapValue,
@@ -576,10 +576,11 @@ export function resolveScrollCellPresentation<TRowData>(
 					recordVersionsFrom: snapshot ?? versionsFromCtx(),
 					title: snapshot?.title || null,
 					validationError: snapshot?.validationError,
+					source: 'fallback',
 				};
 			}
 			return {
-				kind: 'html-snapshot-pending',
+				kind: 'html-pending',
 				className: cellClassName,
 				releaseStalePortal,
 				recordVersions: snapshot ?? versionsFromCtx(),
@@ -592,7 +593,7 @@ export function resolveScrollCellPresentation<TRowData>(
 		const cheapValue = warmSyntheticText && warmSyntheticText.contentMode !== 'portal' ? warmSyntheticText.formattedValue : genericCheap;
 		const syntheticMode: CellContentMode = cheapValue !== '' ? 'fallback' : 'empty';
 		return {
-			kind: 'impostor-synthetic',
+			kind: 'shell',
 			className: cellClassName,
 			contentMode: syntheticMode,
 			formattedValue: cheapValue,
@@ -618,11 +619,12 @@ export function resolveScrollCellPresentation<TRowData>(
 
 	if (isPortalFrozen || isStaleFrozen) {
 		return {
-			kind: 'portal-frozen',
+			kind: 'frozen-portal',
 			className: cellClassName,
 			portalCellKey,
 			markDirty: !isPortalFrozen || shouldDirtyFrozenPortal,
 			keepVersionFresh: false,
+			captureFrozenHtml: false,
 			recordVersionsFrom: snapshot,
 			title: snapshot?.title || null,
 			validationError: snapshot?.validationError,
@@ -636,12 +638,13 @@ export function resolveScrollCellPresentation<TRowData>(
 	// placeholder and waits for the fidelity lane.
 	if (isEditing || isFocused) {
 		return {
-			kind: 'force-live-interactive-exception',
+			kind: 'live-renderer',
 			className: cellClassName,
 			portalCellKey,
 			releasePriorPortal: !!cellSlot.lastPortalKey && cellSlot.lastPortalKey !== portalCellKey,
 			isEditing,
 			isFocused,
+			forceLiveInteractive: true,
 			recordVersionsFrom: snapshot,
 			title: snapshot?.title || null,
 			validationError: snapshot?.validationError,
@@ -658,7 +661,7 @@ export function resolveScrollCellPresentation<TRowData>(
 	const fallbackCheapValue = warmFallbackText && warmFallbackText.contentMode !== 'portal' ? warmFallbackText.formattedValue : genericCheap;
 	const fallbackSyntheticMode: CellContentMode = fallbackCheapValue !== '' ? 'fallback' : 'empty';
 	return {
-		kind: 'impostor-synthetic',
+		kind: 'shell',
 		className: cellClassName,
 		contentMode: fallbackSyntheticMode,
 		formattedValue: fallbackCheapValue,

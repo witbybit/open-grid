@@ -45,20 +45,21 @@ function resolvePresentationFreshness(presentation: ScrollCellPresentation, fall
 	switch (presentation.kind) {
 		case 'buffered':
 		case 'primitive':
-		case 'live-mount':
-		case 'force-live-interactive-exception':
-		case 'portal-frozen':
+		case 'live-renderer':
+		case 'frozen-portal':
 			return presentation.recordVersionsFrom ? snapshotFreshness(presentation.recordVersionsFrom) : fallback;
-		case 'freeze-live-portal':
-			return presentation.snapshotForCapture ? snapshotFreshness(presentation.snapshotForCapture) : fallback;
-		case 'impostor-text':
-		case 'impostor-html':
+		case 'html-snapshot':
 			return 'rowVersion' in presentation.recordVersionsFrom
 				? presentation.recordVersionsFrom
 				: snapshotFreshness(presentation.recordVersionsFrom);
 		case 'text-impostor':
-		case 'html-snapshot-pending':
-		case 'impostor-synthetic':
+			return 'recordVersionsFrom' in presentation
+				? 'rowVersion' in presentation.recordVersionsFrom
+					? presentation.recordVersionsFrom
+					: snapshotFreshness(presentation.recordVersionsFrom)
+				: presentation.recordVersions;
+		case 'html-pending':
+		case 'shell':
 			return presentation.recordVersions;
 		case 'checkbox-selector':
 			return fallback;
@@ -93,31 +94,29 @@ function hydrateCellCtrlFromScrollPresentation(
 					: false,
 		requiresFidelity:
 			presentation.kind === 'primitive' ||
-			presentation.kind === 'freeze-live-portal' ||
-			presentation.kind === 'impostor-synthetic' ||
+			presentation.kind === 'frozen-portal' ||
+			presentation.kind === 'shell' ||
 			presentation.kind === 'text-impostor' ||
-			presentation.kind === 'impostor-text' ||
-			presentation.kind === 'html-snapshot-pending' ||
-			presentation.kind === 'impostor-html',
+			presentation.kind === 'html-pending' ||
+			presentation.kind === 'html-snapshot',
 		freshness,
 		contentMode: 'contentMode' in presentation ? presentation.contentMode : undefined,
 		formattedValue: 'formattedValue' in presentation ? presentation.formattedValue : undefined,
 		portalKey: 'portalCellKey' in presentation ? presentation.portalCellKey : 'portalKey' in presentation ? presentation.portalKey : undefined,
 		html: 'frozenHtml' in presentation ? presentation.frozenHtml : undefined,
-		markDirty:
-			'markDirty' in presentation ? presentation.markDirty : 'shouldMarkDirty' in presentation ? presentation.shouldMarkDirty : undefined,
+		markDirty: 'markDirty' in presentation ? presentation.markDirty : undefined,
 		isEditing: 'isEditing' in presentation ? presentation.isEditing : cellCtrl.visualState.editing,
 		isFocused: 'isFocused' in presentation ? presentation.isFocused : cellCtrl.visualState.focused,
+		forceLiveInteractive: 'forceLiveInteractive' in presentation ? presentation.forceLiveInteractive : undefined,
 		keepVersionFresh: 'keepVersionFresh' in presentation ? presentation.keepVersionFresh : undefined,
 		captureFrozenHtml: 'captureFrozenHtml' in presentation ? presentation.captureFrozenHtml : undefined,
+		textImpostorSource: 'source' in presentation ? presentation.source : undefined,
 		recordVersions:
 			'recordVersionsFrom' in presentation
 				? presentation.recordVersionsFrom
-				: 'snapshotForCapture' in presentation
-					? presentation.snapshotForCapture
-					: 'recordVersions' in presentation
-						? presentation.recordVersions
-						: undefined,
+				: 'recordVersions' in presentation
+					? presentation.recordVersions
+					: undefined,
 	};
 	cellCtrl.visualState.className = presentation.className;
 	cellCtrl.visualState.title = getPresentationTitle(presentation);
@@ -126,24 +125,24 @@ function hydrateCellCtrlFromScrollPresentation(
 	cellCtrl.visualState.editing = 'isEditing' in presentation ? presentation.isEditing : cellCtrl.visualState.editing;
 	cellCtrl.valueState.formattedValue = 'formattedValue' in presentation ? presentation.formattedValue : '';
 	cellCtrl.valueState.displayText = cellCtrl.valueState.formattedValue;
-	cellCtrl.valueState.loading = presentation.kind === 'html-snapshot-pending';
+	cellCtrl.valueState.loading = presentation.kind === 'html-pending';
 	cellCtrl.valueState.empty = !cellCtrl.valueState.formattedValue;
 	cellCtrl.rendererState.portalKey =
 		'portalCellKey' in presentation ? presentation.portalCellKey : 'portalKey' in presentation ? presentation.portalKey : undefined;
 	cellCtrl.rendererState.htmlSnapshotKey =
-		presentation.kind === 'impostor-html' || presentation.kind === 'html-snapshot-pending'
+		presentation.kind === 'html-snapshot' || presentation.kind === 'html-pending'
 			? createCellControllerKey(cellCtrl.rowId, cellCtrl.columnInstanceId)
 			: undefined;
 	cellCtrl.rendererState.mode =
-		presentation.kind === 'live-mount' || presentation.kind === 'force-live-interactive-exception'
+		presentation.kind === 'live-renderer'
 			? 'live'
-			: presentation.kind === 'freeze-live-portal' || presentation.kind === 'portal-frozen'
+			: presentation.kind === 'frozen-portal'
 				? 'frozen'
-				: presentation.kind === 'text-impostor' || presentation.kind === 'impostor-text' || presentation.kind === 'impostor-synthetic'
+				: presentation.kind === 'text-impostor' || presentation.kind === 'shell'
 					? 'text-impostor'
-					: presentation.kind === 'impostor-html'
+					: presentation.kind === 'html-snapshot'
 						? 'html-snapshot'
-						: presentation.kind === 'html-snapshot-pending'
+						: presentation.kind === 'html-pending'
 							? 'html-pending'
 							: presentation.kind === 'checkbox-selector'
 								? 'none'
@@ -175,7 +174,7 @@ function hydrateCellCtrlFromFullBind(cellCtrl: CellCtrl, context: NonNullable<Ce
 	cellCtrl.presentationState = {
 		kind:
 			context.presentationKind ??
-			(context.contentMode === 'portal' ? 'live-mount' : context.contentMode === 'loading' ? 'loading' : 'primitive'),
+			(context.contentMode === 'portal' ? 'live-renderer' : context.contentMode === 'loading' ? 'loading' : 'primitive'),
 		className: context.className,
 		title: context.title,
 		validationError: context.validationError,
