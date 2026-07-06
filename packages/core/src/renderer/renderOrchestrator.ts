@@ -111,6 +111,7 @@ export interface RenderStats {
 	integrityComputesDuringScroll?: number;
 	forceLiveMountsDuringScroll?: number;
 	liveReactMountsDuringScroll?: number;
+	liveReactOverscanMounts?: number;
 	liveReactUpdatesDuringScroll?: number;
 	liveReactEmergencyShellsDuringScroll?: number;
 	htmlSnapshotHitsDuringScroll?: number;
@@ -227,6 +228,7 @@ export function createEmptyRenderStats(): RenderStats {
 		integrityComputesDuringScroll: 0,
 		forceLiveMountsDuringScroll: 0,
 		liveReactMountsDuringScroll: 0,
+		liveReactOverscanMounts: 0,
 		liveReactUpdatesDuringScroll: 0,
 		liveReactEmergencyShellsDuringScroll: 0,
 		htmlSnapshotHitsDuringScroll: 0,
@@ -330,6 +332,7 @@ export class RenderOrchestrator {
 		integrityComputesDuringScroll: 0,
 		forceLiveMountsDuringScroll: 0,
 		liveReactMountsDuringScroll: 0,
+		liveReactOverscanMounts: 0,
 		liveReactUpdatesDuringScroll: 0,
 		liveReactEmergencyShellsDuringScroll: 0,
 		htmlSnapshotHitsDuringScroll: 0,
@@ -483,6 +486,7 @@ export class RenderOrchestrator {
 		this.stats.integrityComputesDuringScroll = 0;
 		this.stats.forceLiveMountsDuringScroll = 0;
 		this.stats.liveReactMountsDuringScroll = 0;
+		this.stats.liveReactOverscanMounts = 0;
 		this.stats.liveReactUpdatesDuringScroll = 0;
 		this.stats.liveReactEmergencyShellsDuringScroll = 0;
 		this.stats.htmlSnapshotHitsDuringScroll = 0;

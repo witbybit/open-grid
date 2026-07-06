@@ -6,6 +6,8 @@ import type { CellDisplaySnapshot } from './cellDisplaySnapshot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { hasMountedDataVersionDrifted, type VisualFreshness } from './visualFreshness.js';
 import { getCellScrollPresentation } from './scrollPresentationMode.js';
+import { canFreezePortalForCellCtrl } from './controllerWarmDomGuards.js';
+import { createCellCtrl } from './controllers/CellCtrl.js';
 
 /**
  * Narrow, purpose-built dependency surface for the scroll presentation resolver — deliberately
@@ -72,7 +74,23 @@ export function canFreezeExistingPortalForIdentity<TRowData>(
 	expectedPortalKey: string,
 	isRowRebind: boolean
 ): boolean {
-	return !isRowRebind && cellSlot.lastPortalKey === expectedPortalKey && hasAuthoritativePortalHostContent(deps, cellSlot, expectedPortalKey);
+	if (isRowRebind) return false;
+	const controller = createCellCtrl({
+		rowId: cellSlot.rowId,
+		columnInstanceId: cellSlot.columnInstanceId as ColumnInstanceId,
+		colField: cellSlot.colField,
+		freshness: {
+			rowVersion: cellSlot.lastMountedRowVersion,
+			globalVersion: cellSlot.lastMountedGlobalVersion,
+			insightVersion: cellSlot.lastMountedInsightVersion,
+			styleVersion: cellSlot.lastMountedStyleVersion,
+			loadingVersion: cellSlot.lastMountedLoadingVersion,
+			selectionVersion: cellSlot.lastMountedSelectionVersion,
+		},
+	});
+	controller.lifecycle.attachedSlotInstanceId = cellSlot.cellInstanceId;
+	controller.rendererState.portalKey = expectedPortalKey;
+	return canFreezePortalForCellCtrl(cellSlot, controller) && hasAuthoritativePortalHostContent(deps, cellSlot, expectedPortalKey);
 }
 
 /**
@@ -294,6 +312,9 @@ export function resolveScrollCellPresentation<TRowData>(
 	const compiledPlan = ctx.plan.columnPlans[colIndex];
 	const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
 	const rendererKind: 'primitive' | 'portal' | 'loading' = isRowLoading ? 'loading' : isEditing || compiledPlan?.isCustom ? 'portal' : 'primitive';
+	const scrollMode = compiledPlan?.mode;
+	const isDomRenderer = scrollMode === 'custom-dom';
+	const presentation = isDomRenderer ? 'freeze' : getCellScrollPresentation(col);
 
 	let cellClassName = buildCellPinClass(lane);
 	if (rendererKind === 'loading') cellClassName += ' og-cell-loading';
@@ -303,7 +324,7 @@ export function resolveScrollCellPresentation<TRowData>(
 		cellClassName = cellSlot.lastClassName;
 	}
 
-	if (!isInVisibleContent) {
+	if (!isInVisibleContent && presentation !== 'live') {
 		const primitiveSnapshot = isPrimitiveSnapshotContent(snapshot) ? snapshot : undefined;
 		const canReuseSnapshotContent = !!primitiveSnapshot;
 		const canReuseSnapshotPortal =
@@ -365,10 +386,7 @@ export function resolveScrollCellPresentation<TRowData>(
 	// tree. A loading row with a custom-renderer column lets that renderer show its own loading
 	// state via portal mount (isLoading is threaded into the mount request below).
 	const portalCellKey = isEditing ? createEditRendererKey(node.id, getColumnInstanceIdentity(col)) : cellKey;
-	const scrollMode = compiledPlan?.mode;
 	const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
-	const isDomRenderer = scrollMode === 'custom-dom';
-	const presentation = isDomRenderer ? 'freeze' : getCellScrollPresentation(col);
 
 	const versionsFromCtx = (): VisualFreshness => ({
 		rowVersion: input.rowVersion,

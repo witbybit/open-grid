@@ -378,6 +378,7 @@ export class RowRenderer<TRowData = unknown> {
 			plan,
 			this.engine.rendererOptions
 		);
+		const columnWindowDelta = this.currentViewportPlan.columnWindowDelta;
 
 		// ── Live-mode frame budget ────────────────────────────────────────────────────
 		// rendererOptions is immutable for the engine's lifetime, so reconfiguring every frame is
@@ -427,8 +428,18 @@ export class RowRenderer<TRowData = unknown> {
 		const centerColEnd = nextWindow.colEnd;
 		const centerColCount = Math.max(0, centerColEnd - centerColStart + 1);
 
-		// Column layout change detection — used for full vs partial cell rebind.
-		const columnLayoutChanged = delta.colsEntered.length > 0 || delta.colsExited.length > 0;
+		// Column instance-id delta — used for full vs partial cell rebind, slot retention, and
+		// visible-column refresh decisions. Structural deltas (pin/unpin/reorder) are distinct from
+		// routine horizontal window shifts over a stable topology.
+		const columnLayoutChanged =
+			!!columnWindowDelta &&
+			(columnWindowDelta.enteredCenterColumns.length > 0 ||
+				columnWindowDelta.exitedCenterColumns.length > 0 ||
+				columnWindowDelta.enteredPinnedLeftColumns.length > 0 ||
+				columnWindowDelta.exitedPinnedLeftColumns.length > 0 ||
+				columnWindowDelta.enteredPinnedRightColumns.length > 0 ||
+				columnWindowDelta.exitedPinnedRightColumns.length > 0 ||
+				columnWindowDelta.laneMoves.length > 0);
 
 		if (isScrollFrameActive) {
 			if (columnLayoutChanged) this.slotStats.fullRebindFrames++;
@@ -455,9 +466,11 @@ export class RowRenderer<TRowData = unknown> {
 		const visibleColumnsEntered =
 			isScrollFrameActive && visibleColumnsChanged
 				? (() => {
+						const enteredIds = new Set(columnWindowDelta?.enteredCenterColumns ?? []);
 						const entered = new Set<number>();
 						for (let c = nextVisibleColStart; c <= nextVisibleColEnd; c++) {
-							if (c < prevVisibleColStart || c > prevVisibleColEnd) entered.add(c);
+							const column = columns[c];
+							if (column?.instanceId && enteredIds.has(column.instanceId)) entered.add(c);
 						}
 						return entered;
 					})()
@@ -672,6 +685,7 @@ export class RowRenderer<TRowData = unknown> {
 					forceCellRefresh: rowEnteredVisibleContent,
 					isRowVisible,
 					refreshVisibleColumns,
+					viewportPlan: this.currentViewportPlan,
 				});
 			} else {
 				// Full-width row (group / detail / footer)

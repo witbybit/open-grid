@@ -25,7 +25,20 @@ function mountLiveGrid(rowCount: number) {
 			cellRendererCapabilities: { scrollPresentation: 'live' } as any,
 		} as any,
 	];
-	const store = new GridStore<LiveRow>({ columns, defaultRowHeight: 40, defaultColWidth: 150, getRowId: (row) => row.id });
+	const store = new GridStore<LiveRow>({
+		columns,
+		defaultRowHeight: 40,
+		defaultColWidth: 150,
+		getRowId: (row) => row.id,
+		rendererOptions: {
+			liveReact: {
+				rowOverscan: 2,
+				columnOverscan: 1,
+				maxMountsPerFrame: 100,
+				maxUpdatesPerFrame: 100,
+			},
+		},
+	});
 	const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
 		rows: Array.from({ length: rowCount }, (_, i) => ({ id: `row-${i}`, value: `v${i}` })),
 		columns: store.getState().columns,
@@ -71,6 +84,22 @@ describe('LiveFrameBudget wiring — end to end sanity (unconfigured)', () => {
 		// mount-vs-update/emergency-shell branch logic itself, tested directly and deterministically.
 		expect(stats.liveReactMountsDuringScroll + stats.liveReactUpdatesDuringScroll).toBeGreaterThan(0);
 		expect(stats.liveReactEmergencyShellsDuringScroll || 0).toBe(0);
+		expect(stats.liveReactOverscanMounts || 0).toBeGreaterThanOrEqual(0);
+
+		cleanup(grid);
+	});
+
+	it('live overscan execution mounts offscreen live cells and records the overscan work', () => {
+		const grid = mountLiveGrid(200);
+		const scrollViewport = grid.container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 400;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		const stats = grid.renderer.getRenderStats() as any;
+		const plan = grid.renderer.rowRenderer.currentViewportPlan;
+		expect(plan).not.toBeNull();
+		expect(plan!.liveCells.overscan.length).toBeGreaterThan(0);
+		expect(stats.liveReactOverscanMounts || 0).toBeGreaterThan(0);
 
 		cleanup(grid);
 	});

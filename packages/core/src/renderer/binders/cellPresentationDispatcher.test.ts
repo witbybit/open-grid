@@ -4,6 +4,8 @@ import { CellSlot } from '../cellSlot.js';
 import type { RowCellBinderDeps, BindCellDuringScrollRequest } from '../rowCellBinder.js';
 import type { ScrollCellPresentation } from '../scrollCellPresentation.js';
 import { dispatchCellPresentation } from './cellPresentationDispatcher.js';
+import { createCellCtrl } from '../controllers/CellCtrl.js';
+import { getColumnInstanceIdentity } from '../../columnDef.js';
 
 /**
  * One golden test per mode per lane (5 modes x 3 lanes = 15) — proves cellPresentationDispatcher.ts
@@ -100,6 +102,82 @@ const laneClass: Record<'left' | 'center' | 'right', string> = {
 
 const LANES: Array<'left' | 'center' | 'right'> = ['left', 'center', 'right'];
 
+function makeDispatchInput(
+	deps: RowCellBinderDeps<{ id: string; name: string }>,
+	request: BindCellDuringScrollRequest<{ id: string; name: string }>,
+	presentation: ScrollCellPresentation,
+	rowVersion: number
+) {
+	const cellCtrl = createCellCtrl({
+		rowId: request.node.id,
+		rowIndex: request.rowIndex,
+		rowCtrlKey: request.node.id,
+		columnInstanceId: getColumnInstanceIdentity(request.col),
+		colId: request.col.colId ?? request.col.field,
+		colField: request.col.field,
+		colIndex: request.colIndex,
+		freshness: {
+			rowVersion,
+			globalVersion: request.ctx.globalVersion,
+			insightVersion: request.ctx.insightVersion,
+			styleVersion: request.ctx.styleVersion,
+			loadingVersion: request.ctx.loadingVersion,
+			selectionVersion: request.ctx.selectionVersion,
+		},
+	});
+	cellCtrl.presentationState = {
+		kind: presentation.kind,
+		className: presentation.className,
+		title: 'title' in presentation ? (presentation.title ?? null) : null,
+		validationError: 'validationError' in presentation ? presentation.validationError : undefined,
+		releaseStalePortal:
+			'releaseStalePortal' in presentation
+				? presentation.releaseStalePortal
+				: 'releasePriorPortal' in presentation
+					? presentation.releasePriorPortal
+					: false,
+		requiresFidelity: false,
+		freshness: cellCtrl.freshness!,
+		contentMode: 'contentMode' in presentation ? presentation.contentMode : undefined,
+		formattedValue: 'formattedValue' in presentation ? presentation.formattedValue : undefined,
+		portalKey: 'portalCellKey' in presentation ? presentation.portalCellKey : 'portalKey' in presentation ? presentation.portalKey : undefined,
+		html: 'frozenHtml' in presentation ? presentation.frozenHtml : undefined,
+		markDirty:
+			'markDirty' in presentation ? presentation.markDirty : 'shouldMarkDirty' in presentation ? presentation.shouldMarkDirty : undefined,
+		isEditing: 'isEditing' in presentation ? presentation.isEditing : false,
+		isFocused: 'isFocused' in presentation ? presentation.isFocused : false,
+		keepVersionFresh: 'keepVersionFresh' in presentation ? presentation.keepVersionFresh : undefined,
+		captureFrozenHtml: 'captureFrozenHtml' in presentation ? presentation.captureFrozenHtml : undefined,
+		recordVersions:
+			'recordVersionsFrom' in presentation
+				? presentation.recordVersionsFrom
+				: 'snapshotForCapture' in presentation
+					? presentation.snapshotForCapture
+					: 'recordVersions' in presentation
+						? presentation.recordVersions
+						: undefined,
+	};
+	cellCtrl.rendererState.portalKey = cellCtrl.presentationState.portalKey;
+	cellCtrl.visualState.editing = cellCtrl.presentationState.isEditing ?? false;
+	cellCtrl.visualState.focused = cellCtrl.presentationState.isFocused ?? false;
+	return {
+		deps,
+		request,
+		cellCtrl,
+		rowCtrl: {
+			rowId: request.node.id,
+			rowVersion,
+			attachedSlotId: undefined,
+			attachedGeneration: -1,
+			cellKeysByColumnInstanceId: new Map(),
+			isEditing: false,
+			isFocused: false,
+		},
+		phase: 'scroll' as const,
+		rowVersion,
+	};
+}
+
 describe('cellPresentationDispatcher — one golden test per mode per lane', () => {
 	for (const lane of LANES) {
 		it(`primitive mode (${lane}): writes text content and releases stale portal`, () => {
@@ -116,7 +194,7 @@ describe('cellPresentationDispatcher — one golden test per mode per lane', () 
 				validationError: undefined,
 				recordVersionsFrom: undefined,
 			};
-			dispatchCellPresentation(deps, request, presentation, 1);
+			dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 			expect(request.cellSlot.lastContentMode).toBe('text');
 			expect(request.cellSlot.lastFormattedValue).toBe('hello');
 			expect(request.cellSlot.lastClassName).toBe(laneClass[lane]);
@@ -137,7 +215,7 @@ describe('cellPresentationDispatcher — one golden test per mode per lane', () 
 				title: null,
 				validationError: undefined,
 			};
-			dispatchCellPresentation(deps, request, presentation, 1);
+			dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 			expect(deps.portalMountManager.mountCellImmediately).toHaveBeenCalledWith(
 				expect.objectContaining({ phase: 'scroll-live', isScrolling: true })
 			);
@@ -159,7 +237,7 @@ describe('cellPresentationDispatcher — one golden test per mode per lane', () 
 				captureFrozenHtml: false,
 				snapshotForCapture: undefined,
 			};
-			dispatchCellPresentation(deps, request, presentation, 1);
+			dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 			expect(deps.cellRenderer.showPortalContent).toHaveBeenCalledWith(request.cellSlot.element);
 			expect(deps.portalMountManager.mountCellImmediately).not.toHaveBeenCalled();
 			expect(request.cellSlot.lastContentMode).toBe('portal');
@@ -179,7 +257,7 @@ describe('cellPresentationDispatcher — one golden test per mode per lane', () 
 				title: null,
 				validationError: undefined,
 			};
-			dispatchCellPresentation(deps, request, presentation, 1);
+			dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 			expect(deps.incrementTextImpostorUsesDuringScroll).toHaveBeenCalledTimes(1);
 			expect(deps.portalMountManager.mountCellImmediately).not.toHaveBeenCalled();
 			expect(request.cellSlot.lastFormattedValue).toBe('★ chip');
@@ -198,7 +276,7 @@ describe('cellPresentationDispatcher — one golden test per mode per lane', () 
 				title: null,
 				validationError: undefined,
 			};
-			dispatchCellPresentation(deps, request, presentation, 1);
+			dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 			expect(deps.incrementHtmlSnapshotHitsDuringScroll).toHaveBeenCalledTimes(1);
 			expect(deps.portalMountManager.mountCellImmediately).not.toHaveBeenCalled();
 			expect(request.cellSlot.lastContentMode).toBe('portal');
@@ -232,7 +310,7 @@ describe('cellPresentationDispatcher — editing/focused/loading/rebind flag thr
 			title: null,
 			validationError: undefined,
 		};
-		dispatchCellPresentation(deps, request, presentation, 1);
+		dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 		expect(deps.portalMountManager.mountCellImmediately).toHaveBeenCalledWith(
 			expect.objectContaining({ isEditing: true, isFocused: true, isLoading: true })
 		);
@@ -252,7 +330,7 @@ describe('cellPresentationDispatcher — editing/focused/loading/rebind flag thr
 			title: null,
 			validationError: undefined,
 		};
-		dispatchCellPresentation(deps, request, presentation, 1);
+		dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 		expect(deps.incrementForceLiveMountsDuringScroll).toHaveBeenCalledTimes(1);
 		expect(deps.incrementLiveReactMountsDuringScroll).not.toHaveBeenCalled();
 		expect(deps.portalMountManager.mountCellImmediately).toHaveBeenCalledWith(expect.objectContaining({ isEditing: true, isFocused: false }));
@@ -271,7 +349,7 @@ describe('cellPresentationDispatcher — editing/focused/loading/rebind flag thr
 			captureFrozenHtml: false,
 			snapshotForCapture: undefined,
 		};
-		dispatchCellPresentation(deps, request, presentation, 1);
+		dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 		expect(deps.markCellDirtyAfterScroll).toHaveBeenCalledWith(request.cellSlot.element);
 	});
 
@@ -288,7 +366,7 @@ describe('cellPresentationDispatcher — editing/focused/loading/rebind flag thr
 			captureFrozenHtml: false,
 			snapshotForCapture: undefined,
 		};
-		dispatchCellPresentation(deps, request, presentation, 1);
+		dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 		expect(deps.markCellDirtyAfterScroll).not.toHaveBeenCalled();
 	});
 
@@ -303,7 +381,7 @@ describe('cellPresentationDispatcher — editing/focused/loading/rebind flag thr
 			releaseStalePortal: false,
 			recordVersions: { rowVersion: 1, globalVersion: 1, insightVersion: 0, styleVersion: 0, loadingVersion: 0, selectionVersion: 0 },
 		};
-		dispatchCellPresentation(deps, request, presentation, 1);
+		dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1));
 		expect(deps.incrementHtmlSnapshotMissesDuringScroll).toHaveBeenCalledTimes(1);
 		expect(request.cellSlot.lastContentMode).toBe('pending');
 		expect(deps.portalMountManager.mountCellImmediately).not.toHaveBeenCalled();

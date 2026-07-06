@@ -48,6 +48,9 @@ export interface RenderRuntimeStats {
 	forceLiveMountsDuringScroll: number;
 	/** scrollPresentation:'live' mounts/updates during scroll — see renderer/rowCellBinder.ts. */
 	liveReactMountsDuringScroll: number;
+	/** Live-mode work admitted for cells that were in the overscan band rather than the visible
+	 *  viewport. Counted when the scroll-time live path actually executes for an overscan cell. */
+	liveReactOverscanMounts: number;
 	/** Same cellKey already mounted — a React re-render, not a fresh portal mount. Budgeted
 	 *  separately from liveReactMountsDuringScroll by liveFrameBudget.ts. */
 	liveReactUpdatesDuringScroll: number;
@@ -137,6 +140,7 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		integrityComputesDuringScroll: 0,
 		forceLiveMountsDuringScroll: 0,
 		liveReactMountsDuringScroll: 0,
+		liveReactOverscanMounts: 0,
 		liveReactUpdatesDuringScroll: 0,
 		liveReactEmergencyShellsDuringScroll: 0,
 		htmlSnapshotHitsDuringScroll: 0,
@@ -246,6 +250,7 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		integrityComputesDuringScroll: deps.runtimeStats.integrityComputesDuringScroll,
 		forceLiveMountsDuringScroll: deps.runtimeStats.forceLiveMountsDuringScroll,
 		liveReactMountsDuringScroll: deps.runtimeStats.liveReactMountsDuringScroll,
+		liveReactOverscanMounts: deps.runtimeStats.liveReactOverscanMounts,
 		liveReactUpdatesDuringScroll: deps.runtimeStats.liveReactUpdatesDuringScroll,
 		liveReactEmergencyShellsDuringScroll: deps.runtimeStats.liveReactEmergencyShellsDuringScroll,
 		htmlSnapshotHitsDuringScroll: deps.runtimeStats.htmlSnapshotHitsDuringScroll,

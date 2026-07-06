@@ -124,7 +124,7 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	/** Called once per cell whose resolved presentation this frame was 'live-mount' — lets the
 	 *  caller's ViewportPlan.liveRows/liveCenterColumns (see viewportPlanner.ts) reflect what the
 	 *  resolver actually decided, without this binder needing to know about ViewportPlan itself. */
-	onLiveCellResolved?: (rowId: string, columnInstanceId: ColumnInstanceId) => void;
+	onLiveCellResolved?: (rowId: string, columnInstanceId: ColumnInstanceId, rowIndex: number, wasFreshMount: boolean) => void;
 }
 
 export interface BindCellFullRequest<TRowData = unknown> {

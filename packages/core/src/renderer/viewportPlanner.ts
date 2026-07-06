@@ -1,5 +1,5 @@
 import type { ColumnInstanceId, CompiledGridPlan, InternalColumnDef } from '../columnDef.js';
-import { computeColumnWindowDelta, type ColumnWindowDelta, type CompiledColumnTopology } from './columnTopology.js';
+import { computeColumnWindowDelta, computeRoutineColumnWindowDelta, type ColumnWindowDelta, type CompiledColumnTopology } from './columnTopology.js';
 import { diffRenderWindow, type RenderWindow, type ViewportDelta } from './renderWindow.js';
 
 export interface Range {
@@ -75,9 +75,6 @@ export class ViewportPlanner<TRowData = unknown> {
 		rendererOptions?: { liveReact?: { rowOverscan?: number; columnOverscan?: number } }
 	): ViewportPlan {
 		const viewportDelta = diffRenderWindow(this.prevWindow, window);
-		const columnWindowDelta =
-			this.prevTopology && this.prevTopology.version !== topology.version ? computeColumnWindowDelta(this.prevTopology, topology) : undefined;
-
 		const visibleRows = makeRange(window.visibleRowStart ?? window.rowStart, window.visibleRowEnd ?? window.rowEnd);
 		const renderedRows = makeRange(window.rowStart, window.rowEnd);
 		const liveRowRange = expandRange(visibleRows, rendererOptions?.liveReact?.rowOverscan ?? 0, Math.max(0, window.rowCount - 1));
@@ -92,6 +89,20 @@ export class ViewportPlanner<TRowData = unknown> {
 		const renderedCenterColumns = topology.center
 			.filter((placement) => placement.absoluteIndex >= window.colStart && placement.absoluteIndex <= window.colEnd)
 			.map((placement) => placement.columnId);
+		const prevRenderedCenterColumns =
+			this.prevTopology && this.prevWindow
+				? this.prevTopology.center
+						.filter(
+							(placement) => placement.absoluteIndex >= this.prevWindow!.colStart && placement.absoluteIndex <= this.prevWindow!.colEnd
+						)
+						.map((placement) => placement.columnId)
+				: null;
+		const columnWindowDelta =
+			this.prevTopology && prevRenderedCenterColumns
+				? this.prevTopology.version !== topology.version
+					? computeColumnWindowDelta(this.prevTopology, topology)
+					: computeRoutineColumnWindowDelta(prevRenderedCenterColumns, renderedCenterColumns)
+				: undefined;
 		const pinnedLeftColumns = topology.left.map((placement) => placement.columnId);
 		const pinnedRightColumns = topology.right.map((placement) => placement.columnId);
 
@@ -171,7 +182,7 @@ export class ViewportPlanner<TRowData = unknown> {
 			reasons: {
 				verticalRangeChanged: !this.prevWindow || this.prevWindow.rowStart !== window.rowStart || this.prevWindow.rowEnd !== window.rowEnd,
 				horizontalRangeChanged: !this.prevWindow || this.prevWindow.colStart !== window.colStart || this.prevWindow.colEnd !== window.colEnd,
-				topologyChanged: !!columnWindowDelta,
+				topologyChanged: !!columnWindowDelta?.structural,
 				dataChanged:
 					!this.prevWindow ||
 					(this.prevWindow.rowModelVersion ?? 0) !== (window.rowModelVersion ?? 0) ||

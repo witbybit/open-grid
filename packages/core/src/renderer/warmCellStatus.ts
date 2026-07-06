@@ -1,6 +1,8 @@
 import type { CellSlot } from './cellSlot.js';
 import { matchesCellSlotMountedFreshness, matchesCellSlotMountedVisualVersions } from './cellSlot.js';
 import { hasMountedDataVersionDrifted } from './visualFreshness.js';
+import { mustClearSlotForControllerChange } from './controllerWarmDomGuards.js';
+import { createCellCtrl } from './controllers/CellCtrl.js';
 
 /**
  * Read-only inspection of a warm (already-mounted) cell's own portal state — kept separate from the
@@ -55,11 +57,26 @@ export function resolveWarmVisibleCellStatus<TRowData>(
 	cellSlot: CellSlot<TRowData>,
 	ctx: WarmVisibleCellStatusContext
 ): WarmVisibleCellStatus {
+	const cellCtrl = createCellCtrl({
+		rowId: cellSlot.rowId,
+		columnInstanceId: cellSlot.columnInstanceId as any,
+		colField: cellSlot.colField,
+		freshness: {
+			rowVersion: ctx.currentRowVersion ?? -1,
+			globalVersion: ctx.globalVersion,
+			insightVersion: ctx.insightVersion,
+			styleVersion: ctx.styleVersion,
+			loadingVersion: ctx.loadingVersion,
+			selectionVersion: ctx.selectionVersion,
+		},
+	});
+	cellCtrl.lifecycle.attachedSlotInstanceId = cellSlot.cellInstanceId;
 	const lastPortalKey = cellSlot.lastPortalKey;
 	const portalHost = cellSlot.lastContentMode === 'portal' ? deps.getCellPortalHost(cellSlot.element) : null;
 	const hasStalePortalMount = cellSlot.lastContentMode === 'portal' && !!lastPortalKey && !deps.isCellMounted(lastPortalKey);
 	const hasEmptyPortalHost = cellSlot.lastContentMode === 'portal' && !!lastPortalKey && !!portalHost && portalHost.childElementCount === 0;
 	const hasSuspiciousWarmState =
+		mustClearSlotForControllerChange(cellSlot, cellCtrl) ||
 		cellSlot.lastMountedRowVersion === -1 ||
 		cellSlot.lastMountedGlobalVersion === -1 ||
 		cellSlot.lastContentMode === 'pending' ||

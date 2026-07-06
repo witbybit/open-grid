@@ -8,6 +8,7 @@ import { bindCellDuringScroll, bindCellFull, type RowCellBinderDeps } from './ro
 import type { RowSlot } from './rowSlot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { CompiledColumnTopology } from './columnTopology.js';
+import type { ViewportPlan } from './viewportPlanner.js';
 import { GridMetric, type GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot } from './cellDisplaySnapshot.js';
 import { applyCellSlotRetentionPolicy } from './cellSlotRetention.js';
@@ -89,6 +90,7 @@ export interface BindAllDataCellsRequest<TRowData = unknown> {
 	forceCellRefresh: boolean;
 	isRowVisible: boolean;
 	refreshVisibleColumns?: ReadonlySet<number> | null;
+	viewportPlan?: ViewportPlan | null;
 }
 
 export interface BindAllLoadingCellsRequest<TRowData = unknown> {
@@ -386,6 +388,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		forceCellRefresh,
 		isRowVisible,
 		refreshVisibleColumns,
+		viewportPlan,
 	} = request;
 	const pinLeftWidth = plan.pinLeftWidth;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
@@ -430,7 +433,13 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	const shouldSkipStableCellDuringScroll = (cellSlot: CellSlot<TRowData>, columnIndex: number, isVisibleContent: boolean): boolean => {
 		if (!isScrollFrameActive || forceCellRefresh || isRowRebind) return false;
 		if (cellSlot.colIndex !== columnIndex || cellSlot.rowId !== node.id || cellSlot.rowIndex !== rowIndex) return false;
-		if (!isVisibleContent) return true;
+		if (!isVisibleContent) {
+			const instanceId = (columns[columnIndex] as InternalColumnDef<TRowData> | undefined)?.instanceId;
+			if (instanceId && viewportPlan?.liveCells.overscan.some((cell) => cell.rowIndex === rowIndex && cell.columnInstanceId === instanceId)) {
+				return false;
+			}
+			return true;
+		}
 		if (getWarmVisibleCellStatus(cellSlot).needsImmediateWake) return false;
 		return !refreshVisibleColumns?.has(columnIndex);
 	};

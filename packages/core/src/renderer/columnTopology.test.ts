@@ -405,7 +405,7 @@ describe('computeColumnWindowDelta', () => {
 		const next = compilePlan(cols, 1, 0, 2); // 'a' pinned left
 
 		const delta = computeColumnWindowDelta(prev, next);
-		expect(delta.laneMoves).toEqual([{ colField: 'a', from: 'center', to: 'left' }]);
+		expect(delta.laneMoves).toEqual([{ columnInstanceId: 'a', from: 'center', to: 'left' }]);
 		// A lane move is a relocation, not an enter/exit, and must not appear in stayed either.
 		expect(delta.enteredCenterColumns).toHaveLength(0);
 		expect(delta.exitedCenterColumns).toHaveLength(0);
@@ -420,7 +420,7 @@ describe('computeColumnWindowDelta', () => {
 		const next = compilePlan([makeCol('b'), makeCol('c'), makeCol('e')], 1, 0, 2);
 
 		const delta = computeColumnWindowDelta(prev, next);
-		expect(delta.laneMoves).toEqual([{ colField: 'b', from: 'center', to: 'left' }]);
+		expect(delta.laneMoves).toEqual([{ columnInstanceId: 'b', from: 'center', to: 'left' }]);
 		expect(delta.exitedCenterColumns.sort()).toEqual(['a', 'd']);
 		expect(delta.enteredCenterColumns).toEqual(['e']);
 		expect(delta.stayedCenterColumns).toEqual(['c']);

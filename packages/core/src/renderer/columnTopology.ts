@@ -268,18 +268,19 @@ export function diffColumnTopologies(prev: CompiledColumnTopology, next: Compile
 
 /** Column field lists, segmented by lane, plus cross-lane moves — for scroll/resize-driven reconciliation. */
 export interface ColumnWindowDelta {
-	readonly enteredCenterColumns: readonly string[];
-	readonly exitedCenterColumns: readonly string[];
-	readonly stayedCenterColumns: readonly string[];
-	readonly enteredPinnedLeftColumns: readonly string[];
-	readonly exitedPinnedLeftColumns: readonly string[];
-	readonly enteredPinnedRightColumns: readonly string[];
-	readonly exitedPinnedRightColumns: readonly string[];
+	readonly enteredCenterColumns: readonly ColumnInstanceId[];
+	readonly exitedCenterColumns: readonly ColumnInstanceId[];
+	readonly stayedCenterColumns: readonly ColumnInstanceId[];
+	readonly enteredPinnedLeftColumns: readonly ColumnInstanceId[];
+	readonly exitedPinnedLeftColumns: readonly ColumnInstanceId[];
+	readonly enteredPinnedRightColumns: readonly ColumnInstanceId[];
+	readonly exitedPinnedRightColumns: readonly ColumnInstanceId[];
 	readonly laneMoves: ReadonlyArray<{
-		readonly colField: string;
+		readonly columnInstanceId: ColumnInstanceId;
 		readonly from: 'left' | 'center' | 'right';
 		readonly to: 'left' | 'center' | 'right';
 	}>;
+	readonly structural: boolean;
 }
 
 /**
@@ -293,25 +294,25 @@ export interface ColumnWindowDelta {
 export function computeColumnWindowDelta(prev: CompiledColumnTopology, next: CompiledColumnTopology): ColumnWindowDelta {
 	const diff = diffColumnTopologies(prev, next);
 
-	const enteredCenterColumns: string[] = [];
-	const enteredPinnedLeftColumns: string[] = [];
-	const enteredPinnedRightColumns: string[] = [];
+	const enteredCenterColumns: ColumnInstanceId[] = [];
+	const enteredPinnedLeftColumns: ColumnInstanceId[] = [];
+	const enteredPinnedRightColumns: ColumnInstanceId[] = [];
 	for (const placement of diff.entered) {
 		if (placement.lane === 'left') enteredPinnedLeftColumns.push(placement.columnId);
 		else if (placement.lane === 'right') enteredPinnedRightColumns.push(placement.columnId);
 		else enteredCenterColumns.push(placement.columnId);
 	}
 
-	const exitedCenterColumns: string[] = [];
-	const exitedPinnedLeftColumns: string[] = [];
-	const exitedPinnedRightColumns: string[] = [];
+	const exitedCenterColumns: ColumnInstanceId[] = [];
+	const exitedPinnedLeftColumns: ColumnInstanceId[] = [];
+	const exitedPinnedRightColumns: ColumnInstanceId[] = [];
 	for (const placement of diff.exited) {
 		if (placement.lane === 'left') exitedPinnedLeftColumns.push(placement.columnId);
 		else if (placement.lane === 'right') exitedPinnedRightColumns.push(placement.columnId);
 		else exitedCenterColumns.push(placement.columnId);
 	}
 
-	const stayedCenterColumns: string[] = [];
+	const stayedCenterColumns: ColumnInstanceId[] = [];
 	const relocatedIds = new Set(diff.relocated.map((r) => r.next.columnId));
 	for (const { next: nextPlacement } of diff.retained) {
 		if (nextPlacement.lane === 'center' && !relocatedIds.has(nextPlacement.columnId)) {
@@ -319,7 +320,7 @@ export function computeColumnWindowDelta(prev: CompiledColumnTopology, next: Com
 		}
 	}
 
-	const laneMoves = diff.relocated.map((r) => ({ colField: r.next.columnId, from: r.prev.lane, to: r.next.lane }));
+	const laneMoves = diff.relocated.map((r) => ({ columnInstanceId: r.next.columnId, from: r.prev.lane, to: r.next.lane }));
 
 	return {
 		enteredCenterColumns,
@@ -330,5 +331,30 @@ export function computeColumnWindowDelta(prev: CompiledColumnTopology, next: Com
 		enteredPinnedRightColumns,
 		exitedPinnedRightColumns,
 		laneMoves,
+		structural: true,
+	};
+}
+
+export function computeRoutineColumnWindowDelta(
+	prevRenderedCenterColumns: readonly ColumnInstanceId[],
+	nextRenderedCenterColumns: readonly ColumnInstanceId[]
+): ColumnWindowDelta {
+	const prevSet = new Set(prevRenderedCenterColumns);
+	const nextSet = new Set(nextRenderedCenterColumns);
+
+	const enteredCenterColumns = nextRenderedCenterColumns.filter((id) => !prevSet.has(id));
+	const exitedCenterColumns = prevRenderedCenterColumns.filter((id) => !nextSet.has(id));
+	const stayedCenterColumns = nextRenderedCenterColumns.filter((id) => prevSet.has(id));
+
+	return {
+		enteredCenterColumns,
+		exitedCenterColumns,
+		stayedCenterColumns,
+		enteredPinnedLeftColumns: [],
+		exitedPinnedLeftColumns: [],
+		enteredPinnedRightColumns: [],
+		exitedPinnedRightColumns: [],
+		laneMoves: [],
+		structural: false,
 	};
 }

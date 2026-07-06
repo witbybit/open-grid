@@ -263,11 +263,17 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 						(this.deps.stateHost.renderStats.textImpostorUsesDuringScroll || 0) + 1;
 				}
 			},
-			onLiveCellResolved: (rowId: string, columnInstanceId: ColumnInstanceId) => {
+			onLiveCellResolved: (rowId: string, columnInstanceId: ColumnInstanceId, rowIndex: number, _wasFreshMount: boolean) => {
 				const plan = this.deps.stateHost.currentViewportPlan;
 				if (!plan) return;
 				plan.liveRows.add(rowId);
 				plan.liveCenterColumns.add(columnInstanceId);
+				if (
+					plan.liveCells.overscan.some((cell) => cell.rowIndex === rowIndex && cell.columnInstanceId === columnInstanceId) &&
+					this.deps.stateHost.renderStats
+				) {
+					this.deps.stateHost.renderStats.liveReactOverscanMounts = (this.deps.stateHost.renderStats.liveReactOverscanMounts || 0) + 1;
+				}
 			},
 			getHtmlSnapshotDefaults: () => {
 				const opts = this.deps.engine.rendererOptions?.htmlSnapshot;

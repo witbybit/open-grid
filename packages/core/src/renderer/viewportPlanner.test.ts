@@ -55,15 +55,17 @@ describe('ViewportPlanner', () => {
 		expect(second.frame).toBe(first.frame + 1);
 	});
 
-	it('routine scroll (same topology version) — viewportDelta reflects entered/exited rows, columnWindowDelta stays undefined', () => {
+	it('routine horizontal scroll (same topology version) computes ColumnInstanceId entered/stayed/exited without marking the delta structural', () => {
 		const planner = new ViewportPlanner();
-		const topology = compileColumnTopology(makePlan([makeCol('a'), makeCol('b')], 0, 0, 1));
-		planner.computePlan(windowWithRows(0, 9), topology);
-		const plan = planner.computePlan(windowWithRows(1, 10), topology);
+		const topology = compileColumnTopology(makePlan([makeCol('a'), makeCol('b'), makeCol('c')], 0, 0, 1));
+		planner.computePlan({ ...windowWithRows(0, 9), colStart: 0, colEnd: 1, visibleColStart: 0, visibleColEnd: 1 }, topology);
+		const plan = planner.computePlan({ ...windowWithRows(0, 9), colStart: 1, colEnd: 2, visibleColStart: 1, visibleColEnd: 2 }, topology);
 
-		expect(plan.columnWindowDelta).toBeUndefined();
-		expect(plan.viewportDelta.rowsEntered).toContain(10);
-		expect(plan.viewportDelta.rowsExited).toContain(0);
+		expect(plan.columnWindowDelta).toBeDefined();
+		expect(plan.columnWindowDelta!.structural).toBe(false);
+		expect(plan.columnWindowDelta!.enteredCenterColumns).toEqual(['c']);
+		expect(plan.columnWindowDelta!.exitedCenterColumns).toEqual(['a']);
+		expect(plan.columnWindowDelta!.stayedCenterColumns).toEqual(['b']);
 	});
 
 	it('topology version change (pin/reorder) — columnWindowDelta is computed against the prior topology', () => {
@@ -76,7 +78,19 @@ describe('ViewportPlanner', () => {
 		const plan = planner.computePlan(windowWithRows(0, 9), topologyV2);
 
 		expect(plan.columnWindowDelta).toBeDefined();
+		expect(plan.columnWindowDelta!.structural).toBe(true);
 		expect(plan.columnWindowDelta!.laneMoves.length).toBeGreaterThan(0);
+	});
+
+	it('duplicate-field columns remain distinct in routine horizontal delta because instance ids differ', () => {
+		const planner = new ViewportPlanner();
+		const cols = [makeCol('price#raw'), makeCol('price#badge'), makeCol('price#spark')];
+		const topology = compileColumnTopology(makePlan(cols, 0, 0, 1));
+		planner.computePlan({ ...windowWithRows(0, 9), colStart: 0, colEnd: 1, visibleColStart: 0, visibleColEnd: 1 }, topology);
+		const plan = planner.computePlan({ ...windowWithRows(0, 9), colStart: 1, colEnd: 2, visibleColStart: 1, visibleColEnd: 2 }, topology);
+		expect(plan.columnWindowDelta!.exitedCenterColumns).toEqual(['price#raw']);
+		expect(plan.columnWindowDelta!.stayedCenterColumns).toEqual(['price#badge']);
+		expect(plan.columnWindowDelta!.enteredCenterColumns).toEqual(['price#spark']);
 	});
 
 	it('retainedFocusEditRowIndices passes through unchanged — planner does not compute retention itself', () => {

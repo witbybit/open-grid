@@ -171,8 +171,8 @@ export function applyLiveCellPresentation<TRowData>(
 		return;
 	}
 
-	deps.onLiveCellResolved?.(node.id, (col as InternalColumnDef<TRowData>).instanceId);
 	const isFreshMount = !deps.portalMountManager.isCellMounted(presentation.portalKey!);
+	deps.onLiveCellResolved?.(node.id, (col as InternalColumnDef<TRowData>).instanceId, rowIndex, isFreshMount);
 	const withinBudget = deps.tryConsumeLiveBudget?.(isFreshMount ? 'mount' : 'update') ?? true;
 	if (!withinBudget) {
 		if (!isFreshMount) return;
