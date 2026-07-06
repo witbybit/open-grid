@@ -56,8 +56,8 @@ function cleanup(grid: ReturnType<typeof mountLiveGrid>): void {
 	vi.unstubAllGlobals();
 }
 
-describe('ViewportPlanner wiring — end to end', () => {
-	it('a scrollPresentation:"live" column populates ViewportPlan.liveRows/liveCenterColumns during a scroll frame', () => {
+describe('ViewportPlanner wiring - end to end', () => {
+	it('a scrollPresentation:"live" column produces executable live cells during a scroll frame', () => {
 		const grid = mountLiveGrid(200);
 		const scrollViewport = grid.container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		expect(scrollViewport).not.toBeNull();
@@ -67,13 +67,16 @@ describe('ViewportPlanner wiring — end to end', () => {
 
 		const plan = grid.renderer.rowRenderer.currentViewportPlan;
 		expect(plan).not.toBeNull();
-		expect(plan!.liveRows.size).toBeGreaterThan(0);
-		expect(plan!.liveCenterColumns.size).toBeGreaterThan(0);
+		expect(plan!.liveCells.visible.length + plan!.liveCells.overscan.length).toBeGreaterThan(0);
+		expect(plan!.liveCells.overscan.every((cell) => cell.rowIndex >= plan!.renderedRows.start && cell.rowIndex <= plan!.renderedRows.end)).toBe(
+			true
+		);
+		expect(plan!.liveCells.overscan.every((cell) => plan!.renderedCenterColumns.includes(cell.columnInstanceId))).toBe(true);
 
 		cleanup(grid);
 	});
 
-	it('a non-live (freeze default) column does not populate liveRows/liveCenterColumns', () => {
+	it('a non-live (freeze default) column does not produce live cells', () => {
 		vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
 			cb(0);
 			return 1;
@@ -107,8 +110,8 @@ describe('ViewportPlanner wiring — end to end', () => {
 
 		const plan = renderer.rowRenderer.currentViewportPlan;
 		expect(plan).not.toBeNull();
-		expect(plan!.liveRows.size).toBe(0);
-		expect(plan!.liveCenterColumns.size).toBe(0);
+		expect(plan!.liveCells.visible).toEqual([]);
+		expect(plan!.liveCells.overscan).toEqual([]);
 
 		renderer.unmount();
 		controller.dispose();

@@ -21,6 +21,7 @@ export interface CellCtrlPresentationState {
 	kind:
 		| 'buffered'
 		| 'primitive'
+		| 'loading'
 		| 'checkbox-selector'
 		| 'live-mount'
 		| 'force-live-interactive-exception'
@@ -30,10 +31,7 @@ export interface CellCtrlPresentationState {
 		| 'text-impostor'
 		| 'impostor-text'
 		| 'impostor-html'
-		| 'html-snapshot-pending'
-		| 'full-bind-portal'
-		| 'full-bind-primitive'
-		| 'full-bind-loading';
+		| 'html-snapshot-pending';
 	className: string;
 	title?: string | null;
 	validationError?: string;

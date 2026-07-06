@@ -61,13 +61,11 @@ export function dispatchCellPresentation<TRowData>(input: DispatchCellPresentati
 	switch (input.cellCtrl.presentationState.kind) {
 		case 'buffered':
 		case 'primitive':
-		case 'full-bind-primitive':
-		case 'full-bind-loading':
+		case 'loading':
 			return applyPrimitiveCellPresentation(input);
 
 		case 'live-mount':
 		case 'force-live-interactive-exception':
-		case 'full-bind-portal':
 			return applyLiveCellPresentation(input);
 
 		case 'checkbox-selector':

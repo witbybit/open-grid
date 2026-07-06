@@ -1,7 +1,13 @@
-import type { InternalColumnDef } from '../../columnDef.js';
 import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
 import { applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
 import { createCellRendererLifecycle } from '../lifecycle/cellRendererLifecycle.js';
+
+function isOverscanLiveExecution<TRowData>(input: DispatchCellPresentationInput<TRowData>): boolean {
+	if (input.phase !== 'scroll' || !input.viewportPlan) return false;
+	return input.viewportPlan.liveCells.overscan.some(
+		(cell) => cell.rowIndex === input.geometry.rowIndex && cell.columnInstanceId === input.cellCtrl.columnInstanceId
+	);
+}
 
 /** Renders the over-budget emergency shell for a fresh live mount that couldn't be granted this
  * frame's mount budget. */
@@ -98,9 +104,6 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 	}
 
 	const isFreshMount = !deps.portalMountManager.isCellMounted(presentation.portalKey!);
-	if (input.phase === 'scroll') {
-		deps.onLiveCellResolved?.(cellCtrl.rowId, (mountRuntime.col as InternalColumnDef<TRowData>).instanceId, geometry.rowIndex, isFreshMount);
-	}
 	const withinBudget = deps.tryConsumeLiveBudget?.(isFreshMount ? 'mount' : 'update') ?? true;
 	if (!withinBudget) {
 		if (!isFreshMount) return;
@@ -112,6 +115,7 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 	if (input.phase === 'scroll') {
 		if (isFreshMount) deps.incrementLiveReactMountsDuringScroll?.();
 		else deps.incrementLiveReactUpdatesDuringScroll?.();
+		if (isOverscanLiveExecution(input)) deps.incrementLiveReactOverscanMountsDuringScroll?.();
 	}
 	if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'scrolled-out', cellElement: cellSlot.element });
 	if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);

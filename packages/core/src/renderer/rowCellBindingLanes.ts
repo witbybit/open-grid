@@ -409,6 +409,9 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 	rowCtrl.isFocused = false;
 	const getWarmVisibleCellStatus = (cellSlot: CellSlot<TRowData>) => {
 		if (!ctx) return { needsImmediateWake: false, needsDeferredRefresh: false };
+		const cellCtrl =
+			cellSlot.columnInstanceId !== '' ? deps.engine.rowCtrls?.cellCtrls.getByRowAndColumn(node.id, cellSlot.columnInstanceId) : undefined;
+		if (!cellCtrl) return { needsImmediateWake: true, needsDeferredRefresh: true };
 		return resolveWarmVisibleCellStatus(
 			{
 				getCellPortalHost: deps.cellBinderDeps.getCellPortalHost,
@@ -427,10 +430,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				hasDeferredCellStyleRules: ctx.hasDeferredCellStyleRules,
 				loadingChangedDuringScroll: ctx.loadingChangedDuringScroll,
 				selectionChangedDuringScroll: ctx.selectionChangedDuringScroll,
-				cellCtrl:
-					cellSlot.columnInstanceId !== ''
-						? deps.engine.rowCtrls?.cellCtrls.getByRowAndColumn(node.id, cellSlot.columnInstanceId)
-						: undefined,
+				cellCtrl,
 			}
 		);
 	};
@@ -527,6 +527,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				isRowRebind,
 				isRowLoading,
 				isInVisibleContent: isVisibleContent,
+				viewportPlan,
 				rowCtrl,
 			});
 		} else {
@@ -580,6 +581,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				isRowRebind,
 				isRowLoading,
 				isInVisibleContent: isVisibleContent,
+				viewportPlan,
 				rowCtrl,
 			});
 		} else {
@@ -635,6 +637,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				isRowRebind,
 				isRowLoading,
 				isInVisibleContent: isVisibleContent,
+				viewportPlan,
 				rowCtrl,
 			});
 		} else {

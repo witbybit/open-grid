@@ -43,8 +43,8 @@ describe('ViewportPlanner', () => {
 		expect(plan.frame).toBe(1);
 		expect(plan.columnWindowDelta).toBeUndefined();
 		expect(plan.renderWindow.rowStart).toBe(0);
-		expect(plan.liveRows.size).toBe(0);
-		expect(plan.liveCenterColumns.size).toBe(0);
+		expect(plan.liveCells.visible).toEqual([]);
+		expect(plan.liveCells.overscan).toEqual([]);
 	});
 
 	it('frame counter increments monotonically across calls', () => {
@@ -101,14 +101,27 @@ describe('ViewportPlanner', () => {
 		expect(plan.retainedFocusEditRowIndices).toBe(retained);
 	});
 
-	it('liveRows/liveCenterColumns are caller-owned mutable sets the planner never populates itself', () => {
+	it('live window is clamped to the executable rendered window', () => {
 		const planner = new ViewportPlanner();
-		const topology = compileColumnTopology(makePlan([makeCol('a')], 0, 0, 1));
-		const plan = planner.computePlan(windowWithRows(0, 9), topology);
-		plan.liveRows.add('r1');
-		plan.liveCenterColumns.add('a' as any);
-		expect(plan.liveRows.has('r1')).toBe(true);
-		expect(plan.liveCenterColumns.has('a' as any)).toBe(true);
+		const cols = [makeCol('a'), makeCol('b'), makeCol('c'), makeCol('d'), makeCol('e')];
+		const topology = compileColumnTopology(makePlan(cols, 0, 0, 1));
+		const plan = planner.computePlan(
+			{
+				...windowWithRows(10, 19),
+				colStart: 1,
+				colEnd: 3,
+				visibleRowStart: 12,
+				visibleRowEnd: 15,
+				visibleColStart: 2,
+				visibleColEnd: 2,
+			},
+			topology,
+			new Set(),
+			makePlan(cols, 0, 0, 1),
+			{ liveReact: { rowOverscan: 10, columnOverscan: 10 } }
+		);
+		expect(plan.liveRowRange).toEqual({ start: 10, end: 19 });
+		expect(plan.liveCenterColumnWindow).toEqual(['b', 'c', 'd']);
 	});
 
 	it('reset() clears diffing state so the next frame is treated as freshly-entered', () => {

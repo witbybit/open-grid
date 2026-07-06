@@ -60,9 +60,8 @@ export function applyPrimitiveCellPresentation<TRowData>(input: DispatchCellPres
 			return;
 		}
 
-		case 'full-bind-primitive':
-		case 'full-bind-loading': {
-			if (presentation.kind === 'full-bind-loading') deps.cellRenderer.ensureLoadingSkeleton(cellSlot.element);
+		case 'loading': {
+			deps.cellRenderer.ensureLoadingSkeleton(cellSlot.element);
 			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 			applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 			const didWrite = cellSlot.update(
@@ -74,7 +73,7 @@ export function applyPrimitiveCellPresentation<TRowData>(input: DispatchCellPres
 				geometry.right,
 				geometry.width,
 				presentation.className,
-				presentation.kind === 'full-bind-loading' ? 'loading' : (presentation.contentMode ?? 'text'),
+				'loading',
 				cellCtrl.valueState.value,
 				presentation.formattedValue ?? '',
 				undefined,

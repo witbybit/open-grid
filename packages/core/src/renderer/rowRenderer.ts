@@ -156,9 +156,8 @@ export class RowRenderer<TRowData = unknown> {
 	private readonly pinnedContainers = new PinnedContainerManager<TRowData>();
 	private readonly columnTopologyCoordinator = new ColumnTopologyCoordinator<TRowData>();
 	private readonly viewportPlanner = new ViewportPlanner<TRowData>();
-	/** This frame's ViewportPlan, read by RowCellBinderDeps.onLiveCellResolved (via stateHost: this
-	 *  in RowRendererRuntimeBridge) to record which cells actually resolved 'live-mount'. Null before
-	 *  the first recycleViewport call. */
+	/** This frame's ViewportPlan, computed before the bind loop and read by binders/telemetry during
+	 *  scroll execution. Null before the first recycleViewport call. */
 	public currentViewportPlan: ViewportPlan | null = null;
 	/** Per-frame live-mode mount/update budget (see liveFrameBudget.ts), read by
 	 *  RowCellBinderDeps.tryConsumeLiveBudget/allowLiveEmergencyShell via stateHost: this. Reset each
@@ -368,9 +367,9 @@ export class RowRenderer<TRowData = unknown> {
 		const { retainedRowIndices } = computeRowWindowRetention({ renderWindow: nextWindow, focusedRowIndex, editingRowIndex });
 
 		// ── Viewport plan ──────────────────────────────────────────────────────────────
-		// Computed before the bind loop so RowCellBinderDeps.onLiveCellResolved (invoked from the
-		// live-mount binder case) has somewhere to record which cells actually resolved 'live' this
-		// frame. liveRows/liveCenterColumns start empty and are populated as the bind loop below runs.
+		// Computed before the bind loop so scroll binders operate against an executable live window:
+		// live overscan cells are guaranteed to be a subset of the rendered row/column window rather
+		// than inferred later by mutating the plan after binding.
 		this.currentViewportPlan = this.viewportPlanner.computePlan(
 			nextWindow,
 			columnTopology,

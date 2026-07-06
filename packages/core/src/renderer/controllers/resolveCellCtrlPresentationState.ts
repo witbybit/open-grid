@@ -175,7 +175,7 @@ function hydrateCellCtrlFromFullBind(cellCtrl: CellCtrl, context: NonNullable<Ce
 	cellCtrl.presentationState = {
 		kind:
 			context.presentationKind ??
-			(context.contentMode === 'portal' ? 'full-bind-portal' : context.contentMode === 'loading' ? 'full-bind-loading' : 'full-bind-primitive'),
+			(context.contentMode === 'portal' ? 'live-mount' : context.contentMode === 'loading' ? 'loading' : 'primitive'),
 		className: context.className,
 		title: context.title,
 		validationError: context.validationError,

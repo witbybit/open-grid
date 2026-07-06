@@ -16,6 +16,7 @@ import { bindAllDataCells, reconcileTopology, reconcileCellTopologyForScroll } f
 import type { ColumnDef, CompiledGridPlan } from '../columnDef.js';
 import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
 import { createCellInstanceRendererKey } from './identityKeys.js';
+import { createCellCtrl } from './controllers/CellCtrl.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -618,6 +619,30 @@ describe('bindAllDataCells — visibility boundary refresh', () => {
 	function makeBindingDeps() {
 		const onScrollCellPatched = vi.fn();
 		const markCellDirtyAfterScroll = vi.fn();
+		const getOrCreateRowCtrl = vi.fn((rowId: string) => ({
+			rowId,
+			rowVersion: 1,
+			attachedSlotId: undefined,
+			attachedGeneration: -1,
+			cellKeysByColumnInstanceId: new Map(),
+			isEditing: false,
+			isFocused: false,
+		}));
+		const getByRowAndColumn = vi.fn((rowId: string, columnInstanceId: string) =>
+			createCellCtrl({
+				rowId,
+				columnInstanceId: columnInstanceId as any,
+				colField: String(columnInstanceId),
+				freshness: {
+					rowVersion: 1,
+					globalVersion: 1,
+					insightVersion: 0,
+					styleVersion: 0,
+					loadingVersion: 0,
+					selectionVersion: 0,
+				},
+			})
+		);
 		return {
 			deps: {
 				engine: {
@@ -643,6 +668,12 @@ describe('bindAllDataCells — visibility boundary refresh', () => {
 						formattedValue: `${colField}-value`,
 						title: '',
 					})),
+					rowCtrls: {
+						getOrCreate: getOrCreateRowCtrl,
+						cellCtrls: {
+							getByRowAndColumn,
+						},
+					},
 					instrumentation: undefined,
 				} as any,
 				initCell,

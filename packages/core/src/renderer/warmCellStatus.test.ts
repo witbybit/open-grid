@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CellSlot } from './cellSlot.js';
 import { resolveWarmVisibleCellStatus, type WarmVisibleCellStatusContext, type WarmVisibleCellStatusDeps } from './warmCellStatus.js';
+import { createCellCtrl } from './controllers/CellCtrl.js';
 
 function makeDeps(overrides: Partial<WarmVisibleCellStatusDeps> = {}): WarmVisibleCellStatusDeps {
 	return {
@@ -24,6 +25,7 @@ function makeContext(overrides: Partial<WarmVisibleCellStatusContext> = {}): War
 		hasDeferredCellStyleRules: false,
 		loadingChangedDuringScroll: false,
 		selectionChangedDuringScroll: false,
+		cellCtrl: createCellCtrl({ rowId: 'r1', columnInstanceId: 'name' as any, colField: 'name' }),
 		...overrides,
 	};
 }

@@ -47,7 +47,7 @@ describe('CellCtrl freshness - full bind resolves controller state before bindin
 		const cellCtrl = store.engine.rowCtrls.cellCtrls.getByRowAndColumn('row-0', column!.instanceId);
 		expect(cellCtrl).toBeDefined();
 		expect(cellCtrl!.freshness).not.toBeUndefined();
-		expect(cellCtrl!.presentationState.kind).toBe('full-bind-primitive');
+		expect(cellCtrl!.presentationState.kind).toBe('primitive');
 		expect(cellCtrl!.rendererState.mountedSlotInstanceId).toBeDefined();
 
 		renderer.unmount();

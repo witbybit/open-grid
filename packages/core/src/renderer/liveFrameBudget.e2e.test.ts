@@ -99,6 +99,13 @@ describe('LiveFrameBudget wiring — end to end sanity (unconfigured)', () => {
 		const plan = grid.renderer.rowRenderer.currentViewportPlan;
 		expect(plan).not.toBeNull();
 		expect(plan!.liveCells.overscan.length).toBeGreaterThan(0);
+		const overscanCell = plan!.liveCells.overscan[0]!;
+		expect(overscanCell.rowIndex < plan!.visibleRows.start || overscanCell.rowIndex > plan!.visibleRows.end).toBe(true);
+		const overscanCellEl = grid.container.querySelector(
+			`.og-cell[data-row-id="row-${overscanCell.rowIndex}"][data-col-field="value"]`
+		) as HTMLElement | null;
+		expect(overscanCellEl).not.toBeNull();
+		expect(overscanCellEl?.dataset.contentMode).toBe('portal');
 		expect(stats.liveReactOverscanMounts || 0).toBeGreaterThan(0);
 
 		cleanup(grid);

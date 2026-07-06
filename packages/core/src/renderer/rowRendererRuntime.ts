@@ -31,7 +31,6 @@ import type { RenderWindow } from './renderWindow.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { reportRendererFault } from './rendererFaults.js';
 import type { ViewportPlan } from './viewportPlanner.js';
-import type { ColumnInstanceId } from '../columnDef.js';
 import type { LiveFrameBudget } from './liveFrameBudget.js';
 
 export interface RowRendererRuntimeArgs<TRowData = unknown> {
@@ -231,6 +230,11 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 						(this.deps.stateHost.renderStats.liveReactUpdatesDuringScroll || 0) + 1;
 				}
 			},
+			incrementLiveReactOverscanMountsDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.liveReactOverscanMounts = (this.deps.stateHost.renderStats.liveReactOverscanMounts || 0) + 1;
+				}
+			},
 			incrementLiveReactEmergencyShellsDuringScroll: () => {
 				if (this.deps.stateHost.renderStats) {
 					this.deps.stateHost.renderStats.liveReactEmergencyShellsDuringScroll =
@@ -261,18 +265,6 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 				if (this.deps.stateHost.renderStats) {
 					this.deps.stateHost.renderStats.textImpostorUsesDuringScroll =
 						(this.deps.stateHost.renderStats.textImpostorUsesDuringScroll || 0) + 1;
-				}
-			},
-			onLiveCellResolved: (rowId: string, columnInstanceId: ColumnInstanceId, rowIndex: number, _wasFreshMount: boolean) => {
-				const plan = this.deps.stateHost.currentViewportPlan;
-				if (!plan) return;
-				plan.liveRows.add(rowId);
-				plan.liveCenterColumns.add(columnInstanceId);
-				if (
-					plan.liveCells.overscan.some((cell) => cell.rowIndex === rowIndex && cell.columnInstanceId === columnInstanceId) &&
-					this.deps.stateHost.renderStats
-				) {
-					this.deps.stateHost.renderStats.liveReactOverscanMounts = (this.deps.stateHost.renderStats.liveReactOverscanMounts || 0) + 1;
 				}
 			},
 			getHtmlSnapshotDefaults: () => {

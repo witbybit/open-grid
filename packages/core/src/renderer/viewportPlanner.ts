@@ -30,8 +30,6 @@ export interface ViewportPlan {
 	readonly snapshotPrewarmColumns: ColumnInstanceId[];
 	readonly pinnedLeftColumns: ColumnInstanceId[];
 	readonly pinnedRightColumns: ColumnInstanceId[];
-	readonly liveRows: Set<string>;
-	readonly liveCenterColumns: Set<ColumnInstanceId>;
 	readonly liveCells: {
 		visible: CellAddress[];
 		overscan: CellAddress[];
@@ -62,6 +60,10 @@ function expandRange(range: Range, overscan: number, maxEnd: number): Range {
 	return { start: Math.max(0, range.start - overscan), end: Math.min(maxEnd, range.end + overscan) };
 }
 
+function intersectRange(a: Range, b: Range): Range {
+	return { start: Math.max(a.start, b.start), end: Math.min(a.end, b.end) };
+}
+
 export class ViewportPlanner<TRowData = unknown> {
 	private frameCounter = 0;
 	private prevWindow: RenderWindow | null = null;
@@ -77,7 +79,10 @@ export class ViewportPlanner<TRowData = unknown> {
 		const viewportDelta = diffRenderWindow(this.prevWindow, window);
 		const visibleRows = makeRange(window.visibleRowStart ?? window.rowStart, window.visibleRowEnd ?? window.rowEnd);
 		const renderedRows = makeRange(window.rowStart, window.rowEnd);
-		const liveRowRange = expandRange(visibleRows, rendererOptions?.liveReact?.rowOverscan ?? 0, Math.max(0, window.rowCount - 1));
+		const liveRowRange = intersectRange(
+			expandRange(visibleRows, rendererOptions?.liveReact?.rowOverscan ?? 0, Math.max(0, window.rowCount - 1)),
+			renderedRows
+		);
 
 		const visibleCenterColumns = topology.center
 			.filter(
@@ -109,10 +114,12 @@ export class ViewportPlanner<TRowData = unknown> {
 		const centerIds = topology.center.map((placement) => placement.columnId);
 		const visibleStart = Math.max(0, (window.visibleColStart ?? window.colStart) - window.pinLeftCols);
 		const visibleEnd = Math.max(visibleStart, (window.visibleColEnd ?? window.colEnd) - window.pinLeftCols);
-		const liveCenterColumnWindow = centerIds.slice(
+		const rawLiveCenterColumnWindow = centerIds.slice(
 			Math.max(0, visibleStart - (rendererOptions?.liveReact?.columnOverscan ?? 0)),
 			Math.min(centerIds.length, visibleEnd + (rendererOptions?.liveReact?.columnOverscan ?? 0) + 1)
 		);
+		const renderedCenterColumnSet = new Set(renderedCenterColumns);
+		const liveCenterColumnWindow = rawLiveCenterColumnWindow.filter((columnInstanceId) => renderedCenterColumnSet.has(columnInstanceId));
 
 		const liveColumns = new Set<ColumnInstanceId>();
 		const snapshotColumns: ColumnInstanceId[] = [];
@@ -128,7 +135,13 @@ export class ViewportPlanner<TRowData = unknown> {
 			for (const columnInstanceId of [...pinnedLeftColumns, ...liveCenterColumnWindow, ...pinnedRightColumns]) {
 				if (!liveColumns.has(columnInstanceId)) continue;
 				const address = { rowIndex, columnInstanceId };
-				if (rowIndex >= visibleRows.start && rowIndex <= visibleRows.end && visibleCenterColumns.includes(columnInstanceId)) {
+				if (
+					rowIndex >= visibleRows.start &&
+					rowIndex <= visibleRows.end &&
+					(visibleCenterColumns.includes(columnInstanceId) ||
+						pinnedLeftColumns.includes(columnInstanceId) ||
+						pinnedRightColumns.includes(columnInstanceId))
+				) {
 					liveVisibleCells.push(address);
 				} else {
 					liveOverscanCells.push(address);
@@ -164,8 +177,6 @@ export class ViewportPlanner<TRowData = unknown> {
 			snapshotPrewarmColumns: snapshotColumns,
 			pinnedLeftColumns,
 			pinnedRightColumns,
-			liveRows: new Set(),
-			liveCenterColumns: new Set(),
 			liveCells: {
 				visible: liveVisibleCells,
 				overscan: liveOverscanCells,

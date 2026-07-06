@@ -19,6 +19,7 @@ import type { CellRenderer } from './cellRenderer.js';
 import type { PortalMountManager } from './portalMountManager.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
+import type { ViewportPlan } from './viewportPlanner.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
 import {
 	collectCellDecorationSnapshotMetadata,
@@ -108,6 +109,7 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	/** A live cell already mounted (React re-render, not a fresh portal mount) — budgeted separately
 	 *  from incrementLiveReactMountsDuringScroll by liveFrameBudget.ts. */
 	incrementLiveReactUpdatesDuringScroll?: () => void;
+	incrementLiveReactOverscanMountsDuringScroll?: () => void;
 	/** A live-mount was deferred to a shell/pending placeholder because the frame's mount budget was
 	 *  exhausted (see liveFrameBudget.ts, GridRendererOptions.liveReact). */
 	incrementLiveReactEmergencyShellsDuringScroll?: () => void;
@@ -129,7 +131,6 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	/** Called once per cell whose resolved presentation this frame was 'live-mount' — lets the
 	 *  caller's ViewportPlan.liveRows/liveCenterColumns (see viewportPlanner.ts) reflect what the
 	 *  resolver actually decided, without this binder needing to know about ViewportPlan itself. */
-	onLiveCellResolved?: (rowId: string, columnInstanceId: ColumnInstanceId, rowIndex: number, wasFreshMount: boolean) => void;
 }
 
 export interface BindCellFullRequest<TRowData = unknown> {
@@ -170,6 +171,7 @@ export interface BindCellDuringScrollRequest<TRowData = unknown> {
 	isRowRebind: boolean;
 	isRowLoading: boolean;
 	isInVisibleContent: boolean;
+	viewportPlan?: ViewportPlan | null;
 	/** Attached RowCtrl for this row, when the caller already resolved one this frame. Falls back to
 	 *  engine.rowCtrls.getOrCreate(node.id) when omitted. */
 	rowCtrl?: RowCtrl<TRowData>;
@@ -331,7 +333,7 @@ function makeScrollDispatchInput<TRowData>(
 		cellCtrl,
 		rowCtrl,
 		cellSlot: request.cellSlot,
-		viewportPlan: null,
+		viewportPlan: request.viewportPlan ?? null,
 		geometry: {
 			rowIndex: request.rowIndex,
 			colIndex: request.colIndex,
