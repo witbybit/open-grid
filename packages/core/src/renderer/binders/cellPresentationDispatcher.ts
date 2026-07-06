@@ -1,17 +1,54 @@
+import type { CellRendererPhase, ColumnDef } from '../../columnDef.js';
 import type { CellCtrl } from '../controllers/CellCtrl.js';
 import type { RowCtrl } from '../controllers/RowCtrl.js';
-import type { BindCellDuringScrollRequest, RowCellBinderDeps } from '../rowCellBinder.js';
+import type { RowCellBinderDeps } from '../rowCellBinder.js';
+import type { RowNode } from '../../rowNode.js';
+import type { ViewportPlan } from '../viewportPlanner.js';
+import type { CellSlot } from '../cellSlot.js';
 import { applyPrimitiveCellPresentation } from './primitiveCellBinder.js';
 import { applyLiveCellPresentation } from './liveCellBinder.js';
 import { applyFreezeCellPresentation } from './freezeCellBinder.js';
 import { applyTextImpostorCellPresentation } from './textImpostorCellBinder.js';
 import { applyHtmlSnapshotCellPresentation } from './htmlSnapshotCellBinder.js';
 
+export interface CellBindGeometry {
+	rowIndex: number;
+	colIndex: number;
+	left: number;
+	right: number;
+	width: number;
+	lane: 'left' | 'center' | 'right';
+}
+
+export interface CellBindRuntime<TRowData> {
+	globalVersion: number;
+	rowSlotId: string;
+	slotGeneration: number;
+	rowHeight?: number;
+	colWidth?: number;
+	mount?: {
+		node: RowNode<TRowData>;
+		col: ColumnDef<TRowData>;
+		value: unknown;
+		isLoading: boolean;
+		isSelected: boolean;
+		renderPhase: CellRendererPhase;
+	};
+	checkbox?: {
+		checked: boolean;
+		ariaLabel: string;
+		title: string;
+	};
+}
+
 export interface DispatchCellPresentationInput<TRowData> {
 	deps: RowCellBinderDeps<TRowData>;
-	request: BindCellDuringScrollRequest<TRowData>;
 	cellCtrl: CellCtrl;
 	rowCtrl: RowCtrl<TRowData>;
+	cellSlot: CellSlot<TRowData>;
+	viewportPlan: ViewportPlan | null;
+	geometry: CellBindGeometry;
+	runtime: CellBindRuntime<TRowData>;
 	phase: 'scroll' | 'full-bind' | 'prewarm' | 'fidelity';
 	rowVersion: number;
 }
@@ -24,10 +61,13 @@ export function dispatchCellPresentation<TRowData>(input: DispatchCellPresentati
 	switch (input.cellCtrl.presentationState.kind) {
 		case 'buffered':
 		case 'primitive':
+		case 'full-bind-primitive':
+		case 'full-bind-loading':
 			return applyPrimitiveCellPresentation(input);
 
 		case 'live-mount':
 		case 'force-live-interactive-exception':
+		case 'full-bind-portal':
 			return applyLiveCellPresentation(input);
 
 		case 'checkbox-selector':

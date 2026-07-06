@@ -162,7 +162,6 @@ function makeDispatchInput(
 	cellCtrl.visualState.focused = cellCtrl.presentationState.isFocused ?? false;
 	return {
 		deps,
-		request,
 		cellCtrl,
 		rowCtrl: {
 			rowId: request.node.id,
@@ -172,6 +171,31 @@ function makeDispatchInput(
 			cellKeysByColumnInstanceId: new Map(),
 			isEditing: false,
 			isFocused: false,
+		},
+		cellSlot: request.cellSlot,
+		viewportPlan: null,
+		geometry: {
+			rowIndex: request.rowIndex,
+			colIndex: request.colIndex,
+			left: request.left,
+			right: request.right,
+			width: request.width,
+			lane: request.lane,
+		},
+		runtime: {
+			globalVersion: request.ctx.globalVersion,
+			rowSlotId: request.pooledRowId,
+			slotGeneration: request.pooledRowGeneration,
+			rowHeight: deps.engine.geometry?.rowHeights?.[request.rowIndex],
+			colWidth: request.ctx.plan?.colWidths?.[request.colIndex],
+			mount: {
+				node: request.node,
+				col: request.col,
+				value: request.node.data?.name,
+				isLoading: request.isRowLoading,
+				isSelected: false,
+				renderPhase: 'scroll',
+			},
 		},
 		phase: 'scroll' as const,
 		rowVersion,

@@ -427,6 +427,10 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 				hasDeferredCellStyleRules: ctx.hasDeferredCellStyleRules,
 				loadingChangedDuringScroll: ctx.loadingChangedDuringScroll,
 				selectionChangedDuringScroll: ctx.selectionChangedDuringScroll,
+				cellCtrl:
+					cellSlot.columnInstanceId !== ''
+						? deps.engine.rowCtrls?.cellCtrls.getByRowAndColumn(node.id, cellSlot.columnInstanceId)
+						: undefined,
 			}
 		);
 	};

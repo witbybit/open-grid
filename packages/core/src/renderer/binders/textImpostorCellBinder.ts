@@ -1,6 +1,6 @@
 import { recordCellSlotMountedVisualVersions } from '../cellSlot.js';
 import { isHtmlSnapshotPresentation } from '../scrollPresentationMode.js';
-import { applyCellTitlesAndValidation, stampMountedVersions } from './binderShared.js';
+import { applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
 import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
 import { createCellRendererLifecycle } from '../lifecycle/cellRendererLifecycle.js';
 
@@ -12,49 +12,47 @@ import { createCellRendererLifecycle } from '../lifecycle/cellRendererLifecycle.
  * shape, differing only in which telemetry counter increments.
  */
 export function applyTextImpostorCellPresentation<TRowData>(input: DispatchCellPresentationInput<TRowData>): void {
-	const { deps, request, cellCtrl, rowVersion } = input;
+	const { deps, cellCtrl, cellSlot, geometry, runtime, rowVersion } = input;
 	const presentation = cellCtrl.presentationState;
-	const { cellSlot, node, rowIndex, colIndex, col, ctx, left, right, width } = request;
 	const lifecycle = createCellRendererLifecycle(deps);
 
 	if (presentation.kind === 'impostor-text') {
-		if (isHtmlSnapshotPresentation(col)) deps.incrementHtmlSnapshotMissesDuringScroll?.();
+		if (runtime.mount && isHtmlSnapshotPresentation(runtime.mount.col)) deps.incrementHtmlSnapshotMissesDuringScroll?.();
 		if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
-		deps.markCellDirtyAfterScroll(cellSlot.element);
+		if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 		applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 		const didWrite = cellSlot.update(
-			colIndex,
-			col.field,
-			rowIndex,
-			node.id,
-			left,
-			right,
-			width,
+			geometry.colIndex,
+			cellCtrl.field,
+			geometry.rowIndex,
+			cellCtrl.rowId,
+			geometry.left,
+			geometry.right,
+			geometry.width,
 			presentation.className,
 			presentation.contentMode ?? 'fallback',
 			undefined,
 			presentation.formattedValue ?? '',
 			undefined
 		);
-		if (presentation.recordVersions) stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersions);
-		if (didWrite) deps.incrementCurrentScrollCellsWritten();
-		deps.incrementCellsBoundDuringScroll();
+		if (presentation.recordVersions) stampMountedVersions(cellSlot, rowVersion, runtime.globalVersion, presentation.recordVersions);
+		recordDispatchWrite(input, didWrite);
 		return;
 	}
 
 	// 'text-impostor'
-	deps.incrementTextImpostorUsesDuringScroll?.();
+	if (input.phase === 'scroll') deps.incrementTextImpostorUsesDuringScroll?.();
 	if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
-	deps.markCellDirtyAfterScroll(cellSlot.element);
+	if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 	applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 	const didWrite = cellSlot.update(
-		colIndex,
-		col.field,
-		rowIndex,
-		node.id,
-		left,
-		right,
-		width,
+		geometry.colIndex,
+		cellCtrl.field,
+		geometry.rowIndex,
+		cellCtrl.rowId,
+		geometry.left,
+		geometry.right,
+		geometry.width,
 		presentation.className,
 		presentation.contentMode ?? 'fallback',
 		undefined,
@@ -62,10 +60,9 @@ export function applyTextImpostorCellPresentation<TRowData>(input: DispatchCellP
 		undefined
 	);
 	cellSlot.lastMountedRowVersion = rowVersion;
-	cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
+	cellSlot.lastMountedGlobalVersion = runtime.globalVersion;
 	if (presentation.recordVersions && !('rowId' in presentation.recordVersions)) {
 		recordCellSlotMountedVisualVersions(cellSlot, presentation.recordVersions);
 	}
-	if (didWrite) deps.incrementCurrentScrollCellsWritten();
-	deps.incrementCellsBoundDuringScroll();
+	recordDispatchWrite(input, didWrite);
 }

@@ -4,6 +4,7 @@ import { recordCellSlotMountedVisualVersions, type CellSlot } from '../cellSlot.
 import { mergeCellSnapshotTitle, type CellDisplaySnapshot } from '../cellDisplaySnapshot.js';
 import type { VisualFreshness } from '../visualFreshness.js';
 import type { RowCellBinderDeps } from '../rowCellBinder.js';
+import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
 
 /**
  * Shared helpers used by every presentation-mode binder (primitiveCellBinder.ts, liveCellBinder.ts,
@@ -71,4 +72,10 @@ export function getScrollMountValue<TRowData>(
 	// exact row/column identity, never for whatever row previously occupied this slot.
 	const isSameIdentity = !!cellSlot && cellSlot.rowId === node.id && cellSlot.colField === col.field;
 	return isSameIdentity ? (cellSlot!.lastFormattedValue ?? '') : '';
+}
+
+export function recordDispatchWrite<TRowData>(input: DispatchCellPresentationInput<TRowData>, didWrite: boolean): void {
+	if (input.phase !== 'scroll') return;
+	if (didWrite) input.deps.incrementCurrentScrollCellsWritten();
+	input.deps.incrementCellsBoundDuringScroll();
 }

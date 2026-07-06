@@ -1,53 +1,54 @@
 import type { InternalColumnDef } from '../../columnDef.js';
 import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
-import { applyCellTitlesAndValidation, getScrollMountValue, stampMountedVersions } from './binderShared.js';
+import { applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
 import { createCellRendererLifecycle } from '../lifecycle/cellRendererLifecycle.js';
 
 /** Renders the over-budget emergency shell for a fresh live mount that couldn't be granted this
  * frame's mount budget. */
 function applyLiveMountEmergencyShell<TRowData>(input: DispatchCellPresentationInput<TRowData>): void {
-	const { deps, request, cellCtrl, rowVersion } = input;
+	const { deps, cellCtrl, cellSlot, geometry, runtime, rowVersion } = input;
 	const presentation = cellCtrl.presentationState;
-	const { cellSlot, node, rowIndex, colIndex, col, ctx, left, right, width } = request;
 	deps.incrementLiveReactEmergencyShellsDuringScroll?.();
-	deps.markCellDirtyAfterScroll(cellSlot.element);
+	if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 	applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 	const didWrite = cellSlot.update(
-		colIndex,
-		col.field,
-		rowIndex,
-		node.id,
-		left,
-		right,
-		width,
+		geometry.colIndex,
+		cellCtrl.field,
+		geometry.rowIndex,
+		cellCtrl.rowId,
+		geometry.left,
+		geometry.right,
+		geometry.width,
 		presentation.className,
 		'pending',
 		undefined,
 		'',
-		undefined
+		undefined,
+		0,
+		input.phase === 'full-bind' ? cellCtrl.visualState.selected : undefined
 	);
 	cellSlot.lastMountedRowVersion = rowVersion;
-	cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-	if (didWrite) deps.incrementCurrentScrollCellsWritten();
-	deps.incrementCellsBoundDuringScroll();
+	cellSlot.lastMountedGlobalVersion = runtime.globalVersion;
+	recordDispatchWrite(input, didWrite);
 }
 export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentationInput<TRowData>): void {
-	const { deps, request, cellCtrl, rowVersion } = input;
+	const { deps, cellCtrl, cellSlot, geometry, runtime, rowVersion } = input;
 	const presentation = cellCtrl.presentationState;
-	const { cellSlot, node, rowIndex, colIndex, col, ctx, pooledRowId, left, right, width, isRowLoading } = request;
 	const lifecycle = createCellRendererLifecycle(deps);
+	const mountRuntime = runtime.mount;
+	if (!mountRuntime) throw new Error('Live cell presentation requires mount runtime.');
 
 	if (presentation.kind === 'force-live-interactive-exception') {
-		deps.incrementForceLiveMountsDuringScroll?.();
+		if (input.phase === 'scroll') deps.incrementForceLiveMountsDuringScroll?.();
 		if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'scrolled-out', cellElement: cellSlot.element });
-		deps.markCellDirtyAfterScroll(cellSlot.element);
+		if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 		const ensuredPortalHost = deps.ensureCellPortalHost(cellSlot.element);
 		lifecycle.mountLive({
 			cellCtrl,
 			host: ensuredPortalHost,
-			reason: 'scroll-force-live',
+			reason: input.phase === 'full-bind' ? 'full-bind' : 'scroll-force-live',
 			token: {
-				epoch: ctx.globalVersion,
+				epoch: runtime.globalVersion,
 				cellControllerKey: cellCtrl.key,
 				rowId: cellCtrl.rowId,
 				columnInstanceId: cellCtrl.columnInstanceId,
@@ -55,48 +56,51 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 			},
 			mount: {
 				cellKey: presentation.portalKey!,
-				value: getScrollMountValue(deps, node, col, cellSlot),
-				node,
-				col,
-				rowIndex,
-				colIndex,
-				rowSlotId: pooledRowId,
-				slotGeneration: request.pooledRowGeneration,
+				value: mountRuntime.value,
+				node: mountRuntime.node,
+				col: mountRuntime.col,
+				rowIndex: geometry.rowIndex,
+				colIndex: geometry.colIndex,
+				rowSlotId: runtime.rowSlotId,
+				slotGeneration: runtime.slotGeneration,
 				cellRowBindingGeneration: cellSlot.rowBindingGeneration,
 				cellInstanceId: cellSlot.cellInstanceId,
 				portalHostId: cellSlot.portalHostId,
 				isEditing: cellCtrl.visualState.editing,
-				isLoading: isRowLoading,
+				isLoading: mountRuntime.isLoading,
 				isFocused: cellCtrl.visualState.focused,
-				isSelected: false,
+				isSelected: mountRuntime.isSelected,
 			},
 		});
 		cellSlot.lastMountedRowVersion = rowVersion;
-		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
+		cellSlot.lastMountedGlobalVersion = runtime.globalVersion;
 		applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 		const didWrite = cellSlot.update(
-			colIndex,
-			col.field,
-			rowIndex,
-			node.id,
-			left,
-			right,
-			width,
+			geometry.colIndex,
+			cellCtrl.field,
+			geometry.rowIndex,
+			cellCtrl.rowId,
+			geometry.left,
+			geometry.right,
+			geometry.width,
 			presentation.className,
 			'portal',
 			undefined,
 			'',
-			presentation.portalKey
+			presentation.portalKey,
+			0,
+			input.phase === 'full-bind' ? cellCtrl.visualState.selected : undefined
 		);
 		if (presentation.recordVersions && 'rowId' in presentation.recordVersions)
-			stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersions);
-		if (didWrite) deps.incrementCurrentScrollCellsWritten();
-		deps.incrementCellsBoundDuringScroll();
+			stampMountedVersions(cellSlot, rowVersion, runtime.globalVersion, presentation.recordVersions);
+		recordDispatchWrite(input, didWrite);
 		return;
 	}
 
 	const isFreshMount = !deps.portalMountManager.isCellMounted(presentation.portalKey!);
-	deps.onLiveCellResolved?.(node.id, (col as InternalColumnDef<TRowData>).instanceId, rowIndex, isFreshMount);
+	if (input.phase === 'scroll') {
+		deps.onLiveCellResolved?.(cellCtrl.rowId, (mountRuntime.col as InternalColumnDef<TRowData>).instanceId, geometry.rowIndex, isFreshMount);
+	}
 	const withinBudget = deps.tryConsumeLiveBudget?.(isFreshMount ? 'mount' : 'update') ?? true;
 	if (!withinBudget) {
 		if (!isFreshMount) return;
@@ -105,13 +109,15 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 			return;
 		}
 	}
-	if (isFreshMount) deps.incrementLiveReactMountsDuringScroll?.();
-	else deps.incrementLiveReactUpdatesDuringScroll?.();
+	if (input.phase === 'scroll') {
+		if (isFreshMount) deps.incrementLiveReactMountsDuringScroll?.();
+		else deps.incrementLiveReactUpdatesDuringScroll?.();
+	}
 	if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'scrolled-out', cellElement: cellSlot.element });
-	deps.markCellDirtyAfterScroll(cellSlot.element);
+	if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 	const ensuredPortalHost = deps.ensureCellPortalHost(cellSlot.element);
 	const token = {
-		epoch: ctx.globalVersion,
+		epoch: runtime.globalVersion,
 		cellControllerKey: cellCtrl.key,
 		rowId: cellCtrl.rowId,
 		columnInstanceId: cellCtrl.columnInstanceId,
@@ -119,42 +125,56 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 	};
 	const mount = {
 		cellKey: presentation.portalKey!,
-		value: getScrollMountValue(deps, node, col, cellSlot),
-		node,
-		col,
-		rowIndex,
-		colIndex,
-		rowSlotId: pooledRowId,
-		slotGeneration: request.pooledRowGeneration,
+		value: mountRuntime.value,
+		node: mountRuntime.node,
+		col: mountRuntime.col,
+		rowIndex: geometry.rowIndex,
+		colIndex: geometry.colIndex,
+		rowSlotId: runtime.rowSlotId,
+		slotGeneration: runtime.slotGeneration,
 		cellRowBindingGeneration: cellSlot.rowBindingGeneration,
 		cellInstanceId: cellSlot.cellInstanceId,
 		portalHostId: cellSlot.portalHostId,
 		isEditing: cellCtrl.visualState.editing,
-		isLoading: isRowLoading,
+		isLoading: mountRuntime.isLoading,
 		isFocused: cellCtrl.visualState.focused,
-		isSelected: false,
+		isSelected: mountRuntime.isSelected,
 	};
-	if (isFreshMount) lifecycle.mountLive({ cellCtrl, host: ensuredPortalHost, reason: 'scroll-live', token, mount });
-	else lifecycle.updateLive({ cellCtrl, host: ensuredPortalHost, reason: 'scroll-live', token, mount });
+	if (isFreshMount)
+		lifecycle.mountLive({ cellCtrl, host: ensuredPortalHost, reason: input.phase === 'full-bind' ? 'full-bind' : 'scroll-live', token, mount });
+	else lifecycle.updateLive({ cellCtrl, host: ensuredPortalHost, reason: input.phase === 'full-bind' ? 'full-bind' : 'scroll-live', token, mount });
 	cellSlot.lastMountedRowVersion = rowVersion;
-	cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
+	cellSlot.lastMountedGlobalVersion = runtime.globalVersion;
+	if (input.phase === 'full-bind' && cellCtrl.scrollPresentation === 'html-snapshot') {
+		lifecycle.captureHtml({
+			cellCtrl,
+			host: ensuredPortalHost,
+			reason: 'full-bind',
+			token,
+			cellSlot,
+			colField: cellCtrl.field,
+			rowHeight: runtime.rowHeight,
+			colWidth: runtime.colWidth,
+		});
+	}
 	applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 	const didWrite = cellSlot.update(
-		colIndex,
-		col.field,
-		rowIndex,
-		node.id,
-		left,
-		right,
-		width,
+		geometry.colIndex,
+		cellCtrl.field,
+		geometry.rowIndex,
+		cellCtrl.rowId,
+		geometry.left,
+		geometry.right,
+		geometry.width,
 		presentation.className,
 		'portal',
 		undefined,
 		'',
-		presentation.portalKey
+		presentation.portalKey,
+		0,
+		input.phase === 'full-bind' ? cellCtrl.visualState.selected : undefined
 	);
 	if (presentation.recordVersions && 'rowId' in presentation.recordVersions)
-		stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersions);
-	if (didWrite) deps.incrementCurrentScrollCellsWritten();
-	deps.incrementCellsBoundDuringScroll();
+		stampMountedVersions(cellSlot, rowVersion, runtime.globalVersion, presentation.recordVersions);
+	recordDispatchWrite(input, didWrite);
 }

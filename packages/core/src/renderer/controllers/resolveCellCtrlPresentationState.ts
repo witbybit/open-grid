@@ -21,7 +21,8 @@ export interface CellCtrlResolveContext<TRowData = unknown> {
 		className: string;
 		title: string | null;
 		validationError?: string;
-		contentMode: 'portal' | 'text' | 'empty' | 'loading' | 'fallback';
+		contentMode: 'portal' | 'text' | 'empty' | 'loading' | 'fallback' | 'custom';
+		presentationKind?: CellCtrl['presentationState']['kind'];
 		formattedValue: string;
 		portalKey?: string;
 		freshness: VisualFreshness;
@@ -166,11 +167,15 @@ function hydrateCellCtrlFromFullBind(cellCtrl: CellCtrl, context: NonNullable<Ce
 			? 'live'
 			: context.contentMode === 'loading'
 				? 'loading'
-				: context.contentMode === 'fallback'
-					? 'text-impostor'
-					: 'primitive';
+				: context.contentMode === 'custom'
+					? 'none'
+					: context.contentMode === 'fallback'
+						? 'text-impostor'
+						: 'primitive';
 	cellCtrl.presentationState = {
-		kind: context.contentMode === 'portal' ? 'full-bind-portal' : context.contentMode === 'loading' ? 'full-bind-loading' : 'full-bind-primitive',
+		kind:
+			context.presentationKind ??
+			(context.contentMode === 'portal' ? 'full-bind-portal' : context.contentMode === 'loading' ? 'full-bind-loading' : 'full-bind-primitive'),
 		className: context.className,
 		title: context.title,
 		validationError: context.validationError,

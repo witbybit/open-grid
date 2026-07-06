@@ -3,6 +3,7 @@ import { matchesCellSlotMountedFreshness, matchesCellSlotMountedVisualVersions }
 import { hasMountedDataVersionDrifted } from './visualFreshness.js';
 import { mustClearSlotForControllerChange } from './controllerWarmDomGuards.js';
 import { createCellCtrl } from './controllers/CellCtrl.js';
+import type { CellCtrl } from './controllers/CellCtrl.js';
 
 /**
  * Read-only inspection of a warm (already-mounted) cell's own portal state — kept separate from the
@@ -26,6 +27,7 @@ export interface WarmVisibleCellStatusContext {
 	hasDeferredCellStyleRules: boolean;
 	loadingChangedDuringScroll: boolean;
 	selectionChangedDuringScroll: boolean;
+	cellCtrl?: CellCtrl;
 }
 
 export interface WarmVisibleCellStatus {
@@ -57,19 +59,21 @@ export function resolveWarmVisibleCellStatus<TRowData>(
 	cellSlot: CellSlot<TRowData>,
 	ctx: WarmVisibleCellStatusContext
 ): WarmVisibleCellStatus {
-	const cellCtrl = createCellCtrl({
-		rowId: cellSlot.rowId,
-		columnInstanceId: cellSlot.columnInstanceId as any,
-		colField: cellSlot.colField,
-		freshness: {
-			rowVersion: ctx.currentRowVersion ?? -1,
-			globalVersion: ctx.globalVersion,
-			insightVersion: ctx.insightVersion,
-			styleVersion: ctx.styleVersion,
-			loadingVersion: ctx.loadingVersion,
-			selectionVersion: ctx.selectionVersion,
-		},
-	});
+	const cellCtrl =
+		ctx.cellCtrl ??
+		createCellCtrl({
+			rowId: cellSlot.rowId,
+			columnInstanceId: cellSlot.columnInstanceId as any,
+			colField: cellSlot.colField,
+			freshness: {
+				rowVersion: ctx.currentRowVersion ?? -1,
+				globalVersion: ctx.globalVersion,
+				insightVersion: ctx.insightVersion,
+				styleVersion: ctx.styleVersion,
+				loadingVersion: ctx.loadingVersion,
+				selectionVersion: ctx.selectionVersion,
+			},
+		});
 	cellCtrl.lifecycle.attachedSlotInstanceId = cellSlot.cellInstanceId;
 	const lastPortalKey = cellSlot.lastPortalKey;
 	const portalHost = cellSlot.lastContentMode === 'portal' ? deps.getCellPortalHost(cellSlot.element) : null;

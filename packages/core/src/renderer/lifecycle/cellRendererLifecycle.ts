@@ -76,10 +76,19 @@ export function createCellRendererLifecycle<TRowData>(deps: RowCellBinderDeps<TR
 		return reason === 'full-bind' ? 'initial' : reason;
 	}
 
+	function mountImmediately(args: Record<string, unknown>): void {
+		const manager = deps.portalMountManager as typeof deps.portalMountManager & {
+			mountCellImmediately?: (input: Record<string, unknown>) => void;
+			mountCell?: (input: Record<string, unknown>) => void;
+		};
+		if (manager.mountCellImmediately) manager.mountCellImmediately(args);
+		else manager.mountCell?.(args);
+	}
+
 	return {
 		mountLive({ cellCtrl, host, reason, token, mount }) {
 			if (!isControllerWorkStillValid({ token, cellCtrl, attachedSlotInstanceId: cellCtrl.lifecycle.attachedSlotInstanceId })) return;
-			deps.portalMountManager.mountCellImmediately({
+			mountImmediately({
 				cellKey: mount.cellKey,
 				container: host,
 				value: mount.value,
@@ -108,7 +117,7 @@ export function createCellRendererLifecycle<TRowData>(deps: RowCellBinderDeps<TR
 		},
 		updateLive({ cellCtrl, host, reason, token, mount }) {
 			if (!isControllerWorkStillValid({ token, cellCtrl, attachedSlotInstanceId: cellCtrl.lifecycle.attachedSlotInstanceId })) return;
-			deps.portalMountManager.mountCellImmediately({
+			mountImmediately({
 				cellKey: mount.cellKey,
 				container: host,
 				value: mount.value,

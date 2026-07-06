@@ -20,12 +20,17 @@ import type { PortalMountManager } from './portalMountManager.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
-import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, type CellDisplaySnapshot } from './cellDisplaySnapshot.js';
+import {
+	collectCellDecorationSnapshotMetadata,
+	createCellDisplaySnapshot,
+	mergeCellSnapshotTitle,
+	type CellDisplaySnapshot,
+} from './cellDisplaySnapshot.js';
 import { isVisualFresh, type VisualFreshness } from './visualFreshness.js';
 import type { ScrollCellPresentationDeps } from './scrollCellPresentation.js';
 import { getCellScrollPresentation, isHtmlSnapshotPresentation, isTextImpostorPresentation } from './scrollPresentationMode.js';
 import { dispatchCellPresentation } from './binders/cellPresentationDispatcher.js';
-import { buildCellPinClass, applyCellTitlesAndValidation } from './binders/binderShared.js';
+import { buildCellPinClass, applyCellTitlesAndValidation, getScrollMountValue } from './binders/binderShared.js';
 import { getOrCreateCellCtrl, createRowCtrl, type RowCtrl } from './controllers/RowCtrl.js';
 import type { CellCtrl } from './controllers/CellCtrl.js';
 import { CellCtrlStore } from './controllers/CellCtrlStore.js';
@@ -313,6 +318,51 @@ function recordCellCtrlPhysicalBinding<TRowData>(cellCtrl: CellCtrl, cellSlot: C
 	cellCtrl.rendererState.lastBindEpoch = (cellCtrl.rendererState.lastBindEpoch ?? 0) + 1;
 }
 
+function makeScrollDispatchInput<TRowData>(
+	deps: RowCellBinderDeps<TRowData>,
+	request: BindCellDuringScrollRequest<TRowData>,
+	cellCtrl: CellCtrl,
+	rowCtrl: RowCtrl<TRowData>,
+	rowVersion: number,
+	mountValue?: unknown
+) {
+	return {
+		deps,
+		cellCtrl,
+		rowCtrl,
+		cellSlot: request.cellSlot,
+		viewportPlan: null,
+		geometry: {
+			rowIndex: request.rowIndex,
+			colIndex: request.colIndex,
+			left: request.left,
+			right: request.right,
+			width: request.width,
+			lane: request.lane,
+		},
+		runtime: {
+			globalVersion: request.ctx.globalVersion,
+			rowSlotId: request.pooledRowId,
+			slotGeneration: request.pooledRowGeneration,
+			rowHeight: deps.engine.geometry?.rowHeights?.[request.rowIndex],
+			colWidth: request.ctx.plan?.colWidths?.[request.colIndex],
+			mount:
+				mountValue === undefined
+					? undefined
+					: {
+							node: request.node,
+							col: request.col,
+							value: mountValue,
+							isLoading: request.isRowLoading,
+							isSelected: false,
+							renderPhase: 'scroll' as const,
+						},
+		},
+		phase: 'scroll' as const,
+		rowVersion,
+	};
+}
+
 export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellFullRequest<TRowData>): void {
 	deps.incrementFullCellBinds?.();
 	deps.incrementCellSlotRebinds?.();
@@ -327,6 +377,8 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		selectionVersion: deps.engine.selectionVersion,
 	};
 	const cellCtrl = attachCellCtrl(deps, request, access.isEditing, access.isFocused);
+	const rowCtrl = request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl(node.id);
+	cellCtrl.visualState.selected = access.isSelected;
 
 	const baseCellClassName = buildCellPinClass(lane);
 	let cellClassName = baseCellClassName;
@@ -407,67 +459,6 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	const leftArg = lane === 'right' ? cellLeft - pinRightBaseLeft : cellLeft;
 	const cellWidth = plan.colWidths[colIndex];
 	const dragShift = deps.getColumnShift ? deps.getColumnShift(colIndex) : 0;
-
-	if (col.checkboxSelection) {
-		const cell = cellSlot.contentElement;
-		const rowId = node.id;
-		const isChecked = !!deps.selectionPaint.getSelectedRowIdSet(state.selectedRowIds)?.has(rowId);
-		cellClassName += ' og-cell-row-selector';
-		// Click handling is centralized: a single delegated listener on the viewport container
-		// (SelectionPaintManager.onViewportClick) resolves checkbox vs. cell clicks from the DOM
-		// target at fire time — see its doc comment for why moving off a per-checkbox listener here
-		// is behavior-preserving.
-		let checkbox = cell.querySelector<HTMLInputElement>('input[type="checkbox"].og-row-checkbox');
-		if (!checkbox) {
-			checkbox = document.createElement('input');
-			checkbox.type = 'checkbox';
-			checkbox.className = 'og-row-checkbox';
-			cell.textContent = '';
-			cell.appendChild(checkbox);
-		}
-		checkbox.dataset.rowId = rowId;
-		checkbox.setAttribute('aria-label', isChecked ? `Deselect row ${rowIndex + 1}` : `Select row ${rowIndex + 1}`);
-		checkbox.title = 'Select row. Shift-click selects a range.';
-		if (checkbox.checked !== isChecked) checkbox.checked = isChecked;
-		cellSlot.update(
-			colIndex,
-			col.field,
-			rowIndex,
-			node.id,
-			leftArg,
-			-1,
-			cellWidth,
-			cellClassName,
-			'custom',
-			undefined,
-			'',
-			undefined,
-			dragShift,
-			access.isSelected
-		);
-		cellSlot.lastMountedRowVersion = rowVersion;
-		cellSlot.lastMountedGlobalVersion = state.globalVersion;
-		recordCellSlotMountedVisualVersions(cellSlot, currentVisualVersions);
-		resolveCellCtrlPresentationState({
-			cellCtrl,
-			rowCtrl: request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl(node.id),
-			viewportPlan: null,
-			phase: 'full-bind',
-			context: {
-				fullBind: {
-					className: cellClassName,
-					title: cellSlot.element.title || null,
-					contentMode: 'fallback',
-					formattedValue: '',
-					freshness: { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions },
-					value: access.rawValue,
-				},
-			},
-		});
-		recordCellCtrlPhysicalBinding(cellCtrl, cellSlot, { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions });
-		return;
-	}
-
 	const stableKey = access.isEditing
 		? createEditRendererKey(node.id, getColumnInstanceIdentity(col))
 		: createCellInstanceRendererKey(cellSlot.cellInstanceId, getColumnInstanceIdentity(col));
@@ -475,29 +466,56 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	let contentMode: CellContentMode = 'empty';
 	let formattedValue = '';
 	let portalImpostorValue = '';
-	const isHtmlSnapshotCol = isHtmlSnapshotPresentation(col);
-	// html-snapshot mode — capture the committed HTML of an already-live portal on every full
-	// (non-scroll) bind, not just the scroll freeze-in-place moment. Without this, a cell only ever
-	// gets a frozen clone after surviving one prior scroll-while-visible cycle; any normal re-render
-	// (selection, focus, unrelated repaint elsewhere in the grid) settles this cell's portal without
-	// ever reading its committed DOM, so the very first scroll after that settle still falls back to
-	// plain text. Reading here — before this bind decides whether to release/remount the portal —
-	// means the cell already "looks frozen" the first time it is ever scrolled.
-	if (isHtmlSnapshotCol && cellSlot.lastPortalKey === stableKey && deps.portalMountManager.isCellMounted(stableKey)) {
-		const existingHost = deps.getCellPortalHost(cellSlot.element);
-		if (existingHost && existingHost.childElementCount > 0) {
-			deps.engine.htmlScrollSnapshots.set(
-				deps.engine.htmlScrollSnapshots.createSnapshot({
-					rowId: node.id,
-					columnInstanceId: getColumnInstanceIdentity(col),
-					colField: col.field,
-					html: existingHost.innerHTML,
+
+	if (col.checkboxSelection) {
+		const rowId = node.id;
+		const isChecked = !!deps.selectionPaint.getSelectedRowIdSet(state.selectedRowIds)?.has(rowId);
+		cellClassName += ' og-cell-row-selector';
+		resolveCellCtrlPresentationState({
+			cellCtrl,
+			rowCtrl,
+			viewportPlan: null,
+			phase: 'full-bind',
+			context: {
+				fullBind: {
+					className: cellClassName,
+					title: null,
+					contentMode: 'custom',
+					presentationKind: 'checkbox-selector',
+					formattedValue: '',
 					freshness: { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions },
-					rowHeight: deps.engine.geometry?.rowHeights?.[rowIndex],
-					colWidth: plan.colWidths?.[colIndex],
-				})
-			);
-		}
+					value: access.rawValue,
+				},
+			},
+		});
+		dispatchCellPresentation({
+			deps,
+			cellCtrl,
+			rowCtrl,
+			cellSlot,
+			viewportPlan: null,
+			geometry: { rowIndex, colIndex, left: leftArg, right: -1, width: cellWidth, lane },
+			runtime: {
+				globalVersion: state.globalVersion,
+				rowSlotId: slotId,
+				slotGeneration: request.slotGeneration,
+				rowHeight: deps.engine.geometry?.rowHeights?.[rowIndex],
+				colWidth: cellWidth,
+				checkbox: {
+					checked: isChecked,
+					ariaLabel: isChecked ? `Deselect row ${rowIndex + 1}` : `Select row ${rowIndex + 1}`,
+					title: 'Select row. Shift-click selects a range.',
+				},
+			},
+			phase: 'full-bind',
+			rowVersion,
+		});
+		assignRendererHandle(cellSlot, 'custom', '', stableKey);
+		cellSlot.lastMountedRowVersion = rowVersion;
+		cellSlot.lastMountedGlobalVersion = state.globalVersion;
+		recordCellSlotMountedVisualVersions(cellSlot, currentVisualVersions);
+		recordCellCtrlPhysicalBinding(cellCtrl, cellSlot, { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions });
+		return;
 	}
 
 	if (((col as InternalColumnDef<TRowData>).cellRenderer || access.isEditing) && !access.isLoading) {
@@ -515,43 +533,9 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			textImpostorRender != null
 				? textImpostorRender({ value: access.value, formattedValue: formattedForImpostor }) || formattedForImpostor
 				: formattedForImpostor;
-		if (cellSlot.lastPortalKey !== stableKey || !deps.portalMountManager.isCellMounted(stableKey)) {
-			if (cellSlot.lastPortalKey) {
-				deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-			}
-			// Text content is left in place — CSS hides .og-cell-content when data-content-mode="portal".
-			// It will be cleared lazily when the cell transitions to a non-portal, non-text mode.
-		}
-		const portalHost = deps.ensureCellPortalHost(cellSlot.element);
-		deps.cellRenderer.showPortalContent(cellSlot.element);
-		deps.portalMountManager.mountCell({
-			cellKey: stableKey,
-			container: portalHost,
-			value: access.value,
-			formattedValue: portalImpostorValue,
-			node,
-			col,
-			rowIndex,
-			colIndex,
-			rowSlotId: slotId,
-			slotGeneration: request.slotGeneration,
-			cellRowBindingGeneration: cellSlot.rowBindingGeneration,
-			cellInstanceId: cellSlot.cellInstanceId,
-			portalHostId: cellSlot.portalHostId,
-			isEditing: access.isEditing,
-			isLoading: access.isLoading,
-			phase: access.isEditing ? 'edit' : phase,
-			isScrolling: false,
-			isFocused: access.isFocused,
-			isSelected: access.isSelected,
-		});
 	} else {
-		if (cellSlot.lastPortalKey) {
-			deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-		}
 		if (access.isLoading) {
 			contentMode = 'loading';
-			deps.cellRenderer.ensureLoadingSkeleton(cellSlot.element);
 		} else {
 			formattedValue = getCheapCellText(deps, node, col, cellSlot, ctx);
 			contentMode = formattedValue === '' ? 'empty' : 'text';
@@ -566,16 +550,16 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 				? col.tooltip
 				: col.tooltip({ row: node.data as TRowData, rowId: node.id, colField: col.field, value: access.rawValue });
 	}
-	applyCellTitlesAndValidation(cellSlot.element, tooltipText, insightTitle, validationDecTitle);
+	const mergedTitle = mergeCellSnapshotTitle(tooltipText, insightTitle);
 	resolveCellCtrlPresentationState({
 		cellCtrl,
-		rowCtrl: request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl(node.id),
+		rowCtrl,
 		viewportPlan: null,
 		phase: 'full-bind',
 		context: {
 			fullBind: {
 				className: cellClassName,
-				title: cellSlot.element.title || null,
+				title: mergedTitle,
 				validationError: validationDecTitle,
 				contentMode,
 				formattedValue: contentMode === 'portal' ? portalImpostorValue : formattedValue,
@@ -585,23 +569,34 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			},
 		},
 	});
-
-	cellSlot.update(
-		colIndex,
-		col.field,
-		rowIndex,
-		node.id,
-		leftArg,
-		-1,
-		cellWidth,
-		cellClassName,
-		contentMode,
-		access.rawValue,
-		formattedValue,
-		contentMode === 'portal' ? stableKey : undefined,
-		dragShift,
-		access.isSelected
-	);
+	dispatchCellPresentation({
+		deps,
+		cellCtrl,
+		rowCtrl,
+		cellSlot,
+		viewportPlan: null,
+		geometry: { rowIndex, colIndex, left: leftArg, right: -1, width: cellWidth, lane },
+		runtime: {
+			globalVersion: state.globalVersion,
+			rowSlotId: slotId,
+			slotGeneration: request.slotGeneration,
+			rowHeight: deps.engine.geometry?.rowHeights?.[rowIndex],
+			colWidth: cellWidth,
+			mount:
+				contentMode === 'portal'
+					? {
+							node,
+							col,
+							value: access.value,
+							isLoading: access.isLoading,
+							isSelected: access.isSelected,
+							renderPhase: (access.isEditing ? 'edit' : phase) as CellRendererPhase,
+						}
+					: undefined,
+		},
+		phase: 'full-bind',
+		rowVersion,
+	});
 
 	// WS2: assign the renderer handle based on the resolved content mode.
 	// Destroy the previous handle when the renderer kind or portal key changes.
@@ -778,13 +773,17 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	});
 
 	// 3. Dispatch to the mode-specific binder — enqueues fidelity work, updates mounted slot bookkeeping.
-	dispatchCellPresentation({
-		deps,
-		request,
-		cellCtrl,
-		rowCtrl: request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl(node.id),
-		phase: 'scroll',
-		rowVersion,
-	});
+	dispatchCellPresentation(
+		makeScrollDispatchInput(
+			deps,
+			request,
+			cellCtrl,
+			request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl(node.id),
+			rowVersion,
+			cellCtrl.presentationState.kind === 'live-mount' || cellCtrl.presentationState.kind === 'force-live-interactive-exception'
+				? getScrollMountValue(deps, request.node, request.col, request.cellSlot)
+				: undefined
+		)
+	);
 	recordCellCtrlPhysicalBinding(cellCtrl, cellSlot);
 }
