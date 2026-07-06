@@ -1,4 +1,5 @@
 import type { CellScrollPresentation, ColumnInstanceId } from '../../columnDef.js';
+import type { CellDisplaySnapshot } from '../cellDisplaySnapshot.js';
 import type { CellContentMode } from '../cellSlot.js';
 import type { VisualFreshness } from '../visualFreshness.js';
 
@@ -14,6 +15,47 @@ export interface ControllerWorkToken {
 	rowId: string;
 	columnInstanceId: ColumnInstanceId;
 	freshness: VisualFreshness;
+}
+
+export interface CellCtrlPresentationState {
+	kind:
+		| 'buffered'
+		| 'primitive'
+		| 'checkbox-selector'
+		| 'live-mount'
+		| 'force-live-interactive-exception'
+		| 'freeze-live-portal'
+		| 'portal-frozen'
+		| 'impostor-synthetic'
+		| 'text-impostor'
+		| 'impostor-text'
+		| 'impostor-html'
+		| 'html-snapshot-pending'
+		| 'full-bind-portal'
+		| 'full-bind-primitive'
+		| 'full-bind-loading';
+	className: string;
+	title?: string | null;
+	validationError?: string;
+	contentMode?: CellContentMode;
+	formattedValue?: string;
+	portalKey?: string;
+	html?: string;
+	releaseStalePortal: boolean;
+	requiresFidelity: boolean;
+	markDirty?: boolean;
+	isEditing?: boolean;
+	isFocused?: boolean;
+	keepVersionFresh?: boolean;
+	captureFrozenHtml?: boolean;
+	recordVersions?: VisualFreshness | CellDisplaySnapshot;
+	freshness: VisualFreshness;
+	/**
+	 * Transitional payload during the authority inversion. This is populated before binding and read
+	 * through CellCtrl, so the controller stays authoritative even while individual binders are still
+	 * being narrowed to smaller state slices.
+	 */
+	legacyPresentation?: unknown;
 }
 
 export function isControllerWorkStillValid(input: {
@@ -82,12 +124,7 @@ export interface CellCtrl {
 		stale: boolean;
 	};
 
-	lastResolvedFreshness: VisualFreshness | undefined;
-	attachedSlotInstanceId: string | undefined;
-	attachedRowBindingGeneration: number;
-	lastResolvedContentMode: CellContentMode | undefined;
-	isEditing: boolean;
-	isFocused: boolean;
+	presentationState: CellCtrlPresentationState;
 }
 
 export interface CreateCellCtrlInput {
@@ -102,6 +139,17 @@ export interface CreateCellCtrlInput {
 	freshness?: VisualFreshness;
 }
 
+function createDefaultFreshness(): VisualFreshness {
+	return {
+		rowVersion: -1,
+		globalVersion: -1,
+		insightVersion: -1,
+		styleVersion: -1,
+		loadingVersion: -1,
+		selectionVersion: -1,
+	};
+}
+
 export function createCellCtrl(input: CreateCellCtrlInput): CellCtrl;
 export function createCellCtrl(rowId: string, columnInstanceId: ColumnInstanceId, field: string): CellCtrl;
 export function createCellCtrl(inputOrRowId: CreateCellCtrlInput | string, columnInstanceIdArg?: ColumnInstanceId, fieldArg?: string): CellCtrl {
@@ -113,6 +161,7 @@ export function createCellCtrl(inputOrRowId: CreateCellCtrlInput | string, colum
 					colField: fieldArg!,
 				}
 			: inputOrRowId;
+	const freshness = input.freshness ?? createDefaultFreshness();
 	return {
 		key: createCellControllerKey(input.rowId, input.columnInstanceId),
 		rowId: input.rowId,
@@ -147,11 +196,15 @@ export function createCellCtrl(inputOrRowId: CreateCellCtrlInput | string, colum
 			destroyed: false,
 			stale: false,
 		},
-		lastResolvedFreshness: undefined,
-		attachedSlotInstanceId: undefined,
-		attachedRowBindingGeneration: -1,
-		lastResolvedContentMode: undefined,
-		isEditing: false,
-		isFocused: false,
+		presentationState: {
+			kind: 'primitive',
+			className: '',
+			title: null,
+			releaseStalePortal: false,
+			requiresFidelity: false,
+			freshness,
+			formattedValue: '',
+			contentMode: 'empty',
+		},
 	};
 }

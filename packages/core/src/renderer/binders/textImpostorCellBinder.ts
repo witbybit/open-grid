@@ -1,8 +1,8 @@
 import { recordCellSlotMountedVisualVersions } from '../cellSlot.js';
-import type { RowCellBinderDeps, BindCellDuringScrollRequest } from '../rowCellBinder.js';
-import type { ScrollCellPresentation } from '../scrollCellPresentation.js';
 import { isHtmlSnapshotPresentation } from '../scrollPresentationMode.js';
 import { applyCellTitlesAndValidation, stampMountedVersions } from './binderShared.js';
+import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
+import { createCellRendererLifecycle } from '../lifecycle/cellRendererLifecycle.js';
 
 /**
  * scrollPresentation: 'text-impostor' — the explicit, always-on text/chip stand-in via
@@ -11,19 +11,17 @@ import { applyCellTitlesAndValidation, stampMountedVersions } from './binderShar
  * 'html-snapshot' mode when allowTextFallbackWhenMissing is set — both share the identical apply
  * shape, differing only in which telemetry counter increments.
  */
-export function applyTextImpostorCellPresentation<TRowData>(
-	deps: RowCellBinderDeps<TRowData>,
-	request: BindCellDuringScrollRequest<TRowData>,
-	presentation: Extract<ScrollCellPresentation, { kind: 'text-impostor' | 'impostor-text' }>,
-	rowVersion: number
-): void {
+export function applyTextImpostorCellPresentation<TRowData>(input: DispatchCellPresentationInput<TRowData>): void {
+	const { deps, request, cellCtrl, rowVersion } = input;
+	const presentation = cellCtrl.presentationState;
 	const { cellSlot, node, rowIndex, colIndex, col, ctx, left, right, width } = request;
+	const lifecycle = createCellRendererLifecycle(deps);
 
 	if (presentation.kind === 'impostor-text') {
 		if (isHtmlSnapshotPresentation(col)) deps.incrementHtmlSnapshotMissesDuringScroll?.();
-		if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
+		if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 		deps.markCellDirtyAfterScroll(cellSlot.element);
-		applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
+		applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 		const didWrite = cellSlot.update(
 			colIndex,
 			col.field,
@@ -33,12 +31,12 @@ export function applyTextImpostorCellPresentation<TRowData>(
 			right,
 			width,
 			presentation.className,
-			presentation.contentMode,
+			presentation.contentMode ?? 'fallback',
 			undefined,
-			presentation.formattedValue,
+			presentation.formattedValue ?? '',
 			undefined
 		);
-		stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersionsFrom);
+		if (presentation.recordVersions) stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersions);
 		if (didWrite) deps.incrementCurrentScrollCellsWritten();
 		deps.incrementCellsBoundDuringScroll();
 		return;
@@ -46,9 +44,9 @@ export function applyTextImpostorCellPresentation<TRowData>(
 
 	// 'text-impostor'
 	deps.incrementTextImpostorUsesDuringScroll?.();
-	if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
+	if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 	deps.markCellDirtyAfterScroll(cellSlot.element);
-	applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
+	applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 	const didWrite = cellSlot.update(
 		colIndex,
 		col.field,
@@ -58,14 +56,16 @@ export function applyTextImpostorCellPresentation<TRowData>(
 		right,
 		width,
 		presentation.className,
-		presentation.contentMode,
+		presentation.contentMode ?? 'fallback',
 		undefined,
-		presentation.formattedValue,
+		presentation.formattedValue ?? '',
 		undefined
 	);
 	cellSlot.lastMountedRowVersion = rowVersion;
 	cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-	recordCellSlotMountedVisualVersions(cellSlot, presentation.recordVersions);
+	if (presentation.recordVersions && !('rowId' in presentation.recordVersions)) {
+		recordCellSlotMountedVisualVersions(cellSlot, presentation.recordVersions);
+	}
 	if (didWrite) deps.incrementCurrentScrollCellsWritten();
 	deps.incrementCellsBoundDuringScroll();
 }

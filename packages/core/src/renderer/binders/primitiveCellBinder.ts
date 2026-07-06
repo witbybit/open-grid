@@ -1,5 +1,4 @@
-import type { RowCellBinderDeps, BindCellDuringScrollRequest } from '../rowCellBinder.js';
-import type { ScrollCellPresentation } from '../scrollCellPresentation.js';
+import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
 import { applyCellTitlesAndValidation, stampMountedVersions } from './binderShared.js';
 
 /**
@@ -7,18 +6,15 @@ import { applyCellTitlesAndValidation, stampMountedVersions } from './binderShar
  * Also handles the 'buffered' kind (an off-screen cell reusing/clearing its last-known content),
  * which is presentation-orthogonal but shares this binder's plain cellSlot.update() shape.
  */
-export function applyPrimitiveCellPresentation<TRowData>(
-	deps: RowCellBinderDeps<TRowData>,
-	request: BindCellDuringScrollRequest<TRowData>,
-	presentation: Extract<ScrollCellPresentation, { kind: 'buffered' | 'primitive' }>,
-	rowVersion: number
-): void {
+export function applyPrimitiveCellPresentation<TRowData>(input: DispatchCellPresentationInput<TRowData>): void {
+	const { deps, request, cellCtrl, rowVersion } = input;
+	const presentation = cellCtrl.presentationState;
 	const { cellSlot, node, rowIndex, colIndex, col, ctx, left, right, width } = request;
 
 	switch (presentation.kind) {
 		case 'buffered': {
 			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
+			applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 			const didWrite = cellSlot.update(
 				colIndex,
 				col.field,
@@ -28,12 +24,12 @@ export function applyPrimitiveCellPresentation<TRowData>(
 				right,
 				width,
 				presentation.className,
-				presentation.contentMode,
+				presentation.contentMode ?? 'empty',
 				undefined,
-				presentation.formattedValue,
+				presentation.formattedValue ?? '',
 				presentation.portalKey
 			);
-			if (presentation.recordVersionsFrom) stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersionsFrom);
+			if (presentation.recordVersions) stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersions);
 			if (didWrite) deps.incrementCurrentScrollCellsWritten();
 			deps.incrementCellsBoundDuringScroll();
 			return;
@@ -42,7 +38,7 @@ export function applyPrimitiveCellPresentation<TRowData>(
 		case 'primitive': {
 			if (presentation.markDirty) deps.markCellDirtyAfterScroll(cellSlot.element);
 			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
-			applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
+			applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 			const didWrite = cellSlot.update(
 				colIndex,
 				col.field,
@@ -52,12 +48,12 @@ export function applyPrimitiveCellPresentation<TRowData>(
 				right,
 				width,
 				presentation.className,
-				presentation.contentMode,
+				presentation.contentMode ?? 'text',
 				undefined,
-				presentation.formattedValue,
+				presentation.formattedValue ?? '',
 				undefined
 			);
-			if (presentation.recordVersionsFrom) stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersionsFrom);
+			if (presentation.recordVersions) stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersions);
 			if (didWrite) deps.incrementCurrentScrollCellsWritten();
 			deps.incrementCellsBoundDuringScroll();
 			return;

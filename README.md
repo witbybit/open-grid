@@ -1089,6 +1089,21 @@ const columns: ColumnDef<TradeRow>[] = [
 ];
 ```
 
+#### How cell rendering works
+
+Open Grid separates "what this cell should mean" from "where this cell's DOM currently lives":
+
+1. The grid resolves a row and column into a cell controller keyed by `rowId + columnInstanceId`.
+2. The controller decides the semantic presentation for the current phase: primitive text, frozen portal, live renderer, text impostor, or HTML snapshot.
+3. The visible cell slot receives that controller state and applies it into the DOM.
+4. During active scroll, `capabilities.scrollPresentation` decides whether the cell stays live, freezes, falls back to a text impostor, or replays an HTML snapshot.
+5. When scrolling settles, fidelity work restores the full renderer if the scroll mode used a temporary presentation.
+
+That means a renderer column is really configured in two layers:
+
+- Column-level `renderer` and `renderer.capabilities` describe what a single column is allowed to do.
+- Grid-level `rendererOptions` describe how much live or snapshot work the whole grid can afford.
+
 #### Renderer kinds
 
 | Kind                                     | Use it for                                                                                                                 |
@@ -1114,6 +1129,24 @@ The older `cellRenderer` examples in this README are kept for compatibility with
 
 If you omit `scrollPresentation` on a custom renderer, Open Grid treats it as `'freeze'`. If a column has no renderer, it uses the primitive path.
 
+#### Column capability reference
+
+Use these under `renderer.capabilities`:
+
+| Config path                                 | Type / values                                                             | What it controls                                                                              |
+| :------------------------------------------ | :------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------- |
+| `scrollPresentation`                        | `'primitive' \| 'live' \| 'freeze' \| 'text-impostor' \| 'html-snapshot'` | Chooses the cell's scroll-time presentation mode. This is the main switch.                    |
+| `live.update`                               | `'react' \| 'imperative'`                                                 | For live columns, choose normal React updates or direct imperative `ref.update(...)` updates. |
+| `live.priority`                             | `'high' \| 'normal' \| 'low'`                                             | Optional priority hint for live-renderer scheduling.                                          |
+| `live.allowEmergencyShell`                  | `boolean`                                                                 | For live columns, allow a temporary shell when mount/update budget is exhausted.              |
+| `textImpostor.render`                       | `({ value, formattedValue }) => string`                                   | Produces the cheap scroll-time string/chip representation for `'text-impostor'` mode.         |
+| `htmlSnapshot.strict`                       | `boolean`                                                                 | Tightens snapshot reuse rules for `'html-snapshot'` mode.                                     |
+| `htmlSnapshot.freshness`                    | `'visual' \| 'row-version-only'`                                          | Chooses whether snapshot reuse requires full visual freshness or only row-version freshness.  |
+| `htmlSnapshot.allowShellWhenMissing`        | `boolean`                                                                 | When no valid snapshot exists, allow a shell/pending placeholder.                             |
+| `htmlSnapshot.allowTextFallbackWhenMissing` | `boolean`                                                                 | When no valid snapshot exists, allow plain text fallback instead of shell-only behavior.      |
+| `htmlSnapshot.invalidateOnWidthChange`      | `boolean`                                                                 | Treat width changes as snapshot-invalidating.                                                 |
+| `htmlSnapshot.invalidateOnHeightChange`     | `boolean`                                                                 | Treat height changes as snapshot-invalidating.                                                |
+
 #### Live renderer options and overscan
 
 Use `rendererOptions.liveReact` on `<Grid>` to tune live renderer work. These are initialization-time options.
@@ -1137,6 +1170,8 @@ Use `rendererOptions.liveReact` on `<Grid>` to tune live renderer work. These ar
 ```
 
 `rowOverscan` and `columnOverscan` extend the live-cell planning window beyond the visible viewport. Visible live cells are prioritized first, and the live budget controls how much live renderer work can be admitted in a frame. `maxMountsPerFrame` limits fresh renderer mounts, while `maxUpdatesPerFrame` limits updates to renderers that already exist. Set `allowEmergencyShell: false` when truthfulness is more important than avoiding jank; in live mode, Open Grid will prefer real renderer work over showing raw or stale text.
+
+Overscan only applies to cells using `scrollPresentation: 'live'`. It does not force every offscreen cell to mount; it extends the candidate window, then the per-frame budgets decide how much of that work actually runs. The practical effect is that nearby live cells can already be warm by the time they enter view.
 
 #### HTML snapshot options
 
@@ -1230,6 +1265,33 @@ The grid-level fallback switch is:
 ```
 
 Keep `allowRawValueFallback: false` when raw values would be misleading, such as unformatted currency, percentages, or coded enum values.
+
+#### Grid-level renderer options reference
+
+Use these under `<Grid rendererOptions={...} />`:
+
+| Config path                                 | Type      | What it controls                                                                                           |
+| :------------------------------------------ | :-------- | :--------------------------------------------------------------------------------------------------------- |
+| `liveReact.rowOverscan`                     | `number`  | Extra rows around the visible viewport that are considered for live renderer work during scroll.           |
+| `liveReact.columnOverscan`                  | `number`  | Extra center columns around the visible viewport that are considered for live renderer work during scroll. |
+| `liveReact.maxMountsPerFrame`               | `number`  | Caps new live mounts admitted in a single animation frame.                                                 |
+| `liveReact.maxUpdatesPerFrame`              | `number`  | Caps updates to already-mounted live renderers in a single animation frame.                                |
+| `liveReact.allowEmergencyShell`             | `boolean` | Grid-wide default for whether budget-exhausted live cells may temporarily show a shell.                    |
+| `htmlSnapshot.maxSnapshots`                 | `number`  | Maximum number of cached HTML snapshots kept by the grid.                                                  |
+| `htmlSnapshot.maxTotalBytes`                | `number`  | Total byte budget for the HTML snapshot cache.                                                             |
+| `htmlSnapshot.maxSingleSnapshotBytes`       | `number`  | Per-snapshot byte limit. Large captures are rejected instead of bloating the cache.                        |
+| `htmlSnapshot.defaultStrict`                | `boolean` | Grid-wide default strictness for HTML snapshot reuse.                                                      |
+| `htmlSnapshot.allowShellWhenMissing`        | `boolean` | Grid-wide default for shell fallback when a snapshot is missing or stale.                                  |
+| `htmlSnapshot.allowTextFallbackWhenMissing` | `boolean` | Grid-wide default for text fallback when a snapshot is missing or stale.                                   |
+| `textImpostor.allowRawValueFallback`        | `boolean` | Allows raw values when a text impostor column does not provide a safe formatted string.                    |
+
+#### Choosing a mode quickly
+
+- Use `{ kind: 'text' }` or no renderer for the fastest possible cells.
+- Use `scrollPresentation: 'freeze'` for most custom React renderers.
+- Use `scrollPresentation: 'live'` for cells that must remain truthful while scrolling, then tune overscan and frame budgets.
+- Use `scrollPresentation: 'text-impostor'` when a cheap textual stand-in is acceptable mid-scroll.
+- Use `scrollPresentation: 'html-snapshot'` when the renderer is visually rich but structurally stable enough to replay as inert HTML.
 
 #### Imperative live renderers
 

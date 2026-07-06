@@ -21,14 +21,15 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, type CellDisplaySnapshot } from './cellDisplaySnapshot.js';
-import { isVisualFresh, mountedCellFreshness } from './visualFreshness.js';
-import { resolveScrollCellPresentation, type ScrollCellPresentationDeps } from './scrollCellPresentation.js';
+import { isVisualFresh, type VisualFreshness } from './visualFreshness.js';
+import type { ScrollCellPresentationDeps } from './scrollCellPresentation.js';
 import { getCellScrollPresentation, isHtmlSnapshotPresentation, isTextImpostorPresentation } from './scrollPresentationMode.js';
 import { dispatchCellPresentation } from './binders/cellPresentationDispatcher.js';
 import { buildCellPinClass, applyCellTitlesAndValidation } from './binders/binderShared.js';
 import { getOrCreateCellCtrl, createRowCtrl, type RowCtrl } from './controllers/RowCtrl.js';
 import type { CellCtrl } from './controllers/CellCtrl.js';
 import { CellCtrlStore } from './controllers/CellCtrlStore.js';
+import { resolveCellCtrlPresentationState } from './controllers/resolveCellCtrlPresentationState.js';
 
 const fallbackCellCtrlStores = new WeakMap<object, CellCtrlStore<any>>();
 
@@ -254,12 +255,9 @@ function assignRendererHandle<TRowData>(cellSlot: CellSlot<TRowData>, contentMod
 }
 
 /**
- * Attaches/reuses the CellCtrl for this (rowId, columnInstanceId), stamping its physical-slot
- * bookkeeping and editing/focus state. Deliberately does NOT feed the resolver — CellCtrl is
- * populated alongside resolveScrollCellPresentation's existing decision tree, not injected into it
- * (see controllers/CellCtrl.ts doc comment). Also rolls the row-level isEditing/isFocused flags on
- * RowCtrl into `true` when this cell is the active edit/focus target — the row-level reset back to
- * `false` happens once per row in bindAllDataCells, not here.
+ * Attaches/reuses the CellCtrl for this (rowId, columnInstanceId), stamping only attachment and
+ * focus/edit bookkeeping. Semantic presentation state is resolved separately and written onto
+ * CellCtrl before any binder mutates the physical CellSlot.
  */
 function attachCellCtrl<TRowData>(
 	deps: RowCellBinderDeps<TRowData>,
@@ -300,11 +298,7 @@ function attachCellCtrl<TRowData>(
 		if (created) deps.engine.rowCtrls.stats.cellCtrlsCreated++;
 		else deps.engine.rowCtrls.stats.cellCtrlsReused++;
 	}
-	cellCtrl.attachedSlotInstanceId = cellSlot.cellInstanceId;
 	cellCtrl.lifecycle.attachedSlotInstanceId = cellSlot.cellInstanceId;
-	cellCtrl.attachedRowBindingGeneration = cellSlot.rowBindingGeneration;
-	cellCtrl.isEditing = isEditing;
-	cellCtrl.isFocused = isFocused;
 	cellCtrl.visualState.editing = isEditing;
 	cellCtrl.visualState.focused = isFocused;
 	if (isEditing) rowCtrl.isEditing = true;
@@ -312,42 +306,10 @@ function attachCellCtrl<TRowData>(
 	return cellCtrl;
 }
 
-/**
- * Mirrors cellCtrl.lastResolvedFreshness/lastResolvedContentMode from cellSlot's just-written
- * lastMounted* fields — a same-call-frame read of values cellSlot.update()/stampMountedVersions()
- * have already written, not a stale cache. Reading FROM cellSlot (rather than reconstructing the
- * frame's freshness independently) matters: several scroll-time binder branches only conditionally
- * call stampMountedVersions (e.g. when a presentation's `recordVersionsFrom` is undefined, cellSlot's
- * stamps are deliberately left unchanged). Mirroring cellSlot's actual post-dispatch state keeps
- * CellCtrl truthful in exactly those cases instead of silently diverging from what's really mounted.
- */
-function stampCellCtrlResolution<TRowData>(cellCtrl: CellCtrl, cellSlot: CellSlot<TRowData>): void {
-	cellCtrl.lastResolvedFreshness = mountedCellFreshness(cellSlot);
-	cellCtrl.lastResolvedContentMode = cellSlot.lastContentMode;
-	cellCtrl.freshness = cellCtrl.lastResolvedFreshness;
-	cellCtrl.valueState.formattedValue = cellSlot.lastFormattedValue ?? '';
-	cellCtrl.valueState.displayText = cellSlot.lastFormattedValue ?? '';
-	cellCtrl.valueState.empty = !cellSlot.lastFormattedValue;
-	cellCtrl.visualState.className = cellSlot.lastClassName ?? '';
-	cellCtrl.rendererState.mode =
-		cellSlot.lastContentMode === 'portal'
-			? cellCtrl.scrollPresentation === 'live'
-				? 'live'
-				: cellCtrl.scrollPresentation === 'html-snapshot'
-					? 'html-snapshot'
-					: 'frozen'
-			: cellSlot.lastContentMode === 'loading'
-				? 'loading'
-				: cellSlot.lastContentMode === 'pending'
-					? 'html-pending'
-					: cellSlot.lastContentMode === 'fallback'
-						? 'text-impostor'
-						: cellSlot.lastContentMode === 'text'
-							? 'primitive'
-							: 'none';
-	cellCtrl.rendererState.portalKey = cellSlot.lastPortalKey;
+function recordCellCtrlPhysicalBinding<TRowData>(cellCtrl: CellCtrl, cellSlot: CellSlot<TRowData>, freshness?: VisualFreshness): void {
+	cellCtrl.lifecycle.attachedSlotInstanceId = cellSlot.cellInstanceId;
 	cellCtrl.rendererState.mountedSlotInstanceId = cellSlot.cellInstanceId;
-	cellCtrl.rendererState.mountedFreshness = cellCtrl.lastResolvedFreshness;
+	cellCtrl.rendererState.mountedFreshness = freshness ?? cellCtrl.freshness;
 	cellCtrl.rendererState.lastBindEpoch = (cellCtrl.rendererState.lastBindEpoch ?? 0) + 1;
 }
 
@@ -486,7 +448,23 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = state.globalVersion;
 		recordCellSlotMountedVisualVersions(cellSlot, currentVisualVersions);
-		stampCellCtrlResolution(cellCtrl, cellSlot);
+		resolveCellCtrlPresentationState({
+			cellCtrl,
+			rowCtrl: request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl(node.id),
+			viewportPlan: null,
+			phase: 'full-bind',
+			context: {
+				fullBind: {
+					className: cellClassName,
+					title: cellSlot.element.title || null,
+					contentMode: 'fallback',
+					formattedValue: '',
+					freshness: { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions },
+					value: access.rawValue,
+				},
+			},
+		});
+		recordCellCtrlPhysicalBinding(cellCtrl, cellSlot, { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions });
 		return;
 	}
 
@@ -589,6 +567,24 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 				: col.tooltip({ row: node.data as TRowData, rowId: node.id, colField: col.field, value: access.rawValue });
 	}
 	applyCellTitlesAndValidation(cellSlot.element, tooltipText, insightTitle, validationDecTitle);
+	resolveCellCtrlPresentationState({
+		cellCtrl,
+		rowCtrl: request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl(node.id),
+		viewportPlan: null,
+		phase: 'full-bind',
+		context: {
+			fullBind: {
+				className: cellClassName,
+				title: cellSlot.element.title || null,
+				validationError: validationDecTitle,
+				contentMode,
+				formattedValue: contentMode === 'portal' ? portalImpostorValue : formattedValue,
+				portalKey: contentMode === 'portal' ? stableKey : undefined,
+				freshness: { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions },
+				value: access.rawValue,
+			},
+		},
+	});
 
 	cellSlot.update(
 		colIndex,
@@ -667,7 +663,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	cellSlot.lastMountedRowVersion = rowVersion;
 	cellSlot.lastMountedGlobalVersion = state.globalVersion;
 	recordCellSlotMountedVisualVersions(cellSlot, currentVisualVersions);
-	stampCellCtrlResolution(cellCtrl, cellSlot);
+	recordCellCtrlPhysicalBinding(cellCtrl, cellSlot, { rowVersion, globalVersion: state.globalVersion, ...currentVisualVersions });
 }
 
 export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellDuringScrollRequest<TRowData>): void {
@@ -753,24 +749,42 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		},
 		getHtmlSnapshotDefaults: deps.getHtmlSnapshotDefaults,
 	};
-	const presentation = resolveScrollCellPresentation(scrollPresentationDeps, {
-		cellSlot,
-		node,
-		rowIndex,
-		colIndex,
-		col,
-		lane,
-		ctx,
-		isRowRebind,
-		isRowLoading,
-		isInVisibleContent,
-		snapshot,
-		isWarmBindingVersionFresh,
-		rowVersion,
-		cellKey,
+	resolveCellCtrlPresentationState({
+		cellCtrl,
+		rowCtrl: request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl(node.id),
+		viewportPlan: null,
+		phase: 'scroll',
+		context: {
+			scroll: {
+				deps: scrollPresentationDeps,
+				input: {
+					cellSlot,
+					node,
+					rowIndex,
+					colIndex,
+					col,
+					lane,
+					ctx,
+					isRowRebind,
+					isRowLoading,
+					isInVisibleContent,
+					snapshot,
+					isWarmBindingVersionFresh,
+					rowVersion,
+					cellKey,
+				},
+			},
+		},
 	});
 
 	// 3. Dispatch to the mode-specific binder — enqueues fidelity work, updates mounted slot bookkeeping.
-	dispatchCellPresentation(deps, request, presentation, rowVersion);
-	stampCellCtrlResolution(cellCtrl, cellSlot);
+	dispatchCellPresentation({
+		deps,
+		request,
+		cellCtrl,
+		rowCtrl: request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl(node.id),
+		phase: 'scroll',
+		rowVersion,
+	});
+	recordCellCtrlPhysicalBinding(cellCtrl, cellSlot);
 }

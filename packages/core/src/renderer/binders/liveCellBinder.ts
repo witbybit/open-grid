@@ -1,21 +1,20 @@
-import type { InternalColumnDef } from '../../columnDef.js';
+import { getColumnInstanceIdentity, type InternalColumnDef } from '../../columnDef.js';
+import { createCellCtrl } from '../controllers/CellCtrl.js';
+import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
+import { applyCellTitlesAndValidation, getScrollMountValue, stampMountedVersions } from './binderShared.js';
+import { createCellRendererLifecycle } from '../lifecycle/cellRendererLifecycle.js';
 import type { RowCellBinderDeps, BindCellDuringScrollRequest } from '../rowCellBinder.js';
 import type { ScrollCellPresentation } from '../scrollCellPresentation.js';
-import { applyCellTitlesAndValidation, getScrollMountValue, stampMountedVersions } from './binderShared.js';
 
-/** Renders the over-budget emergency shell for a fresh 'live-mount' that couldn't be granted this
- *  frame's mount budget — same 'pending' content-mode pattern htmlSnapshotCellBinder.ts uses for its
- *  own no-capture-available case. A later frame with budget available will mount it for real. */
-function applyLiveMountEmergencyShell<TRowData>(
-	deps: RowCellBinderDeps<TRowData>,
-	request: BindCellDuringScrollRequest<TRowData>,
-	presentation: Extract<ScrollCellPresentation, { kind: 'live-mount' }>,
-	rowVersion: number
-): void {
+/** Renders the over-budget emergency shell for a fresh live mount that couldn't be granted this
+ * frame's mount budget. */
+function applyLiveMountEmergencyShell<TRowData>(input: DispatchCellPresentationInput<TRowData>): void {
+	const { deps, request, cellCtrl, rowVersion } = input;
+	const presentation = cellCtrl.presentationState;
 	const { cellSlot, node, rowIndex, colIndex, col, ctx, left, right, width } = request;
 	deps.incrementLiveReactEmergencyShellsDuringScroll?.();
 	deps.markCellDirtyAfterScroll(cellSlot.element);
-	applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
+	applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 	const didWrite = cellSlot.update(
 		colIndex,
 		col.field,
@@ -36,56 +35,121 @@ function applyLiveMountEmergencyShell<TRowData>(
 	deps.incrementCellsBoundDuringScroll();
 }
 
-/**
- * scrollPresentation: 'live' — the real renderer is mounted/updated on every scroll frame this cell
- * is bound ('live-mount'). Also handles 'force-live-interactive-exception': the rare, freeze-mode-only
- * case where an actively editing/focused cell must mount live despite not declaring 'live' —
- * counted under a separate telemetry counter so a regression firing it for a non-interactive cell
- * stays visible.
- */
-export function applyLiveCellPresentation<TRowData>(
+function toCompatInput<TRowData>(
 	deps: RowCellBinderDeps<TRowData>,
 	request: BindCellDuringScrollRequest<TRowData>,
 	presentation: Extract<ScrollCellPresentation, { kind: 'live-mount' | 'force-live-interactive-exception' }>,
 	rowVersion: number
+): DispatchCellPresentationInput<TRowData> {
+	const cellCtrl = createCellCtrl({
+		rowId: request.node.id,
+		rowIndex: request.rowIndex,
+		rowCtrlKey: request.node.id,
+		columnInstanceId: getColumnInstanceIdentity(request.col),
+		colId: request.col.colId ?? request.col.field,
+		colField: request.col.field,
+		colIndex: request.colIndex,
+	});
+	cellCtrl.freshness = {
+		rowVersion,
+		globalVersion: request.ctx.globalVersion,
+		insightVersion: request.ctx.insightVersion,
+		styleVersion: request.ctx.styleVersion,
+		loadingVersion: request.ctx.loadingVersion,
+		selectionVersion: request.ctx.selectionVersion,
+	};
+	cellCtrl.visualState.editing = presentation.isEditing;
+	cellCtrl.visualState.focused = presentation.isFocused;
+	cellCtrl.presentationState = {
+		kind: presentation.kind,
+		className: presentation.className,
+		title: presentation.title ?? null,
+		validationError: presentation.validationError,
+		releaseStalePortal: presentation.releasePriorPortal,
+		requiresFidelity: false,
+		freshness: cellCtrl.freshness,
+		portalKey: presentation.portalCellKey,
+		isEditing: presentation.isEditing,
+		isFocused: presentation.isFocused,
+		recordVersions: presentation.recordVersionsFrom,
+	};
+	return {
+		deps,
+		request,
+		cellCtrl,
+		rowCtrl: {
+			rowId: request.node.id,
+			rowVersion,
+			attachedSlotId: undefined,
+			attachedGeneration: -1,
+			cellKeysByColumnInstanceId: new Map(),
+			isEditing: false,
+			isFocused: false,
+		},
+		phase: 'scroll',
+		rowVersion,
+	};
+}
+
+export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentationInput<TRowData>): void;
+export function applyLiveCellPresentation<TRowData>(
+	deps: RowCellBinderDeps<TRowData>,
+	compatRequest: BindCellDuringScrollRequest<TRowData>,
+	compatPresentation: Extract<ScrollCellPresentation, { kind: 'live-mount' | 'force-live-interactive-exception' }>,
+	compatRowVersion: number
+): void;
+export function applyLiveCellPresentation<TRowData>(
+	inputOrDeps: DispatchCellPresentationInput<TRowData> | RowCellBinderDeps<TRowData>,
+	compatRequest?: BindCellDuringScrollRequest<TRowData>,
+	compatPresentation?: Extract<ScrollCellPresentation, { kind: 'live-mount' | 'force-live-interactive-exception' }>,
+	compatRowVersion?: number
 ): void {
+	const input =
+		compatRequest && compatPresentation && typeof compatRowVersion === 'number'
+			? toCompatInput(inputOrDeps as RowCellBinderDeps<TRowData>, compatRequest, compatPresentation, compatRowVersion)
+			: (inputOrDeps as DispatchCellPresentationInput<TRowData>);
+	const { deps, request, cellCtrl, rowVersion } = input;
+	const presentation = cellCtrl.presentationState;
 	const { cellSlot, node, rowIndex, colIndex, col, ctx, pooledRowId, left, right, width, isRowLoading } = request;
+	const lifecycle = createCellRendererLifecycle(deps);
 
 	if (presentation.kind === 'force-live-interactive-exception') {
-		// The sole exception permitted to mount live during active scroll — see the type comment on
-		// ScrollCellPresentation. Counted separately from every other mount/portal metric on purpose:
-		// if this ever fires for a cell that isn't actively editing/focused, that's a regression, and
-		// folding it into a generic counter would hide it.
 		deps.incrementForceLiveMountsDuringScroll?.();
-		if (presentation.releasePriorPortal) deps.releaseCellPortal(cellSlot.element, undefined, 'scrolled-out');
+		if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'scrolled-out', cellElement: cellSlot.element });
 		deps.markCellDirtyAfterScroll(cellSlot.element);
 		const ensuredPortalHost = deps.ensureCellPortalHost(cellSlot.element);
-		deps.portalMountManager.mountCellImmediately({
-			cellKey: presentation.portalCellKey,
-			container: ensuredPortalHost,
-			value: getScrollMountValue(deps, node, col, cellSlot),
-			node,
-			col,
-			rowIndex,
-			colIndex,
-			rowSlotId: pooledRowId,
-			slotGeneration: request.pooledRowGeneration,
-			cellRowBindingGeneration: cellSlot.rowBindingGeneration,
-			cellInstanceId: cellSlot.cellInstanceId,
-			portalHostId: cellSlot.portalHostId,
-			isEditing: presentation.isEditing,
-			isLoading: isRowLoading,
-			// Honest phase/isScrolling: this mount genuinely happens mid-scroll (the sole force-live
-			// exception), unlike ordinary 'scroll'-phase mounts which never occur during active
-			// scroll. A renderer that special-cases scrolling deserves to know it's really scrolling.
-			phase: 'scroll-force-live',
-			isScrolling: true,
-			isFocused: presentation.isFocused,
-			isSelected: false,
+		lifecycle.mountLive({
+			cellCtrl,
+			host: ensuredPortalHost,
+			reason: 'scroll-force-live',
+			token: {
+				epoch: ctx.globalVersion,
+				cellControllerKey: cellCtrl.key,
+				rowId: cellCtrl.rowId,
+				columnInstanceId: cellCtrl.columnInstanceId,
+				freshness: cellCtrl.freshness!,
+			},
+			mount: {
+				cellKey: presentation.portalKey!,
+				value: getScrollMountValue(deps, node, col, cellSlot),
+				node,
+				col,
+				rowIndex,
+				colIndex,
+				rowSlotId: pooledRowId,
+				slotGeneration: request.pooledRowGeneration,
+				cellRowBindingGeneration: cellSlot.rowBindingGeneration,
+				cellInstanceId: cellSlot.cellInstanceId,
+				portalHostId: cellSlot.portalHostId,
+				isEditing: cellCtrl.visualState.editing,
+				isLoading: isRowLoading,
+				isFocused: cellCtrl.visualState.focused,
+				isSelected: false,
+			},
 		});
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-		applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
+		applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 		const didWrite = cellSlot.update(
 			colIndex,
 			col.field,
@@ -98,41 +162,39 @@ export function applyLiveCellPresentation<TRowData>(
 			'portal',
 			undefined,
 			'',
-			presentation.portalCellKey
+			presentation.portalKey
 		);
-		if (presentation.recordVersionsFrom) stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersionsFrom);
+		if (presentation.recordVersions && 'rowId' in presentation.recordVersions)
+			stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersions);
 		if (didWrite) deps.incrementCurrentScrollCellsWritten();
 		deps.incrementCellsBoundDuringScroll();
 		return;
 	}
 
-	// 'live-mount' — scrollPresentation:'live' — mounts/updates the real renderer on every scroll
-	// frame this cell is bound. Expected to fire continuously for these columns; see
-	// incrementForceLiveMountsDuringScroll above for the separate, rare freeze-mode exception.
 	deps.onLiveCellResolved?.(node.id, (col as InternalColumnDef<TRowData>).instanceId);
-	const isFreshMount = !deps.portalMountManager.isCellMounted(presentation.portalCellKey);
+	const isFreshMount = !deps.portalMountManager.isCellMounted(presentation.portalKey!);
 	const withinBudget = deps.tryConsumeLiveBudget?.(isFreshMount ? 'mount' : 'update') ?? true;
 	if (!withinBudget) {
-		if (!isFreshMount) {
-			// Already mounted and content exists — skip this frame's re-render rather than mount a
-			// shell over live content. Position/size may lag by a frame under sustained budget
-			// pressure; acceptable relative to discarding a live portal that's already correct.
-			return;
-		}
+		if (!isFreshMount) return;
 		if (deps.allowLiveEmergencyShell?.() ?? true) {
-			applyLiveMountEmergencyShell(deps, request, presentation, rowVersion);
+			applyLiveMountEmergencyShell(input);
 			return;
 		}
-		// Emergency shells disabled — never leave a blank cell, mount anyway despite the budget.
 	}
 	if (isFreshMount) deps.incrementLiveReactMountsDuringScroll?.();
 	else deps.incrementLiveReactUpdatesDuringScroll?.();
-	if (presentation.releasePriorPortal) deps.releaseCellPortal(cellSlot.element, undefined, 'scrolled-out');
+	if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'scrolled-out', cellElement: cellSlot.element });
 	deps.markCellDirtyAfterScroll(cellSlot.element);
 	const ensuredPortalHost = deps.ensureCellPortalHost(cellSlot.element);
-	deps.portalMountManager.mountCellImmediately({
-		cellKey: presentation.portalCellKey,
-		container: ensuredPortalHost,
+	const token = {
+		epoch: ctx.globalVersion,
+		cellControllerKey: cellCtrl.key,
+		rowId: cellCtrl.rowId,
+		columnInstanceId: cellCtrl.columnInstanceId,
+		freshness: cellCtrl.freshness!,
+	};
+	const mount = {
+		cellKey: presentation.portalKey!,
 		value: getScrollMountValue(deps, node, col, cellSlot),
 		node,
 		col,
@@ -143,16 +205,16 @@ export function applyLiveCellPresentation<TRowData>(
 		cellRowBindingGeneration: cellSlot.rowBindingGeneration,
 		cellInstanceId: cellSlot.cellInstanceId,
 		portalHostId: cellSlot.portalHostId,
-		isEditing: presentation.isEditing,
+		isEditing: cellCtrl.visualState.editing,
 		isLoading: isRowLoading,
-		phase: 'scroll-live',
-		isScrolling: true,
-		isFocused: presentation.isFocused,
+		isFocused: cellCtrl.visualState.focused,
 		isSelected: false,
-	});
+	};
+	if (isFreshMount) lifecycle.mountLive({ cellCtrl, host: ensuredPortalHost, reason: 'scroll-live', token, mount });
+	else lifecycle.updateLive({ cellCtrl, host: ensuredPortalHost, reason: 'scroll-live', token, mount });
 	cellSlot.lastMountedRowVersion = rowVersion;
 	cellSlot.lastMountedGlobalVersion = ctx.globalVersion;
-	applyCellTitlesAndValidation(cellSlot.element, presentation.title, '', presentation.validationError);
+	applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
 	const didWrite = cellSlot.update(
 		colIndex,
 		col.field,
@@ -165,9 +227,10 @@ export function applyLiveCellPresentation<TRowData>(
 		'portal',
 		undefined,
 		'',
-		presentation.portalCellKey
+		presentation.portalKey
 	);
-	if (presentation.recordVersionsFrom) stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersionsFrom);
+	if (presentation.recordVersions && 'rowId' in presentation.recordVersions)
+		stampMountedVersions(cellSlot, rowVersion, ctx.globalVersion, presentation.recordVersions);
 	if (didWrite) deps.incrementCurrentScrollCellsWritten();
 	deps.incrementCellsBoundDuringScroll();
 }

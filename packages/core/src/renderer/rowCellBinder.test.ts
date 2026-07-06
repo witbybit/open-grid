@@ -2423,7 +2423,21 @@ describe('bindCellDuringScroll', () => {
 
 		// HTML snapshot store should be patched with captured innerHTML — `existingSnapshot` itself
 		// (a CellDisplaySnapshot, which extends VisualFreshness) is passed through as the freshness stamp.
-		expect(htmlSnapshotSet).toHaveBeenCalledWith('r1', 'name', '<span class="badge">INFO</span>', existingSnapshot, undefined, undefined);
+		expect(htmlSnapshotSet).toHaveBeenCalledWith(
+			'r1',
+			'name',
+			'<span class="badge">INFO</span>',
+			expect.objectContaining({
+				rowVersion: 2,
+				globalVersion: 1,
+				insightVersion: 0,
+				styleVersion: 0,
+				loadingVersion: 0,
+				selectionVersion: 0,
+			}),
+			undefined,
+			undefined
+		);
 		// Cell stays frozen — portal content visible, no remount
 		expect(showPortalContent).toHaveBeenCalledWith(cellSlot.element);
 	});
