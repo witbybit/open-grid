@@ -50,12 +50,6 @@ export interface CellCtrlPresentationState {
 	captureFrozenHtml?: boolean;
 	recordVersions?: VisualFreshness | CellDisplaySnapshot;
 	freshness: VisualFreshness;
-	/**
-	 * Transitional payload during the authority inversion. This is populated before binding and read
-	 * through CellCtrl, so the controller stays authoritative even while individual binders are still
-	 * being narrowed to smaller state slices.
-	 */
-	legacyPresentation?: unknown;
 }
 
 export function isControllerWorkStillValid(input: {

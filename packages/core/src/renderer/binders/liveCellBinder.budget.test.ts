@@ -4,6 +4,8 @@ import { CellSlot } from '../cellSlot.js';
 import type { RowCellBinderDeps, BindCellDuringScrollRequest } from '../rowCellBinder.js';
 import type { ScrollCellPresentation } from '../scrollCellPresentation.js';
 import { applyLiveCellPresentation } from './liveCellBinder.js';
+import { createCellCtrl } from '../controllers/CellCtrl.js';
+import { getColumnInstanceIdentity } from '../../columnDef.js';
 
 /**
  * Deterministic unit tests for the LiveFrameBudget mount/update/emergency-shell branching in
@@ -109,13 +111,69 @@ function makeLiveMountPresentation(): Extract<ScrollCellPresentation, { kind: 'l
 	};
 }
 
+function makeDispatchInput(
+	deps: RowCellBinderDeps<{ id: string; name: string }>,
+	request: BindCellDuringScrollRequest<{ id: string; name: string }>,
+	presentation: Extract<ScrollCellPresentation, { kind: 'live-mount' | 'force-live-interactive-exception' }>,
+	rowVersion: number
+) {
+	const cellCtrl = createCellCtrl({
+		rowId: request.node.id,
+		rowIndex: request.rowIndex,
+		rowCtrlKey: request.node.id,
+		columnInstanceId: getColumnInstanceIdentity(request.col),
+		colId: request.col.colId ?? request.col.field,
+		colField: request.col.field,
+		colIndex: request.colIndex,
+		freshness: {
+			rowVersion,
+			globalVersion: request.ctx.globalVersion,
+			insightVersion: request.ctx.insightVersion,
+			styleVersion: request.ctx.styleVersion,
+			loadingVersion: request.ctx.loadingVersion,
+			selectionVersion: request.ctx.selectionVersion,
+		},
+	});
+	cellCtrl.visualState.editing = presentation.isEditing;
+	cellCtrl.visualState.focused = presentation.isFocused;
+	cellCtrl.presentationState = {
+		kind: presentation.kind,
+		className: presentation.className,
+		title: presentation.title ?? null,
+		validationError: presentation.validationError,
+		releaseStalePortal: presentation.releasePriorPortal,
+		requiresFidelity: false,
+		freshness: cellCtrl.freshness!,
+		portalKey: presentation.portalCellKey,
+		isEditing: presentation.isEditing,
+		isFocused: presentation.isFocused,
+		recordVersions: presentation.recordVersionsFrom,
+	};
+	return {
+		deps,
+		request,
+		cellCtrl,
+		rowCtrl: {
+			rowId: request.node.id,
+			rowVersion,
+			attachedSlotId: undefined,
+			attachedGeneration: -1,
+			cellKeysByColumnInstanceId: new Map(),
+			isEditing: false,
+			isFocused: false,
+		},
+		phase: 'scroll' as const,
+		rowVersion,
+	};
+}
+
 describe('liveCellBinder — LiveFrameBudget branching', () => {
 	it('within budget + fresh mount: mounts and counts as a mount, not an update', () => {
 		const deps = makeDeps({
 			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately: vi.fn() } as any,
 			tryConsumeLiveBudget: vi.fn(() => true),
 		});
-		applyLiveCellPresentation(deps, makeRequest(), makeLiveMountPresentation(), 1);
+		applyLiveCellPresentation(makeDispatchInput(deps, makeRequest(), makeLiveMountPresentation(), 1));
 
 		expect(deps.tryConsumeLiveBudget).toHaveBeenCalledWith('mount');
 		expect(deps.incrementLiveReactMountsDuringScroll).toHaveBeenCalledTimes(1);
@@ -129,7 +187,7 @@ describe('liveCellBinder — LiveFrameBudget branching', () => {
 			portalMountManager: { isCellMounted: vi.fn(() => true), mountCellImmediately: vi.fn() } as any,
 			tryConsumeLiveBudget: vi.fn(() => true),
 		});
-		applyLiveCellPresentation(deps, makeRequest(), makeLiveMountPresentation(), 1);
+		applyLiveCellPresentation(makeDispatchInput(deps, makeRequest(), makeLiveMountPresentation(), 1));
 
 		expect(deps.tryConsumeLiveBudget).toHaveBeenCalledWith('update');
 		expect(deps.incrementLiveReactUpdatesDuringScroll).toHaveBeenCalledTimes(1);
@@ -144,7 +202,7 @@ describe('liveCellBinder — LiveFrameBudget branching', () => {
 			allowLiveEmergencyShell: vi.fn(() => true),
 		});
 		const request = makeRequest();
-		applyLiveCellPresentation(deps, request, makeLiveMountPresentation(), 1);
+		applyLiveCellPresentation(makeDispatchInput(deps, request, makeLiveMountPresentation(), 1));
 
 		expect(deps.incrementLiveReactEmergencyShellsDuringScroll).toHaveBeenCalledTimes(1);
 		expect(deps.portalMountManager.mountCellImmediately).not.toHaveBeenCalled();
@@ -158,7 +216,7 @@ describe('liveCellBinder — LiveFrameBudget branching', () => {
 			tryConsumeLiveBudget: vi.fn(() => false),
 			allowLiveEmergencyShell: vi.fn(() => false),
 		});
-		applyLiveCellPresentation(deps, makeRequest(), makeLiveMountPresentation(), 1);
+		applyLiveCellPresentation(makeDispatchInput(deps, makeRequest(), makeLiveMountPresentation(), 1));
 
 		expect(deps.incrementLiveReactEmergencyShellsDuringScroll).not.toHaveBeenCalled();
 		expect(deps.portalMountManager.mountCellImmediately).toHaveBeenCalledTimes(1);
@@ -171,7 +229,7 @@ describe('liveCellBinder — LiveFrameBudget branching', () => {
 			portalMountManager: { isCellMounted: vi.fn(() => true), mountCellImmediately: vi.fn() } as any,
 			tryConsumeLiveBudget: vi.fn(() => false),
 		});
-		applyLiveCellPresentation(deps, makeRequest(), makeLiveMountPresentation(), 1);
+		applyLiveCellPresentation(makeDispatchInput(deps, makeRequest(), makeLiveMountPresentation(), 1));
 
 		expect(deps.portalMountManager.mountCellImmediately).not.toHaveBeenCalled();
 		expect(deps.incrementLiveReactUpdatesDuringScroll).not.toHaveBeenCalled();
@@ -182,7 +240,7 @@ describe('liveCellBinder — LiveFrameBudget branching', () => {
 		const deps = makeDeps({
 			portalMountManager: { isCellMounted: vi.fn(() => false), mountCellImmediately: vi.fn() } as any,
 		});
-		applyLiveCellPresentation(deps, makeRequest(), makeLiveMountPresentation(), 1);
+		applyLiveCellPresentation(makeDispatchInput(deps, makeRequest(), makeLiveMountPresentation(), 1));
 
 		expect(deps.incrementLiveReactMountsDuringScroll).toHaveBeenCalledTimes(1);
 		expect(deps.portalMountManager.mountCellImmediately).toHaveBeenCalledTimes(1);

@@ -1,10 +1,7 @@
-import { getColumnInstanceIdentity, type InternalColumnDef } from '../../columnDef.js';
-import { createCellCtrl } from '../controllers/CellCtrl.js';
+import type { InternalColumnDef } from '../../columnDef.js';
 import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
 import { applyCellTitlesAndValidation, getScrollMountValue, stampMountedVersions } from './binderShared.js';
 import { createCellRendererLifecycle } from '../lifecycle/cellRendererLifecycle.js';
-import type { RowCellBinderDeps, BindCellDuringScrollRequest } from '../rowCellBinder.js';
-import type { ScrollCellPresentation } from '../scrollCellPresentation.js';
 
 /** Renders the over-budget emergency shell for a fresh live mount that couldn't be granted this
  * frame's mount budget. */
@@ -34,80 +31,7 @@ function applyLiveMountEmergencyShell<TRowData>(input: DispatchCellPresentationI
 	if (didWrite) deps.incrementCurrentScrollCellsWritten();
 	deps.incrementCellsBoundDuringScroll();
 }
-
-function toCompatInput<TRowData>(
-	deps: RowCellBinderDeps<TRowData>,
-	request: BindCellDuringScrollRequest<TRowData>,
-	presentation: Extract<ScrollCellPresentation, { kind: 'live-mount' | 'force-live-interactive-exception' }>,
-	rowVersion: number
-): DispatchCellPresentationInput<TRowData> {
-	const cellCtrl = createCellCtrl({
-		rowId: request.node.id,
-		rowIndex: request.rowIndex,
-		rowCtrlKey: request.node.id,
-		columnInstanceId: getColumnInstanceIdentity(request.col),
-		colId: request.col.colId ?? request.col.field,
-		colField: request.col.field,
-		colIndex: request.colIndex,
-	});
-	cellCtrl.freshness = {
-		rowVersion,
-		globalVersion: request.ctx.globalVersion,
-		insightVersion: request.ctx.insightVersion,
-		styleVersion: request.ctx.styleVersion,
-		loadingVersion: request.ctx.loadingVersion,
-		selectionVersion: request.ctx.selectionVersion,
-	};
-	cellCtrl.visualState.editing = presentation.isEditing;
-	cellCtrl.visualState.focused = presentation.isFocused;
-	cellCtrl.presentationState = {
-		kind: presentation.kind,
-		className: presentation.className,
-		title: presentation.title ?? null,
-		validationError: presentation.validationError,
-		releaseStalePortal: presentation.releasePriorPortal,
-		requiresFidelity: false,
-		freshness: cellCtrl.freshness,
-		portalKey: presentation.portalCellKey,
-		isEditing: presentation.isEditing,
-		isFocused: presentation.isFocused,
-		recordVersions: presentation.recordVersionsFrom,
-	};
-	return {
-		deps,
-		request,
-		cellCtrl,
-		rowCtrl: {
-			rowId: request.node.id,
-			rowVersion,
-			attachedSlotId: undefined,
-			attachedGeneration: -1,
-			cellKeysByColumnInstanceId: new Map(),
-			isEditing: false,
-			isFocused: false,
-		},
-		phase: 'scroll',
-		rowVersion,
-	};
-}
-
-export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentationInput<TRowData>): void;
-export function applyLiveCellPresentation<TRowData>(
-	deps: RowCellBinderDeps<TRowData>,
-	compatRequest: BindCellDuringScrollRequest<TRowData>,
-	compatPresentation: Extract<ScrollCellPresentation, { kind: 'live-mount' | 'force-live-interactive-exception' }>,
-	compatRowVersion: number
-): void;
-export function applyLiveCellPresentation<TRowData>(
-	inputOrDeps: DispatchCellPresentationInput<TRowData> | RowCellBinderDeps<TRowData>,
-	compatRequest?: BindCellDuringScrollRequest<TRowData>,
-	compatPresentation?: Extract<ScrollCellPresentation, { kind: 'live-mount' | 'force-live-interactive-exception' }>,
-	compatRowVersion?: number
-): void {
-	const input =
-		compatRequest && compatPresentation && typeof compatRowVersion === 'number'
-			? toCompatInput(inputOrDeps as RowCellBinderDeps<TRowData>, compatRequest, compatPresentation, compatRowVersion)
-			: (inputOrDeps as DispatchCellPresentationInput<TRowData>);
+export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentationInput<TRowData>): void {
 	const { deps, request, cellCtrl, rowVersion } = input;
 	const presentation = cellCtrl.presentationState;
 	const { cellSlot, node, rowIndex, colIndex, col, ctx, pooledRowId, left, right, width, isRowLoading } = request;

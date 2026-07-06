@@ -117,7 +117,6 @@ function hydrateCellCtrlFromScrollPresentation(
 					: 'recordVersions' in presentation
 						? presentation.recordVersions
 						: undefined,
-		legacyPresentation: presentation,
 	};
 	cellCtrl.visualState.className = presentation.className;
 	cellCtrl.visualState.title = getPresentationTitle(presentation);
