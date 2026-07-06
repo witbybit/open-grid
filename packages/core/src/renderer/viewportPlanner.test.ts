@@ -124,6 +124,40 @@ describe('ViewportPlanner', () => {
 		expect(plan.liveCenterColumnWindow).toEqual(['b', 'c', 'd']);
 	});
 
+	it('increasing live overscan beyond the physical render window does not create executable cells outside rendered rows/columns', () => {
+		const planner = new ViewportPlanner();
+		const cols = [makeCol('a'), makeCol('b'), makeCol('c'), makeCol('d'), makeCol('e')];
+		const compiledPlan = makePlan(cols, 0, 0, 1);
+		const plan = planner.computePlan(
+			{
+				...windowWithRows(20, 24),
+				colStart: 1,
+				colEnd: 2,
+				visibleRowStart: 21,
+				visibleRowEnd: 22,
+				visibleColStart: 1,
+				visibleColEnd: 1,
+			},
+			compileColumnTopology(compiledPlan),
+			new Set(),
+			{
+				...compiledPlan,
+				displayedColumns: cols.map((col, index) =>
+					index === 1 || index === 2
+						? ({ ...col, cellRendererCapabilities: { scrollPresentation: 'live' } } as InternalColumnDef<unknown>)
+						: col
+				),
+			} as CompiledGridPlan<unknown>,
+			{ liveReact: { rowOverscan: 999, columnOverscan: 999 } }
+		);
+		expect(plan.liveCells.visible.every((cell) => cell.rowIndex >= plan.renderedRows.start && cell.rowIndex <= plan.renderedRows.end)).toBe(true);
+		expect(plan.liveCells.overscan.every((cell) => cell.rowIndex >= plan.renderedRows.start && cell.rowIndex <= plan.renderedRows.end)).toBe(
+			true
+		);
+		expect(plan.liveCells.visible.every((cell) => plan.renderedCenterColumns.includes(cell.columnInstanceId))).toBe(true);
+		expect(plan.liveCells.overscan.every((cell) => plan.renderedCenterColumns.includes(cell.columnInstanceId))).toBe(true);
+	});
+
 	it('reset() clears diffing state so the next frame is treated as freshly-entered', () => {
 		const planner = new ViewportPlanner();
 		const topology = compileColumnTopology(makePlan([makeCol('a')], 0, 0, 1));

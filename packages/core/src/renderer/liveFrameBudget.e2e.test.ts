@@ -7,26 +7,32 @@ import { RenderEngine } from './renderEngine.js';
 interface LiveRow {
 	id: string;
 	value: string;
+	liveA?: string;
+	liveB?: string;
+	staticA?: string;
+	staticB?: string;
 }
 
-function mountLiveGrid(rowCount: number) {
+function mountLiveGrid(rowCount: number, columns?: ColumnDef<LiveRow>[], rect?: Partial<DOMRect>) {
 	vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
 		cb(0);
 		return 1;
 	});
 	vi.stubGlobal('cancelAnimationFrame', (_id: number) => {});
 
-	const columns: ColumnDef<LiveRow>[] = [
-		{
-			field: 'value',
-			header: 'Value',
-			width: 150,
-			cellRenderer: () => null,
-			cellRendererCapabilities: { scrollPresentation: 'live' } as any,
-		} as any,
-	];
+	const resolvedColumns: ColumnDef<LiveRow>[] =
+		columns ??
+		([
+			{
+				field: 'value',
+				header: 'Value',
+				width: 150,
+				cellRenderer: () => null,
+				cellRendererCapabilities: { scrollPresentation: 'live' } as any,
+			} as any,
+		] satisfies ColumnDef<LiveRow>[]);
 	const store = new GridStore<LiveRow>({
-		columns,
+		columns: resolvedColumns,
 		defaultRowHeight: 40,
 		defaultColWidth: 150,
 		getRowId: (row) => row.id,
@@ -40,7 +46,14 @@ function mountLiveGrid(rowCount: number) {
 		},
 	});
 	const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
-		rows: Array.from({ length: rowCount }, (_, i) => ({ id: `row-${i}`, value: `v${i}` })),
+		rows: Array.from({ length: rowCount }, (_, i) => ({
+			id: `row-${i}`,
+			value: `v${i}`,
+			liveA: `liveA-${i}`,
+			liveB: `liveB-${i}`,
+			staticA: `staticA-${i}`,
+			staticB: `staticB-${i}`,
+		})),
 		columns: store.getState().columns,
 	});
 	const container = document.createElement('div');
@@ -49,10 +62,10 @@ function mountLiveGrid(rowCount: number) {
 		y: 0,
 		top: 0,
 		left: 0,
-		right: 300,
-		bottom: 400,
-		width: 300,
-		height: 400,
+		right: rect?.right ?? 300,
+		bottom: rect?.bottom ?? 400,
+		width: rect?.width ?? 300,
+		height: rect?.height ?? 400,
 		toJSON: () => ({}),
 	} as DOMRect);
 	document.body.appendChild(container);
@@ -107,6 +120,56 @@ describe('LiveFrameBudget wiring — end to end sanity (unconfigured)', () => {
 		expect(overscanCellEl).not.toBeNull();
 		expect(overscanCellEl?.dataset.contentMode).toBe('portal');
 		expect(stats.liveReactOverscanMounts || 0).toBeGreaterThan(0);
+
+		cleanup(grid);
+	});
+
+	it('horizontal live column overscan mounts a live column before it becomes visible', () => {
+		const grid = mountLiveGrid(
+			50,
+			[
+				{ field: 'staticA', header: 'Static A', width: 200 },
+				{
+					field: 'liveA',
+					header: 'Live A',
+					width: 200,
+					cellRenderer: () => null,
+					cellRendererCapabilities: { scrollPresentation: 'live' } as any,
+				} as any,
+				{ field: 'staticB', header: 'Static B', width: 200 },
+			],
+			{ width: 150, height: 240, right: 150, bottom: 240 }
+		);
+		const scrollViewport = grid.container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		scrollViewport.scrollTop = 40;
+		scrollViewport.scrollLeft = 25;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		const plan = grid.renderer.rowRenderer.currentViewportPlan;
+		const liveAColumn = grid.store.engine.columns.getPrimaryColumnByField('liveA');
+		expect(plan).not.toBeNull();
+		expect(liveAColumn).toBeDefined();
+		const horizontalOverscanCell = plan!.liveCells.overscan.find((cell) => cell.columnInstanceId === liveAColumn!.instanceId);
+		expect(horizontalOverscanCell).toBeDefined();
+
+		const overscanDomCell = grid.container.querySelector(
+			`.og-cell[data-row-id="row-${horizontalOverscanCell!.rowIndex}"][data-col-field="liveA"]`
+		) as HTMLElement | null;
+		expect(overscanDomCell).not.toBeNull();
+		expect(overscanDomCell?.dataset.contentMode).toBe('portal');
+
+		const statsBeforeReveal = grid.renderer.getRenderStats() as any;
+		expect(statsBeforeReveal.liveReactOverscanMounts || 0).toBeGreaterThan(0);
+
+		scrollViewport.scrollLeft = 200;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+
+		const revealedCell = grid.container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="liveA"]') as HTMLElement | null;
+		expect(revealedCell).not.toBeNull();
+		expect(revealedCell?.dataset.contentMode).toBe('portal');
+		expect(revealedCell?.textContent).not.toBe('...');
+		expect(revealedCell?.dataset.contentMode).not.toBe('pending');
+		expect(revealedCell?.dataset.contentMode).not.toBe('fallback');
 
 		cleanup(grid);
 	});
