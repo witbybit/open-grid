@@ -41,12 +41,12 @@ import type {
 	GridStateSnapshot,
 	GridWriteResult,
 	RowDataTransaction,
-	RowNodeTransaction,
 	RowSelectionChangeResult,
 	RowSelectionGesture,
 	SelectAllRowsOptions,
 	SelectRowsOptions,
 } from './GridApi.js';
+import type { RowNodeTransaction } from '../rowTransactions.js';
 
 export interface GridDataApi<TRowData = unknown> {
 	getStateSnapshot(): GridStateSnapshot<TRowData>;

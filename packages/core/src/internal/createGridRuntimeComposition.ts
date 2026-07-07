@@ -18,13 +18,13 @@ import type {
 	GridSnapshotSelectorEquality,
 	GridStateSnapshot,
 	RowDataTransaction,
-	RowNodeTransaction,
 	RowSelectionGesture,
 	SelectAllRowsOptions,
 	SelectRowsOptions,
 	ScrollToRowOptions,
 	ScrollToCellOptions,
 } from '../api/GridApi.js';
+import type { RowNodeTransaction } from '../rowTransactions.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { FilterModel, SortModel, RowModelCapability } from '../rowModel.js';
 import type { ColumnState, GridInitialState } from '../state/GridState.js';

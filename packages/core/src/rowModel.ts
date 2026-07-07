@@ -1,10 +1,12 @@
 import { type ColumnDef, setValueByPath, compilePathGetter } from './columnDef.js';
 import { GridEventName } from './api/GridEvents.js';
-import type { RowDataTransaction, RowNodeTransaction, RowSelectionScope } from './api/GridApi.js';
+import type { RowDataTransaction, RowSelectionScope } from './api/GridApi.js';
 import type { ClientRowModelRuntime } from './engine/runtimePorts.js';
 import { GridMetric } from './diagnostics/GridInstrumentation.js';
 import { getFieldRoot } from './ids.js';
+import { createGridRowDataRef } from './publicRowRef.js';
 import { RowNode } from './rowNode.js';
+import type { InternalRowNodeTransaction } from './rowTransactions.js';
 import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
 import { RowDependencyRegistry, classifyMutation, type RowMutationImpact } from './rows/rowMutationClassifier.js';
 import type { PageWindow } from './rows/pageModel.js';
@@ -299,7 +301,7 @@ export interface ClientStructuralRowModel<TRowData = unknown> extends RowOrderCa
 	updateRowsStructurally(updater: (rows: TRowData[]) => TRowData[]): RowModelWriteResult<TRowData>;
 	applyTransactionStructurally(
 		transaction: import('./api/GridApi.js').RowDataTransaction<TRowData>
-	): RowModelWriteResult<TRowData> & import('./api/GridApi.js').RowNodeTransaction<TRowData>;
+	): RowModelWriteResult<TRowData> & InternalRowNodeTransaction<TRowData>;
 	writeCellValueStructurally(
 		rowId: string,
 		colField: string,
@@ -387,7 +389,7 @@ export interface TransactionalRowModel<TRowData = unknown> {
 	captureTransactionSnapshot(
 		mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TRowData>
 	): RowModelTransactionSnapshot<TRowData>;
-	applyTransaction(mutation: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
+	applyTransaction(mutation: RowDataTransaction<TRowData>): InternalRowNodeTransaction<TRowData>;
 	restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;
 }
 
@@ -596,7 +598,7 @@ function compareValues(a: unknown, b: unknown): number {
 
 export function getColumnValue<TData>(node: RowNode<TData>, column: ColumnDef<TData> | undefined): unknown {
 	if (!column) return undefined;
-	if (column.valueGetter) return column.valueGetter({ node, row: node.data, colField: column.field });
+	if (column.valueGetter) return column.valueGetter({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: column.field });
 	const getter = compilePathGetter(column.field);
 	return node.getCellValue(column.field, getter);
 }
@@ -765,7 +767,7 @@ function describeVisualRowDiff<TData>(
 function makeGetter<TData>(column: ColumnDef<TData>): (node: RowNode<TData>) => unknown {
 	if (column.valueGetter) {
 		const vg = column.valueGetter;
-		return (node) => vg({ node, row: node.data, colField: column.field });
+		return (node) => vg({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: column.field });
 	}
 	const pg = compilePathGetter(column.field);
 	return (node) => node.getCellValue(column.field, pg);
@@ -896,7 +898,7 @@ export function applyClientSortAndFilter<TData>(
 			if (column) {
 				if (column.valueGetter) {
 					const colValGetter = column.valueGetter;
-					getter = (node: RowNode<TData>) => colValGetter({ node, row: node.data, colField: column.field });
+					getter = (node: RowNode<TData>) => colValGetter({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: column.field });
 				} else {
 					const pathGetter = compilePathGetter(column.field);
 					getter = (node: RowNode<TData>) => node.getCellValue(column.field, pathGetter);
@@ -1185,7 +1187,7 @@ export class ClientRowModelController<TData = unknown>
 			if (col) {
 				if (col.valueGetter) {
 					const vg = col.valueGetter;
-					return (node: RowNode<TData>): unknown => vg({ node, row: node.data, colField: col.field });
+					return (node: RowNode<TData>): unknown => vg({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: col.field });
 				}
 				const pg = compilePathGetter(col.field);
 				return (node: RowNode<TData>): unknown => node.getCellValue(col.field, pg);
@@ -1273,7 +1275,7 @@ export class ClientRowModelController<TData = unknown>
 
 	public applyTransactionStructurally(
 		transaction: import('./api/GridApi.js').RowDataTransaction<TData>
-	): RowModelWriteResult<TData> & import('./api/GridApi.js').RowNodeTransaction<TData> {
+	): RowModelWriteResult<TData> & InternalRowNodeTransaction<TData> {
 		const result = this.dataStore.applyTransaction(transaction);
 		const hasStructural = result.added.length > 0 || result.removed.length > 0;
 		return {
@@ -1494,7 +1496,7 @@ export class ClientRowModelController<TData = unknown>
 					if (col) {
 						if (col.valueGetter) {
 							const vg = col.valueGetter;
-							return (node: RowNode<TData>): unknown => vg({ node, row: node.data, colField: col.field });
+							return (node: RowNode<TData>): unknown => vg({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: col.field });
 						}
 						const pg = compilePathGetter(col.field);
 						return (node: RowNode<TData>): unknown => node.getCellValue(col.field, pg);
@@ -1582,7 +1584,7 @@ export class ClientRowModelController<TData = unknown>
 	// Compatibility shell only: structural writes and post-write lifecycle ownership stay centralized
 	// in applyTransactionStructurally(...) + reconcileAfterDataWrite(...) so transaction updates cannot
 	// diverge from setCellValue, batchCellValues, updateRows, or integrity-driven writes.
-	public applyTransaction = (transaction: RowDataTransaction<TData>): RowNodeTransaction<TData> => {
+	public applyTransaction = (transaction: RowDataTransaction<TData>): InternalRowNodeTransaction<TData> => {
 		const writeResult = this.applyTransactionStructurally(transaction);
 		const notifyCells = this.collectCommittedCellChanges(writeResult);
 		if (notifyCells.size > 0) {

@@ -2,7 +2,6 @@ import type { FilterModel, SortModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { ColumnDef, CellRendererPhase } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
-import type { RowNode } from '../rowNode.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
 import type { ColumnState, GridCellRangeBounds } from '../state/GridState.js';
@@ -10,6 +9,7 @@ import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { GridIntegrityIssue } from '../features/dataIntegrity/integrityTypes.js';
 import type { GridApi as PublicGridApi, GridPluginRuntime as PublicGridPluginRuntime } from './GridApiSurfaces.js';
 import type { GridRowNode } from '../publicRowNode.js';
+import type { RowNodeTransaction } from '../rowTransactions.js';
 
 export type {
 	GridDataApi,
@@ -307,11 +307,7 @@ export interface RowDataTransaction<TData = unknown> {
 	update?: TData[];
 }
 
-export interface RowNodeTransaction<TData = unknown> {
-	add: RowNode<TData>[];
-	remove: RowNode<TData>[];
-	update: RowNode<TData>[];
-}
+export type { RowNodeTransaction } from '../rowTransactions.js';
 
 export interface GridTransaction<TRowData = unknown> {
 	columns?: ColumnDef<TRowData>[];

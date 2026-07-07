@@ -127,8 +127,24 @@ describe('aggregateStage', () => {
 	it('custom function aggregation receives leaf RowNodes and returns its value', () => {
 		const nodes = [makeNode('1', { category: 'A', amount: 10 }), makeNode('2', { category: 'A', amount: 20 })];
 		const { roots, ctx } = buildGroups(nodes);
-		aggregateStage(roots, [{ field: 'amount', aggFunc: (leafNodes) => leafNodes.length * 100 }], ctx);
+		let seenLeafNodes: unknown[] = [];
+		aggregateStage(
+			roots,
+			[
+				{
+					field: 'amount',
+					aggFunc: (leafNodes) => {
+						seenLeafNodes = leafNodes;
+						return leafNodes.length * 100;
+					},
+				},
+			],
+			ctx
+		);
 		expect((roots[0] as any).aggregateValues['amount']).toBe(200);
+		expect(seenLeafNodes[0]).not.toBeInstanceOf(RowNode);
+		expect(seenLeafNodes[0]).toMatchObject({ id: '1', data: { id: '1', category: 'A', amount: 10, label: '' } });
+		expect(typeof (seenLeafNodes[0] as { getValue?: unknown }).getValue).toBe('function');
 	});
 
 	it('computes multiple built-in aggregations in one pass', () => {

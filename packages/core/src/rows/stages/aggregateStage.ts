@@ -1,9 +1,10 @@
+import { createGridRowDataRef, type GridRowDataRef } from '../../publicRowRef.js';
 import { RowNode } from '../../store.js';
 import type { RowPipelineContext, RowTreeNode } from './types.js';
 
 export interface AggregationDef<TData = unknown> {
 	field: string;
-	aggFunc: 'sum' | 'avg' | 'min' | 'max' | 'count' | ((nodes: RowNode<TData>[]) => unknown);
+	aggFunc: 'sum' | 'avg' | 'min' | 'max' | 'count' | ((nodes: GridRowDataRef<TData>[]) => unknown);
 }
 
 export function aggregateStage<TData>(roots: RowTreeNode<TData>[], aggDefs: AggregationDef<TData>[], context: RowPipelineContext<TData>): void {
@@ -25,7 +26,7 @@ interface NumericStats {
 
 interface AggregateVisitResult<TData> {
 	statsByField: Map<string, NumericStats>;
-	leafNodes?: RowNode<TData>[];
+	leafNodes?: GridRowDataRef<TData>[];
 }
 
 function createStats(): NumericStats {
@@ -73,10 +74,10 @@ function aggregateNodeRecursively<TData>(
 	needsLeafNodes: boolean
 ): AggregateVisitResult<TData> {
 	const statsByField = new Map<string, NumericStats>();
-	const leafNodes: RowNode<TData>[] | undefined = needsLeafNodes ? [] : undefined;
+	const leafNodes: GridRowDataRef<TData>[] | undefined = needsLeafNodes ? [] : undefined;
 
 	if (node.kind === 'data') {
-		if (leafNodes) leafNodes.push(node.node);
+		if (leafNodes) leafNodes.push(createGridRowDataRef(node.node.id, node.node.data));
 		for (const def of aggDefs) {
 			if (typeof def.aggFunc !== 'function') {
 				addNodeValue(getStats(statsByField, def.field), node.node, def.field, context);

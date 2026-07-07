@@ -87,6 +87,10 @@ Capabilities are truthful.
 
 - [ ] Keep existing mutable row wrapper internal-only
 - [~] Stop using the internal node type as a public API surface
+    - [x] `DomCellRendererParams.node` narrowed to public row ref
+    - [x] `ValueGetterParams.node` narrowed to public row ref
+    - [x] Custom aggregation callbacks narrowed to public row refs
+    - [x] `RowNodeTransaction` now returns public `GridRowNode` facades
 - [x] Add a public-row-node factory/facade layer
 - [x] Ensure facade properties are readonly snapshots/getters only
 - [x] Ensure no facade method can mutate row arrays or row data directly
@@ -200,6 +204,7 @@ Capabilities are truthful.
 - 2026-07-07: `GridEventName.rowsUpdated` now exposes public `GridRowNode` facades instead of raw internal `RowNode[]`. Row-model and mutation internals still emit raw nodes through a dedicated internal dispatch payload, and `GridEngine` converts them at the dispatch boundary via `publicRowNodeDispatch.ts`. Added a regression proving event listeners receive facades, and kept the architecture guard green by extracting the bridge out of `GridEngine.ts`. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
 - 2026-07-07: Removed the direct public `RowNode` runtime export from `@open-grid/core`. The public export snapshot in `boundary.test.ts` was updated accordingly, and React-side tests that previously imported the internal class now use local row-shaped helpers instead. Verification again passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
 - 2026-07-07: Narrowed `DomCellRendererParams.node` to a public `DomCellRendererRowRef` (`id` + `data`) instead of the internal mutable `RowNode` type. Internal renderer managers still pass the same runtime object via structural compatibility, so behavior did not change. Verification again passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
+- 2026-07-07: Closed the next larger public RowNode leaks coherently. Added `GridRowDataRef` for callback-style row references, switched `ValueGetterParams.node` and custom aggregation callbacks to that public ref, and split transaction ownership so row models still return internal `RowNode[]` internally while `GridEngine.applyTransaction(...)` maps them to public `GridRowNode` facades before the API boundary. Added regressions proving `valueGetter`, aggregation callbacks, `rowsUpdated`, and `applyTransaction` do not leak mutable internal row nodes. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, `corepack pnpm --filter @open-grid/react build`, and `corepack pnpm --filter @open-grid/react test`.
 
 ## Done criteria
 

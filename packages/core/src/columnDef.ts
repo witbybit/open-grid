@@ -1,15 +1,15 @@
 /**
  * Column definition types, cell renderer interfaces, and path utilities.
  */
-import type { RowNode } from './rowNode.js';
 import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState } from './api/GridApi.js';
 import type { GroupVisualRow, DetailVisualRow } from './visualRow.js';
 import type { GridCapabilityCallback } from './capabilities/capabilityTypes.js';
+import type { GridRowDataRef } from './publicRowRef.js';
 
 // ─── Value getter / setter / validator params ─────────────────────────────────
 
 export interface ValueGetterParams<TRowData = unknown> {
-	node: RowNode<TRowData>;
+	node: GridRowDataRef<TRowData>;
 	row: TRowData;
 	colField: string;
 }

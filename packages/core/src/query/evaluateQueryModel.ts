@@ -7,6 +7,7 @@
  */
 import type { ColumnDef } from '../columnDef.js';
 import { compilePathGetter } from '../columnDef.js';
+import { createGridRowDataRef } from '../publicRowRef.js';
 import type { RowNode } from '../rowNode.js';
 import type { GridQueryCondition, GridQueryGroup, GridQueryModel, GridQueryNode, QueryConditionDiagnostic } from './GridQueryModel.js';
 import { getQueryOperator } from './queryOperatorRegistry.js';
@@ -88,7 +89,7 @@ export function createQueryEvaluationContext<TRowData>(
 		if (!getter) {
 			if (col.valueGetter) {
 				const vg = col.valueGetter;
-				getter = (n) => vg({ node: n, row: n.data, colField: col.field });
+				getter = (n) => vg({ node: createGridRowDataRef(n.id, n.data), row: n.data, colField: col.field });
 			} else {
 				const pg = compilePathGetter(col.field);
 				getter = (n) => n.getCellValue(col.field, pg);

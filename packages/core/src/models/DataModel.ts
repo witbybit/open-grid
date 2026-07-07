@@ -1,5 +1,6 @@
 import { compilePathGetter, type ColumnDef } from '../columnDef.js';
 import type { DataModelRuntime } from '../engine/runtimePorts.js';
+import { createGridRowDataRef } from '../publicRowRef.js';
 import { RowNode } from '../rowNode.js';
 
 export class DataModel<TRowData = unknown> {
@@ -79,8 +80,9 @@ export class DataModel<TRowData = unknown> {
 		if (this.runtime.isScrolling() || this.runtime.isScrollFrameActive()) {
 			if (trackDuringScroll) this.runtime.recordValueGetterDuringScroll();
 		}
+		const rowRef = createGridRowDataRef(node.id, node.data);
 		if (!col.valueGetterDependencies) {
-			return col.valueGetter!({ node, row: node.data, colField });
+			return col.valueGetter!({ node: rowRef, row: node.data, colField });
 		}
 
 		let rowCache = this.valueGetterCache.get(rowId);
@@ -92,7 +94,7 @@ export class DataModel<TRowData = unknown> {
 			return rowCache.get(colField);
 		}
 
-		const value = col.valueGetter!({ node, row: node.data, colField });
+		const value = col.valueGetter!({ node: rowRef, row: node.data, colField });
 		rowCache.set(colField, value);
 		return value;
 	}

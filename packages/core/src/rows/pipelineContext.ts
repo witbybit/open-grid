@@ -1,4 +1,5 @@
 import { compilePathGetter, type ColumnDef } from '../columnDef.js';
+import { createGridRowDataRef } from '../publicRowRef.js';
 import { RowNode } from '../rowNode.js';
 import type { GroupDef } from './RowPipeline.js';
 import type { RowPipelineContext, RowPipelineExpansion } from './stages/types.js';
@@ -9,7 +10,7 @@ export function getCellValueForPipeline<TData>(node: RowNode<TData>, column: Col
 		return node.getCellValue(colId, getter);
 	}
 	if (column.valueGetter) {
-		return column.valueGetter({ node, row: node.data, colField: column.field });
+		return column.valueGetter({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: column.field });
 	}
 	const getter = compilePathGetter(column.field);
 	return node.getCellValue(column.field, getter);

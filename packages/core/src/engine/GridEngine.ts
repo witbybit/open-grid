@@ -38,6 +38,8 @@ import { GeometryModel } from '../models/GeometryModel.js';
 import { SelectionModel } from '../models/SelectionModel.js';
 import { EditModel } from '../models/EditModel.js';
 import { CellAccessModel } from '../models/CellAccess.js';
+import { mapInternalRowNodeTransaction } from './publicRowNodeDispatch.js';
+import type { InternalRowNodeTransaction } from '../rowTransactions.js';
 import { DagEngine, type FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
@@ -725,8 +727,8 @@ export class GridEngine<TRowData = unknown> {
 			reason: 'rows:apply-transaction',
 			domainMutations: [{ kind: 'row-transaction', transaction }],
 		});
-		const result = execution.appliedMutations[0]?.result as RowNodeTransaction<TRowData> | undefined;
-		return result ?? null;
+		const result = execution.appliedMutations[0]?.result as InternalRowNodeTransaction<TRowData> | undefined;
+		return result ? mapInternalRowNodeTransaction(this.getPublicRowNodeDispatchDeps(), result) : null;
 	}
 
 	public replaceRows(rows: readonly TRowData[]): GridWriteResult {

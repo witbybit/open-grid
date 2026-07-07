@@ -912,6 +912,63 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('applyTransaction returns public row-node facades instead of internal mutable row nodes', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		const result = store.applyTransaction({
+			update: [{ id: '1', name: 'Product A+', price: 10 }],
+		});
+
+		expect(result?.update).toHaveLength(1);
+		expect(result?.update[0]).toMatchObject({
+			id: '1',
+			kind: 'data',
+			rowIndex: 0,
+		});
+		expect(result?.update[0]).not.toBe(store.getRowNodeById('1'));
+		expect(result?.update[0].getValue('name')).toBe('Product A+');
+		expect('setCellValue' in (result?.update[0] as Record<string, unknown>)).toBe(false);
+
+		controller.dispose();
+	});
+
+	it('valueGetter params expose a lightweight public row ref instead of the internal row node', () => {
+		let seenNode: unknown;
+		const store = new GridStore<TestRow>({
+			columns: [
+				{
+					field: 'display',
+					header: 'Display',
+					valueGetter: ({ node, row }) => {
+						seenNode = node;
+						return `${node.id}:${row.name}:${node.getValue('name')}`;
+					},
+				},
+			] as ColumnDef<TestRow>[],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		expect(store.getCellValue('1', 'display')).toBe('1:Product A:Product A');
+		expect(seenNode).toMatchObject({ id: '1', data: { id: '1', name: 'Product A', price: 10 } });
+		expect(seenNode).not.toBe(store.getRowNodeById('1'));
+		expect(typeof (seenNode as { getValue?: unknown }).getValue).toBe('function');
+		expect('setCellValue' in (seenNode as Record<string, unknown>)).toBe(false);
+
+		controller.dispose();
+	});
+
 	it('selection change events publish projection-owned bounds from committed state', () => {
 		const store = new GridStore<TestRow>({
 			columns: [

@@ -1,5 +1,5 @@
 import { GridEventName } from '../api/GridEvents.js';
-import type { BatchCellValueUpdate, GridCellPointer, RowDataTransaction, RowNodeTransaction } from '../api/GridApi.js';
+import type { BatchCellValueUpdate, GridCellPointer, RowDataTransaction } from '../api/GridApi.js';
 import {
 	asAnyModelCellWritable,
 	asRowOrderCapableModel,
@@ -27,6 +27,7 @@ import type {
 	ServerIntegrityReport,
 } from '../state/integrityStateTypes.js';
 import type { GridInvalidation } from '../renderer/invalidationManager.js';
+import type { InternalRowNodeTransaction } from '../rowTransactions.js';
 import type { GridCommitEvent, GridCommitReason, GridHistoryEntry } from './GridChangeApplier.js';
 import type { CellValueChangeOptions, CellValueChangeResult, StructuralWriteEffectResult } from '../features/DataMutationController.js';
 import type { GridIntegrityIssueFilter } from '../features/dataIntegrity/integrityTypes.js';
@@ -334,9 +335,9 @@ function createEventsFromResults<TRowData>(results: readonly CellValueChangeResu
 
 function createRowsUpdatedEvents<TRowData>(params: {
 	changedValuesByRow?: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
-	changedNodes?: RowNodeTransaction<TRowData>['update'];
-	addedNodes?: RowNodeTransaction<TRowData>['add'];
-	removedNodes?: RowNodeTransaction<TRowData>['remove'];
+	changedNodes?: InternalRowNodeTransaction<TRowData>['update'];
+	addedNodes?: InternalRowNodeTransaction<TRowData>['add'];
+	removedNodes?: InternalRowNodeTransaction<TRowData>['remove'];
 }): GridCommitEvent<TRowData>[] {
 	const changedNodes = params.changedNodes ?? [];
 	const addedNodes = params.addedNodes ?? [];
@@ -874,7 +875,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 					noop: true,
 					domains: [],
 					events: [],
-					apply: () => ({ noop: true, result: { add: [], remove: [], update: [] } satisfies RowNodeTransaction<TRowData> }),
+					apply: () => ({ noop: true, result: { add: [], remove: [], update: [] } satisfies InternalRowNodeTransaction<TRowData> }),
 				};
 			}
 			const rowModel = getTransactionalRowModel(context)!;
@@ -896,7 +897,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 							domains: ['rows', 'geometry'],
 							invalidations: [{ kind: 'full', reason: 'data' }],
 							requestRender: true,
-							result: { add: [], remove: [], update: [] } satisfies RowNodeTransaction<TRowData>,
+							result: { add: [], remove: [], update: [] } satisfies InternalRowNodeTransaction<TRowData>,
 						};
 					}
 					if (structuralRowModel) {

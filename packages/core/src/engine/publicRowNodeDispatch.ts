@@ -2,6 +2,7 @@ import type { GridWriteResult } from '../api/GridApi.js';
 import { GridEventName, type GridEventPayloadMap } from '../api/GridEvents.js';
 import { createGridRowNodeFacade, type GridRowNode } from '../publicRowNode.js';
 import type { RowNode } from '../rowNode.js';
+import type { InternalRowNodeTransaction, RowNodeTransaction } from '../rowTransactions.js';
 import type { RowsUpdatedDispatchPayload } from './runtimePorts.js';
 
 export interface PublicRowNodeDispatchDeps<TRowData = unknown> {
@@ -35,6 +36,17 @@ export function createPublicRowNodeFromInternal<TRowData>(deps: PublicRowNodeDis
 		expanded: deps.isDetailExpanded(rowId),
 		editable: true,
 	});
+}
+
+export function mapInternalRowNodeTransaction<TRowData>(
+	deps: PublicRowNodeDispatchDeps<TRowData>,
+	transaction: InternalRowNodeTransaction<TRowData>
+): RowNodeTransaction<TRowData> {
+	return {
+		add: transaction.add.map((node) => createPublicRowNodeFromInternal(deps, node)),
+		remove: transaction.remove.map((node) => createPublicRowNodeFromInternal(deps, node)),
+		update: transaction.update.map((node) => createPublicRowNodeFromInternal(deps, node)),
+	};
 }
 
 export function mapRowsUpdatedDispatchPayload<TRowData>(
