@@ -520,13 +520,12 @@ describe('Architecture guardrails', () => {
 		expect(featureContent).not.toContain('private getCellValueWritableRowModel()');
 	});
 
-	it('RowRenderer narrows visible-block loading instead of optional row-model hooks', () => {
+	it('RowRenderer drives viewport loading through the shared row-model contract', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderer.ts'), 'utf-8');
-		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
-		expect(rowModelContent).toContain('export interface VisibleBlockLoadCapableRowModel');
-		expect(rowModelContent).toContain('export function asVisibleBlockLoadCapableRowModel(');
-		expect(content).toContain('return asVisibleBlockLoadCapableRowModel(this.engine.getRowModel());');
-		expect(content).not.toContain("typeof fullRowModel.loadVisibleBlocks === 'function'");
+		expect(content).toContain("this.engine.getRowModel()?.ensureRange(nextWindow.rowStart, nextWindow.rowEnd, 'viewport-render');");
+		expect(content).not.toContain('loadVisibleBlocks(');
+		expect(content).not.toContain('asVisibleBlockLoadCapableRowModel(');
+		expect(content).not.toContain("id: `loading:${r}`");
 	});
 
 	it('GridFeatureContext does not expose raw side-effect primitives', () => {

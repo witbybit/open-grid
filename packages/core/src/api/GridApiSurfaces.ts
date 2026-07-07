@@ -7,7 +7,6 @@ import type { ServerDatasource, ServerPageState } from '../serverPageRowModel.js
 import type { RowModelType, ColumnState, GridIntegrityState } from '../state/GridState.js';
 import type { ColumnDef, GridStyleRule } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
-import type { RowNode } from '../rowNode.js';
 import type { GridRowNode } from '../publicRowNode.js';
 import type { RowLoadState } from '../rowModel.js';
 import type { RenderStats } from '../renderer/renderOrchestrator.js';

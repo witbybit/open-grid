@@ -3596,11 +3596,14 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			loading: true,
 		});
-		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
-			rows: [],
-			columns,
+		const rowModelState: { visualRows: Array<any> } = {
+			visualRows: [{ kind: 'loading', id: 'loading:0', rowIndex: 0, editable: false }],
+		};
+		const rowModel = createMinimalRowModel({
+			get visualRows() {
+				return rowModelState.visualRows;
+			},
 		});
 		const container = document.createElement('div');
 		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
@@ -3617,15 +3620,28 @@ describe('RenderEngine', () => {
 		document.body.appendChild(container);
 
 		const renderer = new RenderEngine(store.engine, store);
+		store.registerRowModel(rowModel);
 		renderer.mount(container);
 
 		// Cell should be in loading mode initially
 		let cell = container.querySelector('.og-cell') as HTMLDivElement;
 		expect(cell.className).toContain('og-cell-loading');
 
-		// Transition loading to false and supply rows
-		store.setRows([{ id: 'row-0', a: 'A0' }]);
-		store.engine.setRowModelLoadingState(false);
+		// Transition from an explicit loading visual row to a data row.
+		rowModelState.visualRows = [
+			{
+				kind: 'data',
+				id: 'row:row-0',
+				rowId: 'row-0',
+				rowIndex: 0,
+				node: {
+					id: 'row-0',
+					data: { id: 'row-0', a: 'A0' },
+					getCellValue: (_field: string) => 'A0',
+				},
+			},
+		];
+		store.registerRowModel(rowModel);
 
 		// Wait for render scheduler frame
 		await Promise.resolve();
@@ -3636,7 +3652,6 @@ describe('RenderEngine', () => {
 		expect(cell.querySelector('.og-cell-content')?.textContent).toBe('A0');
 
 		renderer.unmount();
-		controller.dispose();
 		store.destroy();
 	});
 

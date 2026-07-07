@@ -11,7 +11,6 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { RowSlot } from './rowSlot.js';
 import { RowSlotPool } from './rowSlotPool.js';
 import { RowRendererRuntimeBridge } from './rowRendererRuntime.js';
-import { asVisibleBlockLoadCapableRowModel } from '../rowModel.js';
 import { compileStyleRules } from '../styling/styleRules.js';
 import { PinnedContainerManager } from './pinnedContainerManager.js';
 import type { CompiledColumnTopology } from './columnTopology.js';
@@ -126,10 +125,6 @@ export class RowRenderer<TRowData = unknown> {
 	private readonly _rowIndicesScratch: number[] = [];
 	// Reusable scratch for diffRenderWindow() — avoids six array allocations per frame.
 	private readonly _deltaScratch = createEmptyViewportDelta();
-	private getVisibleBlockLoadCapableRowModel() {
-		return asVisibleBlockLoadCapableRowModel(this.engine.getRowModel());
-	}
-
 	// Pre-allocated scratch object for cell styleSlot callbacks — mutated in place before each call
 	// to eliminate per-cell object literal allocation during decoration passes.
 	// Row class scratch is owned by SelectionPaintManager.
@@ -344,18 +339,15 @@ export class RowRenderer<TRowData = unknown> {
 			this.renderStats.colsStayedDuringScroll = (this.renderStats.colsStayedDuringScroll || 0) + delta.colsStayed.length;
 		}
 
-		// Load visible blocks if server row model (server-specific, not in VisualRowModel)
-		const fullRowModel = this.getVisibleBlockLoadCapableRowModel();
-		if (fullRowModel) {
-			fullRowModel.loadVisibleBlocks(nextWindow.rowStart, nextWindow.rowEnd);
-		}
+		// Row loading is driven through the shared viewport/load contract; renderer code must not
+		// depend on row-model-specific block-loading capabilities.
+		this.engine.getRowModel()?.ensureRange(nextWindow.rowStart, nextWindow.rowEnd, 'viewport-render');
 		// Renderer-facing visual row access uses the stable VisualRowModel contract.
 		const rowModel = this.engine.getVisualRowModel();
 
 		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
 		const columnTopology = this.getCompiledColumnTopology(plan, isScrollFrameActive);
 		const columns = plan.displayedColumns;
-		const loading = ctx ? ctx.loadingVersion > 0 : state.loading;
 
 		// ── Vertical focus/edit row retention ─────────────────────────────────────────
 		// Mirrors the existing horizontal focused-column guard (reconcileCellTopologyForScroll) —
@@ -546,9 +538,6 @@ export class RowRenderer<TRowData = unknown> {
 
 			// Resolve the visual row early — needed for identity-based rebind check.
 			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
-			if (!visualRow && loading) {
-				visualRow = { kind: 'loading', id: `loading:${r}`, rowIndex: r };
-			}
 			if (!visualRow) {
 				const prevUnbind = slot.visualIndex;
 				this.releaseRowPortal(slot);

@@ -188,6 +188,23 @@ describe('Runtime Performance & Granular Versioning', () => {
 		store.destroy();
 	});
 
+	it('drives active-scroll row loading through ensureRange on the shared row-model contract', () => {
+		const grid = createWideGrid({ rows: 200, cols: 8 });
+		try {
+			const rowModel = grid.store.engine.getRowModel();
+			expect(rowModel).not.toBeNull();
+			const ensureRangeSpy = vi.spyOn(rowModel!, 'ensureRange');
+
+			grid.store.engine.viewport.setScrollPosition(120, 0);
+			grid.renderer.rowRenderer.recycleViewport(true, makeScrollCtx(grid.store) as any);
+
+			const window = grid.renderer.rowRenderer.currentWindow as RenderWindow;
+			expect(ensureRangeSpy).toHaveBeenCalledWith(window.rowStart, window.rowEnd, 'viewport-render');
+		} finally {
+			cleanupGrid(grid);
+		}
+	});
+
 	it('tests stable-slot virtualization does not remove/re-append row elements during scroll', () => {
 		const store = new GridStore<{ id: string; name: string }>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],

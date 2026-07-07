@@ -164,10 +164,10 @@ Capabilities are truthful.
 
 ### Phase 10 - Renderer integration migration
 
-- [ ] Renderer depends on `RowModelViewportAccess`, not model-specific APIs
-- [ ] Renderer uses `getRowLoadState` and `ensureRange`
-- [ ] Renderer does not inspect infinite block internals
-- [ ] Renderer does not infer loading from `getVisualRow(index) === null`
+- [x] Renderer depends on `RowModelViewportAccess`, not model-specific APIs
+- [x] Renderer uses `getRowLoadState` and `ensureRange`
+- [x] Renderer does not inspect infinite block internals
+- [x] Renderer does not infer loading from `getVisualRow(index) === null`
 
 ### Phase 11 - GridRowNode validation and integrity ergonomics
 
@@ -182,10 +182,10 @@ Capabilities are truthful.
 - [ ] Public row-node facade tests
 - [ ] Infinite cache tests
 - [ ] Query token tests
-- [ ] Renderer integration tests
+- [x] Renderer integration tests
 - [ ] Mutation semantics tests
 - [ ] Selection scope tests
-- [ ] Architecture guards for public facade and viewport access usage
+- [x] Architecture guards for public facade and viewport access usage
 
 ## Initial execution checklist
 
@@ -211,6 +211,7 @@ Capabilities are truthful.
 - 2026-07-07: Completed the remaining Phase 6 infinite-cache slice. `InfiniteRowModelController` now owns block loading/failure/known-row-count state through a dedicated internal `InfiniteBlockCache` instead of scattered `loadingBlocks` / `failedBlocks` / `hasKnownTotalCount` flags. Added a regression proving `purgeCache()` clears failed-block and known-count authority before refetching. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.test.ts src/serverRowModel.adversarial.test.ts` and `corepack pnpm --filter @open-grid/core build`.
 - 2026-07-07: Completed Phase 9 selection-scope honesty. Client row selection kept its richer `page` / `filtered` / `all` behavior, while infinite now explicitly exposes only loaded-cache selection (`page` aliases to loaded, `all`/`filtered` return empty) and server-page now explicitly exposes only current-page selection (`loaded` aliases to page, `all`/`filtered` return empty). Added direct scope regressions for infinite and server-page selection. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/rowModel.capabilities.test.ts src/features/RowSelectionFeatureController.test.ts` and `corepack pnpm --filter @open-grid/core build`.
 - 2026-07-08: Completed the next coherent Phase 8/11 row-node facade slice. Public `GridRowNode` row writes now route through canonical cell-write batching instead of pretending row transactions exist on every row model, so client writes remain local commits while infinite/server-page writes honestly patch only loaded/current-page rows. Added row-node validation/integrity helpers (`getValidationState`, `getIntegrityIssues`, `validate`, `refreshIntegrity`) that delegate to the existing integrity API, made group/detail expansion delegate to the existing grouping owner, and made failed-row `retryLoad()` re-enter the current row model's authoritative load path. Added focused regressions for async row-node writes, row-node validation/integrity helpers, and failed-row retry. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/store.test.ts` and `corepack pnpm --filter @open-grid/core build`.
+- 2026-07-08: Completed the main Phase 10 renderer migration seam. `rowRenderer.ts` no longer narrows to `VisibleBlockLoadCapableRowModel` or calls `loadVisibleBlocks(...)`; it now drives viewport loading through `RowModelViewportAccess.ensureRange(...)` and continues to read rows through `getVisualRowModel()`. Removed the last synthetic `loading:${r}` fallback so renderer loading rows come from the row model instead of being inferred from `getVisualRow(...) === null`. Added a focused renderer regression proving active scroll calls `ensureRange(...)`, and updated the architecture guard to lock in the new contract. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/engine/architectureGuards.test.ts src/renderer/runtimePerformance.test.ts` and `corepack pnpm --filter @open-grid/core build`.
 
 ## Done criteria
 
@@ -224,7 +225,7 @@ Capabilities are truthful.
 - [ ] Row-node writes are honest per row model
 - [ ] Validation/integrity row-node operations route through existing authoritative owners
 - [ ] Selection scopes are honest per row model
-- [ ] Renderer no longer relies on row-model-specific loading seams
+- [x] Renderer no longer relies on row-model-specific loading seams
 - [ ] Unsupported operations fail consistently
 - [ ] Core tests and build pass
 
