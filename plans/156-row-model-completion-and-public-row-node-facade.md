@@ -78,8 +78,8 @@ Capabilities are truthful.
 - [x] Introduce `InternalRowModelKind`
 - [x] Introduce `RowNodeKind` and `RowLoadState`
 - [x] Split internal/public node concepts in types:
-  - [x] internal mutable row node contract boundary identified and kept separate from new facade types
-  - [x] public `GridRowNode` facade contract
+    - [x] internal mutable row node contract boundary identified and kept separate from new facade types
+    - [x] public `GridRowNode` facade contract
 - [x] Add `RowModelViewportAccess` interface skeleton
 - [ ] Add initial architecture guards preventing new full-SSRM naming drift
 
@@ -107,24 +107,24 @@ Capabilities are truthful.
 - [ ] Implement `RowModelViewportAccess` on infinite row model
 - [ ] Implement `RowModelViewportAccess` on server-page row model
 - [ ] Add:
-  - [ ] `getKnownRowCount`
-  - [ ] `getEstimatedRowCount`
-  - [ ] `getRowCountKind`
-  - [ ] `getRowLoadState`
-  - [ ] `isRowLoaded`
-  - [ ] `isRowLoading`
-  - [ ] `isRowFailed`
-  - [ ] `isRangeLoaded`
-  - [ ] `getRangeLoadState`
-  - [ ] `ensureRange`
+    - [ ] `getKnownRowCount`
+    - [ ] `getEstimatedRowCount`
+    - [ ] `getRowCountKind`
+    - [ ] `getRowLoadState`
+    - [ ] `isRowLoaded`
+    - [ ] `isRowLoading`
+    - [ ] `isRowFailed`
+    - [ ] `isRangeLoaded`
+    - [ ] `getRangeLoadState`
+    - [ ] `ensureRange`
 
 ### Phase 5 - Visual row normalization
 
 - [ ] Normalize minimum visual row kinds:
-  - [ ] `data`
-  - [ ] `loading`
-  - [ ] `failed`
-  - [ ] `placeholder`
+    - [ ] `data`
+    - [ ] `loading`
+    - [ ] `failed`
+    - [ ] `placeholder`
 - [ ] Ensure renderer can render loading/failed/placeholder rows without inferring from null data
 - [ ] Ensure server/infinite missing rows are represented honestly
 
@@ -198,6 +198,8 @@ Capabilities are truthful.
 - 2026-07-07: Public `getRowNodeById` removal and Phase 2 surface shrink are in progress. `GridApiSurfaces`, plugin/runtime composition, and `rows().getNodeById(...)` now point at `GridRowNode` facades instead of the internal mutable node. `GridCellAccess.node` and `GridCellClickParams.node` now also return `GridRowNode` facades, and `getDataRowNodeAtVisualIndex(...)` has been removed from the public API facade. Renderer/portal internals still intentionally use `RowNode` for now. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
 - 2026-07-07: Continued Phase 2 shrink in `@open-grid/react`. The portal layer no longer imports the exported internal `RowNode` type from `@open-grid/core`; it now uses a local minimal `PortalRowNodeLike` contract (`id` + `data`) while preserving the same runtime object identity and behavior. Verification again passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
 - 2026-07-07: `GridEventName.rowsUpdated` now exposes public `GridRowNode` facades instead of raw internal `RowNode[]`. Row-model and mutation internals still emit raw nodes through a dedicated internal dispatch payload, and `GridEngine` converts them at the dispatch boundary via `publicRowNodeDispatch.ts`. Added a regression proving event listeners receive facades, and kept the architecture guard green by extracting the bridge out of `GridEngine.ts`. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
+- 2026-07-07: Removed the direct public `RowNode` runtime export from `@open-grid/core`. The public export snapshot in `boundary.test.ts` was updated accordingly, and React-side tests that previously imported the internal class now use local row-shaped helpers instead. Verification again passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
+- 2026-07-07: Narrowed `DomCellRendererParams.node` to a public `DomCellRendererRowRef` (`id` + `data`) instead of the internal mutable `RowNode` type. Internal renderer managers still pass the same runtime object via structural compatibility, so behavior did not change. Verification again passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
 
 ## Done criteria
 

@@ -21,10 +21,7 @@ export interface PublicRowNodeDispatchDeps<TRowData = unknown> {
 	getRowModelType(): 'client' | 'infinite' | 'server';
 }
 
-export function createPublicRowNodeFromInternal<TRowData>(
-	deps: PublicRowNodeDispatchDeps<TRowData>,
-	node: RowNode<TRowData>
-): GridRowNode<TRowData> {
+export function createPublicRowNodeFromInternal<TRowData>(deps: PublicRowNodeDispatchDeps<TRowData>, node: RowNode<TRowData>): GridRowNode<TRowData> {
 	const rowId = node.id;
 	return createGridRowNodeFacade(deps, {
 		id: rowId,

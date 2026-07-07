@@ -14,6 +14,17 @@ export interface ValueGetterParams<TRowData = unknown> {
 	colField: string;
 }
 
+/**
+ * Public row reference for DOM cell renderers.
+ *
+ * This intentionally exposes only stable identity and row data, not the internal mutable RowNode
+ * implementation or its helper methods/caches.
+ */
+export interface DomCellRendererRowRef<TRowData = unknown> {
+	id: string;
+	data: TRowData;
+}
+
 export interface TooltipParams<TRowData = unknown> {
 	row: TRowData;
 	rowId: string;
@@ -146,7 +157,7 @@ export interface ImperativeCellHandle<TRowData = unknown> {
 export interface DomCellRendererParams<TRowData = unknown> {
 	container: HTMLElement;
 	value: unknown;
-	node: RowNode<TRowData>;
+	node: DomCellRendererRowRef<TRowData>;
 	col: ColumnDef<TRowData>;
 	isEditing: boolean;
 	isScrolling: boolean;

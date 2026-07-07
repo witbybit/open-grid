@@ -4,7 +4,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 afterEach(cleanup);
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
-import { createClientGrid, RowNode, type ClientGridOptions, type ColumnDef } from '@open-grid/core';
+import { createClientGrid, type ClientGridOptions, type ColumnDef } from '@open-grid/core';
 import * as ReactPackage from './index.js';
 import { GridProvider } from './gridContext.js';
 import { GridView } from './GridView.js';
@@ -32,7 +32,7 @@ function createTestGrid<TRowData>(options: ClientGridOptions<TRowData>) {
 }
 
 function makeInternalNode<TRowData>(id: string, data: TRowData) {
-	return new RowNode(id, data);
+	return { id, data };
 }
 
 const SelectorInspector = () => {
@@ -499,14 +499,40 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const colDef = grid.api.getColumnDef('name')!;
 
 		const store = createPortalStore<TestRow>();
-		store.mountCell('1:name', container, 'Old', makeInternalNode('1', { id: '1', name: 'Old' }), colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 1,
-		});
-		store.mountCell('2:name', container, 'New', makeInternalNode('2', { id: '2', name: 'New' }), colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 2,
-		});
+		store.mountCell(
+			'1:name',
+			container,
+			'Old',
+			makeInternalNode('1', { id: '1', name: 'Old' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 1,
+			}
+		);
+		store.mountCell(
+			'2:name',
+			container,
+			'New',
+			makeInternalNode('2', { id: '2', name: 'New' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 2,
+			}
+		);
 
 		render(<PortalManager store={store} api={grid.api} />);
 
@@ -529,14 +555,40 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const container = document.createElement('div');
 		const colDef = grid.api.getColumnDef('name')!;
 
-		store.mountCell('1:name', container, 'Old', makeInternalNode('1', { id: '1', name: 'Old' }), colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 1,
-		});
-		store.mountCell('2:name', container, 'New', makeInternalNode('2', { id: '2', name: 'New' }), colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 2,
-		});
+		store.mountCell(
+			'1:name',
+			container,
+			'Old',
+			makeInternalNode('1', { id: '1', name: 'Old' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 1,
+			}
+		);
+		store.mountCell(
+			'2:name',
+			container,
+			'New',
+			makeInternalNode('2', { id: '2', name: 'New' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 2,
+			}
+		);
 		await act(async () => {
 			await Promise.resolve();
 		});
@@ -567,10 +619,23 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const colDef = grid.api.getColumnDef('name')!;
 
 		// Mount cell first (structural change)
-		store.mountCell(cellKey, container, 'Old', makeInternalNode('1', { id: '1', name: 'Product A' }), colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 1,
-		});
+		store.mountCell(
+			cellKey,
+			container,
+			'Old',
+			makeInternalNode('1', { id: '1', name: 'Product A' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 1,
+			}
+		);
 		await act(async () => {
 			await Promise.resolve();
 		});
@@ -580,10 +645,23 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const unsubscribeCell = store.subscribeToCell!(cellKey, cellListener);
 
 		// Update cell data only (non-structural change)
-		store.mountCell(cellKey, container, 'New', makeInternalNode('1', { id: '1', name: 'Product A' }), colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 2,
-		});
+		store.mountCell(
+			cellKey,
+			container,
+			'New',
+			makeInternalNode('1', { id: '1', name: 'Product A' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 2,
+			}
+		);
 
 		// The structural listener should NOT have fired again (remains 1)
 		expect(structuralListener).toHaveBeenCalledTimes(1);

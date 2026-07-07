@@ -78,7 +78,6 @@ describe('Public/internal boundary', () => {
 				'LIGHT_THEME',
 				'MINIMAL_MONOCHROME_THEME',
 				'NUMBER_OPS',
-				'RowNode',
 				'TEXT_OPS',
 				'ThemeManager',
 				'WARM_ORANGE_THEME',
@@ -129,6 +128,7 @@ describe('Public/internal boundary', () => {
 
 		it('does not export experimental style-rule compiler or concrete instrumentation helpers', () => {
 			for (const name of [
+				'RowNode',
 				'compileStyleRules',
 				'NoopGridInstrumentation',
 				'RecordingGridInstrumentation',

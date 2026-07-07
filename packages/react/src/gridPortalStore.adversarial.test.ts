@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RowNode, type ColumnDef, type VisualRow } from '@open-grid/core';
+import type { ColumnDef, VisualRow } from '@open-grid/core';
 import { createPortalStore } from './gridPortalStore.js';
 
 interface TestRow {
@@ -36,8 +36,8 @@ function makeIdentity(
 	return { cellInstanceId, rowSlotId, slotGeneration, rowBindingGeneration, portalHostId };
 }
 
-function makeNode(id: string, name = id): RowNode<TestRow> {
-	return new RowNode<TestRow>(id, { id, name });
+function makeNode(id: string, name = id) {
+	return { id, data: { id, name } };
 }
 
 function makeDetailRow(rowKey: string): VisualRow<TestRow> {

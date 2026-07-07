@@ -49,7 +49,6 @@ export type { GridRowNode, GridRowNodeValidationState, RowNodeSelectionOptions }
 export type { PersistenceStatus, PersistenceSaveStatus } from './persistence/statePersistence.js';
 export { GRID_STATE_SCHEMA_VERSION, validateSchemaVersion } from './persistence/statePersistence.js';
 
-export { RowNode } from './rowNode.js';
 export { GridEventName } from './api/GridEvents.js';
 export type { RowDataTransaction, RowNodeTransaction } from './api/GridApi.js';
 export type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './api/GridApi.js';
@@ -95,6 +94,7 @@ export type {
 	DomCellRenderer,
 	DomCellRendererHandle,
 	DomCellRendererParams,
+	DomCellRendererRowRef,
 	ImperativeCellHandle,
 	RowStyleRule,
 	GroupRowStyleRule,

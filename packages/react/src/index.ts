@@ -92,6 +92,7 @@ export type {
 	DomCellRenderer,
 	DomCellRendererHandle,
 	DomCellRendererParams,
+	DomCellRendererRowRef,
 	ImperativeCellHandle,
 	GridReadyEvent,
 	GridInitialState,
