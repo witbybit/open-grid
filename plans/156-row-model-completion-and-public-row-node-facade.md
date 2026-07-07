@@ -134,19 +134,19 @@ Capabilities are truthful.
 
 ### Phase 6 - Infinite block cache and request-token authority
 
-- [ ] Introduce `InfiniteBlockCache`
-- [ ] Replace ad hoc infinite loading state as source of truth
-- [ ] Add `RowModelQueryState`
-- [ ] Add `RowModelRequestToken`
-- [ ] Guard async result application on datasource generation, queryVersion, requestId, and block/page identity
-- [ ] Add stale-result tests
+- [x] Introduce `InfiniteBlockCache`
+- [x] Replace ad hoc infinite loading state as source of truth
+- [x] Add `RowModelQueryState`
+- [x] Add `RowModelRequestToken`
+- [x] Guard async result application on datasource generation, queryVersion, requestId, and block/page identity
+- [x] Add stale-result tests
 
 ### Phase 7 - Sort/filter/query ownership hardening
 
 - [ ] Client sort/filter/query remains local pipeline-owned
-- [ ] Infinite sort/filter/query bumps queryVersion and resets/stales cache
-- [ ] Server-page sort/filter/query bumps queryVersion and resets to page 0
-- [ ] Add tests proving stale previous-query results are ignored
+- [x] Infinite sort/filter/query bumps queryVersion and resets/stales cache
+- [x] Server-page sort/filter/query bumps queryVersion and resets to page 0
+- [x] Add tests proving stale previous-query results are ignored
 
 ### Phase 8 - Honest mutation semantics per row model
 
@@ -158,9 +158,9 @@ Capabilities are truthful.
 
 ### Phase 9 - Row selection scope honesty
 
-- [ ] Define explicit selection-scope behavior per row model
-- [ ] Reject `all` where the model cannot honestly provide it
-- [ ] Add scope tests for client, infinite, and server-page
+- [x] Define explicit selection-scope behavior per row model
+- [x] Reject `all` where the model cannot honestly provide it
+- [x] Add scope tests for client, infinite, and server-page
 
 ### Phase 10 - Renderer integration migration
 
@@ -207,6 +207,9 @@ Capabilities are truthful.
 - 2026-07-07: Closed the next larger public RowNode leaks coherently. Added `GridRowDataRef` for callback-style row references, switched `ValueGetterParams.node` and custom aggregation callbacks to that public ref, and split transaction ownership so row models still return internal `RowNode[]` internally while `GridEngine.applyTransaction(...)` maps them to public `GridRowNode` facades before the API boundary. Added regressions proving `valueGetter`, aggregation callbacks, `rowsUpdated`, and `applyTransaction` do not leak mutable internal row nodes. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, `corepack pnpm --filter @open-grid/react build`, and `corepack pnpm --filter @open-grid/react test`.
 - 2026-07-07: Phase 2 can now be treated as complete from the public-boundary standpoint. The remaining raw `RowNode` seams are internal row-model/query/storage contracts rather than consumer-facing leaks. Started landing Phase 4 for real by making `RowModel` extend `RowModelViewportAccess` and implementing `getKnownRowCount`, `getEstimatedRowCount`, `getRowCountKind`, `getRowLoadState`, `isRowLoaded`, `isRowLoading`, `isRowFailed`, `isRangeLoaded`, `getRangeLoadState`, and `ensureRange` across client, infinite, and server-page row models. Added failure-state tracking for infinite block loads, server-page viewport/load-state regressions, a minimal-row-model test helper update, and an architecture guard asserting the stronger viewport/load contract. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, `corepack pnpm --filter @open-grid/react build`, and `corepack pnpm --filter @open-grid/react test`.
 - 2026-07-07: Began Phase 5 visual-row normalization. Added first-class `FailedVisualRow` and `PlaceholderVisualRow` types to the shared visual-row vocabulary, taught row slots / portal identity / row presentation / store facades about them, and made infinite + server-page row models emit explicit failed visual rows instead of only reporting failure through load-state side channels. React row portals now have default failed/placeholder renderers, and focused regressions prove the renderer/store/public node surface sees failed rows directly. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, `corepack pnpm --filter @open-grid/react build`, and `corepack pnpm --filter @open-grid/react test`.
+- 2026-07-07: Landed the first coherent Phase 6/7 hardening slice. Added shared `RowModelQueryState` and `RowModelRequestToken` types, replaced the old single `requestGeneration` guards in infinite and server-page row models with explicit datasource-generation/query-version request authority, and wired `queryModelChanged` into both async models so stale previous-query results are dropped the same way as stale sort/filter results. Extended the adversarial stale-response suite to churn `queryModel` as well. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.adversarial.test.ts src/query/queryModel.test.ts` and `corepack pnpm --filter @open-grid/core build`.
+- 2026-07-07: Completed the remaining Phase 6 infinite-cache slice. `InfiniteRowModelController` now owns block loading/failure/known-row-count state through a dedicated internal `InfiniteBlockCache` instead of scattered `loadingBlocks` / `failedBlocks` / `hasKnownTotalCount` flags. Added a regression proving `purgeCache()` clears failed-block and known-count authority before refetching. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.test.ts src/serverRowModel.adversarial.test.ts` and `corepack pnpm --filter @open-grid/core build`.
+- 2026-07-07: Completed Phase 9 selection-scope honesty. Client row selection kept its richer `page` / `filtered` / `all` behavior, while infinite now explicitly exposes only loaded-cache selection (`page` aliases to loaded, `all`/`filtered` return empty) and server-page now explicitly exposes only current-page selection (`loaded` aliases to page, `all`/`filtered` return empty). Added direct scope regressions for infinite and server-page selection. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/rowModel.capabilities.test.ts src/features/RowSelectionFeatureController.test.ts` and `corepack pnpm --filter @open-grid/core build`.
 
 ## Done criteria
 

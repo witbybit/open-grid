@@ -171,6 +171,77 @@ describe('Row model capabilities', () => {
 
 		api.destroy();
 	});
+
+	it('infinite row selection scopes are honest about loaded-only selection', async () => {
+		const api = createInfiniteGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			rowSelection: { mode: 'multiple', selectAllScope: 'page' },
+			datasource: {
+				getRows: vi.fn().mockResolvedValue({
+					rows: [
+						{ id: '1', name: 'Alpha', amount: 1 },
+						{ id: '2', name: 'Beta', amount: 2 },
+					],
+					totalCount: 20,
+				}),
+			},
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		api.selectAllRows({ scope: 'page' });
+		expect(api.rows().getCheckedIds()).toEqual(['1', '2']);
+
+		api.clearRowSelection();
+		api.selectAllRows({ scope: 'loaded' });
+		expect(api.rows().getCheckedIds()).toEqual(['1', '2']);
+
+		api.clearRowSelection();
+		api.selectAllRows({ scope: 'all' });
+		expect(api.rows().getCheckedIds()).toEqual([]);
+
+		api.selectAllRows({ scope: 'filtered' });
+		expect(api.rows().getCheckedIds()).toEqual([]);
+
+		api.destroy();
+	});
+
+	it('server-page row selection scopes are honest about current-page-only selection', async () => {
+		const api = createServerPageGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			rowSelection: { mode: 'multiple', selectAllScope: 'page' },
+			datasource: {
+				getPage: vi.fn().mockResolvedValue({
+					rows: [
+						{ id: '1', name: 'Alpha', amount: 1 },
+						{ id: '2', name: 'Beta', amount: 2 },
+					],
+					totalRowCount: 20,
+				}),
+			},
+			pagination: { pageSize: 10 },
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		api.selectAllRows({ scope: 'page' });
+		expect(api.rows().getCheckedIds()).toEqual(['1', '2']);
+
+		api.clearRowSelection();
+		api.selectAllRows({ scope: 'loaded' });
+		expect(api.rows().getCheckedIds()).toEqual(['1', '2']);
+
+		api.clearRowSelection();
+		api.selectAllRows({ scope: 'all' });
+		expect(api.rows().getCheckedIds()).toEqual([]);
+
+		api.selectAllRows({ scope: 'filtered' });
+		expect(api.rows().getCheckedIds()).toEqual([]);
+
+		api.destroy();
+	});
 });
 
 // ── Unsupported operation errors ──────────────────────────────────────────────

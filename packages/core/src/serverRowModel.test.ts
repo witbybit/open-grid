@@ -437,4 +437,53 @@ describe('InfiniteRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('purgeCache resets failed block state and known row count before refetching', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let rejectBlockOne!: (error: unknown) => void;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (params.startRow === 0) {
+					return Promise.resolve({
+						rows: [{ id: '1', name: 'Alice' }],
+						totalCount: 100,
+					});
+				}
+				return new Promise((_, reject) => {
+					rejectBlockOne = reject;
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		controller.ensureRange(50, 50, 'test');
+		rejectBlockOne!(new Error('block failed'));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getRowLoadState(50)).toEqual({ kind: 'failed', error: 'block failed', retryable: true });
+		expect(controller.getKnownRowCount()).toBe(100);
+
+		controller.purgeCache();
+
+		expect(controller.getKnownRowCount()).toBeNull();
+		expect(controller.getRowCountKind()).toBe('unknown');
+		expect(controller.getRowLoadState(50)).toEqual({ kind: 'missing' });
+		expect(mockDatasource.getRows).toHaveBeenLastCalledWith(expect.objectContaining({ startRow: 0, endRow: 50 }));
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getKnownRowCount()).toBe(100);
+
+		controller.dispose();
+		store.destroy();
+	});
 });

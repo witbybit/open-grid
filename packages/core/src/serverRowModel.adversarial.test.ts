@@ -146,7 +146,7 @@ describe('InfiniteRowModelController — adversarial generation invariants', () 
 		await resolveRequest(initialRequest!);
 
 		for (let step = 0; step < 40; step++) {
-			const op = lcgInt(rng, 5);
+			const op = lcgInt(rng, 6);
 			const label = `seed=0x5eed1234,step=${step},op=${op}`;
 
 			if (op === 0) {
@@ -175,6 +175,27 @@ describe('InfiniteRowModelController — adversarial generation invariants', () 
 			}
 
 			if (op === 2) {
+				bump('query');
+				store.setQueryModel({
+					id: `query-${sequence}`,
+					root: {
+						kind: 'group',
+						operator: 'and',
+						children: [
+							{
+								kind: 'condition',
+								field: 'name',
+								operator: 'contains',
+								value: sequence % 2 === 0 ? 'A' : 'B',
+							},
+						],
+					},
+				});
+				expect(store.getState().loading, `[${label}] query purge should enter loading`).toBe(true);
+				continue;
+			}
+
+			if (op === 3) {
 				source = source === 'A' ? 'B' : 'A';
 				activeDatasource = source === 'A' ? datasourceA : datasourceB;
 				bump('datasource');
@@ -191,7 +212,7 @@ describe('InfiniteRowModelController — adversarial generation invariants', () 
 			const faultsBefore = store.getRuntimeFaults().length;
 			const isCurrent = request.token === currentToken;
 
-			if (op === 3) {
+			if (op === 4) {
 				await resolveRequest(request);
 				const names = loadedNames(controller);
 
@@ -237,7 +258,7 @@ describe('InfiniteRowModelController — adversarial generation invariants', () 
 });
 
 describe('ServerPageRowModelController — adversarial generation invariants', () => {
-	it('stale responses and stale failures are ignored after page/sort/filter/datasource churn', async () => {
+	it('stale responses and stale failures are ignored after page/sort/filter/query/datasource churn', async () => {
 		const rng = makeLcg(0x1460cafe);
 		const pending: PendingPageRequest[] = [];
 		const store = new GridStore<TestRow>({
@@ -285,7 +306,7 @@ describe('ServerPageRowModelController — adversarial generation invariants', (
 		await resolveRequest(initialRequest!);
 
 		for (let step = 0; step < 40; step++) {
-			const op = lcgInt(rng, 6);
+			const op = lcgInt(rng, 7);
 			const label = `seed=0x1460cafe,step=${step},op=${op}`;
 
 			if (op === 0) {
@@ -322,6 +343,28 @@ describe('ServerPageRowModelController — adversarial generation invariants', (
 			}
 
 			if (op === 3) {
+				bump('query');
+				store.setQueryModel({
+					id: `query-${sequence}`,
+					root: {
+						kind: 'group',
+						operator: 'and',
+						children: [
+							{
+								kind: 'condition',
+								field: 'name',
+								operator: 'contains',
+								value: sequence % 2 === 0 ? 'A' : 'B',
+							},
+						],
+					},
+				});
+				expect(store.getServerPageState()?.loading, `[${label}] query change should enter loading`).toBe(true);
+				expect(controller.getVisualRow(0)?.kind, `[${label}] query change should clear stale rows immediately`).toBe('loading');
+				continue;
+			}
+
+			if (op === 4) {
 				source = source === 'A' ? 'B' : 'A';
 				activeDatasource = source === 'A' ? datasourceA : datasourceB;
 				bump('datasource');
@@ -339,7 +382,7 @@ describe('ServerPageRowModelController — adversarial generation invariants', (
 			const faultsBefore = store.getRuntimeFaults().length;
 			const isCurrent = request.token === currentToken;
 
-			if (op === 4) {
+			if (op === 5) {
 				await resolveRequest(request);
 				const names: string[] = [];
 				for (let i = 0; i < controller.getVisualRowCount(); i++) {

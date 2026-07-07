@@ -14,6 +14,8 @@ import type {
 	RowModelCapabilities,
 	RowCountKind,
 	RowLoadState,
+	RowModelRequestToken,
+	RowModelQueryState,
 	RowRangeLoadState,
 } from './rowModel.js';
 import type { RowSelectionScope } from './api/GridApi.js';
@@ -109,7 +111,9 @@ export class ServerPageRowModelController<TData = unknown>
 	private rowIdToVisualIndex = new Map<string, number>();
 	private unsubscribers: Array<() => void> = [];
 	private disposed = false;
-	private requestGeneration = 0;
+	private datasourceGeneration = 0;
+	private queryVersion = 0;
+	private nextRequestId = 1;
 
 	private currentPage: number;
 	private pageSize: number;
@@ -134,16 +138,16 @@ export class ServerPageRowModelController<TData = unknown>
 
 		this.unsubscribers.push(
 			this.runtime.addEventListener(GridEventName.sortChanged, () => {
-				this.currentPage = 0;
-				this.fetchPage({ preserveVisibleRows: false });
+				this.invalidateQueryAndResetPage();
 			}),
 			this.runtime.addEventListener(GridEventName.filterChanged, () => {
-				this.currentPage = 0;
-				this.fetchPage({ preserveVisibleRows: false });
+				this.invalidateQueryAndResetPage();
 			}),
 			this.runtime.addEventListener(GridEventName.quickFilterChanged, () => {
-				this.currentPage = 0;
-				this.fetchPage({ preserveVisibleRows: false });
+				this.invalidateQueryAndResetPage();
+			}),
+			this.runtime.addEventListener(GridEventName.queryModelChanged, () => {
+				this.invalidateQueryAndResetPage();
 			})
 		);
 
@@ -156,6 +160,7 @@ export class ServerPageRowModelController<TData = unknown>
 
 	public setDatasource(datasource: ServerDatasource<TData>): void {
 		this.datasource = datasource;
+		this.bumpDatasourceGeneration();
 		this.currentPage = 0;
 		this.fetchPage({ preserveVisibleRows: false });
 	}
@@ -190,7 +195,7 @@ export class ServerPageRowModelController<TData = unknown>
 
 	public dispose(): void {
 		this.disposed = true;
-		this.requestGeneration++;
+		this.bumpDatasourceGeneration();
 		this.unsubscribers.forEach((u) => u());
 		this.unsubscribers = [];
 	}
@@ -308,7 +313,9 @@ export class ServerPageRowModelController<TData = unknown>
 		this.reloadPage(reason);
 	};
 
-	public getSelectableDataRowIds = (_scope: RowSelectionScope = 'loaded'): string[] => {
+	public getSelectableDataRowIds = (scope: RowSelectionScope = 'loaded'): string[] => {
+		if (scope === 'all' || scope === 'filtered') return [];
+		// Server-page rows only know the active page. Treat `loaded` as the current page window.
 		return this.activeNodes.map((n) => n.id);
 	};
 
@@ -350,11 +357,10 @@ export class ServerPageRowModelController<TData = unknown>
 	private fetchPage = async (options?: { preserveVisibleRows?: boolean }): Promise<void> => {
 		if (this.disposed) return;
 
-		this.requestGeneration++;
-		const generation = this.requestGeneration;
 		const page = this.currentPage;
 		const pageSize = this.pageSize;
 		const preserveVisibleRows = options?.preserveVisibleRows ?? false;
+		const requestToken = this.createPageRequestToken(page, pageSize);
 
 		this.loading = true;
 		this.error = null;
@@ -384,7 +390,7 @@ export class ServerPageRowModelController<TData = unknown>
 				queryModel: state.queryModel,
 			});
 
-			if (this.disposed || generation !== this.requestGeneration) return;
+			if (!this.isRequestTokenCurrent(requestToken)) return;
 
 			this.loading = false;
 			this.error = null;
@@ -434,7 +440,7 @@ export class ServerPageRowModelController<TData = unknown>
 				error: null,
 			});
 		} catch (error) {
-			if (this.disposed || generation !== this.requestGeneration) return;
+			if (!this.isRequestTokenCurrent(requestToken)) return;
 
 			this.loading = false;
 			this.error = toErrorMessage(error);
@@ -458,5 +464,45 @@ export class ServerPageRowModelController<TData = unknown>
 	public refresh(_reason?: RowRefreshReason): RowModelRefreshResult {
 		this.fetchPage({ preserveVisibleRows: true });
 		return { changed: true };
+	}
+
+	private getQueryState(): RowModelQueryState {
+		return {
+			datasourceGeneration: this.datasourceGeneration,
+			queryVersion: this.queryVersion,
+		};
+	}
+
+	private createPageRequestToken(page: number, pageSize: number): RowModelRequestToken {
+		const queryState = this.getQueryState();
+		return {
+			kind: 'server-page',
+			datasourceGeneration: queryState.datasourceGeneration,
+			queryVersion: queryState.queryVersion,
+			requestId: this.nextRequestId++,
+			page,
+			pageSize,
+		};
+	}
+
+	private isRequestTokenCurrent(token: RowModelRequestToken): boolean {
+		if (this.disposed) return false;
+		if (token.kind !== 'server-page') return false;
+		return (
+			token.datasourceGeneration === this.datasourceGeneration &&
+			token.queryVersion === this.queryVersion &&
+			token.page === this.currentPage &&
+			token.pageSize === this.pageSize
+		);
+	}
+
+	private bumpDatasourceGeneration(): void {
+		this.datasourceGeneration++;
+	}
+
+	private invalidateQueryAndResetPage(): void {
+		this.queryVersion++;
+		this.currentPage = 0;
+		this.fetchPage({ preserveVisibleRows: false });
 	}
 }

@@ -63,6 +63,23 @@ export type RowNodeKind = 'data' | 'loading' | 'failed' | 'placeholder' | 'group
 
 export type RowCountKind = 'known' | 'estimated' | 'unknown';
 
+export interface RowModelQueryState {
+	readonly datasourceGeneration: number;
+	readonly queryVersion: number;
+}
+
+export interface RowModelRequestToken {
+	readonly kind: 'infinite-block' | 'server-page';
+	readonly datasourceGeneration: number;
+	readonly queryVersion: number;
+	readonly requestId: number;
+	readonly startRow?: number;
+	readonly endRow?: number;
+	readonly blockIndex?: number;
+	readonly page?: number;
+	readonly pageSize?: number;
+}
+
 export type RowLoadState =
 	| { kind: 'loaded'; rowId: string }
 	| { kind: 'loading'; reason?: string }
