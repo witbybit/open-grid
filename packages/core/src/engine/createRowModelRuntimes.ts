@@ -26,7 +26,7 @@ export function createClientRowModelRuntime<TRowData>(store: RowModelRuntimeStor
 		getValueGetterDependents: (colField) => store.engine.getValueGetterDependents(colField),
 		hasValueGetter: (colField) => store.engine.hasValueGetter(colField),
 		notifyBulkCellChange: (changes) => store.engine.notifyBulkCellChange(changes),
-		dispatchRowsUpdated: (payload) => store.dispatchEvent(GridEventName.rowsUpdated, payload),
+		dispatchRowsUpdated: (payload) => store.engine.dispatchRowsUpdated(payload),
 		getInstrumentation: () => store.getInstrumentation(),
 	};
 }

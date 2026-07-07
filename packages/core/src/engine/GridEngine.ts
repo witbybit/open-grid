@@ -76,6 +76,8 @@ import { GridEngineRenderBridge } from './GridEngineRenderBridge.js';
 import { CellDisplaySnapshotStore, type CellDisplaySnapshot } from '../renderer/cellDisplaySnapshot.js';
 import { HtmlScrollSnapshotStore } from '../renderer/htmlScrollSnapshotStore.js';
 import { RowCtrlStore } from '../renderer/controllers/RowCtrlStore.js';
+import type { RowsUpdatedDispatchPayload } from './runtimePorts.js';
+import { mapRowsUpdatedDispatchPayload, type PublicRowNodeDispatchDeps } from './publicRowNodeDispatch.js';
 
 export type ManagedRowDragBlockReason =
 	| 'unsupported-row-model'
@@ -442,6 +444,13 @@ export class GridEngine<TRowData = unknown> {
 			stateManager: this.stateManager,
 			invalidation: this.invalidation,
 			eventBus: this.eventBus,
+			dispatchEvent: (type, payload) => {
+				if (type === GridEventName.rowsUpdated) {
+					this.dispatchRowsUpdated(payload as RowsUpdatedDispatchPayload<TRowData>);
+					return;
+				}
+				this.dispatchEvent(type, payload as GridEventPayloadMap<TRowData>[typeof type]);
+			},
 			commandHistory: this.commandHistory,
 			requestRender: (reason) => this.requestRender(reason),
 			commitContext: {
@@ -804,21 +813,34 @@ export class GridEngine<TRowData = unknown> {
 		this.eventBus.dispatchEvent(type, payload);
 	}
 
-	public getRowId(row: TRowData): string {
-		return this.data.getRowId(row);
+	private getPublicRowNodeDispatchDeps(): PublicRowNodeDispatchDeps<TRowData> {
+		return {
+			getRowId: (row) => this.getRowId(row),
+			getRawRowById: (targetRowId) => this.rowModel?.getRawRowById(targetRowId) ?? null,
+			getCellValue: (targetRowId, field) => this.data.getCellValue(targetRowId, field),
+			getVisualIndexByRowId: (targetRowId) => this.rowModel?.getVisualIndexByRowId(targetRowId) ?? null,
+			getVisualRowCount: () => this.rowModel?.getVisualRowCount() ?? 0,
+			getSelectedRowIds: () => this.stateManager.getState().selectedRowIds,
+			isDetailExpanded: (targetRowId) => asRowExpansionStateReadableModel(this.rowModel)?.isDetailExpanded(targetRowId) ?? false,
+			selectRows: (rowIds, options) => (options?.mode === 'replace' ? this.replaceRowIds(rowIds, 'api') : this.selectRowIds(rowIds, 'api')),
+			deselectRows: (rowIds) => this.deselectRowIds(rowIds, 'api'),
+			scrollToRow: () => {},
+			setCellValue: (targetRowId, field, value) => this.setCellValue(targetRowId, field, value),
+			applyTransaction: (input) => this.applyTransaction(input),
+			refreshRows: () => this.rowModel?.refresh(),
+			getRowModelType: () => (asServerPageControllableRowModel(this.rowModel) ? 'server' : asInfiniteControllableRowModel(this.rowModel) ? 'infinite' : 'client'),
+		};
 	}
-	public isRowLoading(rowId: string): boolean {
-		return this.data.isRowLoading(rowId);
+
+	public dispatchRowsUpdated(payload: RowsUpdatedDispatchPayload<TRowData>): void {
+		this.eventBus.dispatchEvent(GridEventName.rowsUpdated, mapRowsUpdatedDispatchPayload(this.getPublicRowNodeDispatchDeps(), payload));
 	}
-	public getCellDisplayValue(rowId: string, colField: string): unknown {
-		return this.data.getCellValue(rowId, colField);
-	}
-	public getCachedDisplayValue(rowId: string, colField: string): string | undefined {
-		return this.data.getCachedDisplayValue(rowId, colField);
-	}
-	public primeDisplayValue(rowId: string, colField: string): string | undefined {
-		return this.data.primeDisplayValue(rowId, colField);
-	}
+
+	public getRowId(row: TRowData): string { return this.data.getRowId(row); }
+	public isRowLoading(rowId: string): boolean { return this.data.isRowLoading(rowId); }
+	public getCellDisplayValue(rowId: string, colField: string): unknown { return this.data.getCellValue(rowId, colField); }
+	public getCachedDisplayValue(rowId: string, colField: string): string | undefined { return this.data.getCachedDisplayValue(rowId, colField); }
+	public primeDisplayValue(rowId: string, colField: string): string | undefined { return this.data.primeDisplayValue(rowId, colField); }
 	public getCellDisplaySnapshot(rowId: string, colFieldOrInstanceId: string): CellDisplaySnapshot | undefined {
 		const column = this.columns.getPrimaryColumnByField(colFieldOrInstanceId);
 		return this.cellDisplaySnapshots.get(rowId, column?.instanceId ?? colFieldOrInstanceId);

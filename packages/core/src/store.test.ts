@@ -881,6 +881,37 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('rowsUpdated event exposes public row-node facades instead of internal mutable row nodes', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const listener = vi.fn();
+		store.addEventListener(GridEventName.rowsUpdated, listener);
+
+		store.applyTransaction({
+			update: [{ id: '1', name: 'Product A+', price: 10 }],
+		});
+
+		const payload = listener.mock.calls.at(-1)?.[0]?.payload;
+		expect(payload.changedNodes).toHaveLength(1);
+		expect(payload.changedNodes[0]).toMatchObject({
+			id: '1',
+			kind: 'data',
+			rowIndex: 0,
+		});
+		expect(payload.changedNodes[0]).not.toBe(store.getRowNodeById('1'));
+		expect(payload.changedNodes[0].getValue('name')).toBe('Product A+');
+
+		controller.dispose();
+	});
+
 	it('selection change events publish projection-owned bounds from committed state', () => {
 		const store = new GridStore<TestRow>({
 			columns: [

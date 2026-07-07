@@ -1,0 +1,53 @@
+import type { GridWriteResult } from '../api/GridApi.js';
+import { GridEventName, type GridEventPayloadMap } from '../api/GridEvents.js';
+import { createGridRowNodeFacade, type GridRowNode } from '../publicRowNode.js';
+import type { RowNode } from '../rowNode.js';
+import type { RowsUpdatedDispatchPayload } from './runtimePorts.js';
+
+export interface PublicRowNodeDispatchDeps<TRowData = unknown> {
+	getRowId(row: TRowData): string;
+	getRawRowById(rowId: string): TRowData | null;
+	getCellValue(rowId: string, field: string): unknown;
+	getVisualIndexByRowId(rowId: string): number | null;
+	getVisualRowCount(): number;
+	getSelectedRowIds(): string[];
+	isDetailExpanded(rowId: string): boolean;
+	selectRows(rowIds: string[], options?: { mode?: 'add' | 'replace' }): void;
+	deselectRows(rowIds: string[]): void;
+	scrollToRow(rowId: string, options?: { select?: boolean }): void;
+	setCellValue(rowId: string, field: string, value: unknown): GridWriteResult;
+	applyTransaction(input: { update?: TRowData[] }): unknown;
+	refreshRows(): void;
+	getRowModelType(): 'client' | 'infinite' | 'server';
+}
+
+export function createPublicRowNodeFromInternal<TRowData>(
+	deps: PublicRowNodeDispatchDeps<TRowData>,
+	node: RowNode<TRowData>
+): GridRowNode<TRowData> {
+	const rowId = node.id;
+	return createGridRowNodeFacade(deps, {
+		id: rowId,
+		kind: 'data',
+		rowIndex: deps.getVisualIndexByRowId(rowId),
+		loadState: { kind: 'loaded', rowId },
+		data: node.data,
+		selectable: true,
+		selected: deps.getSelectedRowIds().includes(rowId),
+		expandable: false,
+		expanded: deps.isDetailExpanded(rowId),
+		editable: true,
+	});
+}
+
+export function mapRowsUpdatedDispatchPayload<TRowData>(
+	deps: PublicRowNodeDispatchDeps<TRowData>,
+	payload: RowsUpdatedDispatchPayload<TRowData>
+): GridEventPayloadMap<TRowData>[GridEventName.rowsUpdated] {
+	return {
+		changedValuesByRow: payload.changedValuesByRow,
+		changedNodes: payload.changedNodes.map((node) => createPublicRowNodeFromInternal(deps, node)),
+		addedNodes: payload.addedNodes?.map((node) => createPublicRowNodeFromInternal(deps, node)),
+		removedNodes: payload.removedNodes?.map((node) => createPublicRowNodeFromInternal(deps, node)),
+	};
+}

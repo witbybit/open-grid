@@ -4,6 +4,7 @@ import type { ColumnDef, CompiledGridPlan } from '../columnDef.js';
 import type { FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import type { GeometryModel } from '../models/GeometryModel.js';
 import type { RowModel, RowModelRefreshResult } from '../rowModel.js';
+import type { RowNode } from '../rowNode.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
@@ -53,7 +54,12 @@ export interface CellAccessRuntime<TRowData = unknown> {
 	getRowModelType: () => 'client' | 'infinite' | 'server';
 }
 
-export type RowsUpdatedPayload<TRowData = unknown> = GridEventPayloadMap<TRowData>[GridEventName.rowsUpdated];
+export interface RowsUpdatedDispatchPayload<TRowData = unknown> {
+	changedValuesByRow: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
+	changedNodes: RowNode<TRowData>[];
+	addedNodes?: RowNode<TRowData>[];
+	removedNodes?: RowNode<TRowData>[];
+}
 
 export interface RowModelRuntimeBase<TRowData = unknown> {
 	getState: () => InternalGridState<TRowData>;
@@ -88,7 +94,7 @@ export interface RowModelMutationRuntime<TRowData = unknown> {
 	getValueGetterDependents: (colField: string) => string[];
 	hasValueGetter: (colField: string) => boolean;
 	notifyBulkCellChange: (changes: Map<string, Set<string>>) => void;
-	dispatchRowsUpdated: (payload: RowsUpdatedPayload<TRowData>) => void;
+	dispatchRowsUpdated: (payload: RowsUpdatedDispatchPayload<TRowData>) => void;
 }
 
 export interface ClientRowModelRuntime<TRowData = unknown> extends RowModelRuntimeBase<TRowData>, RowModelMutationRuntime<TRowData> {
@@ -137,6 +143,7 @@ export interface RowModelRuntimeEngineBridge<TRowData = unknown> {
 	getValueGetterDependents: (colField: string) => string[];
 	hasValueGetter: (colField: string) => boolean;
 	notifyBulkCellChange: (changes: Map<string, Set<string>>) => void;
+	dispatchRowsUpdated: (payload: RowsUpdatedDispatchPayload<TRowData>) => void;
 	isScrollingFast: () => boolean;
 	getScrollVelocity: () => { vx: number; vy: number };
 	setRowModelLoadingState: (loading: boolean) => void;

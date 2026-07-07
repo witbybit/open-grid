@@ -1,5 +1,6 @@
 import type { InternalGridState, GridStateUpdater } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
+import { GridEventName } from '../api/GridEvents.js';
 import type { StateManager } from '../state/StateManager.js';
 import { normalizeInvalidationPlan, type InvalidationManager, type GridInvalidation } from '../renderer/invalidationManager.js';
 import type { EventBus } from '../events/EventBus.js';
@@ -14,6 +15,7 @@ import type {
 	PreparedDomainMutation,
 } from './GridDomainMutation.js';
 import type { StateCommitPhase } from '../state/StateManager.js';
+import type { RowsUpdatedDispatchPayload } from './runtimePorts.js';
 
 export type GridCommitReason =
 	| 'columns:set-data'
@@ -87,15 +89,20 @@ export type GridChangeReason = GridCommitReason;
 
 export type GridHistoryPolicy = 'record' | 'suppress';
 
+type GridCommitPayload<
+	TRowData = unknown,
+	K extends keyof GridEventPayloadMap<TRowData> = keyof GridEventPayloadMap<TRowData>,
+> = K extends GridEventName.rowsUpdated ? GridEventPayloadMap<TRowData>[K] | RowsUpdatedDispatchPayload<TRowData> : GridEventPayloadMap<TRowData>[K];
+
 export type GridCommitEventPayloadResolver<
 	TRowData = unknown,
 	K extends keyof GridEventPayloadMap<TRowData> = keyof GridEventPayloadMap<TRowData>,
-> = (state: Readonly<InternalGridState<TRowData>>) => GridEventPayloadMap<TRowData>[K];
+> = (state: Readonly<InternalGridState<TRowData>>) => GridCommitPayload<TRowData, K>;
 
 export type GridCommitEvent<TRowData = unknown, K extends keyof GridEventPayloadMap<TRowData> = keyof GridEventPayloadMap<TRowData>> = {
 	[Type in K]: {
 		type: Type;
-		payload: GridEventPayloadMap<TRowData>[Type] | GridCommitEventPayloadResolver<TRowData, Type>;
+		payload: GridCommitPayload<TRowData, Type> | GridCommitEventPayloadResolver<TRowData, Type>;
 	};
 }[K];
 
@@ -172,6 +179,7 @@ export interface GridCommitKernelDeps<TRowData = unknown> {
 	stateManager: StateManager<TRowData>;
 	invalidation: InvalidationManager;
 	eventBus: EventBus<TRowData>;
+	dispatchEvent?: <K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridCommitPayload<TRowData, K>) => void;
 	commandHistory: CommandHistory;
 	requestRender: (commitReason: string) => void;
 	commitContext?: GridCommitContext<TRowData>;
@@ -329,7 +337,11 @@ export class GridCommitKernel<TRowData = unknown> {
 						typeof event.payload === 'function'
 							? (event.payload as GridCommitEventPayloadResolver<TRowData, typeof event.type>)(this.deps.stateManager.getState())
 							: event.payload;
-					this.deps.eventBus.dispatchEvent(event.type, payload);
+					if (this.deps.dispatchEvent) {
+						this.deps.dispatchEvent(event.type, payload);
+					} else {
+						this.deps.eventBus.dispatchEvent(event.type, payload as GridEventPayloadMap<TRowData>[typeof event.type]);
+					}
 				}
 			});
 		}

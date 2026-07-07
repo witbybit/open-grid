@@ -1,11 +1,11 @@
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { FilterModel, QuickFilterModel, SortModel } from '../rowModel.js';
-import type { RowNode } from '../rowNode.js';
 import type { GridCellPointer, GridSelectionState, SelectionChangeResult, RowSelectionChangeResult, GridCellClickParams } from './GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridViewDefinition, GridWorkspaceState } from '../workspace/workspaceTypes.js';
 import type { GridIntegrityIssue } from '../features/dataIntegrity/integrityTypes.js';
+import type { GridRowNode } from '../publicRowNode.js';
 
 export interface GridEvent<T = unknown> {
 	type: string;
@@ -110,9 +110,9 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.rowSelectionChanged]: RowSelectionChangeResult;
 	[GridEventName.rowsUpdated]: {
 		changedValuesByRow: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
-		changedNodes: RowNode<TRowData>[];
-		addedNodes?: RowNode<TRowData>[];
-		removedNodes?: RowNode<TRowData>[];
+		changedNodes: GridRowNode<TRowData>[];
+		addedNodes?: GridRowNode<TRowData>[];
+		removedNodes?: GridRowNode<TRowData>[];
 	};
 	[GridEventName.paginationChanged]: {
 		page: number;
