@@ -869,6 +869,13 @@ describe('GridStore generic row-store functionality', () => {
 			isSelected: true,
 			isRowSelected: true,
 		});
+		expect(access?.node).toMatchObject({
+			id: '2',
+			data: { id: '2', name: 'Product B', price: 20 },
+			rowIndex: 1,
+		});
+		expect(access?.node).not.toBe(store.getRowNodeById('2'));
+		expect(access?.node?.getValue('price')).toBe(20);
 		expect(store.getColumnField(1)).toBe('name');
 
 		controller.dispose();
@@ -2143,7 +2150,7 @@ describe('GridStore undo and redo functionality', () => {
 		// Getters & Count
 		expect(store.rows().getCount()).toBe(2);
 		expect(store.rows().getById('1')).toEqual({ id: '1', name: 'Product A+', price: 10 });
-		expect(store.rows().getNodeById('2')?.data.name).toBe('Product B');
+		expect(store.rows().getNodeById('2')?.data?.name).toBe('Product B');
 		expect(store.rows().getVisualRowById('1')?.kind).toBe('data');
 
 		// Range testing

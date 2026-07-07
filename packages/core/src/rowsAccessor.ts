@@ -1,7 +1,7 @@
 import type { GridCellRange, GridRowsAccessor } from './api/GridApi.js';
 import type { VisualRow } from './visualRow.js';
-import type { RowNode } from './rowNode.js';
 import type { RowModel } from './rowModel.js';
+import type { GridRowNode } from './publicRowNode.js';
 
 /** Minimal interface required to build a GridRowsAccessor from a GridStore. */
 export interface RowsAccessorSource<TRowData> {
@@ -10,7 +10,7 @@ export interface RowsAccessorSource<TRowData> {
 	getDataRowAtVisualIndex(index: number): TRowData | null;
 	getVisualIndexByRowId(rowId: string): number | null;
 	getRawRowById(rowId: string): TRowData | null;
-	getRowNodeById(rowId: string): RowNode<TRowData> | null;
+	getRowNode(rowId: string): GridRowNode<TRowData> | undefined;
 	getRowModel(): RowModel<TRowData> | null;
 	getState(): { selection: { bounds: { minRow: number; maxRow: number } | null }; selectedRowIds: string[] };
 }
@@ -66,7 +66,7 @@ export function createRowsAccessor<TRowData>(src: RowsAccessorSource<TRowData>):
 			return src.getRawRowById(id);
 		},
 		getNodeById: (id) => {
-			return src.getRowNodeById(id);
+			return src.getRowNode(id);
 		},
 		getCount: () => {
 			const count = src.getVisualRowCount();
@@ -139,8 +139,8 @@ export function createRowsAccessor<TRowData>(src: RowsAccessorSource<TRowData>):
 				for (let i = 0; i < count; i++) {
 					const vr = rowModel.getVisualRow(i);
 					if (vr?.kind === 'data' && checkedSet.has(vr.rowId)) {
-						const node = rowModel.getRowNodeById(vr.rowId);
-						if (node) result.push(node.data);
+						const row = src.getRawRowById(vr.rowId);
+						if (row) result.push(row);
 					}
 				}
 			}

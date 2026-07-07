@@ -86,7 +86,7 @@ Capabilities are truthful.
 ### Phase 2 - Internal row-node ownership split
 
 - [ ] Keep existing mutable row wrapper internal-only
-- [ ] Stop using the internal node type as a public API surface
+- [~] Stop using the internal node type as a public API surface
 - [x] Add a public-row-node factory/facade layer
 - [x] Ensure facade properties are readonly snapshots/getters only
 - [x] Ensure no facade method can mutate row arrays or row data directly
@@ -99,7 +99,7 @@ Capabilities are truthful.
 - [x] Add `api.forEachNode(callback)`
 - [x] Add `api.forEachDisplayedNode(callback)`
 - [x] Add `api.getRowLoadState(index)`
-- [ ] Keep `getRowNodeById` only as a compatibility seam if needed, with a deprecation note internally
+- [x] Remove public `getRowNodeById` if blast radius is acceptably small
 
 ### Phase 4 - Row-model viewport/load contract
 
@@ -195,6 +195,7 @@ Capabilities are truthful.
 - 2026-07-07: Plan created. Phase 1 execution started.
 - 2026-07-07: Phase 1 scaffolding landed. Added `InternalRowModelKind`, `RowNodeKind`, `RowLoadState`, `RowRangeLoadState`, `RowCountKind`, `RowModelViewportAccess`, and a new public `GridRowNode` facade contract. Public compatibility type `RowModelType = 'client' | 'infinite' | 'server'` remains unchanged for now, but `GridState` now documents that `'server'` maps to the server-page model rather than full SSRM. `corepack pnpm --filter @open-grid/core build` passed.
 - 2026-07-07: First compatibility bridge landed for the public facade. `GridApiSurfaces` now includes `getRowNode`, `getDisplayedRowAtIndex`, `getRowIndexById`, `forEachNode`, `forEachDisplayedNode`, and `getRowLoadState`. `GridStore` now creates `GridRowNode` facades through `createGridRowNodeFacade(...)`, and plugin runtime passthroughs were updated. This is still an intermediate bridge: `getRowNodeById` remains public compatibility, and row-model-aware load/failure/placeholder semantics are not complete yet. `corepack pnpm --filter @open-grid/core build` and `corepack pnpm --filter @open-grid/core test` passed.
+- 2026-07-07: Public `getRowNodeById` removal and Phase 2 surface shrink are in progress. `GridApiSurfaces`, plugin/runtime composition, and `rows().getNodeById(...)` now point at `GridRowNode` facades instead of the internal mutable node. `GridCellAccess.node` and `GridCellClickParams.node` now also return `GridRowNode` facades, and `getDataRowNodeAtVisualIndex(...)` has been removed from the public API facade. Renderer/portal internals still intentionally use `RowNode` for now. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
 
 ## Done criteria
 

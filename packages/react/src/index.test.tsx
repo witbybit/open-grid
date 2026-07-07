@@ -4,7 +4,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 afterEach(cleanup);
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
-import { createClientGrid, type ClientGridOptions, type ColumnDef } from '@open-grid/core';
+import { createClientGrid, RowNode, type ClientGridOptions, type ColumnDef } from '@open-grid/core';
 import * as ReactPackage from './index.js';
 import { GridProvider } from './gridContext.js';
 import { GridView } from './GridView.js';
@@ -29,6 +29,10 @@ function createTestGrid<TRowData>(options: ClientGridOptions<TRowData>) {
 	return {
 		api: createClientGrid(options),
 	};
+}
+
+function makeInternalNode<TRowData>(id: string, data: TRowData) {
+	return new RowNode(id, data);
 }
 
 const SelectorInspector = () => {
@@ -143,7 +147,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		render(
 			<GridProvider api={grid.api}>
@@ -176,7 +180,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		render(
 			<GridProvider api={grid.api}>
@@ -214,7 +218,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -244,7 +248,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -271,7 +275,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -315,7 +319,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -356,7 +360,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -408,7 +412,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 		const blockedHandler = vi.fn();
 		grid.api.addEventListener(GridEventName.writeBlocked, blockedHandler);
 
@@ -459,7 +463,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		document.body.appendChild(container);
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		const store = createPortalStore<TestRow>();
 		store.mountCell('1:name', container, 'Product A', node, colDef, false, false, undefined, undefined, undefined, undefined, {
@@ -495,11 +499,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const colDef = grid.api.getColumnDef('name')!;
 
 		const store = createPortalStore<TestRow>();
-		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+		store.mountCell('1:name', container, 'Old', makeInternalNode('1', { id: '1', name: 'Old' }), colDef, false, false, undefined, undefined, undefined, undefined, {
 			rowSlotId: 'slot-1',
 			slotGeneration: 1,
 		});
-		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+		store.mountCell('2:name', container, 'New', makeInternalNode('2', { id: '2', name: 'New' }), colDef, false, false, undefined, undefined, undefined, undefined, {
 			rowSlotId: 'slot-1',
 			slotGeneration: 2,
 		});
@@ -525,11 +529,11 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const container = document.createElement('div');
 		const colDef = grid.api.getColumnDef('name')!;
 
-		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+		store.mountCell('1:name', container, 'Old', makeInternalNode('1', { id: '1', name: 'Old' }), colDef, false, false, undefined, undefined, undefined, undefined, {
 			rowSlotId: 'slot-1',
 			slotGeneration: 1,
 		});
-		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+		store.mountCell('2:name', container, 'New', makeInternalNode('2', { id: '2', name: 'New' }), colDef, false, false, undefined, undefined, undefined, undefined, {
 			rowSlotId: 'slot-1',
 			slotGeneration: 2,
 		});
@@ -563,7 +567,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const colDef = grid.api.getColumnDef('name')!;
 
 		// Mount cell first (structural change)
-		store.mountCell(cellKey, container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+		store.mountCell(cellKey, container, 'Old', makeInternalNode('1', { id: '1', name: 'Product A' }), colDef, false, false, undefined, undefined, undefined, undefined, {
 			rowSlotId: 'slot-1',
 			slotGeneration: 1,
 		});
@@ -576,7 +580,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const unsubscribeCell = store.subscribeToCell!(cellKey, cellListener);
 
 		// Update cell data only (non-structural change)
-		store.mountCell(cellKey, container, 'New', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
+		store.mountCell(cellKey, container, 'New', makeInternalNode('1', { id: '1', name: 'Product A' }), colDef, false, false, undefined, undefined, undefined, undefined, {
 			rowSlotId: 'slot-1',
 			slotGeneration: 2,
 		});

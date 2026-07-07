@@ -34,6 +34,8 @@ export interface ColumnModelRuntime<TRowData = unknown> {
 
 export interface CellAccessRuntime<TRowData = unknown> {
 	getRowModel: () => RowModel<TRowData> | null;
+	getRowId: (row: TRowData) => string;
+	getRawRowById: (rowId: string) => TRowData | null;
 	getColumnIndex: (colField: string) => number;
 	getColumnDef: (colField: string) => ColumnDef<TRowData> | undefined;
 	getCellValue: (rowId: string, colField: string) => unknown;
@@ -41,6 +43,14 @@ export interface CellAccessRuntime<TRowData = unknown> {
 	getState: () => InternalGridState<TRowData>;
 	isRowSelected: (rowIndex: number) => boolean;
 	isRowLoading: (rowId: string) => boolean;
+	isDetailExpanded: (rowId: string) => boolean;
+	selectRows: (rowIds: string[], options?: { mode?: 'add' | 'replace' }) => void;
+	deselectRows: (rowIds: string[]) => void;
+	scrollToRow: (rowId: string, options?: { select?: boolean }) => void;
+	setCellValue: (rowId: string, field: string, value: unknown) => import('../api/GridApi.js').GridWriteResult;
+	applyTransaction: (input: { update?: TRowData[] }) => unknown;
+	refreshRows: () => void;
+	getRowModelType: () => 'client' | 'infinite' | 'server';
 }
 
 export type RowsUpdatedPayload<TRowData = unknown> = GridEventPayloadMap<TRowData>[GridEventName.rowsUpdated];

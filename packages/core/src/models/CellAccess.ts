@@ -3,9 +3,46 @@ import type { CellAccessRuntime } from '../engine/runtimePorts.js';
 import type { GridCellAccess } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { RowNode } from '../rowNode.js';
+import type { RowLoadState } from '../rowModel.js';
+import { createGridRowNodeFacade, type GridRowNode } from '../publicRowNode.js';
 
 export class CellAccessModel<TRowData = unknown> {
 	constructor(private readonly runtime: CellAccessRuntime<TRowData>) {}
+
+	private createPublicRowNode(rowId: string, rowIndex: number, node: RowNode<TRowData> | null): GridRowNode<TRowData> | null {
+		if (!node) return null;
+		const loadState: RowLoadState = { kind: 'loaded', rowId };
+		return createGridRowNodeFacade(
+			{
+				getRowId: this.runtime.getRowId,
+				getRawRowById: this.runtime.getRawRowById,
+				getCellValue: this.runtime.getCellValue,
+				getVisualIndexByRowId: (targetRowId) => this.runtime.getRowModel()?.getVisualIndexByRowId(targetRowId) ?? null,
+				getVisualRowCount: () => this.runtime.getRowModel()?.getVisualRowCount() ?? 0,
+				getSelectedRowIds: () => this.runtime.getState().selectedRowIds,
+				isDetailExpanded: this.runtime.isDetailExpanded,
+				selectRows: this.runtime.selectRows,
+				deselectRows: this.runtime.deselectRows,
+				scrollToRow: this.runtime.scrollToRow,
+				setCellValue: this.runtime.setCellValue,
+				applyTransaction: this.runtime.applyTransaction,
+				refreshRows: this.runtime.refreshRows,
+				getRowModelType: this.runtime.getRowModelType,
+			},
+			{
+				id: rowId,
+				kind: 'data',
+				rowIndex,
+				loadState,
+				data: node.data,
+				selectable: true,
+				selected: this.runtime.isRowSelected(rowIndex),
+				expandable: false,
+				expanded: this.runtime.isDetailExpanded(rowId),
+				editable: true,
+			}
+		);
+	}
 
 	public getByPointer(rowId: string, colField: string, event?: Event): GridCellAccess<TRowData> | null {
 		const rowModel = this.runtime.getRowModel();
@@ -34,6 +71,7 @@ export class CellAccessModel<TRowData = unknown> {
 		const value = this.runtime.getCellValue(rowId, column.field);
 		const rawValue = this.runtime.getRawCellValue(rowId, column.field);
 		const state = hoistedState ?? this.runtime.getState();
+		const publicNode = this.createPublicRowNode(rowId, rowIndex, node);
 		const focusedCell = state.selection.focus;
 		const selectedBounds = state.selection.bounds;
 		const isFocused = focusedCell?.rowId === rowId && focusedCell?.colField === column.field;
@@ -52,7 +90,7 @@ export class CellAccessModel<TRowData = unknown> {
 			rowId,
 			rowIndex,
 			row,
-			node,
+			node: publicNode,
 			colField: column.field,
 			colIndex,
 			column,

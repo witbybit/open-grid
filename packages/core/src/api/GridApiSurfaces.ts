@@ -53,7 +53,6 @@ export interface GridDataApi<TRowData = unknown> {
 	getRowId(row: TRowData): string;
 	isRowLoading(rowId: string): boolean;
 	getDataRowAtVisualIndex(index: number): TRowData | null;
-	getDataRowNodeAtVisualIndex(index: number): RowNode<TRowData> | null;
 	setRows(rows: TRowData[]): GridWriteResult;
 	updateRows(updater: (rows: TRowData[]) => TRowData[]): GridWriteResult;
 	applyTransaction(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null;
@@ -89,7 +88,6 @@ export interface GridDataApi<TRowData = unknown> {
 	forEachNode(callback: (node: GridRowNode<TRowData>, index: number) => void): void;
 	forEachDisplayedNode(callback: (node: GridRowNode<TRowData>, index: number) => void): void;
 	getRowLoadState(index: number): RowLoadState;
-	getRowNodeById(rowId: string): RowNode<TRowData> | null;
 	getRawRowById(rowId: string): TRowData | null;
 	rows(): GridRowsAccessor<TRowData>;
 }

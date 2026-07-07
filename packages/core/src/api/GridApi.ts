@@ -9,6 +9,7 @@ import type { ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { GridIntegrityIssue } from '../features/dataIntegrity/integrityTypes.js';
 import type { GridApi as PublicGridApi, GridPluginRuntime as PublicGridPluginRuntime } from './GridApiSurfaces.js';
+import type { GridRowNode } from '../publicRowNode.js';
 
 export type {
 	GridDataApi,
@@ -237,7 +238,7 @@ export interface GridCellClickParams<TRowData = unknown> {
 	rowId: string;
 	rowIndex: number;
 	row: TRowData | null;
-	node: RowNode<TRowData> | null;
+	node: GridRowNode<TRowData> | null;
 	colField: string;
 	colIndex: number;
 	column: ColumnDef<TRowData>;
@@ -250,7 +251,7 @@ export interface GridCellAccess<TRowData = unknown> {
 	rowId: string;
 	rowIndex: number;
 	row: TRowData | null;
-	node: RowNode<TRowData> | null;
+	node: GridRowNode<TRowData> | null;
 	colField: string;
 	colIndex: number;
 	column: ColumnDef<TRowData>;
@@ -277,7 +278,7 @@ export interface GridRowsAccessor<TRowData = unknown> {
 	getSelected(): TRowData[];
 	getSelectedIds(): string[];
 	getById(id: string): TRowData | null;
-	getNodeById(id: string): RowNode<TRowData> | null;
+	getNodeById(id: string): GridRowNode<TRowData> | undefined;
 	getCount(): number;
 	getVisualRowById(id: string): VisualRow<TRowData> | null;
 	inRange(range: GridCellRange): {

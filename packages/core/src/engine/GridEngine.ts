@@ -19,7 +19,10 @@ import type { ColumnDef, GridRendererOptions } from '../columnDef.js';
 import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
 import {
 	asAllDataNodesCapableRowModel,
+	asInfiniteControllableRowModel,
 	asRowOrderCapableModel,
+	asRowExpansionStateReadableModel,
+	asServerPageControllableRowModel,
 	type RowModel,
 	type RowModelRefreshResult,
 	type VisualRowModel,
@@ -321,6 +324,8 @@ export class GridEngine<TRowData = unknown> {
 		this.edit = new EditModel();
 		this.cellAccess = new CellAccessModel<TRowData>({
 			getRowModel: () => this.rowModel,
+			getRowId: (row) => this.data.getRowId(row),
+			getRawRowById: (rowId) => this.rowModel?.getRawRowById(rowId) ?? null,
 			getColumnIndex: (colField) => this.columns.getColumnIndex(colField),
 			getColumnDef: (colField) => this.columns.getColumnDef(colField),
 			getCellValue: (rowId, colField) => this.data.getCellValue(rowId, colField),
@@ -328,6 +333,22 @@ export class GridEngine<TRowData = unknown> {
 			getState: () => this.stateManager.getState(),
 			isRowSelected: (rowIndex) => this.selection.isRowSelected(rowIndex),
 			isRowLoading: (rowId) => this.data.isRowLoading(rowId),
+			isDetailExpanded: (rowId) => asRowExpansionStateReadableModel(this.rowModel)?.isDetailExpanded(rowId) ?? false,
+			selectRows: (rowIds, options) => {
+				if (options?.mode === 'replace') this.replaceRowIds(rowIds, 'api');
+				else this.selectRowIds(rowIds, 'api');
+			},
+			deselectRows: (rowIds) => this.deselectRowIds(rowIds, 'api'),
+			scrollToRow: () => {},
+			setCellValue: (rowId, field, value) => this.setCellValue(rowId, field, value),
+			applyTransaction: (input) => this.applyTransaction(input),
+			refreshRows: () => this.rowModel?.refresh(),
+			getRowModelType: () =>
+				asServerPageControllableRowModel(this.rowModel)
+					? 'server'
+					: asInfiniteControllableRowModel(this.rowModel)
+						? 'infinite'
+						: 'client',
 		});
 		this.cellNotifications = new CellNotificationController<TRowData>({
 			data: this.data,
