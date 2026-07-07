@@ -1,5 +1,5 @@
 import { flushSync } from 'react-dom';
-import type { ColumnDef, RowNode, VisualRow, CellRendererPhase } from '@open-grid/core';
+import type { ColumnDef, VisualRow, CellRendererPhase } from '@open-grid/core';
 import type {
 	PortalData,
 	RowPortalData,
@@ -8,6 +8,7 @@ import type {
 	RowMenuPortalSnapshot,
 	ImperativeUpdaterFn,
 	CellPortalPhysicalIdentity,
+	PortalRowNodeLike,
 } from './gridPortalTypes.js';
 
 export type ConcretePortalStore<TRowData> = ReturnType<typeof createPortalStore<TRowData>>;
@@ -186,7 +187,7 @@ export function createPortalStore<TRowData = unknown>() {
 		tryImperativeUpdate(
 			cellKey: string,
 			value: unknown,
-			node: RowNode<TRowData>,
+			node: PortalRowNodeLike<TRowData>,
 			col: ColumnDef<TRowData>,
 			isEditing: boolean,
 			isLoading: boolean,
@@ -210,7 +211,7 @@ export function createPortalStore<TRowData = unknown>() {
 			cellKey: string,
 			container: HTMLElement,
 			value: unknown,
-			node: RowNode<TRowData>,
+			node: PortalRowNodeLike<TRowData>,
 			col: ColumnDef<TRowData>,
 			isEditing: boolean,
 			isLoading: boolean,

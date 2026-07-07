@@ -3,7 +3,6 @@ import {
 	ColumnDef,
 	GridApi,
 	GridEventName,
-	RowNode,
 	VisualRow,
 	type ActiveEditState,
 	type CellRendererPhase,
