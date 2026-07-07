@@ -87,18 +87,18 @@ Capabilities are truthful.
 
 - [ ] Keep existing mutable row wrapper internal-only
 - [ ] Stop using the internal node type as a public API surface
-- [ ] Add a public-row-node factory/facade layer
-- [ ] Ensure facade properties are readonly snapshots/getters only
-- [ ] Ensure no facade method can mutate row arrays or row data directly
+- [x] Add a public-row-node factory/facade layer
+- [x] Ensure facade properties are readonly snapshots/getters only
+- [x] Ensure no facade method can mutate row arrays or row data directly
 
 ### Phase 3 - Public GridRowNode API surface
 
-- [ ] Add `api.getRowNode(rowId)`
-- [ ] Add `api.getDisplayedRowAtIndex(index)`
-- [ ] Add `api.getRowIndexById(rowId)`
-- [ ] Add `api.forEachNode(callback)`
-- [ ] Add `api.forEachDisplayedNode(callback)`
-- [ ] Add `api.getRowLoadState(index)`
+- [x] Add `api.getRowNode(rowId)`
+- [x] Add `api.getDisplayedRowAtIndex(index)`
+- [x] Add `api.getRowIndexById(rowId)`
+- [x] Add `api.forEachNode(callback)`
+- [x] Add `api.forEachDisplayedNode(callback)`
+- [x] Add `api.getRowLoadState(index)`
 - [ ] Keep `getRowNodeById` only as a compatibility seam if needed, with a deprecation note internally
 
 ### Phase 4 - Row-model viewport/load contract
@@ -194,6 +194,7 @@ Capabilities are truthful.
 
 - 2026-07-07: Plan created. Phase 1 execution started.
 - 2026-07-07: Phase 1 scaffolding landed. Added `InternalRowModelKind`, `RowNodeKind`, `RowLoadState`, `RowRangeLoadState`, `RowCountKind`, `RowModelViewportAccess`, and a new public `GridRowNode` facade contract. Public compatibility type `RowModelType = 'client' | 'infinite' | 'server'` remains unchanged for now, but `GridState` now documents that `'server'` maps to the server-page model rather than full SSRM. `corepack pnpm --filter @open-grid/core build` passed.
+- 2026-07-07: First compatibility bridge landed for the public facade. `GridApiSurfaces` now includes `getRowNode`, `getDisplayedRowAtIndex`, `getRowIndexById`, `forEachNode`, `forEachDisplayedNode`, and `getRowLoadState`. `GridStore` now creates `GridRowNode` facades through `createGridRowNodeFacade(...)`, and plugin runtime passthroughs were updated. This is still an intermediate bridge: `getRowNodeById` remains public compatibility, and row-model-aware load/failure/placeholder semantics are not complete yet. `corepack pnpm --filter @open-grid/core build` and `corepack pnpm --filter @open-grid/core test` passed.
 
 ## Done criteria
 

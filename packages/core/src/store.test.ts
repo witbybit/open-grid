@@ -2060,7 +2060,7 @@ describe('GridStore undo and redo functionality', () => {
 		expect(store.getState().columnWidths['name']).toBe(105);
 	});
 
-	it('should support GridStore facade methods getVisualIndexById, getVisualIndexByRowId, getRowNodeById, and getRawRowById correctly', () => {
+	it('should support GridStore facade methods getVisualIndexById, getVisualIndexByRowId, getRowNodeById, getRowNode, and getRawRowById correctly', () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
@@ -2079,12 +2079,44 @@ describe('GridStore undo and redo functionality', () => {
 		expect(store.getVisualIndexByRowId('1')).toBe(0);
 		expect(store.getVisualIndexByRowId('2')).toBe(1);
 		expect(store.getRowNodeById('1')?.data.name).toBe('Product A');
+		expect(store.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(store.getRawRowById('1')).toEqual({ id: '1', name: 'Product A', price: 10 });
 		expect(store.getRawRowById('non-existent')).toBeNull();
+		expect(store.getRowIndexById('1')).toBe(0);
+		expect(store.getRowIndexById('missing')).toBeUndefined();
+
+		const publicNode = store.getRowNode('1');
+		expect(publicNode).toBeDefined();
+		expect(publicNode).not.toBe(store.getRowNodeById('1'));
+		expect(publicNode?.id).toBe('1');
+		expect(publicNode?.kind).toBe('data');
+		expect(publicNode?.rowIndex).toBe(0);
+		expect(publicNode?.loaded).toBe(true);
+		expect(publicNode?.getValue('name')).toBe('Product A');
+		expect(publicNode?.getDisplayValue('name')).toBe('Product A');
+
+		const displayedNode = store.getDisplayedRowAtIndex(0);
+		expect(displayedNode?.id).toBe('1');
+		expect(displayedNode?.kind).toBe('data');
+
+		const seenAllNodeIds: string[] = [];
+		store.forEachNode((node) => {
+			seenAllNodeIds.push(node.id);
+		});
+		expect(seenAllNodeIds).toEqual(['1', '2']);
+
+		const seenDisplayedNodeIds: string[] = [];
+		store.forEachDisplayedNode((node) => {
+			seenDisplayedNodeIds.push(node.id);
+		});
+		expect(seenDisplayedNodeIds).toEqual(['1', '2']);
+
+		expect(publicNode?.setDataValue('name', 'Product A+').status).toBe('applied');
+		expect(store.getRawRowById('1')?.name).toBe('Product A+');
 
 		// Test the luxury row collection APIs
 		expect(store.rows().getAll()).toEqual([
-			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '1', name: 'Product A+', price: 10 },
 			{ id: '2', name: 'Product B', price: 20 },
 		]);
 
@@ -2093,7 +2125,7 @@ describe('GridStore undo and redo functionality', () => {
 			processed.push({ ...row, index });
 		});
 		expect(processed).toEqual([
-			{ id: '1', name: 'Product A', price: 10, index: 0 },
+			{ id: '1', name: 'Product A+', price: 10, index: 0 },
 			{ id: '2', name: 'Product B', price: 20, index: 1 },
 		]);
 
@@ -2103,14 +2135,14 @@ describe('GridStore undo and redo functionality', () => {
 
 		store.selectRange({ rowId: '1', colField: 'name' }, { rowId: '2', colField: 'name' });
 		expect(store.rows().getSelected()).toEqual([
-			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '1', name: 'Product A+', price: 10 },
 			{ id: '2', name: 'Product B', price: 20 },
 		]);
 		expect(store.rows().getSelectedIds()).toEqual(['1', '2']);
 
 		// Getters & Count
 		expect(store.rows().getCount()).toBe(2);
-		expect(store.rows().getById('1')).toEqual({ id: '1', name: 'Product A', price: 10 });
+		expect(store.rows().getById('1')).toEqual({ id: '1', name: 'Product A+', price: 10 });
 		expect(store.rows().getNodeById('2')?.data.name).toBe('Product B');
 		expect(store.rows().getVisualRowById('1')?.kind).toBe('data');
 
@@ -2118,7 +2150,7 @@ describe('GridStore undo and redo functionality', () => {
 		const range = { start: { rowId: '1', colField: 'name' }, end: { rowId: '2', colField: 'name' } };
 		expect(store.rows().inRange(range).getIds()).toEqual(['1', '2']);
 		expect(store.rows().inRange(range).getData()).toEqual([
-			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '1', name: 'Product A+', price: 10 },
 			{ id: '2', name: 'Product B', price: 20 },
 		]);
 

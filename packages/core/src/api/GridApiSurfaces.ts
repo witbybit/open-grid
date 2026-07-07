@@ -8,6 +8,8 @@ import type { RowModelType, ColumnState, GridIntegrityState } from '../state/Gri
 import type { ColumnDef, GridStyleRule } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
 import type { RowNode } from '../rowNode.js';
+import type { GridRowNode } from '../publicRowNode.js';
+import type { RowLoadState } from '../rowModel.js';
 import type { RenderStats } from '../renderer/renderOrchestrator.js';
 import type { PersistenceStatus, PersistedGridState } from '../persistence/statePersistence.js';
 import type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from '../workspace/workspaceTypes.js';
@@ -81,6 +83,12 @@ export interface GridDataApi<TRowData = unknown> {
 	setCellValueAsync(rowId: string, colField: string, value: unknown): Promise<GridWriteResult>;
 	batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): GridWriteResult;
 	batchCellValuesAsync(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): Promise<GridWriteResult>;
+	getRowNode(rowId: string): GridRowNode<TRowData> | undefined;
+	getDisplayedRowAtIndex(index: number): GridRowNode<TRowData> | undefined;
+	getRowIndexById(rowId: string): number | undefined;
+	forEachNode(callback: (node: GridRowNode<TRowData>, index: number) => void): void;
+	forEachDisplayedNode(callback: (node: GridRowNode<TRowData>, index: number) => void): void;
+	getRowLoadState(index: number): RowLoadState;
 	getRowNodeById(rowId: string): RowNode<TRowData> | null;
 	getRawRowById(rowId: string): TRowData | null;
 	rows(): GridRowsAccessor<TRowData>;
