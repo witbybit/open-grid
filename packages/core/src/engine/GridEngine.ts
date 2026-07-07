@@ -819,13 +819,30 @@ export class GridEngine<TRowData = unknown> {
 			getVisualIndexByRowId: (targetRowId) => this.rowModel?.getVisualIndexByRowId(targetRowId) ?? null,
 			getVisualRowCount: () => this.rowModel?.getVisualRowCount() ?? 0,
 			getSelectedRowIds: () => this.stateManager.getState().selectedRowIds,
+			isGroupExpanded: (groupId) => asRowExpansionStateReadableModel(this.rowModel)?.isGroupExpanded(groupId) ?? false,
 			isDetailExpanded: (targetRowId) => asRowExpansionStateReadableModel(this.rowModel)?.isDetailExpanded(targetRowId) ?? false,
 			selectRows: (rowIds, options) => (options?.mode === 'replace' ? this.replaceRowIds(rowIds, 'api') : this.selectRowIds(rowIds, 'api')),
 			deselectRows: (rowIds) => this.deselectRowIds(rowIds, 'api'),
 			scrollToRow: () => {},
 			setCellValue: (targetRowId, field, value) => this.setCellValue(targetRowId, field, value),
-			applyTransaction: (input) => this.applyTransaction(input),
+			batchCellValues: (updates) => this.batchCellValues(updates as import('../api/GridApi.js').BatchCellValueUpdate[], 'api'),
+			toggleGroupExpanded: (groupId) => this.groupingFeature.toggleGroupExpanded(groupId),
+			toggleDetailExpanded: (rowId) => this.groupingFeature.toggleDetailExpanded(rowId),
 			refreshRows: () => this.rowModel?.refresh(),
+			retryRowLoad: (rowIndex, loadState) => {
+				if (loadState.kind !== 'failed' || rowIndex == null || !this.rowModel) {
+					return { status: 'rejected', reason: 'Row retry is not available for this row.' } as const;
+				}
+				const serverPageModel = asServerPageControllableRowModel(this.rowModel);
+				if (serverPageModel) {
+					serverPageModel.reloadPage('row-node-retry-load');
+					return { status: 'applied', changeId: Date.now(), faults: [] } as const;
+				}
+				this.rowModel.ensureRange(rowIndex, rowIndex, 'row-node-retry-load');
+				return { status: 'applied', changeId: Date.now(), faults: [] } as const;
+			},
+			getRowIssues: (rowId) => this.dataIntegrity?.buildApi().getRowIssues(rowId) ?? [],
+			validateRow: (rowId) => this.dataIntegrity?.buildApi().validateRow(rowId) ?? Promise.resolve([]),
 			getRowModelType: () =>
 				asServerPageControllableRowModel(this.rowModel) ? 'server' : asInfiniteControllableRowModel(this.rowModel) ? 'infinite' : 'client',
 		};

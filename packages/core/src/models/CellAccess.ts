@@ -20,13 +20,23 @@ export class CellAccessModel<TRowData = unknown> {
 				getVisualIndexByRowId: (targetRowId) => this.runtime.getRowModel()?.getVisualIndexByRowId(targetRowId) ?? null,
 				getVisualRowCount: () => this.runtime.getRowModel()?.getVisualRowCount() ?? 0,
 				getSelectedRowIds: () => this.runtime.getState().selectedRowIds,
+				isGroupExpanded: () => false,
 				isDetailExpanded: this.runtime.isDetailExpanded,
 				selectRows: this.runtime.selectRows,
 				deselectRows: this.runtime.deselectRows,
 				scrollToRow: this.runtime.scrollToRow,
 				setCellValue: this.runtime.setCellValue,
-				applyTransaction: this.runtime.applyTransaction,
+				batchCellValues: (updates) =>
+					updates.reduce<import('../api/GridApi.js').GridWriteResult>(
+						(result, update) => (result.status === 'applied' || result.status === 'noop' ? this.runtime.setCellValue(update.rowId, update.colField, update.value) : result),
+						{ status: 'noop' }
+					),
+				toggleGroupExpanded: () => {},
+				toggleDetailExpanded: () => {},
 				refreshRows: this.runtime.refreshRows,
+				retryRowLoad: () => ({ status: 'rejected', reason: 'Row retry is not available from cell access.' }),
+				getRowIssues: () => [],
+				validateRow: async () => [],
 				getRowModelType: this.runtime.getRowModelType,
 			},
 			{

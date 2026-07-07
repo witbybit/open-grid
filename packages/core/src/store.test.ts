@@ -2262,6 +2262,108 @@ describe('GridStore undo and redo functionality', () => {
 		controller.dispose();
 	});
 
+	it('routes public row-node updateData and setData through the loaded-row write path on infinite and server-page models', async () => {
+		const infiniteStore = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 100 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const infiniteController = new InfiniteRowModelController<TestRow>(infiniteStore.getInfiniteRowModelRuntime(), {
+			columns: infiniteStore.getState().columns,
+			getRowId: (row) => row.id,
+			blockSize: 25,
+			datasource: {
+				getRows: vi.fn().mockResolvedValue({
+					rows: [{ id: '1', name: 'Alpha', price: 10 }],
+					totalCount: 1,
+				}),
+			},
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const infiniteNode = infiniteStore.getRowNode('1');
+		expect(infiniteNode?.updateData({ name: 'Alpha+' }).status).toBe('applied');
+		expect(infiniteStore.getRawRowById('1')).toEqual({ id: '1', name: 'Alpha+', price: 10 });
+
+		const serverStore = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 100 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const serverController = new ServerPageRowModelController<TestRow>(serverStore.getServerPageRowModelRuntime(), {
+			columns: serverStore.getState().columns,
+			getRowId: (row) => row.id,
+			pagination: { pageSize: 10 },
+			datasource: {
+				getPage: vi.fn().mockResolvedValue({
+					rows: [{ id: '2', name: 'Beta', price: 20 }],
+					totalRowCount: 1,
+				}),
+			},
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const serverNode = serverStore.getRowNode('2');
+		expect(serverNode?.setData({ id: '2', name: 'Beta+', price: 25 }).status).toBe('applied');
+		expect(serverStore.getRawRowById('2')).toEqual({ id: '2', name: 'Beta+', price: 25 });
+
+		infiniteController.dispose();
+		infiniteStore.destroy();
+		serverController.dispose();
+		serverStore.destroy();
+	});
+
+	it('exposes public row-node validation and integrity helpers through the authoritative integrity api', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [{ field: 'name', header: 'Name', width: 100 }],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						rowRules: [
+							{
+								id: 'name-required',
+								validate: ({ row }) => (!row.name ? { message: 'Name is required' } : null),
+							},
+						],
+					},
+				},
+			}
+		);
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: '', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const node = store.getRowNode('1');
+		const validationResult = await node?.validate?.();
+		expect(validationResult).toEqual(
+			expect.objectContaining({
+				status: 'validationFailed',
+				reason: 'Name is required',
+			})
+		);
+		expect(node?.getValidationState?.()).toEqual(
+			expect.objectContaining({
+				valid: false,
+				issues: expect.arrayContaining([expect.objectContaining({ rowId: '1', message: 'Name is required' })]),
+			})
+		);
+		expect(node?.getIntegrityIssues?.()).toEqual(expect.arrayContaining([expect.objectContaining({ rowId: '1', message: 'Name is required' })]));
+		expect(await node?.refreshIntegrity?.()).toEqual(expect.objectContaining({ status: 'validationFailed', reason: 'Name is required' }));
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('exposes failed displayed rows as public failed row-node facades', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
@@ -2278,6 +2380,43 @@ describe('GridStore undo and redo functionality', () => {
 		expect(displayedNode?.kind).toBe('failed');
 		expect(displayedNode?.failed).toBe(true);
 		expect(displayedNode?.editable).toBe(false);
+	});
+
+	it('retries failed displayed rows through the row-model authority path', async () => {
+		let callCount = 0;
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ServerPageRowModelController<TestRow>(store.getServerPageRowModelRuntime(), {
+			columns: store.getState().columns,
+			getRowId: (row) => row.id,
+			pagination: { pageSize: 5 },
+			datasource: {
+				getPage: vi.fn().mockImplementation(() => {
+					callCount++;
+					if (callCount === 1) return Promise.reject(new Error('page failed'));
+					return Promise.resolve({
+						rows: [{ id: '1', name: 'Recovered', price: 1 }],
+						totalRowCount: 1,
+					});
+				}),
+			},
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const failedNode = store.getDisplayedRowAtIndex(0);
+		expect(failedNode?.kind).toBe('failed');
+		expect(failedNode?.retryLoad().status).toBe('applied');
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(store.getDisplayedRowAtIndex(0)?.kind).toBe('data');
+		expect(store.getRawRowById('1')?.name).toBe('Recovered');
+
+		controller.dispose();
+		store.destroy();
 	});
 
 	it('compiles immutable grid plans and rebuilds them only for column geometry or pin changes', () => {

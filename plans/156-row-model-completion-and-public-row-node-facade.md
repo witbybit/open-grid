@@ -150,11 +150,11 @@ Capabilities are truthful.
 
 ### Phase 8 - Honest mutation semantics per row model
 
-- [ ] Client row-node writes are fully local committed writes
-- [ ] Infinite row-node writes patch loaded cache rows only
-- [ ] Server-page row-node writes patch current loaded page rows only
-- [ ] Loading/failed/placeholder row nodes reject unsupported writes safely
-- [ ] Unsupported operations fail consistently through the existing result/error policy
+- [x] Client row-node writes are fully local committed writes
+- [x] Infinite row-node writes patch loaded cache rows only
+- [x] Server-page row-node writes patch current loaded page rows only
+- [x] Loading/failed/placeholder row nodes reject unsupported writes safely
+- [x] Unsupported operations fail consistently through the existing result/error policy
 
 ### Phase 9 - Row selection scope honesty
 
@@ -171,10 +171,10 @@ Capabilities are truthful.
 
 ### Phase 11 - GridRowNode validation and integrity ergonomics
 
-- [ ] Add row-node validation/integrity helpers only if they route into existing authoritative owners
-- [ ] Capability-gate unsupported row-node validation/integrity actions
-- [ ] Keep them scoped to row-level operations, not new product features
-- [ ] Add tests proving they do not bypass the commit/invalidation/integrity pipeline
+- [x] Add row-node validation/integrity helpers only if they route into existing authoritative owners
+- [x] Capability-gate unsupported row-node validation/integrity actions
+- [x] Keep them scoped to row-level operations, not new product features
+- [x] Add tests proving they do not bypass the commit/invalidation/integrity pipeline
 
 ### Phase 12 - Verification and guardrails
 
@@ -210,6 +210,7 @@ Capabilities are truthful.
 - 2026-07-07: Landed the first coherent Phase 6/7 hardening slice. Added shared `RowModelQueryState` and `RowModelRequestToken` types, replaced the old single `requestGeneration` guards in infinite and server-page row models with explicit datasource-generation/query-version request authority, and wired `queryModelChanged` into both async models so stale previous-query results are dropped the same way as stale sort/filter results. Extended the adversarial stale-response suite to churn `queryModel` as well. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.adversarial.test.ts src/query/queryModel.test.ts` and `corepack pnpm --filter @open-grid/core build`.
 - 2026-07-07: Completed the remaining Phase 6 infinite-cache slice. `InfiniteRowModelController` now owns block loading/failure/known-row-count state through a dedicated internal `InfiniteBlockCache` instead of scattered `loadingBlocks` / `failedBlocks` / `hasKnownTotalCount` flags. Added a regression proving `purgeCache()` clears failed-block and known-count authority before refetching. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.test.ts src/serverRowModel.adversarial.test.ts` and `corepack pnpm --filter @open-grid/core build`.
 - 2026-07-07: Completed Phase 9 selection-scope honesty. Client row selection kept its richer `page` / `filtered` / `all` behavior, while infinite now explicitly exposes only loaded-cache selection (`page` aliases to loaded, `all`/`filtered` return empty) and server-page now explicitly exposes only current-page selection (`loaded` aliases to page, `all`/`filtered` return empty). Added direct scope regressions for infinite and server-page selection. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/rowModel.capabilities.test.ts src/features/RowSelectionFeatureController.test.ts` and `corepack pnpm --filter @open-grid/core build`.
+- 2026-07-08: Completed the next coherent Phase 8/11 row-node facade slice. Public `GridRowNode` row writes now route through canonical cell-write batching instead of pretending row transactions exist on every row model, so client writes remain local commits while infinite/server-page writes honestly patch only loaded/current-page rows. Added row-node validation/integrity helpers (`getValidationState`, `getIntegrityIssues`, `validate`, `refreshIntegrity`) that delegate to the existing integrity API, made group/detail expansion delegate to the existing grouping owner, and made failed-row `retryLoad()` re-enter the current row model's authoritative load path. Added focused regressions for async row-node writes, row-node validation/integrity helpers, and failed-row retry. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/store.test.ts` and `corepack pnpm --filter @open-grid/core build`.
 
 ## Done criteria
 

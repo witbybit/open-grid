@@ -723,13 +723,38 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			getVisualIndexByRowId: this.getVisualIndexByRowId,
 			getVisualRowCount: this.getVisualRowCount,
 			getSelectedRowIds: this.getSelectedRowIds,
+			isGroupExpanded: this.isGroupExpanded,
 			isDetailExpanded: this.isDetailExpanded,
 			selectRows: this.selectRows,
 			deselectRows: this.deselectRows,
 			scrollToRow: this.scrollToRow,
 			setCellValue: this.setCellValue,
-			applyTransaction: this.applyTransaction,
+			batchCellValues: (updates: ReadonlyArray<{ rowId: string; colField: string; value: unknown }>) =>
+				this.batchCellValues([...updates], 'api'),
+			toggleGroupExpanded: this.toggleGroupExpanded,
+			toggleDetailExpanded: this.toggleDetailExpanded,
 			refreshRows: () => this.refreshRows(),
+			retryRowLoad: (rowIndex: number | null, loadState: import('./rowModel.js').RowLoadState) => {
+				if (loadState.kind !== 'failed') {
+					return { status: 'rejected', reason: `Row retry is only available for failed rows.` } as const;
+				}
+				if (rowIndex == null || rowIndex < 0) {
+					return { status: 'rejected', reason: `Row retry requires a visible failed row index.` } as const;
+				}
+				const rowModel = this.getRowModel();
+				if (!rowModel) {
+					return { status: 'rejected', reason: 'row model unavailable' } as const;
+				}
+				const serverPageModel = asServerPageControllableRowModel(rowModel);
+				if (serverPageModel) {
+					serverPageModel.reloadPage('row-node-retry-load');
+					return { status: 'applied', changeId: Date.now(), faults: [] } as const;
+				}
+				rowModel.ensureRange(rowIndex, rowIndex, 'row-node-retry-load');
+				return { status: 'applied', changeId: Date.now(), faults: [] } as const;
+			},
+			getRowIssues: (rowId: string) => this.integrity.getRowIssues(rowId),
+			validateRow: (rowId: string) => this.integrity.validateRow(rowId),
 			getRowModelType: this.getRowModelType,
 		};
 	}

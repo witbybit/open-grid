@@ -68,13 +68,19 @@ export interface GridRowNodeFacadeSource<TRowData = unknown> {
 	getVisualIndexByRowId(rowId: string): number | null;
 	getVisualRowCount(): number;
 	getSelectedRowIds(): string[];
+	isGroupExpanded(groupId: string): boolean;
 	isDetailExpanded(rowId: string): boolean;
 	selectRows(rowIds: string[], options?: { mode?: 'add' | 'replace' }): void;
 	deselectRows(rowIds: string[]): void;
 	scrollToRow(rowId: string, options?: { select?: boolean }): void;
 	setCellValue(rowId: string, field: string, value: unknown): GridWriteResult;
-	applyTransaction(input: { update?: TRowData[] }): unknown;
+	batchCellValues(updates: ReadonlyArray<{ rowId: string; colField: string; value: unknown }>): GridWriteResult;
+	toggleGroupExpanded(groupId: string): void;
+	toggleDetailExpanded(rowId: string): void;
 	refreshRows(): void;
+	retryRowLoad(rowIndex: number | null, loadState: RowLoadState): GridWriteResult;
+	getRowIssues(rowId: string): readonly GridIntegrityIssue[];
+	validateRow(rowId: string): Promise<readonly GridIntegrityIssue[]>;
 	getRowModelType(): 'client' | 'infinite' | 'server';
 }
 
@@ -84,6 +90,48 @@ function appliedResult(changeId: number): GridWriteResult {
 
 function rejectedResult(reason: string): GridWriteResult {
 	return { status: 'rejected', reason };
+}
+
+function validationResult(issues: readonly GridIntegrityIssue[]): GridWriteResult {
+	if (issues.length === 0) return appliedResult(Date.now());
+	return {
+		status: 'validationFailed',
+		reason: issues[0]?.message ?? 'Row validation failed.',
+		issues,
+	};
+}
+
+function toRowPatchUpdates<TRowData>(
+	source: GridRowNodeFacadeSource<TRowData>,
+	rowId: string,
+	current: TRowData,
+	next: Partial<TRowData>
+): Array<{ rowId: string; colField: string; value: unknown }> {
+	const patch = next as Record<string, unknown>;
+	const currentRecord = current as Record<string, unknown>;
+	const updates: Array<{ rowId: string; colField: string; value: unknown }> = [];
+	for (const colField of Object.keys(patch)) {
+		if (source.getCellValue(rowId, colField) === patch[colField] && currentRecord[colField] === patch[colField]) continue;
+		updates.push({ rowId, colField, value: patch[colField] });
+	}
+	return updates;
+}
+
+function toRowReplaceUpdates<TRowData>(
+	source: GridRowNodeFacadeSource<TRowData>,
+	rowId: string,
+	current: TRowData,
+	next: TRowData
+): Array<{ rowId: string; colField: string; value: unknown }> {
+	const nextRecord = next as Record<string, unknown>;
+	const currentRecord = current as Record<string, unknown>;
+	const keys = new Set([...Object.keys(currentRecord), ...Object.keys(nextRecord)]);
+	const updates: Array<{ rowId: string; colField: string; value: unknown }> = [];
+	for (const colField of keys) {
+		if (source.getCellValue(rowId, colField) === nextRecord[colField] && currentRecord[colField] === nextRecord[colField]) continue;
+		updates.push({ rowId, colField, value: nextRecord[colField] });
+	}
+	return updates;
 }
 
 export function createGridRowNodeFacade<TRowData>(
@@ -143,7 +191,9 @@ export function createGridRowNodeFacade<TRowData>(
 			return input.expandable ?? false;
 		},
 		get expanded() {
-			return input.expanded ?? source.isDetailExpanded(input.id);
+			if (input.expanded !== undefined) return input.expanded;
+			if (input.kind === 'group') return source.isGroupExpanded(input.id);
+			return source.isDetailExpanded(input.id);
 		},
 		get editable() {
 			return input.editable ?? input.kind === 'data';
@@ -159,15 +209,21 @@ export function createGridRowNodeFacade<TRowData>(
 			const value = this.getValue(field);
 			return value == null ? '' : String(value);
 		},
-		setSelected(selected: boolean): GridWriteResult {
+		setSelected(selected: boolean, options?: RowNodeSelectionOptions): GridWriteResult {
 			if (!this.selectable) return rejectedResult(`Row '${input.id}' is not selectable.`);
-			if (selected) source.selectRows([input.id], { mode: 'add' });
+			if (selected) source.selectRows([input.id], { mode: options?.clearOthers ? 'replace' : 'add' });
 			else source.deselectRows([input.id]);
 			return appliedResult(Date.now());
 		},
 		setExpanded(expanded: boolean): GridWriteResult {
 			if (!this.expandable) return rejectedResult(`Row '${input.id}' is not expandable.`);
-			return expanded === this.expanded ? { status: 'noop' } : rejectedResult(`Row '${input.id}' expansion bridge is not implemented yet.`);
+			if (expanded === this.expanded) return { status: 'noop' };
+			if (input.kind === 'group') {
+				source.toggleGroupExpanded(input.id);
+				return appliedResult(Date.now());
+			}
+			source.toggleDetailExpanded(input.id);
+			return appliedResult(Date.now());
 		},
 		ensureVisible(position?: 'top' | 'middle' | 'bottom' | 'nearest'): GridWriteResult {
 			void position;
@@ -175,15 +231,14 @@ export function createGridRowNodeFacade<TRowData>(
 			return appliedResult(Date.now());
 		},
 		setData(data: TRowData): GridWriteResult {
-			if (!isWriteableLoadedDataRow()) return rejectedResult(`Row '${input.id}' is not writable in its current state.`);
-			source.applyTransaction({ update: [data] });
-			return appliedResult(Date.now());
+			const current = getCurrentData();
+			if (!isWriteableLoadedDataRow() || current == null) return rejectedResult(`Row '${input.id}' is not writable in its current state.`);
+			return source.batchCellValues(toRowReplaceUpdates(source, input.id, current, data));
 		},
 		updateData(partial: Partial<TRowData>): GridWriteResult {
 			const current = getCurrentData();
 			if (!isWriteableLoadedDataRow() || current == null) return rejectedResult(`Row '${input.id}' is not writable in its current state.`);
-			source.applyTransaction({ update: [{ ...(current as object), ...(partial as object) } as TRowData] });
-			return appliedResult(Date.now());
+			return source.batchCellValues(toRowPatchUpdates(source, input.id, current, partial));
 		},
 		setDataValue(field: string, value: unknown): GridWriteResult {
 			if (!isWriteableLoadedDataRow()) return rejectedResult(`Row '${input.id}' is not writable in its current state.`);
@@ -194,7 +249,25 @@ export function createGridRowNodeFacade<TRowData>(
 			return appliedResult(Date.now());
 		},
 		retryLoad(): GridWriteResult {
-			return rejectedResult(`Row '${input.id}' does not currently support retryLoad.`);
+			return source.retryRowLoad(this.rowIndex, input.loadState);
+		},
+		getValidationState(): GridRowNodeValidationState {
+			const issues = source.getRowIssues(input.id);
+			return {
+				issues,
+				valid: issues.length === 0,
+			};
+		},
+		async validate(): Promise<GridWriteResult> {
+			if (input.kind !== 'data') return rejectedResult(`Row '${input.id}' does not currently support validate.`);
+			return validationResult(await source.validateRow(input.id));
+		},
+		getIntegrityIssues(): readonly GridIntegrityIssue[] {
+			return source.getRowIssues(input.id);
+		},
+		async refreshIntegrity(): Promise<GridWriteResult> {
+			if (input.kind !== 'data') return rejectedResult(`Row '${input.id}' does not currently support refreshIntegrity.`);
+			return validationResult(await source.validateRow(input.id));
 		},
 	};
 }
