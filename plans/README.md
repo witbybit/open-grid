@@ -150,6 +150,7 @@
 | 151 | [Keep the Grid Fast After Millions of Interactions, Not Just the First Minute](./151-long-session-performance-memory-and-scheduler-resilience.md) | TODO | c4f9506e |
 | 152 | [Make Customization Powerful Without Letting Consumers Break the Core](./152-extension-surface-and-enterprise-customization-contract.md) | TODO | c4f9506e |
 | 153 | [Feather Scroll Snapshot Program](./153-feather-scroll-snapshot-program.md) | TODO | working tree |
+| 156 | [Row Model Completion + Public RowNode Facade](./156-row-model-completion-and-public-row-node-facade.md) | TODO | working tree |
 
 ## Execution order
 

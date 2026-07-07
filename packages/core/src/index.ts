@@ -45,6 +45,7 @@ export type {
 	ServerPageRowModelOptions,
 } from './serverPageRowModel.js';
 export type { RowModelType } from './state/GridState.js';
+export type { GridRowNode, GridRowNodeValidationState, RowNodeSelectionOptions } from './publicRowNode.js';
 export type { PersistenceStatus, PersistenceSaveStatus } from './persistence/statePersistence.js';
 export { GRID_STATE_SCHEMA_VERSION, validateSchemaVersion } from './persistence/statePersistence.js';
 
@@ -106,6 +107,12 @@ export type {
 export type { GridInitialState } from './state/GridState.js';
 export type {
 	VisualRowModel,
+	RowModelViewportAccess,
+	InternalRowModelKind,
+	RowNodeKind,
+	RowLoadState,
+	RowRangeLoadState,
+	RowCountKind,
 	AllDataNodesCapableRowModel,
 	FilteredDataNodesCapableRowModel,
 	CurrentPageDataNodesCapableRowModel,

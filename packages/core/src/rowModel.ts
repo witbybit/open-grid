@@ -46,6 +46,36 @@ export interface SortModelItem {
 
 export type SortModel = SortModelItem[];
 
+/**
+ * Internal row-model identity. Keep this explicit so the codebase does not imply
+ * full SSRM support when the current async paged model is specifically server-page.
+ */
+export type InternalRowModelKind = 'client' | 'infinite' | 'server-page';
+
+/**
+ * Public/visual row-node kind surface. This is intentionally broader than the current
+ * flat client-row implementation because async row models need first-class loading and
+ * failure rows, and future grouped/detail rows must not overload plain data nodes.
+ */
+export type RowNodeKind = 'data' | 'loading' | 'failed' | 'placeholder' | 'group' | 'detail';
+
+export type RowCountKind = 'known' | 'estimated' | 'unknown';
+
+export type RowLoadState =
+	| { kind: 'loaded'; rowId: string }
+	| { kind: 'loading'; reason?: string }
+	| { kind: 'failed'; error: string; retryable: boolean }
+	| { kind: 'placeholder'; reason?: string }
+	| { kind: 'missing' };
+
+export interface RowRangeLoadState {
+	loaded: number;
+	loading: number;
+	failed: number;
+	placeholder: number;
+	missing: number;
+}
+
 export interface ClientRowModelOptions<TData = unknown> {
 	rows: TData[];
 	columns: Array<ColumnDef<TData>>;
@@ -154,6 +184,27 @@ export interface VisualRowModel<TRowData = unknown> {
 	getStickyGroupMeta?(): Map<number, number>;
 	/** Returns the group metadata for a row at the given visual index, or null. */
 	getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
+}
+
+/**
+ * Renderer-facing viewport contract for all row models. The renderer should be able to ask
+ * for rows, counts, and load/range state without knowing whether the backing model is client,
+ * infinite, or server-page.
+ */
+export interface RowModelViewportAccess<TRowData = unknown> extends VisualRowModel<TRowData> {
+	getKnownRowCount(): number | null;
+	getEstimatedRowCount(): number;
+	getRowCountKind(): RowCountKind;
+
+	getRowLoadState(index: number): RowLoadState;
+	isRowLoaded(index: number): boolean;
+	isRowLoading(index: number): boolean;
+	isRowFailed(index: number): boolean;
+
+	isRangeLoaded(startRow: number, endRow: number): boolean;
+	getRangeLoadState(startRow: number, endRow: number): RowRangeLoadState;
+
+	ensureRange(startRow: number, endRow: number, reason?: string): void;
 }
 
 export interface StickyGroupMetaCapableVisualRowModel {

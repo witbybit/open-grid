@@ -123,7 +123,10 @@ export interface GridRuntimeState {
 	selection: GridSelectionState;
 }
 
-/** Which row model is active for this grid instance. */
+/**
+ * Public row-model type surface. `'server'` is preserved here for compatibility, but the concrete
+ * implementation in core is the server-page row model rather than a full SSRM.
+ */
 export type RowModelType = 'client' | 'infinite' | 'server';
 
 /**
