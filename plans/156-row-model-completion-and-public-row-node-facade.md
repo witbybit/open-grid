@@ -85,8 +85,8 @@ Capabilities are truthful.
 
 ### Phase 2 - Internal row-node ownership split
 
-- [ ] Keep existing mutable row wrapper internal-only
-- [~] Stop using the internal node type as a public API surface
+- [x] Keep existing mutable row wrapper internal-only
+- [x] Stop using the internal node type as a public API surface
     - [x] `DomCellRendererParams.node` narrowed to public row ref
     - [x] `ValueGetterParams.node` narrowed to public row ref
     - [x] Custom aggregation callbacks narrowed to public row refs
@@ -107,20 +107,20 @@ Capabilities are truthful.
 
 ### Phase 4 - Row-model viewport/load contract
 
-- [ ] Implement `RowModelViewportAccess` on client row model
-- [ ] Implement `RowModelViewportAccess` on infinite row model
-- [ ] Implement `RowModelViewportAccess` on server-page row model
+- [x] Implement `RowModelViewportAccess` on client row model
+- [x] Implement `RowModelViewportAccess` on infinite row model
+- [x] Implement `RowModelViewportAccess` on server-page row model
 - [ ] Add:
-    - [ ] `getKnownRowCount`
-    - [ ] `getEstimatedRowCount`
-    - [ ] `getRowCountKind`
-    - [ ] `getRowLoadState`
-    - [ ] `isRowLoaded`
-    - [ ] `isRowLoading`
-    - [ ] `isRowFailed`
-    - [ ] `isRangeLoaded`
-    - [ ] `getRangeLoadState`
-    - [ ] `ensureRange`
+    - [x] `getKnownRowCount`
+    - [x] `getEstimatedRowCount`
+    - [x] `getRowCountKind`
+    - [x] `getRowLoadState`
+    - [x] `isRowLoaded`
+    - [x] `isRowLoading`
+    - [x] `isRowFailed`
+    - [x] `isRangeLoaded`
+    - [x] `getRangeLoadState`
+    - [x] `ensureRange`
 
 ### Phase 5 - Visual row normalization
 
@@ -205,6 +205,7 @@ Capabilities are truthful.
 - 2026-07-07: Removed the direct public `RowNode` runtime export from `@open-grid/core`. The public export snapshot in `boundary.test.ts` was updated accordingly, and React-side tests that previously imported the internal class now use local row-shaped helpers instead. Verification again passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
 - 2026-07-07: Narrowed `DomCellRendererParams.node` to a public `DomCellRendererRowRef` (`id` + `data`) instead of the internal mutable `RowNode` type. Internal renderer managers still pass the same runtime object via structural compatibility, so behavior did not change. Verification again passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
 - 2026-07-07: Closed the next larger public RowNode leaks coherently. Added `GridRowDataRef` for callback-style row references, switched `ValueGetterParams.node` and custom aggregation callbacks to that public ref, and split transaction ownership so row models still return internal `RowNode[]` internally while `GridEngine.applyTransaction(...)` maps them to public `GridRowNode` facades before the API boundary. Added regressions proving `valueGetter`, aggregation callbacks, `rowsUpdated`, and `applyTransaction` do not leak mutable internal row nodes. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, `corepack pnpm --filter @open-grid/react build`, and `corepack pnpm --filter @open-grid/react test`.
+- 2026-07-07: Phase 2 can now be treated as complete from the public-boundary standpoint. The remaining raw `RowNode` seams are internal row-model/query/storage contracts rather than consumer-facing leaks. Started landing Phase 4 for real by making `RowModel` extend `RowModelViewportAccess` and implementing `getKnownRowCount`, `getEstimatedRowCount`, `getRowCountKind`, `getRowLoadState`, `isRowLoaded`, `isRowLoading`, `isRowFailed`, `isRangeLoaded`, `getRangeLoadState`, and `ensureRange` across client, infinite, and server-page row models. Added failure-state tracking for infinite block loads, server-page viewport/load-state regressions, a minimal-row-model test helper update, and an architecture guard asserting the stronger viewport/load contract. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, `corepack pnpm --filter @open-grid/react build`, and `corepack pnpm --filter @open-grid/react test`.
 
 ## Done criteria
 

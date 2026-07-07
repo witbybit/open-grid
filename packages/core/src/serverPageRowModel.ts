@@ -12,6 +12,9 @@ import type {
 	AnyModelCellWritable,
 	CapableRowModel,
 	RowModelCapabilities,
+	RowCountKind,
+	RowLoadState,
+	RowRangeLoadState,
 } from './rowModel.js';
 import type { RowSelectionScope } from './api/GridApi.js';
 import { RowNode } from './rowNode.js';
@@ -114,6 +117,7 @@ export class ServerPageRowModelController<TData = unknown>
 	private totalRowCount = 0;
 	private loading = false;
 	private error: string | null = null;
+	private hasResolvedPage = false;
 
 	constructor(runtime: ServerPageRowModelRuntime<TData>, options: ServerPageRowModelOptions<TData>) {
 		this.runtime = runtime;
@@ -214,6 +218,20 @@ export class ServerPageRowModelController<TData = unknown>
 		return this.visualRows.length;
 	};
 
+	public getKnownRowCount = (): number | null => {
+		return this.getRowCountKind() === 'known' ? this.getVisualRowCount() : null;
+	};
+
+	public getEstimatedRowCount = (): number => {
+		return this.getVisualRowCount();
+	};
+
+	public getRowCountKind = (): RowCountKind => {
+		if (this.loading && this.visualRows.length === 0) return 'estimated';
+		if (this.error && this.visualRows.length === 0) return 'estimated';
+		return this.hasResolvedPage ? 'known' : 'unknown';
+	};
+
 	public getDataRowCount = (): number => {
 		return this.visualRows.length;
 	};
@@ -230,6 +248,53 @@ export class ServerPageRowModelController<TData = unknown>
 
 	public getRawRowById = (rowId: string): TData | null => {
 		return this.nodeMap.get(rowId)?.data ?? null;
+	};
+
+	public getRowLoadState = (index: number): RowLoadState => {
+		if (index < 0) return { kind: 'missing' };
+		const row = this.visualRows[index];
+		if (row?.kind === 'data') return { kind: 'loaded', rowId: row.rowId };
+		if (this.loading && this.visualRows.length === 0 && index < this.pageSize) {
+			return { kind: 'loading', reason: 'server-page' };
+		}
+		if (this.error && this.visualRows.length === 0 && index < this.pageSize) {
+			return { kind: 'failed', error: this.error, retryable: true };
+		}
+		return { kind: 'missing' };
+	};
+
+	public isRowLoaded = (index: number): boolean => {
+		return this.getRowLoadState(index).kind === 'loaded';
+	};
+
+	public isRowLoading = (index: number): boolean => {
+		return this.getRowLoadState(index).kind === 'loading';
+	};
+
+	public isRowFailed = (index: number): boolean => {
+		return this.getRowLoadState(index).kind === 'failed';
+	};
+
+	public isRangeLoaded = (startRow: number, endRow: number): boolean => {
+		if (startRow > endRow) return true;
+		for (let index = startRow; index <= endRow; index++) {
+			if (!this.isRowLoaded(index)) return false;
+		}
+		return true;
+	};
+
+	public getRangeLoadState = (startRow: number, endRow: number): RowRangeLoadState => {
+		const state: RowRangeLoadState = { loaded: 0, loading: 0, failed: 0, placeholder: 0, missing: 0 };
+		if (startRow > endRow) return state;
+		for (let index = startRow; index <= endRow; index++) {
+			const rowState = this.getRowLoadState(index);
+			state[rowState.kind]++;
+		}
+		return state;
+	};
+
+	public ensureRange = (_startRow: number, _endRow: number, reason?: string): void => {
+		this.reloadPage(reason);
 	};
 
 	public getSelectableDataRowIds = (_scope: RowSelectionScope = 'loaded'): string[] => {
@@ -335,6 +400,7 @@ export class ServerPageRowModelController<TData = unknown>
 
 			this.totalRowCount = response.totalRowCount;
 			this.pageCount = Math.max(1, Math.ceil(response.totalRowCount / pageSize));
+			this.hasResolvedPage = true;
 			// Clamp currentPage if it's now out of range (e.g. after pageSize change)
 			this.currentPage = Math.min(this.currentPage, this.pageCount - 1);
 

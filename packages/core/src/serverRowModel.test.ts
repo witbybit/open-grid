@@ -85,6 +85,63 @@ describe('InfiniteRowModelController', () => {
 		expect(store.getRowNodeById(visualRow!.id)).toBeNull();
 	});
 
+	it('implements the viewport/load-state contract for infinite blocks', async () => {
+		let rejectBlock!: (error: unknown) => void;
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (params.startRow === 0) {
+					return Promise.resolve({
+						rows: [
+							{ id: '1', name: 'Alice' },
+							{ id: '2', name: 'Bob' },
+						],
+						totalCount: 100,
+					});
+				}
+				return new Promise((_, reject) => {
+					rejectBlock = reject;
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getKnownRowCount()).toBe(100);
+		expect(controller.getEstimatedRowCount()).toBe(100);
+		expect(controller.getRowCountKind()).toBe('known');
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
+		expect(controller.getRowLoadState(80)).toEqual({ kind: 'loading', reason: 'infinite-block' });
+		expect(controller.isRangeLoaded(0, 1)).toBe(true);
+		expect(controller.isRangeLoaded(0, 80)).toBe(false);
+
+		controller.ensureRange(50, 50, 'test');
+		expect(controller.isRowLoading(50)).toBe(true);
+
+		rejectBlock!(new Error('block failed'));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getRowLoadState(50)).toEqual({ kind: 'failed', error: 'block failed', retryable: true });
+		expect(controller.isRowFailed(50)).toBe(true);
+		expect(controller.getRangeLoadState(49, 51)).toEqual({
+			loaded: 0,
+			loading: 1,
+			failed: 2,
+			placeholder: 0,
+			missing: 0,
+		});
+	});
+
 	it('should pre-fetch blocks ahead of time based on scroll velocity', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,

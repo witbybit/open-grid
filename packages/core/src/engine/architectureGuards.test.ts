@@ -1473,9 +1473,10 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('getVisualIndexByRowId(');
 	});
 
-	it('RowModel extends VisualRowModel (Plan 099)', () => {
+	it('RowModel extends the viewport/load contract (Plan 099 / Plan 156)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
-		expect(content).toContain('RowModel<TRowData = unknown> extends VisualRowModel<TRowData>');
+		expect(content).toContain('export interface RowModelViewportAccess<TRowData = unknown> extends VisualRowModel<TRowData>');
+		expect(content).toContain('RowModel<TRowData = unknown> extends RowModelViewportAccess<TRowData>');
 	});
 
 	it('RowModel is the slim shared contract; optional mutation/paging hooks live in named capabilities', () => {

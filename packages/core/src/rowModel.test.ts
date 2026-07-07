@@ -85,6 +85,39 @@ describe('ClientRowModelController', () => {
 		expect(node?.data.name).toBe('Alicia');
 	});
 
+	it('implements the viewport/load-state contract for client rows', () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Alice' },
+				{ id: '2', name: 'Bob' },
+			],
+			columns: store.getState().columns,
+		});
+
+		expect(controller.getKnownRowCount()).toBe(2);
+		expect(controller.getEstimatedRowCount()).toBe(2);
+		expect(controller.getRowCountKind()).toBe('known');
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
+		expect(controller.isRowLoaded(1)).toBe(true);
+		expect(controller.isRowLoading(1)).toBe(false);
+		expect(controller.isRowFailed(1)).toBe(false);
+		expect(controller.isRangeLoaded(0, 1)).toBe(true);
+		expect(controller.getRangeLoadState(0, 2)).toEqual({
+			loaded: 2,
+			loading: 0,
+			failed: 0,
+			placeholder: 0,
+			missing: 1,
+		});
+
+		controller.ensureRange(0, 1, 'test');
+	});
+
 	it('should refresh sorting when a nested column path changes through its parent object', () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,

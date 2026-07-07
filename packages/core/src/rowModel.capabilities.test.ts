@@ -529,6 +529,65 @@ describe('Server page loading state publication', () => {
 		ctrl.dispose();
 	});
 
+	it('implements the viewport/load-state contract for server-page rows', async () => {
+		let rejectReload!: (error: unknown) => void;
+		let callCount = 0;
+		const getPage = vi.fn(() => {
+			callCount++;
+			if (callCount === 1) {
+				return Promise.resolve({
+					rows: [{ id: '1', name: 'Alice', amount: 100 }],
+					totalRowCount: 10,
+				});
+			}
+			return new Promise((_, reject) => {
+				rejectReload = reject;
+			});
+		});
+
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: COLUMNS });
+		const ctrl = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			columns: COLUMNS,
+			pagination: { pageSize: 5 },
+		});
+
+		await new Promise((res) => setTimeout(res, 0));
+
+		expect(ctrl.getKnownRowCount()).toBe(1);
+		expect(ctrl.getEstimatedRowCount()).toBe(1);
+		expect(ctrl.getRowCountKind()).toBe('known');
+		expect(ctrl.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
+		expect(ctrl.isRangeLoaded(0, 0)).toBe(true);
+
+		ctrl.goToPage(1);
+		expect(ctrl.getRowCountKind()).toBe('estimated');
+		expect(ctrl.getKnownRowCount()).toBeNull();
+		expect(ctrl.getRowLoadState(0)).toEqual({ kind: 'loading', reason: 'server-page' });
+		expect(ctrl.getRangeLoadState(0, 1)).toEqual({
+			loaded: 0,
+			loading: 2,
+			failed: 0,
+			placeholder: 0,
+			missing: 0,
+		});
+
+		rejectReload!(new Error('page failed'));
+		await new Promise((res) => setTimeout(res, 0));
+
+		expect(ctrl.getRowLoadState(0)).toEqual({ kind: 'failed', error: 'page failed', retryable: true });
+		expect(ctrl.isRowFailed(0)).toBe(true);
+		expect(ctrl.getRangeLoadState(0, 1)).toEqual({
+			loaded: 0,
+			loading: 0,
+			failed: 2,
+			placeholder: 0,
+			missing: 0,
+		});
+
+		ctrl.dispose();
+	});
+
 	it('page navigation clears stale focus, range, and active edit state when the edited row leaves the active page', async () => {
 		let resolveSecond!: (v: { rows: TestRow[]; totalRowCount: number }) => void;
 		let callCount = 0;

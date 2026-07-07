@@ -13,6 +13,9 @@ import type {
 	VisibleBlockLoadCapableRowModel,
 	CapableRowModel,
 	RowModelCapabilities,
+	RowCountKind,
+	RowLoadState,
+	RowRangeLoadState,
 } from './rowModel.js';
 import type { RowSelectionScope } from './api/GridApi.js';
 import { RowNode } from './rowNode.js';
@@ -89,11 +92,13 @@ export class InfiniteRowModelController<TData = unknown>
 	private visualRowIdToIndex = new Map<string, number>();
 	private rowIdToVisualIndex = new Map<string, number>();
 	private loadingBlocks: Record<number, boolean> = {};
+	private failedBlocks = new Map<number, string>();
 	private loadingBlockCount = 0;
 	private unsubscribers: Array<() => void> = [];
 	private disposed = false;
 	private requestGeneration = 0;
 	private pendingVisibleLoad: { startRow: number; endRow: number } | null = null;
+	private hasKnownTotalCount = false;
 
 	constructor(runtime: InfiniteRowModelRuntime<TData>, options: InfiniteRowModelOptions<TData>) {
 		this.runtime = runtime;
@@ -207,6 +212,19 @@ export class InfiniteRowModelController<TData = unknown>
 		return this.visualRows.length;
 	};
 
+	public getKnownRowCount = (): number | null => {
+		return this.hasKnownTotalCount ? this.visualRows.length : null;
+	};
+
+	public getEstimatedRowCount = (): number => {
+		return this.visualRows.length;
+	};
+
+	public getRowCountKind = (): RowCountKind => {
+		if (this.hasKnownTotalCount) return 'known';
+		return this.visualRows.length > 0 ? 'estimated' : 'unknown';
+	};
+
 	public getDataRowCount = (): number => {
 		return this.visualRows.length;
 	};
@@ -223,6 +241,55 @@ export class InfiniteRowModelController<TData = unknown>
 
 	public getRawRowById = (rowId: string): TData | null => {
 		return this.nodeMap.get(rowId)?.data ?? null;
+	};
+
+	public getRowLoadState = (index: number): RowLoadState => {
+		if (index < 0) return { kind: 'missing' };
+		const row = this.visualRows[index];
+		if (row?.kind === 'data') return { kind: 'loaded', rowId: row.rowId };
+		const blockIndex = Math.floor(index / this.blockSize);
+		if (this.failedBlocks.has(blockIndex)) {
+			return { kind: 'failed', error: this.failedBlocks.get(blockIndex)!, retryable: true };
+		}
+		const withinKnownCount = this.hasKnownTotalCount ? index < this.visualRows.length : index < this.visualRows.length || !!this.loadingBlocks[blockIndex];
+		if (this.loadingBlocks[blockIndex] || withinKnownCount) {
+			return { kind: 'loading', reason: 'infinite-block' };
+		}
+		return { kind: 'missing' };
+	};
+
+	public isRowLoaded = (index: number): boolean => {
+		return this.getRowLoadState(index).kind === 'loaded';
+	};
+
+	public isRowLoading = (index: number): boolean => {
+		return this.getRowLoadState(index).kind === 'loading';
+	};
+
+	public isRowFailed = (index: number): boolean => {
+		return this.getRowLoadState(index).kind === 'failed';
+	};
+
+	public isRangeLoaded = (startRow: number, endRow: number): boolean => {
+		if (startRow > endRow) return true;
+		for (let index = startRow; index <= endRow; index++) {
+			if (!this.isRowLoaded(index)) return false;
+		}
+		return true;
+	};
+
+	public getRangeLoadState = (startRow: number, endRow: number): RowRangeLoadState => {
+		const state: RowRangeLoadState = { loaded: 0, loading: 0, failed: 0, placeholder: 0, missing: 0 };
+		if (startRow > endRow) return state;
+		for (let index = startRow; index <= endRow; index++) {
+			const rowState = this.getRowLoadState(index);
+			state[rowState.kind]++;
+		}
+		return state;
+	};
+
+	public ensureRange = (startRow: number, endRow: number, _reason?: string): void => {
+		this.loadVisibleBlocks(startRow, endRow);
 	};
 
 	public getSelectableDataRowIds = (_scope: RowSelectionScope = 'loaded'): string[] => {
@@ -272,6 +339,7 @@ export class InfiniteRowModelController<TData = unknown>
 		if (this.loadingBlocks[blockIndex]) return;
 
 		this.loadingBlocks[blockIndex] = true;
+		this.failedBlocks.delete(blockIndex);
 		this.loadingBlockCount++;
 		const generation = this.requestGeneration;
 		const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -332,6 +400,7 @@ export class InfiniteRowModelController<TData = unknown>
 			});
 
 			if (typeof response.totalCount === 'number') {
+				this.hasKnownTotalCount = true;
 				if (this.activeNodes.length < response.totalCount) this.activeNodes.length = response.totalCount;
 				if (this.visualRows.length < response.totalCount) this.visualRows.length = response.totalCount;
 			}
@@ -350,6 +419,7 @@ export class InfiniteRowModelController<TData = unknown>
 			});
 		} catch (error) {
 			if (this.disposed || generation !== this.requestGeneration) return;
+			this.failedBlocks.set(blockIndex, toErrorMessage(error));
 			this.runtime.dispatchInfiniteBlockLoadFailed({
 				blockIndex,
 				startRow,
@@ -390,7 +460,9 @@ export class InfiniteRowModelController<TData = unknown>
 		if (this.disposed) return;
 		this.requestGeneration++;
 		this.loadingBlocks = {};
+		this.failedBlocks.clear();
 		this.loadingBlockCount = 0;
+		this.hasKnownTotalCount = false;
 		this.activeNodes = [];
 		this.visualRows = [];
 		this.nodeMap.clear();

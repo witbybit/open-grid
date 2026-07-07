@@ -394,7 +394,7 @@ export interface TransactionalRowModel<TRowData = unknown> {
 }
 
 /** Shared row-model contract used across engine and rendering code. */
-export interface RowModel<TRowData = unknown> extends VisualRowModel<TRowData> {
+export interface RowModel<TRowData = unknown> extends RowModelViewportAccess<TRowData> {
 	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
 }
 
@@ -1629,6 +1629,18 @@ export class ClientRowModelController<TData = unknown>
 		return this.visualRows.length;
 	};
 
+	public getKnownRowCount = (): number | null => {
+		return this.visualRows.length;
+	};
+
+	public getEstimatedRowCount = (): number => {
+		return this.visualRows.length;
+	};
+
+	public getRowCountKind = (): RowCountKind => {
+		return 'known';
+	};
+
 	public getVisualIndexById = (visualRowId: string): number => {
 		const idx = this.visualRowIdToIndex.get(visualRowId);
 		return idx !== undefined ? idx : -1;
@@ -1652,6 +1664,45 @@ export class ClientRowModelController<TData = unknown>
 	public getRowIndexById = (rowId: string): number => {
 		return this.getVisualIndexByRowId(rowId);
 	};
+
+	public getRowLoadState = (index: number): RowLoadState => {
+		const row = this.getVisualRow(index);
+		if (!row) return { kind: 'missing' };
+		if (row.kind === 'data') return { kind: 'loaded', rowId: row.rowId };
+		return { kind: 'loaded', rowId: row.id };
+	};
+
+	public isRowLoaded = (index: number): boolean => {
+		return this.getRowLoadState(index).kind === 'loaded';
+	};
+
+	public isRowLoading = (_index: number): boolean => {
+		return false;
+	};
+
+	public isRowFailed = (_index: number): boolean => {
+		return false;
+	};
+
+	public isRangeLoaded = (startRow: number, endRow: number): boolean => {
+		if (startRow > endRow) return true;
+		for (let index = startRow; index <= endRow; index++) {
+			if (!this.isRowLoaded(index)) return false;
+		}
+		return true;
+	};
+
+	public getRangeLoadState = (startRow: number, endRow: number): RowRangeLoadState => {
+		const state: RowRangeLoadState = { loaded: 0, loading: 0, failed: 0, placeholder: 0, missing: 0 };
+		if (startRow > endRow) return state;
+		for (let index = startRow; index <= endRow; index++) {
+			const rowState = this.getRowLoadState(index);
+			state[rowState.kind]++;
+		}
+		return state;
+	};
+
+	public ensureRange = (_startRow: number, _endRow: number, _reason?: string): void => {};
 
 	public getDataRowById = (rowId: string): TData | null => {
 		return this.getRawRowById(rowId);
