@@ -84,6 +84,8 @@ export type {
 	DetailVisualRow,
 	FooterVisualRow,
 	LoadingVisualRow,
+	FailedVisualRow,
+	PlaceholderVisualRow,
 	GroupDef,
 	AggregationDef,
 	CsvExportOptions,

@@ -692,7 +692,7 @@ export class RowRenderer<TRowData = unknown> {
 					viewportPlan: this.currentViewportPlan,
 				});
 			} else {
-				// Full-width row (group / detail / footer)
+				// Full-width row (group / detail / footer / failed / placeholder)
 				this.runtime.bindFullWidthRow(slot, visualRow);
 			}
 		}

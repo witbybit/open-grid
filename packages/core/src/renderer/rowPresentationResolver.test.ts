@@ -75,6 +75,17 @@ describe('resolveRowPresentation', () => {
 		expect(result.className).toContain('og-row-loading');
 	});
 
+	it('resolves failed and placeholder rows to their base classes', () => {
+		const failed = resolveRowPresentation(makeDeps(), baseInput({ visualRow: { kind: 'failed', id: 'failed:5', rowIndex: 5, error: 'boom', retryable: true } as any }));
+		expect(failed.className).toBe('og-row og-row-failed');
+
+		const placeholder = resolveRowPresentation(
+			makeDeps(),
+			baseInput({ visualRow: { kind: 'placeholder', id: 'placeholder:5', rowIndex: 5, reason: 'waiting' } as any })
+		);
+		expect(placeholder.className).toBe('og-row og-row-placeholder');
+	});
+
 	it('reuses the warm className during scroll when the slot already holds this exact row', () => {
 		const result = resolveRowPresentation(
 			makeDeps(),

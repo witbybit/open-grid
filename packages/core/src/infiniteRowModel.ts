@@ -19,7 +19,7 @@ import type {
 } from './rowModel.js';
 import type { RowSelectionScope } from './api/GridApi.js';
 import { RowNode } from './rowNode.js';
-import { toDataVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
+import { toDataVisualRowId, toFailedVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
 
 function toErrorMessage(error: unknown): string {
@@ -144,7 +144,18 @@ export class InfiniteRowModelController<TData = unknown>
 	public getVisualRow = (rowIndex: number): VisualRow<TData> | null => {
 		const row = this.visualRows[rowIndex];
 		if (row) return row;
-		if (rowIndex >= 0 && rowIndex < this.getVisualRowCount()) {
+		const state = this.getRowLoadState(rowIndex);
+		if (state.kind === 'failed') {
+			return {
+				kind: 'failed',
+				id: toFailedVisualRowId(rowIndex),
+				rowIndex,
+				error: state.error,
+				retryable: state.retryable,
+				editable: false,
+			};
+		}
+		if (state.kind === 'loading') {
 			return {
 				kind: 'loading',
 				id: toLoadingVisualRowId(rowIndex),

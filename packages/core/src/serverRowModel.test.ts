@@ -131,6 +131,7 @@ describe('InfiniteRowModelController', () => {
 		rejectBlock!(new Error('block failed'));
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
+		expect(controller.getVisualRow(50)).toEqual(expect.objectContaining({ kind: 'failed', id: 'failed:50', rowIndex: 50, error: 'block failed' }));
 		expect(controller.getRowLoadState(50)).toEqual({ kind: 'failed', error: 'block failed', retryable: true });
 		expect(controller.isRowFailed(50)).toBe(true);
 		expect(controller.getRangeLoadState(49, 51)).toEqual({

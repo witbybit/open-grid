@@ -702,6 +702,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		switch (row.kind) {
 			case 'loading':
 				return { kind: 'loading' };
+			case 'failed':
+				return { kind: 'failed', error: row.error, retryable: row.retryable };
+			case 'placeholder':
+				return { kind: 'placeholder', reason: row.reason };
 			case 'data':
 				return { kind: 'loaded', rowId: row.rowId };
 			case 'group':
@@ -770,6 +774,26 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 				kind: 'loading',
 				rowIndex: index,
 				loadState: { kind: 'loading' },
+				selectable: false,
+				editable: false,
+			});
+		}
+		if (row.kind === 'failed') {
+			return createGridRowNodeFacade(this.createGridRowNodeSource(), {
+				id: row.id,
+				kind: 'failed',
+				rowIndex: index,
+				loadState: { kind: 'failed', error: row.error, retryable: row.retryable },
+				selectable: false,
+				editable: false,
+			});
+		}
+		if (row.kind === 'placeholder') {
+			return createGridRowNodeFacade(this.createGridRowNodeSource(), {
+				id: row.id,
+				kind: 'placeholder',
+				rowIndex: index,
+				loadState: { kind: 'placeholder', reason: row.reason },
 				selectable: false,
 				editable: false,
 			});

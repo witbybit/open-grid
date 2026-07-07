@@ -6,6 +6,7 @@ import { ServerPageRowModelController } from './serverPageRowModel.js';
 import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
 import type { ActiveEditState, ColumnDef } from './api/GridApi.js';
 import type { GridQueryModel } from './query/GridQueryModel.js';
+import { createMinimalRowModel } from './testUtils/createMinimalRowModel.js';
 
 interface TestRow {
 	id: string;
@@ -2259,6 +2260,24 @@ describe('GridStore undo and redo functionality', () => {
 		expect(rangeProcessed).toEqual(['1-0', '2-1']);
 
 		controller.dispose();
+	});
+
+	it('exposes failed displayed rows as public failed row-node facades', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		store.registerRowModel(
+			createMinimalRowModel({
+				visualRows: [{ kind: 'failed', id: 'failed:0', rowIndex: 0, error: 'load failed', retryable: true }],
+			})
+		);
+
+		expect(store.getRowLoadState(0)).toEqual({ kind: 'failed', error: 'load failed', retryable: true });
+		const displayedNode = store.getDisplayedRowAtIndex(0);
+		expect(displayedNode?.id).toBe('failed:0');
+		expect(displayedNode?.kind).toBe('failed');
+		expect(displayedNode?.failed).toBe(true);
+		expect(displayedNode?.editable).toBe(false);
 	});
 
 	it('compiles immutable grid plans and rebuilds them only for column geometry or pin changes', () => {

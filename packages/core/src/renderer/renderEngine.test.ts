@@ -720,6 +720,43 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('renders failed visual rows as explicit failed rows instead of inferring from missing data', () => {
+		const columns: ColumnDef<{ id: string; name: string }>[] = [{ field: 'name', header: 'Name', width: 120 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const rowModel = createMinimalRowModel({
+			visualRows: [{ kind: 'failed', id: 'failed:0', rowIndex: 0, error: 'load failed', retryable: true }],
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		store.registerRowModel(rowModel);
+		renderer.mount(container);
+
+		const row = container.querySelector('.og-row[data-row-id="failed:0"]') as HTMLDivElement;
+		expect(row.className).toContain('og-row-failed');
+
+		renderer.unmount();
+		store.destroy();
+	});
+
 	it('records granular invalidation stats for cell edit and focus movement', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);

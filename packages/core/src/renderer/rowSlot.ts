@@ -19,7 +19,7 @@ export class RowSlot<TRowData = unknown> {
 
 	public visualIndex = -1;
 	public visualRowId = '';
-	public rowKind: 'data' | 'group' | 'detail' | 'loading' | 'footer' | '' = '';
+	public rowKind: 'data' | 'group' | 'detail' | 'loading' | 'failed' | 'placeholder' | 'footer' | '' = '';
 	public rowTop = -1;
 	public rowHeight = -1;
 
@@ -114,7 +114,7 @@ export class RowSlot<TRowData = unknown> {
 	public update(
 		visualIndex: number,
 		visualRowId: string,
-		rowKind: 'data' | 'group' | 'detail' | 'loading' | 'footer',
+		rowKind: 'data' | 'group' | 'detail' | 'loading' | 'failed' | 'placeholder' | 'footer',
 		rowTop: number,
 		rowHeight: number,
 		className: string

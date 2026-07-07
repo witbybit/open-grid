@@ -124,13 +124,13 @@ Capabilities are truthful.
 
 ### Phase 5 - Visual row normalization
 
-- [ ] Normalize minimum visual row kinds:
-    - [ ] `data`
-    - [ ] `loading`
-    - [ ] `failed`
-    - [ ] `placeholder`
-- [ ] Ensure renderer can render loading/failed/placeholder rows without inferring from null data
-- [ ] Ensure server/infinite missing rows are represented honestly
+- [~] Normalize minimum visual row kinds:
+    - [x] `data`
+    - [x] `loading`
+    - [x] `failed`
+    - [x] `placeholder`
+- [~] Ensure renderer can render loading/failed/placeholder rows without inferring from null data
+- [~] Ensure server/infinite missing rows are represented honestly
 
 ### Phase 6 - Infinite block cache and request-token authority
 
@@ -206,6 +206,7 @@ Capabilities are truthful.
 - 2026-07-07: Narrowed `DomCellRendererParams.node` to a public `DomCellRendererRowRef` (`id` + `data`) instead of the internal mutable `RowNode` type. Internal renderer managers still pass the same runtime object via structural compatibility, so behavior did not change. Verification again passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, and `corepack pnpm --filter @open-grid/react test`.
 - 2026-07-07: Closed the next larger public RowNode leaks coherently. Added `GridRowDataRef` for callback-style row references, switched `ValueGetterParams.node` and custom aggregation callbacks to that public ref, and split transaction ownership so row models still return internal `RowNode[]` internally while `GridEngine.applyTransaction(...)` maps them to public `GridRowNode` facades before the API boundary. Added regressions proving `valueGetter`, aggregation callbacks, `rowsUpdated`, and `applyTransaction` do not leak mutable internal row nodes. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, `corepack pnpm --filter @open-grid/react build`, and `corepack pnpm --filter @open-grid/react test`.
 - 2026-07-07: Phase 2 can now be treated as complete from the public-boundary standpoint. The remaining raw `RowNode` seams are internal row-model/query/storage contracts rather than consumer-facing leaks. Started landing Phase 4 for real by making `RowModel` extend `RowModelViewportAccess` and implementing `getKnownRowCount`, `getEstimatedRowCount`, `getRowCountKind`, `getRowLoadState`, `isRowLoaded`, `isRowLoading`, `isRowFailed`, `isRangeLoaded`, `getRangeLoadState`, and `ensureRange` across client, infinite, and server-page row models. Added failure-state tracking for infinite block loads, server-page viewport/load-state regressions, a minimal-row-model test helper update, and an architecture guard asserting the stronger viewport/load contract. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, `corepack pnpm --filter @open-grid/react build`, and `corepack pnpm --filter @open-grid/react test`.
+- 2026-07-07: Began Phase 5 visual-row normalization. Added first-class `FailedVisualRow` and `PlaceholderVisualRow` types to the shared visual-row vocabulary, taught row slots / portal identity / row presentation / store facades about them, and made infinite + server-page row models emit explicit failed visual rows instead of only reporting failure through load-state side channels. React row portals now have default failed/placeholder renderers, and focused regressions prove the renderer/store/public node surface sees failed rows directly. Verification passed with `corepack pnpm --filter @open-grid/core build`, `corepack pnpm --filter @open-grid/core test`, `corepack pnpm --filter @open-grid/react build`, and `corepack pnpm --filter @open-grid/react test`.
 
 ## Done criteria
 

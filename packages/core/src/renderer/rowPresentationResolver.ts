@@ -8,6 +8,8 @@ import type { SelectionPaintManager } from './selectionPaintManager.js';
 // Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
 const ROW_KIND_BASE: Record<string, string> = {
 	loading: 'og-row og-row-loading',
+	failed: 'og-row og-row-failed',
+	placeholder: 'og-row og-row-placeholder',
 	group: 'og-row og-row-group',
 	detail: 'og-row og-row-detail',
 	footer: 'og-row og-row-footer',

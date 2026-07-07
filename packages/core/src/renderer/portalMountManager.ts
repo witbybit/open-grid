@@ -40,6 +40,12 @@ function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: Visua
 	if (a.kind === 'loading' && b.kind === 'loading') {
 		return a.rowIndex === b.rowIndex;
 	}
+	if (a.kind === 'failed' && b.kind === 'failed') {
+		return a.rowIndex === b.rowIndex && a.error === b.error && a.retryable === b.retryable;
+	}
+	if (a.kind === 'placeholder' && b.kind === 'placeholder') {
+		return a.rowIndex === b.rowIndex && a.reason === b.reason;
+	}
 	if (a.kind === 'data' && b.kind === 'data') {
 		return a.rowId === b.rowId && a.node === b.node && a.depth === b.depth;
 	}

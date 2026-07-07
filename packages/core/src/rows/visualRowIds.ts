@@ -49,6 +49,14 @@ export function toLoadingVisualRowId(index: number): string {
 	return `loading:${index}`;
 }
 
+export function toFailedVisualRowId(index: number): string {
+	return `failed:${index}`;
+}
+
+export function toPlaceholderVisualRowId(index: number): string {
+	return `placeholder:${index}`;
+}
+
 export function parseVisualRowId(id: string): { kind: string; key: string } | null {
 	const separator = id.indexOf(':');
 	if (separator < 0) return null;

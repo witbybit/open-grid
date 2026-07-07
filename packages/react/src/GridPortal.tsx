@@ -11,12 +11,14 @@ import {
 	DefaultGroupRowRenderer,
 	DefaultDetailRowRenderer,
 	DefaultFooterRowRenderer,
+	DefaultFailedRowRenderer,
+	DefaultPlaceholderRowRenderer,
 } from './gridPortalHosts.js';
 import type { PortalStore, PortalManagerProps } from './gridPortalTypes.js';
 
 export { createPortalStore };
 export type { PortalStore };
-export { PortalCell, DefaultGroupRowRenderer, DefaultDetailRowRenderer, DefaultFooterRowRenderer };
+export { PortalCell, DefaultGroupRowRenderer, DefaultDetailRowRenderer, DefaultFooterRowRenderer, DefaultFailedRowRenderer, DefaultPlaceholderRowRenderer };
 export type { PortalCellProps, PortalData, CellPortalSnapshot, RowMenuPortalSnapshot, PortalManagerProps } from './gridPortalTypes.js';
 
 // ─── CellPortalPool ───────────────────────────────────────────────────────────
@@ -103,6 +105,10 @@ function RowMenuPortalPoolInner<TRowData = unknown>({
 					) : (
 						<DefaultFooterRowRenderer visualRow={visualRow} api={api} />
 					);
+				} else if (visualRow.kind === 'failed') {
+					content = <DefaultFailedRowRenderer visualRow={visualRow} api={api} />;
+				} else if (visualRow.kind === 'placeholder') {
+					content = <DefaultPlaceholderRowRenderer visualRow={visualRow} api={api} />;
 				}
 				// Keyed via createPortal's third arg — see CellPortalPool note.
 				return createPortal(content, container, rowKey);

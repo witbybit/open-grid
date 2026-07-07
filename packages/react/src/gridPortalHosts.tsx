@@ -386,6 +386,28 @@ function DefaultFooterRowRendererInner<TRowData = unknown>({ visualRow }: { visu
 
 export const DefaultFooterRowRenderer = memo(DefaultFooterRowRendererInner) as typeof DefaultFooterRowRendererInner;
 
+function DefaultFailedRowRendererInner<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
+	if (visualRow.kind !== 'failed') return null;
+	return (
+		<div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingLeft: 12, color: '#fca5a5', fontWeight: 600 }}>
+			{visualRow.error}
+		</div>
+	);
+}
+
+export const DefaultFailedRowRenderer = memo(DefaultFailedRowRendererInner) as typeof DefaultFailedRowRendererInner;
+
+function DefaultPlaceholderRowRendererInner<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
+	if (visualRow.kind !== 'placeholder') return null;
+	return (
+		<div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingLeft: 12, color: '#94a3b8', fontWeight: 500 }}>
+			{visualRow.reason ?? 'Unavailable'}
+		</div>
+	);
+}
+
+export const DefaultPlaceholderRowRenderer = memo(DefaultPlaceholderRowRendererInner) as typeof DefaultPlaceholderRowRendererInner;
+
 // ─── PortalCellWrapper ────────────────────────────────────────────────────────
 
 interface PortalCellWrapperProps<TRowData = unknown> {

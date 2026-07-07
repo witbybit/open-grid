@@ -575,6 +575,7 @@ describe('Server page loading state publication', () => {
 		rejectReload!(new Error('page failed'));
 		await new Promise((res) => setTimeout(res, 0));
 
+		expect(ctrl.getVisualRow(0)).toEqual(expect.objectContaining({ kind: 'failed', id: 'failed:0', rowIndex: 0, error: 'page failed' }));
 		expect(ctrl.getRowLoadState(0)).toEqual({ kind: 'failed', error: 'page failed', retryable: true });
 		expect(ctrl.isRowFailed(0)).toBe(true);
 		expect(ctrl.getRangeLoadState(0, 1)).toEqual({

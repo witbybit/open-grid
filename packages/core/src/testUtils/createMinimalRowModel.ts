@@ -13,6 +13,9 @@ export function createMinimalRowModel<TRowData>(options: MinimalRowModelOptions<
 		const row = options.visualRows[index];
 		if (!row) return { kind: 'missing' } as const;
 		if (row.kind === 'data') return { kind: 'loaded', rowId: row.rowId } as const;
+		if (row.kind === 'loading') return { kind: 'loading' } as const;
+		if (row.kind === 'failed') return { kind: 'failed', error: row.error, retryable: row.retryable } as const;
+		if (row.kind === 'placeholder') return { kind: 'placeholder', reason: row.reason } as const;
 		return { kind: 'loaded', rowId: row.id } as const;
 	};
 
@@ -28,8 +31,8 @@ export function createMinimalRowModel<TRowData>(options: MinimalRowModelOptions<
 		getRawRowById: options.getRawRowById ?? (() => null),
 		getRowLoadState,
 		isRowLoaded: (index) => getRowLoadState(index).kind === 'loaded',
-		isRowLoading: () => false,
-		isRowFailed: () => false,
+		isRowLoading: (index) => getRowLoadState(index).kind === 'loading',
+		isRowFailed: (index) => getRowLoadState(index).kind === 'failed',
 		isRangeLoaded: (startRow, endRow) => {
 			for (let index = startRow; index <= endRow; index++) {
 				if (getRowLoadState(index).kind !== 'loaded') return false;
