@@ -17,6 +17,7 @@ export interface CellBindGeometry {
 	left: number;
 	right: number;
 	width: number;
+	dragShift: number;
 	lane: 'left' | 'center' | 'right';
 }
 

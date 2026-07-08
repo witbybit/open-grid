@@ -106,7 +106,8 @@ function makeDispatchInput(
 	deps: RowCellBinderDeps<{ id: string; name: string }>,
 	request: BindCellDuringScrollRequest<{ id: string; name: string }>,
 	presentation: ScrollCellPresentation,
-	rowVersion: number
+	rowVersion: number,
+	overrides?: Partial<{ dragShift: number }>
 ) {
 	const cellCtrl = createCellCtrl({
 		rowId: request.node.id,
@@ -182,6 +183,7 @@ function makeDispatchInput(
 			left: request.left,
 			right: request.right,
 			width: request.width,
+			dragShift: overrides?.dragShift ?? 0,
 			lane: request.lane,
 		},
 		runtime: {
@@ -418,5 +420,24 @@ describe('cellPresentationDispatcher — editing/focused/loading/rebind flag thr
 		expect(deps.incrementHtmlSnapshotMissesDuringScroll).toHaveBeenCalledTimes(1);
 		expect(request.cellSlot.lastContentMode).toBe('pending');
 		expect(deps.portalMountManager.mountCellImmediately).not.toHaveBeenCalled();
+	});
+
+	it('threads dragShift through the binder so body cells can follow live header reorder preview', () => {
+		const deps = makeDeps();
+		const request = makeRequest('center');
+		const presentation: ScrollCellPresentation = {
+			kind: 'primitive',
+			className: laneClass.center,
+			contentMode: 'text',
+			formattedValue: 'hello',
+			markDirty: false,
+			releaseStalePortal: false,
+			title: null,
+			validationError: undefined,
+			recordVersionsFrom: undefined,
+		};
+		dispatchCellPresentation(makeDispatchInput(deps, request, presentation, 1, { dragShift: 24 }));
+		expect(request.cellSlot.lastShift).toBe(24);
+		expect(request.cellSlot.element.style.transform).toContain('translateX(24px)');
 	});
 });

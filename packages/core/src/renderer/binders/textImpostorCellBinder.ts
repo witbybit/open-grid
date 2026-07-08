@@ -33,7 +33,8 @@ export function applyTextImpostorCellPresentation<TRowData>(input: DispatchCellP
 			presentation.contentMode ?? 'fallback',
 			undefined,
 			presentation.formattedValue ?? '',
-			undefined
+			undefined,
+			geometry.dragShift
 		);
 		if (presentation.recordVersions) stampMountedVersions(cellSlot, rowVersion, runtime.globalVersion, presentation.recordVersions);
 		recordDispatchWrite(input, didWrite);
@@ -57,7 +58,8 @@ export function applyTextImpostorCellPresentation<TRowData>(input: DispatchCellP
 		presentation.contentMode ?? 'fallback',
 		undefined,
 		presentation.formattedValue ?? '',
-		undefined
+		undefined,
+		geometry.dragShift
 	);
 	cellSlot.lastMountedRowVersion = rowVersion;
 	cellSlot.lastMountedGlobalVersion = runtime.globalVersion;

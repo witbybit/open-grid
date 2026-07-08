@@ -41,7 +41,8 @@ export function applyFreezeCellPresentation<TRowData>(input: DispatchCellPresent
 				'custom',
 				undefined,
 				'',
-				undefined
+				undefined,
+				geometry.dragShift
 			);
 			cellSlot.lastMountedRowVersion = rowVersion;
 			cellSlot.lastMountedGlobalVersion = runtime.globalVersion;
@@ -104,7 +105,8 @@ export function applyFreezeCellPresentation<TRowData>(input: DispatchCellPresent
 				'portal',
 				undefined,
 				'',
-				presentation.portalKey
+				presentation.portalKey,
+				geometry.dragShift
 			);
 			if (presentation.keepVersionFresh) {
 				cellSlot.lastMountedRowVersion = rowVersion;
@@ -133,7 +135,8 @@ export function applyFreezeCellPresentation<TRowData>(input: DispatchCellPresent
 				presentation.contentMode ?? 'fallback',
 				undefined,
 				presentation.formattedValue ?? '',
-				undefined
+				undefined,
+				geometry.dragShift
 			);
 			cellSlot.lastMountedRowVersion = rowVersion;
 			cellSlot.lastMountedGlobalVersion = runtime.globalVersion;

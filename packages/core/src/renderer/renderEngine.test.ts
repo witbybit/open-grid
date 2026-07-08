@@ -248,6 +248,73 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('moves body cells live during header drag reorder preview before drop commit', () => {
+		const columns = [
+			{ field: 'a', header: 'A', width: 100 },
+			{ field: 'b', header: 'B', width: 100 },
+			{ field: 'c', header: 'C', width: 100 },
+		];
+		const store = new GridStore<{ id: string; a: string; b: string; c: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+			enableColumnReorder: true,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-0', a: 'A0', b: 'B0', c: 'C0' }],
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 420,
+			bottom: 220,
+			width: 420,
+			height: 220,
+			toJSON: () => ({}),
+		} as DOMRect);
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.fullPaint();
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		vi.spyOn(scrollViewport, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 420,
+			bottom: 220,
+			width: 420,
+			height: 220,
+			toJSON: () => ({}),
+		} as DOMRect);
+
+		const headerA = container.querySelector('.og-header-cell[data-col-field="a"]') as HTMLElement;
+		const bodyA = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="a"]') as HTMLElement;
+		const bodyB = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="b"]') as HTMLElement;
+
+		headerA.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+		window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, button: 0, clientX: 250, clientY: 12 }));
+
+		expect(container.querySelector('.og-grid-container, .og-col-reordering') ?? container.closest('.og-grid-container')).not.toBeNull();
+		expect(bodyA.style.transform).toContain('translateX');
+		expect(bodyB.style.transform).toContain('translateX');
+
+		window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: 250, clientY: 12 }));
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('positions right-pinned body and header cells inside sticky right lanes', () => {
 		const columns = [
 			{ field: 'a', header: 'A', width: 100 },

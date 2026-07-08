@@ -30,7 +30,8 @@ export function applyHtmlSnapshotCellPresentation<TRowData>(input: DispatchCellP
 			'pending',
 			undefined,
 			'',
-			undefined
+			undefined,
+			geometry.dragShift
 		);
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = runtime.globalVersion;
@@ -65,7 +66,8 @@ export function applyHtmlSnapshotCellPresentation<TRowData>(input: DispatchCellP
 		'portal',
 		undefined,
 		'',
-		undefined
+		undefined,
+		geometry.dragShift
 	);
 	if (presentation.recordVersions) stampMountedVersions(cellSlot, rowVersion, runtime.globalVersion, presentation.recordVersions);
 	recordDispatchWrite(input, didWrite);

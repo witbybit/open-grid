@@ -340,6 +340,7 @@ function makeScrollDispatchInput<TRowData>(
 			left: request.left,
 			right: request.right,
 			width: request.width,
+			dragShift: deps.getColumnShift ? deps.getColumnShift(request.colIndex) : 0,
 			lane: request.lane,
 		},
 		runtime: {
@@ -496,7 +497,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			rowCtrl,
 			cellSlot,
 			viewportPlan: null,
-			geometry: { rowIndex, colIndex, left: leftArg, right: -1, width: cellWidth, lane },
+			geometry: { rowIndex, colIndex, left: leftArg, right: -1, width: cellWidth, dragShift, lane },
 			runtime: {
 				globalVersion: state.globalVersion,
 				rowSlotId: slotId,
@@ -577,7 +578,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		rowCtrl,
 		cellSlot,
 		viewportPlan: null,
-		geometry: { rowIndex, colIndex, left: leftArg, right: -1, width: cellWidth, lane },
+		geometry: { rowIndex, colIndex, left: leftArg, right: -1, width: cellWidth, dragShift, lane },
 		runtime: {
 			globalVersion: state.globalVersion,
 			rowSlotId: slotId,

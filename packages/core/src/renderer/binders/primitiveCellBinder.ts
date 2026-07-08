@@ -27,7 +27,7 @@ export function applyPrimitiveCellPresentation<TRowData>(input: DispatchCellPres
 				undefined,
 				presentation.formattedValue ?? '',
 				presentation.portalKey,
-				0,
+				geometry.dragShift,
 				input.phase === 'full-bind' ? cellCtrl.visualState.selected : undefined
 			);
 			if (presentation.recordVersions) stampMountedVersions(cellSlot, rowVersion, runtime.globalVersion, presentation.recordVersions);
@@ -52,7 +52,7 @@ export function applyPrimitiveCellPresentation<TRowData>(input: DispatchCellPres
 				undefined,
 				presentation.formattedValue ?? '',
 				undefined,
-				0,
+				geometry.dragShift,
 				input.phase === 'full-bind' ? cellCtrl.visualState.selected : undefined
 			);
 			if (presentation.recordVersions) stampMountedVersions(cellSlot, rowVersion, runtime.globalVersion, presentation.recordVersions);
@@ -77,7 +77,7 @@ export function applyPrimitiveCellPresentation<TRowData>(input: DispatchCellPres
 				cellCtrl.valueState.value,
 				presentation.formattedValue ?? '',
 				undefined,
-				0,
+				geometry.dragShift,
 				input.phase === 'full-bind' ? cellCtrl.visualState.selected : undefined
 			);
 			recordDispatchWrite(input, didWrite);

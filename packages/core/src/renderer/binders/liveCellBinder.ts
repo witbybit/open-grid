@@ -94,7 +94,7 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 			undefined,
 			'',
 			presentation.portalKey,
-			0,
+			geometry.dragShift,
 			input.phase === 'full-bind' ? cellCtrl.visualState.selected : undefined
 		);
 		if (presentation.recordVersions && 'rowId' in presentation.recordVersions)
@@ -175,7 +175,7 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 		undefined,
 		'',
 		presentation.portalKey,
-		0,
+		geometry.dragShift,
 		input.phase === 'full-bind' ? cellCtrl.visualState.selected : undefined
 	);
 	if (presentation.recordVersions && 'rowId' in presentation.recordVersions)
