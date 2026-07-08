@@ -281,6 +281,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			// the dragged header ghost moving until drop. This path is already bounded to discrete
 			// insertion-index changes during a drag, not every pointer pixel.
 			schedulePaint: () => this.fullPaint(),
+			gridScheduler: defaultGridScheduler,
 		});
 		// Feed the live column-reorder preview offset into the body bind path.
 		this.rowRenderer.columnShiftSource = (colIndex) => this.columnInteractions.getColumnShift(colIndex);

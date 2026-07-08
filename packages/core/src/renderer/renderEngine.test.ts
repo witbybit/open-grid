@@ -315,6 +315,88 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('auto-scrolls horizontally while a header drag stays parked at the viewport edge', () => {
+		const columns = Array.from({ length: 10 }, (_, index) => ({
+			field: `c${index}`,
+			header: `C${index}`,
+			width: 100,
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+			enableColumnReorder: true,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-0', ...Object.fromEntries(columns.map((col, index) => [col.field, `V${index}`])) }],
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 260,
+			bottom: 220,
+			width: 260,
+			height: 220,
+			toJSON: () => ({}),
+		} as DOMRect);
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.fullPaint();
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		vi.spyOn(scrollViewport, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 260,
+			bottom: 220,
+			width: 260,
+			height: 220,
+			toJSON: () => ({}),
+		} as DOMRect);
+		Object.defineProperty(scrollViewport, 'clientWidth', { value: 260, configurable: true });
+		Object.defineProperty(scrollViewport, 'scrollWidth', { value: 1000, configurable: true });
+		scrollViewport.scrollLeft = 0;
+
+		const rafCallbacks: FrameRequestCallback[] = [];
+		const raf = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+			rafCallbacks.push(cb);
+			return rafCallbacks.length;
+		});
+		const cancelRaf = vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => undefined);
+
+		const header = container.querySelector('.og-header-cell[data-col-field="c0"]') as HTMLElement;
+		header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+		window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, button: 0, clientX: 255, clientY: 12 }));
+
+		expect(raf).toHaveBeenCalled();
+		expect(rafCallbacks.length).toBeGreaterThan(0);
+
+		rafCallbacks.shift()?.(0);
+		const afterFirstFrame = scrollViewport.scrollLeft;
+		expect(afterFirstFrame).toBeGreaterThan(0);
+		expect(store.engine.viewport.scrollLeft).toBe(afterFirstFrame);
+
+		rafCallbacks.shift()?.(16);
+		expect(scrollViewport.scrollLeft).toBeGreaterThan(afterFirstFrame);
+
+		window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: 255, clientY: 12 }));
+		expect(cancelRaf).toHaveBeenCalled();
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('positions right-pinned body and header cells inside sticky right lanes', () => {
 		const columns = [
 			{ field: 'a', header: 'A', width: 100 },

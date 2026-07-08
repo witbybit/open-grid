@@ -2,6 +2,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { GroupPanelRenderer } from './groupPanelRenderer.js';
 import type { GridLayoutPlan } from './layoutPlan.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
+import type { GridScheduler } from './gridScheduler.js';
 
 /**
  * Compute the per-column horizontal shift (px) that previews a reorder of `fromIndex`
@@ -68,7 +69,11 @@ export interface ColumnInteractionControllerOptions<TRowData> {
 	getScrollViewport: () => HTMLDivElement | null;
 	getLayoutPlan: () => GridLayoutPlan | null;
 	schedulePaint: () => void;
+	gridScheduler: GridScheduler;
 }
+
+const COLUMN_DRAG_SCROLL_EDGE_PX = 50;
+const COLUMN_DRAG_SCROLL_MAX_PX = 14;
 
 export class ColumnInteractionController<TRowData = unknown> {
 	private engine: GridEngine<TRowData>;
@@ -76,6 +81,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 	private getScrollViewport: () => HTMLDivElement | null;
 	private getLayoutPlan: () => GridLayoutPlan | null;
 	private schedulePaint: () => void;
+	private gridScheduler: GridScheduler;
 	private isColumnReordering = false;
 	private columnDragStartX = 0;
 	private columnDragStartY = 0;
@@ -96,6 +102,10 @@ export class ColumnInteractionController<TRowData = unknown> {
 	// Whether the current column drag is over the group panel.
 	private columnDragOverGroupPanel = false;
 	private cachedViewportRect: DOMRect | null = null;
+	private autoScrollFrame: number | null = null;
+	private autoScrollRateX = 0;
+	private lastDragClientX: number | null = null;
+	private lastDragClientY: number | null = null;
 
 	constructor(options: ColumnInteractionControllerOptions<TRowData>) {
 		this.engine = options.engine;
@@ -103,6 +113,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 		this.getScrollViewport = options.getScrollViewport;
 		this.getLayoutPlan = options.getLayoutPlan;
 		this.schedulePaint = options.schedulePaint;
+		this.gridScheduler = options.gridScheduler;
 	}
 
 	public onHeaderResizeMouseDown = (e: MouseEvent): void => {
@@ -159,6 +170,8 @@ export class ColumnInteractionController<TRowData = unknown> {
 		this.columnDragField = colField;
 		this.columnDropInsertionIndex = colIndex;
 		this.cachedViewportRect = this.getScrollViewport()?.getBoundingClientRect() ?? null;
+		this.lastDragClientX = e.clientX;
+		this.lastDragClientY = e.clientY;
 
 		window.addEventListener('mousemove', this.onHeaderColumnDragMove);
 		window.addEventListener('mouseup', this.onHeaderColumnDragMouseUp);
@@ -186,6 +199,9 @@ export class ColumnInteractionController<TRowData = unknown> {
 		this.dragShifts = null;
 		this.shiftInsertionIndex = -2;
 		this.cachedViewportRect = null;
+		this.lastDragClientX = null;
+		this.lastDragClientY = null;
+		this.stopAutoScroll();
 		this.removeColumnDropIndicator();
 		this.removeColumnDragGhost();
 		this.getScrollViewport()?.closest('.og-grid-container')?.classList.remove('og-col-reordering');
@@ -224,6 +240,8 @@ export class ColumnInteractionController<TRowData = unknown> {
 		}
 
 		e.preventDefault();
+		this.lastDragClientX = e.clientX;
+		this.lastDragClientY = e.clientY;
 		this.updateColumnDragGhost(e);
 
 		// Route to group panel when the dragged column supports grouping and the
@@ -245,6 +263,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 					// Drop the live-reorder preview while over the panel; recompute on return.
 					this.dragShifts = null;
 					this.shiftInsertionIndex = -2;
+					this.stopAutoScroll();
 					this.schedulePaint();
 				} else {
 					this.groupPanel.onHeaderDragLeave();
@@ -257,6 +276,7 @@ export class ColumnInteractionController<TRowData = unknown> {
 			}
 		}
 
+		this.updateHorizontalAutoScroll(e.clientX);
 		this.updateColumnDropTarget(e);
 	};
 	private onHeaderColumnDragMouseUp = (): void => {
@@ -419,6 +439,65 @@ export class ColumnInteractionController<TRowData = unknown> {
 			this.columnDropIndicator.classList.add('og-indicator-ready');
 		} else {
 			this.columnDropIndicator.style.transform = transform; // glides via CSS transition
+		}
+	}
+
+	private updateHorizontalAutoScroll(clientX: number): void {
+		const scrollViewport = this.getScrollViewport();
+		if (!scrollViewport) return;
+		const scrollRect = this.cachedViewportRect ?? scrollViewport.getBoundingClientRect();
+		const distFromLeft = clientX - scrollRect.left;
+		const distFromRight = scrollRect.right - clientX;
+
+		if (distFromRight < COLUMN_DRAG_SCROLL_EDGE_PX) {
+			this.startAutoScroll(COLUMN_DRAG_SCROLL_MAX_PX * (1 - distFromRight / COLUMN_DRAG_SCROLL_EDGE_PX));
+		} else if (distFromLeft < COLUMN_DRAG_SCROLL_EDGE_PX) {
+			this.startAutoScroll(-COLUMN_DRAG_SCROLL_MAX_PX * (1 - distFromLeft / COLUMN_DRAG_SCROLL_EDGE_PX));
+		} else {
+			this.stopAutoScroll();
+		}
+	}
+
+	private startAutoScroll(rate: number): void {
+		this.autoScrollRateX = rate;
+		if (this.autoScrollFrame !== null) return;
+
+		const tick = (): void => {
+			if (!this.isColumnReordering) {
+				this.autoScrollFrame = null;
+				return;
+			}
+
+			const scrollViewport = this.getScrollViewport();
+			if (!scrollViewport) {
+				this.autoScrollFrame = null;
+				return;
+			}
+
+			const maxScrollLeft = Math.max(0, scrollViewport.scrollWidth - scrollViewport.clientWidth);
+			const nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, scrollViewport.scrollLeft + this.autoScrollRateX));
+			if (nextScrollLeft === scrollViewport.scrollLeft) {
+				this.stopAutoScroll();
+				return;
+			}
+
+			scrollViewport.scrollLeft = nextScrollLeft;
+			this.engine.viewport.setScrollPosition(this.engine.viewport.scrollTop, nextScrollLeft);
+			if (this.lastDragClientX !== null) {
+				this.updateColumnDropTarget({ clientX: this.lastDragClientX } as MouseEvent);
+			}
+			this.schedulePaint();
+			this.autoScrollFrame = this.gridScheduler.raf(tick);
+		};
+
+		this.autoScrollFrame = this.gridScheduler.raf(tick);
+	}
+
+	private stopAutoScroll(): void {
+		this.autoScrollRateX = 0;
+		if (this.autoScrollFrame !== null) {
+			this.gridScheduler.cancelRaf(this.autoScrollFrame);
+			this.autoScrollFrame = null;
 		}
 	}
 }
