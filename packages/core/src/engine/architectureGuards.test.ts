@@ -528,6 +528,15 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain("id: `loading:${r}`");
 	});
 
+	it('row-model naming keeps server-page explicit and does not imply full SSRM support', () => {
+		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
+		const gridStateContent = readFileSync(resolve(CORE_ROOT, 'src', 'state', 'GridState.ts'), 'utf-8');
+		expect(rowModelContent).toContain("export type InternalRowModelKind = 'client' | 'infinite' | 'server-page';");
+		expect(rowModelContent).toContain('full SSRM support when the current async paged model is specifically server-page');
+		expect(gridStateContent).toContain("export type RowModelType = 'client' | 'infinite' | 'server';");
+		expect(gridStateContent).toContain("implementation in core is the server-page row model rather than a full SSRM.");
+	});
+
 	it('GridFeatureContext does not expose raw side-effect primitives', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'GridFeatureContext.ts'), 'utf-8');
 		expect(content).not.toContain('stateManager:');

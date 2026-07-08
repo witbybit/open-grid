@@ -81,7 +81,7 @@ Capabilities are truthful.
     - [x] internal mutable row node contract boundary identified and kept separate from new facade types
     - [x] public `GridRowNode` facade contract
 - [x] Add `RowModelViewportAccess` interface skeleton
-- [ ] Add initial architecture guards preventing new full-SSRM naming drift
+- [x] Add initial architecture guards preventing new full-SSRM naming drift
 
 ### Phase 2 - Internal row-node ownership split
 
@@ -110,7 +110,7 @@ Capabilities are truthful.
 - [x] Implement `RowModelViewportAccess` on client row model
 - [x] Implement `RowModelViewportAccess` on infinite row model
 - [x] Implement `RowModelViewportAccess` on server-page row model
-- [ ] Add:
+- [x] Add:
     - [x] `getKnownRowCount`
     - [x] `getEstimatedRowCount`
     - [x] `getRowCountKind`
@@ -124,13 +124,13 @@ Capabilities are truthful.
 
 ### Phase 5 - Visual row normalization
 
-- [~] Normalize minimum visual row kinds:
+- [x] Normalize minimum visual row kinds:
     - [x] `data`
     - [x] `loading`
     - [x] `failed`
     - [x] `placeholder`
-- [~] Ensure renderer can render loading/failed/placeholder rows without inferring from null data
-- [~] Ensure server/infinite missing rows are represented honestly
+- [x] Ensure renderer can render loading/failed/placeholder rows without inferring from null data
+- [x] Ensure server/infinite missing rows are represented honestly
 
 ### Phase 6 - Infinite block cache and request-token authority
 
@@ -143,7 +143,7 @@ Capabilities are truthful.
 
 ### Phase 7 - Sort/filter/query ownership hardening
 
-- [ ] Client sort/filter/query remains local pipeline-owned
+- [x] Client sort/filter/query remains local pipeline-owned
 - [x] Infinite sort/filter/query bumps queryVersion and resets/stales cache
 - [x] Server-page sort/filter/query bumps queryVersion and resets to page 0
 - [x] Add tests proving stale previous-query results are ignored
@@ -178,13 +178,13 @@ Capabilities are truthful.
 
 ### Phase 12 - Verification and guardrails
 
-- [ ] Contract tests for all row models
-- [ ] Public row-node facade tests
-- [ ] Infinite cache tests
-- [ ] Query token tests
+- [x] Contract tests for all row models
+- [x] Public row-node facade tests
+- [x] Infinite cache tests
+- [x] Query token tests
 - [x] Renderer integration tests
-- [ ] Mutation semantics tests
-- [ ] Selection scope tests
+- [x] Mutation semantics tests
+- [x] Selection scope tests
 - [x] Architecture guards for public facade and viewport access usage
 
 ## Initial execution checklist
@@ -192,7 +192,7 @@ Capabilities are truthful.
 - [x] Create this plan and keep it updated as phases land
 - [x] Land Phase 1 scaffolding with the smallest safe public/internal type split
 - [x] Build after Phase 1
-- [ ] Add/update tests with each phase instead of backfilling at the end
+- [x] Add/update tests with each phase instead of backfilling at the end
 
 ## Progress notes
 
@@ -212,22 +212,23 @@ Capabilities are truthful.
 - 2026-07-07: Completed Phase 9 selection-scope honesty. Client row selection kept its richer `page` / `filtered` / `all` behavior, while infinite now explicitly exposes only loaded-cache selection (`page` aliases to loaded, `all`/`filtered` return empty) and server-page now explicitly exposes only current-page selection (`loaded` aliases to page, `all`/`filtered` return empty). Added direct scope regressions for infinite and server-page selection. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/rowModel.capabilities.test.ts src/features/RowSelectionFeatureController.test.ts` and `corepack pnpm --filter @open-grid/core build`.
 - 2026-07-08: Completed the next coherent Phase 8/11 row-node facade slice. Public `GridRowNode` row writes now route through canonical cell-write batching instead of pretending row transactions exist on every row model, so client writes remain local commits while infinite/server-page writes honestly patch only loaded/current-page rows. Added row-node validation/integrity helpers (`getValidationState`, `getIntegrityIssues`, `validate`, `refreshIntegrity`) that delegate to the existing integrity API, made group/detail expansion delegate to the existing grouping owner, and made failed-row `retryLoad()` re-enter the current row model's authoritative load path. Added focused regressions for async row-node writes, row-node validation/integrity helpers, and failed-row retry. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/store.test.ts` and `corepack pnpm --filter @open-grid/core build`.
 - 2026-07-08: Completed the main Phase 10 renderer migration seam. `rowRenderer.ts` no longer narrows to `VisibleBlockLoadCapableRowModel` or calls `loadVisibleBlocks(...)`; it now drives viewport loading through `RowModelViewportAccess.ensureRange(...)` and continues to read rows through `getVisualRowModel()`. Removed the last synthetic `loading:${r}` fallback so renderer loading rows come from the row model instead of being inferred from `getVisualRow(...) === null`. Added a focused renderer regression proving active scroll calls `ensureRange(...)`, and updated the architecture guard to lock in the new contract. Focused verification passed with `corepack pnpm --filter @open-grid/core exec vitest run src/engine/architectureGuards.test.ts src/renderer/runtimePerformance.test.ts` and `corepack pnpm --filter @open-grid/core build`.
+- 2026-07-08: Reconciled the remaining Plan 156 checklist against the actual test suite and closed the stale documentation gaps. Added an architecture guard that locks in explicit `server-page` internal naming while preserving the public `'server'` compatibility alias without implying full SSRM support. Marked the already-landed test buckets as complete: row-model contract coverage (`rowModel.test.ts`, `serverRowModel.test.ts`, `rowModel.capabilities.test.ts`), public row-node facade coverage (`store.test.ts`), infinite cache and query-token churn coverage (`serverRowModel.test.ts`, `serverRowModel.adversarial.test.ts`), client query pipeline ownership (`query/queryModel.test.ts`), mutation semantics, selection-scope honesty, and visual-row normalization coverage.
 
 ## Done criteria
 
-- [ ] Row model kinds are honest and architecture/docs stop implying full SSRM where it does not exist
-- [ ] Public `GridRowNode` facade exists
-- [ ] Public `GridRowNode` does not expose internal mutable row-model objects
-- [ ] All row models implement one renderer-facing viewport/load-state contract
-- [ ] Loading/failed/placeholder rows are first-class visual rows
-- [ ] Infinite model uses a real block cache with explicit status
-- [ ] Async results are query-version/request-token guarded
-- [ ] Row-node writes are honest per row model
-- [ ] Validation/integrity row-node operations route through existing authoritative owners
-- [ ] Selection scopes are honest per row model
+- [x] Row model kinds are honest and architecture/docs stop implying full SSRM where it does not exist
+- [x] Public `GridRowNode` facade exists
+- [x] Public `GridRowNode` does not expose internal mutable row-model objects
+- [x] All row models implement one renderer-facing viewport/load-state contract
+- [x] Loading/failed/placeholder rows are first-class visual rows
+- [x] Infinite model uses a real block cache with explicit status
+- [x] Async results are query-version/request-token guarded
+- [x] Row-node writes are honest per row model
+- [x] Validation/integrity row-node operations route through existing authoritative owners
+- [x] Selection scopes are honest per row model
 - [x] Renderer no longer relies on row-model-specific loading seams
-- [ ] Unsupported operations fail consistently
-- [ ] Core tests and build pass
+- [x] Unsupported operations fail consistently
+- [x] Core tests and build pass
 
 ## STOP conditions
 
