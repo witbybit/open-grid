@@ -138,11 +138,98 @@ describe('InfiniteRowModelController', () => {
 		expect(controller.isRowFailed(50)).toBe(true);
 		expect(controller.getRangeLoadState(49, 51)).toEqual({
 			loaded: 0,
-			loading: 1,
+			loading: 0,
 			failed: 2,
 			placeholder: 0,
-			missing: 0,
+			missing: 1,
 		});
+	});
+
+	it('ignores an older request for the same block when a newer retry request wins by requestId', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let resolveFirst!: (value: { rows: TestRow[]; totalCount: number }) => void;
+		let resolveSecond!: (value: { rows: TestRow[]; totalCount: number }) => void;
+		let callCount = 0;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation(() => {
+				callCount++;
+				return new Promise((resolve) => {
+					if (callCount === 1) resolveFirst = resolve as typeof resolveFirst;
+					else resolveSecond = resolve as typeof resolveSecond;
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 4,
+			columns: store.getState().columns,
+		});
+
+		controller.ensureRange(0, 0, 'retry');
+
+		resolveSecond({
+			rows: [{ id: '2', name: 'New Block Winner' }],
+			totalCount: 4,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		resolveFirst({
+			rows: [{ id: '1', name: 'Stale Block Loser' }],
+			totalCount: 4,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('New Block Winner');
+		expect(store.getRawRowById('1')).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('does not treat a partially populated block as fully loaded', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: {
+				getRows: vi.fn().mockResolvedValue({
+					rows: [
+						{ id: '1', name: 'Alice' },
+						{ id: '2', name: 'Bob' },
+					],
+					totalCount: 4,
+				}),
+			},
+			blockSize: 4,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRowCount()).toBe(4);
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
+		expect(controller.getRowLoadState(1)).toEqual({ kind: 'loaded', rowId: '2' });
+		expect(controller.getRowLoadState(2)).toEqual({ kind: 'missing' });
+		expect(controller.getRowLoadState(3)).toEqual({ kind: 'missing' });
+		expect(controller.isRangeLoaded(0, 3)).toBe(false);
+		expect(controller.getRangeLoadState(0, 3)).toEqual({
+			loaded: 2,
+			loading: 0,
+			failed: 0,
+			placeholder: 0,
+			missing: 2,
+		});
+
+		controller.dispose();
+		store.destroy();
 	});
 
 	it('should pre-fetch blocks ahead of time based on scroll velocity', async () => {

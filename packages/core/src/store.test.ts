@@ -2262,6 +2262,47 @@ describe('GridStore undo and redo functionality', () => {
 		controller.dispose();
 	});
 
+	it('delegates getRowLoadState to the row model instead of re-deriving from getVisualRow', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		store.registerRowModel({
+			getVisualRow: () =>
+				({
+					kind: 'data',
+					id: 'row:1',
+					rowId: '1',
+					node: { id: '1', data: { id: '1', name: 'Visible Row', price: 1 } },
+					depth: 0,
+				}) as any,
+			getVisualRowCount: () => 1,
+			getKnownRowCount: () => 1,
+			getEstimatedRowCount: () => 1,
+			getRowCountKind: () => 'known',
+			getVisualIndexById: () => 0,
+			getVisualIndexByRowId: () => 0,
+			getRowNodeById: () => null,
+			getRawRowById: () => null,
+			getRowLoadState: () => ({ kind: 'failed', error: 'authoritative row-model state', retryable: true }) as const,
+			isRowLoaded: () => false,
+			isRowLoading: () => false,
+			isRowFailed: () => true,
+			isRangeLoaded: () => false,
+			getRangeLoadState: () => ({ loaded: 0, loading: 0, failed: 1, placeholder: 0, missing: 0 }),
+			ensureRange: () => {},
+			refresh: () => ({ changed: false }),
+		} as any);
+
+		expect(store.getRowLoadState(0)).toEqual({
+			kind: 'failed',
+			error: 'authoritative row-model state',
+			retryable: true,
+		});
+
+		store.destroy();
+	});
+
 	it('routes public row-node updateData and setData through the loaded-row write path on infinite and server-page models', async () => {
 		const infiniteStore = new GridStore<TestRow>({
 			columns: [

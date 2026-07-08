@@ -114,6 +114,7 @@ export class ServerPageRowModelController<TData = unknown>
 	private datasourceGeneration = 0;
 	private queryVersion = 0;
 	private nextRequestId = 1;
+	private activePageRequestId = 0;
 
 	private currentPage: number;
 	private pageSize: number;
@@ -309,7 +310,18 @@ export class ServerPageRowModelController<TData = unknown>
 		return state;
 	};
 
-	public ensureRange = (_startRow: number, _endRow: number, reason?: string): void => {
+	public ensureRange = (startRow: number, endRow: number, reason?: string): void => {
+		if (startRow > endRow) return;
+		const shouldRetry = this.isRetryReason(reason);
+		const rangeState = this.getRangeLoadState(startRow, endRow);
+		const representedRows = rangeState.loaded + rangeState.loading + rangeState.failed + rangeState.placeholder;
+		const requestedRows = endRow - startRow + 1;
+		const rangeIsAlreadyRepresented = representedRows === requestedRows && rangeState.missing === 0;
+
+		if (this.loading && !shouldRetry) return;
+		if (rangeIsAlreadyRepresented && !shouldRetry) return;
+		if (!shouldRetry && rangeState.missing === 0) return;
+
 		this.reloadPage(reason);
 	};
 
@@ -475,11 +487,13 @@ export class ServerPageRowModelController<TData = unknown>
 
 	private createPageRequestToken(page: number, pageSize: number): RowModelRequestToken {
 		const queryState = this.getQueryState();
+		const requestId = this.nextRequestId++;
+		this.activePageRequestId = requestId;
 		return {
 			kind: 'server-page',
 			datasourceGeneration: queryState.datasourceGeneration,
 			queryVersion: queryState.queryVersion,
-			requestId: this.nextRequestId++,
+			requestId,
 			page,
 			pageSize,
 		};
@@ -491,6 +505,7 @@ export class ServerPageRowModelController<TData = unknown>
 		return (
 			token.datasourceGeneration === this.datasourceGeneration &&
 			token.queryVersion === this.queryVersion &&
+			token.requestId === this.activePageRequestId &&
 			token.page === this.currentPage &&
 			token.pageSize === this.pageSize
 		);
@@ -504,5 +519,9 @@ export class ServerPageRowModelController<TData = unknown>
 		this.queryVersion++;
 		this.currentPage = 0;
 		this.fetchPage({ preserveVisibleRows: false });
+	}
+
+	private isRetryReason(reason?: string): boolean {
+		return reason === 'row-node-retry-load' || reason === 'retry' || reason === 'force-reload';
 	}
 }

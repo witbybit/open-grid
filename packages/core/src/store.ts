@@ -697,22 +697,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public getRowLoadState = (index: number): RowLoadState => {
-		const row = this.getVisualRow(index);
-		if (!row) return { kind: 'missing' };
-		switch (row.kind) {
-			case 'loading':
-				return { kind: 'loading' };
-			case 'failed':
-				return { kind: 'failed', error: row.error, retryable: row.retryable };
-			case 'placeholder':
-				return { kind: 'placeholder', reason: row.reason };
-			case 'data':
-				return { kind: 'loaded', rowId: row.rowId };
-			case 'group':
-			case 'detail':
-			case 'footer':
-				return { kind: 'loaded', rowId: row.id };
-		}
+		return this.getRowModel()?.getRowLoadState(index) ?? { kind: 'missing' };
 	};
 
 	private createGridRowNodeSource() {

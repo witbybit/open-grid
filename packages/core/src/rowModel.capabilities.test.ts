@@ -660,6 +660,71 @@ describe('Server page loading state publication', () => {
 		ctrl.dispose();
 	});
 
+	it('ignores a stale older server-page request when a newer same-page request wins by requestId', async () => {
+		let resolveFirst!: (value: { rows: TestRow[]; totalRowCount: number }) => void;
+		let resolveSecond!: (value: { rows: TestRow[]; totalRowCount: number }) => void;
+		let callCount = 0;
+		const getPage = vi.fn().mockImplementation(() => {
+			callCount++;
+			return new Promise((resolve) => {
+				if (callCount === 1) resolveFirst = resolve as typeof resolveFirst;
+				else resolveSecond = resolve as typeof resolveSecond;
+			});
+		});
+
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: COLUMNS });
+		const ctrl = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			columns: COLUMNS,
+			pagination: { pageSize: 5 },
+		});
+
+		ctrl.reloadPage('retry');
+
+		resolveSecond!({
+			rows: [{ id: '2', name: 'New Page Winner', amount: 200 }],
+			totalRowCount: 5,
+		});
+		await new Promise((res) => setTimeout(res, 0));
+
+		resolveFirst!({
+			rows: [{ id: '1', name: 'Stale Page Loser', amount: 100 }],
+			totalRowCount: 5,
+		});
+		await new Promise((res) => setTimeout(res, 0));
+
+		expect(ctrl.getVisualRow(0)?.kind).toBe('data');
+		expect(ctrl.getVisualRow(0)?.kind === 'data' ? ctrl.getVisualRow(0)?.node.data.name : null).toBe('New Page Winner');
+		expect(store.getRawRowById('1')).toBeNull();
+
+		ctrl.dispose();
+	});
+
+	it('server-page ensureRange does not reload the current loaded page on viewport-render checks', async () => {
+		const getPage = vi.fn().mockResolvedValue({
+			rows: [{ id: '1', name: 'Alice', amount: 100 }],
+			totalRowCount: 5,
+		});
+
+		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: COLUMNS });
+		const ctrl = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			columns: COLUMNS,
+			pagination: { pageSize: 5 },
+		});
+
+		await new Promise((res) => setTimeout(res, 0));
+		expect(getPage).toHaveBeenCalledTimes(1);
+
+		ctrl.ensureRange(0, 0, 'viewport-render');
+		ctrl.ensureRange(0, 0, 'viewport-render');
+		ctrl.ensureRange(0, 0, 'viewport-render');
+
+		expect(getPage).toHaveBeenCalledTimes(1);
+
+		ctrl.dispose();
+	});
+
 	it('page navigation clears stale focus, range, and active edit state when the edited row leaves the active page', async () => {
 		let resolveSecond!: (v: { rows: TestRow[]; totalRowCount: number }) => void;
 		let callCount = 0;
