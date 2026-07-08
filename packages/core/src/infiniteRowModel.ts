@@ -122,7 +122,7 @@ class InfiniteBlockCache {
 
 	public getFailure(blockIndex: number): string | null {
 		const current = this.blocks.get(blockIndex);
-		return current?.status === 'failed' ? current.error ?? 'Unknown infinite block load failure' : null;
+		return current?.status === 'failed' ? (current.error ?? 'Unknown infinite block load failure') : null;
 	}
 
 	public isBlockLoading(blockIndex: number): boolean {

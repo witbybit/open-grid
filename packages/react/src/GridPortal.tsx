@@ -18,7 +18,14 @@ import type { PortalStore, PortalManagerProps } from './gridPortalTypes.js';
 
 export { createPortalStore };
 export type { PortalStore };
-export { PortalCell, DefaultGroupRowRenderer, DefaultDetailRowRenderer, DefaultFooterRowRenderer, DefaultFailedRowRenderer, DefaultPlaceholderRowRenderer };
+export {
+	PortalCell,
+	DefaultGroupRowRenderer,
+	DefaultDetailRowRenderer,
+	DefaultFooterRowRenderer,
+	DefaultFailedRowRenderer,
+	DefaultPlaceholderRowRenderer,
+};
 export type { PortalCellProps, PortalData, CellPortalSnapshot, RowMenuPortalSnapshot, PortalManagerProps } from './gridPortalTypes.js';
 
 // ─── CellPortalPool ───────────────────────────────────────────────────────────

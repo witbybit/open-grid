@@ -28,7 +28,10 @@ export class CellAccessModel<TRowData = unknown> {
 				setCellValue: this.runtime.setCellValue,
 				batchCellValues: (updates) =>
 					updates.reduce<import('../api/GridApi.js').GridWriteResult>(
-						(result, update) => (result.status === 'applied' || result.status === 'noop' ? this.runtime.setCellValue(update.rowId, update.colField, update.value) : result),
+						(result, update) =>
+							result.status === 'applied' || result.status === 'noop'
+								? this.runtime.setCellValue(update.rowId, update.colField, update.value)
+								: result,
 						{ status: 'noop' }
 					),
 				toggleGroupExpanded: () => {},

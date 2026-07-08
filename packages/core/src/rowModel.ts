@@ -915,7 +915,8 @@ export function applyClientSortAndFilter<TData>(
 			if (column) {
 				if (column.valueGetter) {
 					const colValGetter = column.valueGetter;
-					getter = (node: RowNode<TData>) => colValGetter({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: column.field });
+					getter = (node: RowNode<TData>) =>
+						colValGetter({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: column.field });
 				} else {
 					const pathGetter = compilePathGetter(column.field);
 					getter = (node: RowNode<TData>) => node.getCellValue(column.field, pathGetter);
@@ -1204,7 +1205,8 @@ export class ClientRowModelController<TData = unknown>
 			if (col) {
 				if (col.valueGetter) {
 					const vg = col.valueGetter;
-					return (node: RowNode<TData>): unknown => vg({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: col.field });
+					return (node: RowNode<TData>): unknown =>
+						vg({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: col.field });
 				}
 				const pg = compilePathGetter(col.field);
 				return (node: RowNode<TData>): unknown => node.getCellValue(col.field, pg);
@@ -1513,7 +1515,8 @@ export class ClientRowModelController<TData = unknown>
 					if (col) {
 						if (col.valueGetter) {
 							const vg = col.valueGetter;
-							return (node: RowNode<TData>): unknown => vg({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: col.field });
+							return (node: RowNode<TData>): unknown =>
+								vg({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: col.field });
 						}
 						const pg = compilePathGetter(col.field);
 						return (node: RowNode<TData>): unknown => node.getCellValue(col.field, pg);

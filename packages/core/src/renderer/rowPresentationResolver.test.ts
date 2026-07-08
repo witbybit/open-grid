@@ -76,7 +76,10 @@ describe('resolveRowPresentation', () => {
 	});
 
 	it('resolves failed and placeholder rows to their base classes', () => {
-		const failed = resolveRowPresentation(makeDeps(), baseInput({ visualRow: { kind: 'failed', id: 'failed:5', rowIndex: 5, error: 'boom', retryable: true } as any }));
+		const failed = resolveRowPresentation(
+			makeDeps(),
+			baseInput({ visualRow: { kind: 'failed', id: 'failed:5', rowIndex: 5, error: 'boom', retryable: true } as any })
+		);
 		expect(failed.className).toBe('og-row og-row-failed');
 
 		const placeholder = resolveRowPresentation(

@@ -525,7 +525,7 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("this.engine.getRowModel()?.ensureRange(nextWindow.rowStart, nextWindow.rowEnd, 'viewport-render');");
 		expect(content).not.toContain('loadVisibleBlocks(');
 		expect(content).not.toContain('asVisibleBlockLoadCapableRowModel(');
-		expect(content).not.toContain("id: `loading:${r}`");
+		expect(content).not.toContain('id: `loading:${r}`');
 	});
 
 	it('row-model naming keeps server-page explicit and does not imply full SSRM support', () => {
@@ -534,7 +534,7 @@ describe('Architecture guardrails', () => {
 		expect(rowModelContent).toContain("export type InternalRowModelKind = 'client' | 'infinite' | 'server-page';");
 		expect(rowModelContent).toContain('full SSRM support when the current async paged model is specifically server-page');
 		expect(gridStateContent).toContain("export type RowModelType = 'client' | 'infinite' | 'server';");
-		expect(gridStateContent).toContain("implementation in core is the server-page row model rather than a full SSRM.");
+		expect(gridStateContent).toContain('implementation in core is the server-page row model rather than a full SSRM.');
 	});
 
 	it('GridFeatureContext does not expose raw side-effect primitives', () => {
