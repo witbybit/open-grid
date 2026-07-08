@@ -9,6 +9,7 @@ import type { InternalGridState } from '../state/GridState.js';
 import type { RuntimeFault, RuntimeFaultInput } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import type { GridInvalidationReason } from '../renderer/invalidationManager.js';
+import type { LayoutTransitionReason } from '../renderer/layoutTransitionController.js';
 
 export interface DataModelRuntime<TRowData = unknown> {
 	getState: () => InternalGridState<TRowData>;
@@ -84,6 +85,7 @@ export interface RowModelRuntimeBase<TRowData = unknown> {
 		}
 	) => void;
 	reportRowPipelineFault: (operation: string, error: unknown, context?: Record<string, unknown>) => RuntimeFault;
+	requestLayoutTransitionCapture?: (reason: LayoutTransitionReason) => void;
 	getInstrumentation: () => GridInstrumentation;
 }
 
@@ -126,6 +128,7 @@ export interface ServerPageRowModelRuntime<TRowData = unknown> extends RowModelR
 export interface RowModelRuntimeEngineBridge<TRowData = unknown> {
 	initializeRowModelState: (model: { columns?: ColumnDef<TRowData>[]; getRowId?: ((row: TRowData) => string) | undefined }) => void;
 	bumpRowModelGlobalVersion: () => void;
+	requestLayoutTransitionCapture: (reason: LayoutTransitionReason) => void;
 	applyRowModelRefreshInvalidation: (
 		refreshResult: RowModelRefreshResult | void,
 		options: {

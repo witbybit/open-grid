@@ -46,7 +46,8 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		this.refreshRendererEpochs();
 		const frame = this.deps.engine.invalidation.consume();
 		// Arm a layout transition for discrete structural changes only — never while
-		// scrolling. Sort reorders rows; group/tree expansion ('group expansion') and
+		// scrolling. Sort reorders rows; that same reason also covers live sort-key
+		// reorders emitted from data writes. Group/tree expansion ('group expansion') and
 		// master-detail ('detail') reveal/hide them. All animate via the
 		// LayoutTransitionController; scroll/data-tick frames are excluded so the hot path
 		// never sets an animation.

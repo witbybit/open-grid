@@ -36,6 +36,7 @@ export enum GridEventName {
 	groupColumnAdded = 'groupColumnAdded',
 	groupColumnRemoved = 'groupColumnRemoved',
 	groupColumnMoved = 'groupColumnMoved',
+	layoutTransitionCaptureRequested = 'layoutTransitionCaptureRequested',
 	renderInvalidated = 'renderInvalidated',
 	rowResized = 'rowResized',
 	rowSelectionChanged = 'rowSelectionChanged',
@@ -72,6 +73,7 @@ export enum GridEventName {
 
 export type GridWriteBlockedSource = 'edit' | 'paste' | 'fill';
 export type GridWriteBlockedStatus = 'validationFailed' | 'capabilityDenied' | 'rejected';
+type LayoutTransitionCaptureReason = 'sort' | 'expansion' | 'detail' | 'live-reorder' | 'other';
 
 export interface GridWriteBlockedEventPayload {
 	source: GridWriteBlockedSource;
@@ -105,6 +107,7 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.groupColumnAdded]: { colId: string; index: number; groupBy: string[] };
 	[GridEventName.groupColumnRemoved]: { colId: string; groupBy: string[] };
 	[GridEventName.groupColumnMoved]: { colId: string; fromIndex: number; toIndex: number; groupBy: string[] };
+	[GridEventName.layoutTransitionCaptureRequested]: { reason: LayoutTransitionCaptureReason };
 	[GridEventName.renderInvalidated]: { reason: string };
 	[GridEventName.rowResized]: { rowId: string; height: number };
 	[GridEventName.rowSelectionChanged]: RowSelectionChangeResult;

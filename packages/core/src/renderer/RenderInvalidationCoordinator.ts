@@ -34,6 +34,11 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 				this.deps.layoutTransition.captureSnapshot('sort');
 			})
 		);
+		this.unsubscribers.push(
+			this.deps.engine.eventBus.addEventListener(GridEventName.layoutTransitionCaptureRequested, (event) => {
+				this.deps.layoutTransition.captureSnapshot(event.payload.reason);
+			})
+		);
 		// Expansion (group, tree, and master-detail all mutate state.expansion) needs the
 		// pre-toggle row positions so the subsequent viewport flush can animate from the old layout.
 		this.unsubscribers.push(

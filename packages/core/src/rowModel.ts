@@ -233,6 +233,7 @@ export interface StickyGroupMetaCapableVisualRowModel {
 export interface RowModelRefreshResult {
 	changed: boolean;
 	reason?: RowRefreshReason;
+	layoutTransitionHint?: 'live-reorder';
 	previousRowCount?: number;
 	nextRowCount?: number;
 	changedStartIndex?: number;
@@ -1379,6 +1380,7 @@ export class ClientRowModelController<TData = unknown>
 				return {
 					changed: true,
 					reason: 'sort',
+					layoutTransitionHint: 'live-reorder',
 					changedStartIndex,
 					changedEndIndex: Math.max(changedStartIndex, this.visualRows.length - 1),
 				};

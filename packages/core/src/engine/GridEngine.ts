@@ -71,6 +71,7 @@ import { GridInsightRegistry } from '../insights/GridInsightRegistry.js';
 import { GridDataIntegrityManager } from '../features/dataIntegrity/GridDataIntegrityManager.js';
 import { createGridIntegrityRowProvider, type GridIntegrityRowModelKind } from '../features/dataIntegrity/GridIntegrityRowProvider.js';
 import { defaultGridScheduler } from '../renderer/gridScheduler.js';
+import type { LayoutTransitionReason } from '../renderer/layoutTransitionController.js';
 import type { GridMutationRejection } from './GridDomainMutation.js';
 import type { GridCommitResult as InternalGridCommitResult } from './GridChangeApplier.js';
 import { GridDomainSubscriptionHub } from './GridDomainSubscriptionHub.js';
@@ -461,6 +462,7 @@ export class GridEngine<TRowData = unknown> {
 				applyCellValueChange: (rowId, colField, value, options) => this.dataMutation.applyCellValueChange(rowId, colField, value, options),
 				applyStructuralWriteEffects: (writeResult) => this.dataMutation.applyStructuralWriteEffects(writeResult),
 				publishCommittedCellChanges: (changes) => this.publishCommittedCellChanges(changes),
+				requestLayoutTransitionCapture: (reason) => this.requestLayoutTransitionCapture(reason),
 			},
 			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TRowData>(),
 			publishDomains: (domains) => this.publishDomains(domains),
@@ -643,7 +645,7 @@ export class GridEngine<TRowData = unknown> {
 		const changed = refreshResult?.changed === true;
 		if (!changed && !options.includeHeaders && !options.includeOverlay) return;
 
-		const reason = options.invalidationReason;
+		const reason = refreshResult?.layoutTransitionHint === 'live-reorder' ? 'sort' : options.invalidationReason;
 		const targetGroupId = refreshResult?.groupId ?? options.groupId;
 		if (targetGroupId) {
 			this.invalidation.invalidateGroup(targetGroupId, reason);
@@ -664,6 +666,10 @@ export class GridEngine<TRowData = unknown> {
 			this.invalidation.invalidateOverlay(reason);
 		}
 		this.requestRender(options.requestRenderReason ?? String(reason));
+	}
+
+	public requestLayoutTransitionCapture(reason: LayoutTransitionReason): void {
+		this.eventBus.dispatchEvent(GridEventName.layoutTransitionCaptureRequested, { reason });
 	}
 
 	public getManagedRowDragPolicy(): ManagedRowDragPolicyResult {

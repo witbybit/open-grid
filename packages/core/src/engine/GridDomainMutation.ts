@@ -31,6 +31,7 @@ import type { InternalRowNodeTransaction } from '../rowTransactions.js';
 import type { GridCommitEvent, GridCommitReason, GridHistoryEntry } from './GridChangeApplier.js';
 import type { CellValueChangeOptions, CellValueChangeResult, StructuralWriteEffectResult } from '../features/DataMutationController.js';
 import type { GridIntegrityIssueFilter } from '../features/dataIntegrity/integrityTypes.js';
+import type { LayoutTransitionReason } from '../renderer/layoutTransitionController.js';
 
 export type GridDomain = keyof GridDomainVersions;
 
@@ -191,6 +192,7 @@ export interface GridCommitContext<TRowData = unknown> {
 	applyCellValueChange?: (rowId: string, colField: string, value: unknown, options?: CellValueChangeOptions) => CellValueChangeResult;
 	applyStructuralWriteEffects?: (writeResult: RowModelWriteResult<TRowData>) => StructuralWriteEffectResult;
 	publishCommittedCellChanges?: (changes: Map<string, Set<string>>) => void;
+	requestLayoutTransitionCapture?: (reason: LayoutTransitionReason) => void;
 }
 
 export interface PreparedDomainMutation<TRowData = unknown, TMutation extends GridDomainMutation<TRowData> = GridDomainMutation<TRowData>> {
@@ -301,22 +303,29 @@ function createInvalidationsFromRefreshResult(
 	reason: GridInvalidation['reason'] = 'data'
 ): GridInvalidation[] {
 	if (!result.changed) return [];
-	const invalidations: GridInvalidation[] = [{ kind: 'viewport', reason }];
+	const effectiveReason: GridInvalidation['reason'] = result.layoutTransitionHint === 'live-reorder' ? 'sort' : reason;
+	const invalidations: GridInvalidation[] = [{ kind: 'viewport', reason: effectiveReason }];
 	if (result.groupId) {
-		invalidations.push({ kind: 'group', groupId: result.groupId, reason });
+		invalidations.push({ kind: 'group', groupId: result.groupId, reason: effectiveReason });
 	}
 	if (result.changedStartIndex !== undefined && result.changedEndIndex !== undefined) {
 		invalidations.push({
 			kind: 'row-range',
 			startIndex: result.changedStartIndex,
 			endIndex: result.changedEndIndex,
-			reason,
+			reason: effectiveReason,
 		});
 	}
 	if (result.previousRowCount !== result.nextRowCount) {
-		invalidations.push({ kind: 'geometry', reason });
+		invalidations.push({ kind: 'geometry', reason: effectiveReason });
 	}
 	return invalidations;
+}
+
+function requestLayoutTransitionCaptureForImpact<TRowData>(context: GridCommitContext<TRowData>, impact: RowWriteImpact): void {
+	if (impact === 'sort-key') {
+		context.requestLayoutTransitionCapture?.('live-reorder');
+	}
 }
 
 function createEventsFromResults<TRowData>(results: readonly CellValueChangeResult[]): GridCommitEvent<TRowData>[] {
@@ -625,6 +634,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 						const changedFieldsByRow = new Map([[preview.rowId, new Set([preview.colField])]]);
 						const impact = structuralRowModel.classifyFieldMutation(new Set([preview.colField]));
 						if (impact !== 'value-only') {
+							requestLayoutTransitionCaptureForImpact(commitContext, impact);
 							const node = commitContext.getRowModel()!.getRowNodeById(preview.rowId);
 							const reconcileResult = structuralRowModel.reconcileAfterDataWrite(
 								{
@@ -796,6 +806,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 							for (const fields of changedFieldsByRow.values()) for (const f of fields) allFields.add(f);
 							const impact = allFields.size > 0 ? structuralRowModel.classifyFieldMutation(allFields) : 'value-only';
 							if (impact !== 'value-only') {
+								requestLayoutTransitionCaptureForImpact(commitContext, impact);
 								const nodes = [...new Set(committed.map((r) => r.rowId))]
 									.map((id) => commitContext.getRowModel()!.getRowNodeById(id))
 									.filter((n): n is NonNullable<typeof n> => n != null);
@@ -916,6 +927,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 							}
 							impact = allFields.size > 0 ? structuralRowModel.classifyFieldMutation(allFields) : 'value-only';
 						}
+						requestLayoutTransitionCaptureForImpact(context, impact);
 						const reconcileResult = structuralRowModel.reconcileAfterDataWrite(txResult, impact);
 						const invalidations = reconcileResult.changed ? createInvalidationsFromRefreshResult(reconcileResult) : [];
 						const changed = txResult.visualChange !== 'none' || invalidations.length > 0;
@@ -1056,6 +1068,7 @@ export function createDefaultGridDomainMutationExecutorRegistry<TRowData = unkno
 						}
 					}
 					const impact: RowWriteImpact = allFields.size > 0 ? rowModel.classifyFieldMutation(allFields) : 'value-only';
+					requestLayoutTransitionCaptureForImpact(commitContext, impact);
 					const reconcileResult = rowModel.reconcileAfterDataWrite(writeResult, impact);
 					const invalidations = reconcileResult.changed ? createInvalidationsFromRefreshResult(reconcileResult) : [];
 					const changed = writeResult.visualChange !== 'none' || invalidations.length > 0;

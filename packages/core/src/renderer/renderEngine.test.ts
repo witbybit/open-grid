@@ -131,6 +131,58 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('animates visible row moves when a live sort-key update reorders the current viewport', () => {
+		const animateMock = vi.fn(() => ({ cancel: vi.fn(), finish: vi.fn(), onfinish: null, oncancel: null }) as unknown as Animation);
+		(HTMLElement.prototype as unknown as { animate: unknown }).animate = animateMock;
+
+		const store = new GridStore<{ id: string; name: string; price: number }>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 120 },
+				{ field: 'price', header: 'Price', width: 120 },
+			],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'A', price: 10 },
+				{ id: '2', name: 'B', price: 20 },
+				{ id: '3', name: 'C', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 420,
+			bottom: 220,
+			width: 420,
+			height: 220,
+			toJSON: () => ({}),
+		} as DOMRect);
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.fullPaint();
+
+		animateMock.mockClear();
+		store.setCellValue('1', 'price', 25);
+		(renderer as unknown as { flushPaint: () => void }).flushPaint();
+
+		expect(animateMock).toHaveBeenCalled();
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('exposes ARIA grid semantics (roles, counts, indices, sort, selection)', () => {
 		const store = new GridStore<{ id: string; name: string; val: string }>({
 			columns: [
