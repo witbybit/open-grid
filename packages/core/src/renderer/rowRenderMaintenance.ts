@@ -68,6 +68,14 @@ function classifyDirtyCellLane<TRowData>(cell: HTMLDivElement, columns: readonly
 	return 'motion';
 }
 
+function getDisplayedColumnIndexesForField<TRowData>(columns: readonly ColumnDef<TRowData>[], colField: string): number[] {
+	const indexes: number[] = [];
+	for (let index = 0; index < columns.length; index++) {
+		if (columns[index]?.field === colField) indexes.push(index);
+	}
+	return indexes;
+}
+
 export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
 	const rowModel = deps.engine.getVisualRowModel();
 	if (!rowModel) return;
@@ -119,54 +127,54 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 		if (!slot || row?.kind !== 'data') continue;
 
 		for (const colField of colFields) {
-			const colIndex = deps.engine.columns.getColumnIndex(colField);
-			if (colIndex < 0) continue;
-			const cellSlot = slot.getCellForCol(colIndex);
-			if (!cellSlot) continue;
-			const lane = columnTopology.byColumnId.get((columns[colIndex] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
-			deps.bindCellFull({
-				cellSlot,
-				slotId: slot.id,
-				slotGeneration: slot.generation,
-				node: row.node,
-				rowIndex,
-				colIndex,
-				col: columns[colIndex],
-				lane,
-				pinRightBaseLeft,
-				plan,
-				state,
-				isScrollFrameActive: false,
-				phase: 'initial',
-			});
+			for (const colIndex of getDisplayedColumnIndexesForField(columns, colField)) {
+				const cellSlot = slot.getCellForCol(colIndex);
+				if (!cellSlot) continue;
+				const lane = columnTopology.byColumnId.get((columns[colIndex] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
+				deps.bindCellFull({
+					cellSlot,
+					slotId: slot.id,
+					slotGeneration: slot.generation,
+					node: row.node,
+					rowIndex,
+					colIndex,
+					col: columns[colIndex],
+					lane,
+					pinRightBaseLeft,
+					plan,
+					state,
+					isScrollFrameActive: false,
+					phase: 'initial',
+				});
+			}
 		}
 	}
 
 	for (const colField of frame.columns) {
-		const colIndex = deps.engine.columns.getColumnIndex(colField);
-		if (colIndex < 0) continue;
-		const lane = columnTopology.byColumnId.get((columns[colIndex] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
-		for (const [rowIndex, slot] of deps.activeRows) {
-			const row = rowModel.getVisualRow(rowIndex);
-			if (row?.kind !== 'data') continue;
+		for (const colIndex of getDisplayedColumnIndexesForField(columns, colField)) {
+			const lane = columnTopology.byColumnId.get((columns[colIndex] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
+			for (const [rowIndex, slot] of deps.activeRows) {
+				const row = rowModel.getVisualRow(rowIndex);
+				if (row?.kind !== 'data') continue;
 
-			const cellSlot = slot.getCellForCol(colIndex);
-			if (!cellSlot) continue;
-			deps.bindCellFull({
-				cellSlot,
-				slotId: slot.id,
-				slotGeneration: slot.generation,
-				node: row.node,
-				rowIndex,
-				colIndex,
-				col: columns[colIndex],
-				lane,
-				pinRightBaseLeft,
-				plan,
-				state,
-				isScrollFrameActive: false,
-				phase: 'initial',
-			});
+				const cellSlot = slot.getCellForCol(colIndex);
+				if (!cellSlot) continue;
+				deps.bindCellFull({
+					cellSlot,
+					slotId: slot.id,
+					slotGeneration: slot.generation,
+					node: row.node,
+					rowIndex,
+					colIndex,
+					col: columns[colIndex],
+					lane,
+					pinRightBaseLeft,
+					plan,
+					state,
+					isScrollFrameActive: false,
+					phase: 'initial',
+				});
+			}
 		}
 	}
 }

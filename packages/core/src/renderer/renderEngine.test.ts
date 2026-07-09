@@ -1127,6 +1127,59 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('repaints every displayed duplicate-field cell when a shared field invalidates', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [
+				{ field: 'name', header: 'Name A', width: 120, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 120, colId: 'name-b' },
+			],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-1', name: 'Before' }],
+			columns: store.getState().columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const before = renderer.getRenderStats();
+		store.setCellValue('row-1', 'name', 'After');
+		store.flushCellUpdatesSync();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const nameCells = Array.from(container.querySelectorAll<HTMLDivElement>('.og-cell[data-row-id="row-1"][data-col-field="name"]'));
+		expect(nameCells).toHaveLength(2);
+		expect(nameCells.map((cell) => cell.textContent)).toEqual(['After', 'After']);
+
+		const after = renderer.getRenderStats();
+		expect(after.cellPaints - before.cellPaints).toBeGreaterThan(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('records geometry invalidation without forcing a full paint for row and column resizing', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
