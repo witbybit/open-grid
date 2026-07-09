@@ -141,6 +141,7 @@ import { makeNoopIntegrityApi } from './features/dataIntegrity/noopIntegrityApi.
 import { createGridStoreSubscriptions, type GridStoreSubscriptionsFacade } from './store/GridStoreSubscriptions.js';
 import { createGridStoreHostFacade, type GridStoreHostFacade } from './store/GridStoreHostFacade.js';
 import { GridInteractionController } from './interaction/GridInteractionController.js';
+import { doesCellPointerMatchColumn } from './interaction/cellPointer.js';
 
 export { validateRowIds } from './ids.js';
 
@@ -391,7 +392,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getCellState = (rowId: string, colField: string): CellState => {
 		const computedValue = this.getCellValue(rowId, colField);
-		const isEditing = this.state.activeEdit?.rowId === rowId && this.state.activeEdit?.colField === colField;
+		const column = this.engine.columns.getColumnDef(colField);
+		const isEditing = column ? doesCellPointerMatchColumn(this.state.activeEdit, rowId, column) : false;
 
 		let value = computedValue;
 		if (this.engine.hasFormula(rowId, colField)) {

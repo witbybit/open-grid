@@ -37,7 +37,6 @@ import { ColumnModel } from '../models/ColumnModel.js';
 import { ViewportModel } from '../models/ViewportModel.js';
 import { GeometryModel } from '../models/GeometryModel.js';
 import { SelectionModel } from '../models/SelectionModel.js';
-import { EditModel } from '../models/EditModel.js';
 import { CellAccessModel } from '../models/CellAccess.js';
 import { mapInternalRowNodeTransaction } from './publicRowNodeDispatch.js';
 import type { InternalRowNodeTransaction } from '../rowTransactions.js';
@@ -105,7 +104,6 @@ export class GridEngine<TRowData = unknown> {
 	public readonly viewport: ViewportModel<TRowData>;
 	public readonly geometry: GeometryModel;
 	public readonly selection: SelectionModel;
-	public readonly edit: EditModel;
 	public readonly cellAccess: CellAccessModel<TRowData>;
 
 	public readonly stateManager: StateManager<TRowData>;
@@ -327,7 +325,6 @@ export class GridEngine<TRowData = unknown> {
 		});
 		this.viewport = new ViewportModel<TRowData>();
 		this.selection = new SelectionModel();
-		this.edit = new EditModel();
 		this.cellAccess = new CellAccessModel<TRowData>({
 			getRowModel: () => this.rowModel,
 			getRowId: (row) => this.data.getRowId(row),
@@ -584,7 +581,6 @@ export class GridEngine<TRowData = unknown> {
 		this.viewport.init(this);
 		this.geometry.init();
 		this.selection.init();
-		this.edit.init();
 
 		if (config.columns) {
 			this.columns.updateColumns(config.columns, config.columnWidths || {}, config.defaultColWidth);

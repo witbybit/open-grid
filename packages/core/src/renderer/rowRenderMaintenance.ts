@@ -9,6 +9,7 @@ import type { RowSlot } from './rowSlot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { compileColumnTopology } from './columnTopology.js';
+import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
 
 export interface RowCellBindRequest<TRowData = unknown> {
 	cellSlot: {
@@ -203,10 +204,14 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 	const focusedCell = state.selection.focus;
 
 	const getCellPriority = (cell: HTMLDivElement): number => {
-		const cs = (cell as unknown as { __cellSlot?: { rowIndex: number; colField?: string; rowId?: string; colIndex: number } }).__cellSlot;
+		const cs = (
+			cell as unknown as {
+				__cellSlot?: { rowIndex: number; colField?: string; rowId?: string; colIndex: number; columnInstanceId?: string };
+			}
+		).__cellSlot;
 		if (!cs || cs.rowIndex < 0 || !cs.colField) return 0;
-		if (activeEdit && cs.rowId === activeEdit.rowId && cs.colField === activeEdit.colField) return 6;
-		if (focusedCell && cs.rowId === focusedCell.rowId && cs.colField === focusedCell.colField) return 5;
+		if (activeEdit && doesCellPointerMatchColumn(activeEdit, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })) return 6;
+		if (focusedCell && doesCellPointerMatchColumn(focusedCell, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })) return 5;
 
 		const isRowVisible = cs.rowIndex >= rowRange.startIdx && cs.rowIndex <= rowRange.endIdx;
 		const isColVisible = cs.colIndex >= colRange.startIdx && cs.colIndex <= colRange.endIdx;
