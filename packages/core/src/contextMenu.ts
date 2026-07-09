@@ -70,14 +70,17 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		if (this.options.disabled) return;
 
 		const state = this.runtime.getStateSnapshot();
+		const access = this.runtime.getCellAccessByPointer(pointer);
 		let inSelection = false;
 		if (state.selection.bounds) {
 			const rowModel = this.runtime.getRowModel();
 			if (rowModel) {
-				const clickedRowIdx = rowModel.getVisualIndexByRowId(pointer.rowId);
-				const clickedColIdx = pointer.columnInstanceId
-					? state.columns.findIndex((column) => 'instanceId' in column && column.instanceId === pointer.columnInstanceId)
-					: state.columns.findIndex((column) => column.field === pointer.colField);
+				const clickedRowIdx = access?.rowIndex ?? rowModel.getVisualIndexByRowId(pointer.rowId);
+				const clickedColIdx =
+					access?.colIndex ??
+					(pointer.columnInstanceId
+						? state.columns.findIndex((column) => 'instanceId' in column && column.instanceId === pointer.columnInstanceId)
+						: state.columns.findIndex((column) => column.field === pointer.colField));
 				const bounds = state.selection.bounds;
 				if (
 					clickedRowIdx >= bounds.minRow &&

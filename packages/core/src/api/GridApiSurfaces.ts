@@ -271,6 +271,7 @@ export interface GridApi<TRowData = unknown>
 
 export interface GridPluginRuntime<TRowData = unknown> extends GridApi<TRowData> {
 	getCellState(rowId: string, colField: string): CellState;
+	getCellAccessByPointer(pointer: GridCellPointer): GridCellAccess<TRowData> | null;
 	getCheapDisplayValue(rowId: string, colField: string): string;
 	getVisualRow(index: number): VisualRow<TRowData> | null;
 	getVisualRowCount(): number;

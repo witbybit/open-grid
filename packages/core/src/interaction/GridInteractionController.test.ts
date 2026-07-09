@@ -34,6 +34,29 @@ function createRuntime(overrides: Partial<GridPluginRuntime<TestRow>> = {}): Gri
 		getColumnField: (index: number) => displayedColumns[index]?.field ?? null,
 		getColumnIndex: (colField: string) => displayedColumns.findIndex((column) => column.field === colField),
 		getCellState: () => ({ isEditing: false } as any),
+		getCellAccessByPointer: (pointer: GridCellPointer) => {
+			const rowIndex = pointer.rowId === 'r1' ? 0 : -1;
+			const colIndex = displayedColumns.findIndex((column) => column.instanceId === pointer.columnInstanceId || column.field === pointer.colField);
+			const column = colIndex >= 0 ? displayedColumns[colIndex] : null;
+			if (rowIndex < 0 || !column) return null;
+			return {
+				rowId: pointer.rowId,
+				rowIndex,
+				row: { id: 'r1', name: 'A' },
+				node: null,
+				colField: column.field,
+				colIndex,
+				column,
+				value: 'A',
+				rawValue: 'A',
+				isFocused: false,
+				isRowFocused: false,
+				isSelected: false,
+				isRowSelected: false,
+				isEditing: false,
+				isLoading: false,
+			} as any;
+		},
 		selectCell: vi.fn(),
 		extendSelection: vi.fn(),
 		copySelectedRange: vi.fn(async () => {}),

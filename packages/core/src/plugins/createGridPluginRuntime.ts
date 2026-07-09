@@ -29,6 +29,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		hasFormula: source.hasFormula,
 		setFormula: source.setFormula,
 		clearFormula: source.clearFormula,
+		getCellAccessByPointer: source.getCellAccessByPointer,
 		setCellValue: source.setCellValue,
 		setCellValueAsync: source.setCellValueAsync,
 		batchCellValues: source.batchCellValues,
