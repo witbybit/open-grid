@@ -222,7 +222,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [ ] loading/failed/placeholder rows
     - [ ] row-model unknown/estimated counts
     - [ ] editable-only navigation mode if still supported
- - [~] Replace fixed `PageUp` / `PageDown` heuristics with viewport-aware navigation
+- [~] Replace fixed `PageUp` / `PageDown` heuristics with viewport-aware navigation
 - [~] Keep keyboard behavior test-driven during demolition so there is no regression in current capabilities
 
 ### Phase 5 - Editing lifecycle state machine

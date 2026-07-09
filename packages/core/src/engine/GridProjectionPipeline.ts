@@ -124,7 +124,10 @@ export class GridProjectionPipeline<TRowData = unknown> {
 			this.deps.selection.setSelection(currState.selection);
 		}
 
-		if ((updatedSet.has('selection') || updatedSet.has('activeEdit') || updatedSet.has('selectedRowIds')) && !isInteractionStateCurrent(currState)) {
+		if (
+			(updatedSet.has('selection') || updatedSet.has('activeEdit') || updatedSet.has('selectedRowIds')) &&
+			!isInteractionStateCurrent(currState)
+		) {
 			const interaction = buildInteractionState({
 				selection: currState.selection,
 				activeEdit: currState.activeEdit,

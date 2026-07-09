@@ -1251,7 +1251,6 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-
 	it('records geometry invalidation without forcing a full paint for row and column resizing', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);

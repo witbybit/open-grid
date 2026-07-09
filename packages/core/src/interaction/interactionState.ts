@@ -53,9 +53,7 @@ export function buildInteractionState(input: {
 	};
 }
 
-export function readInteractionState<TRowData>(
-	state: InteractionStateReadable<TRowData>
-): GridInteractionState {
+export function readInteractionState<TRowData>(state: InteractionStateReadable<TRowData>): GridInteractionState {
 	if (isInteractionStateCurrent(state)) {
 		return state.interaction!;
 	}
@@ -66,9 +64,7 @@ export function readInteractionState<TRowData>(
 	});
 }
 
-export function isInteractionStateCurrent<TRowData>(
-	state: InteractionStateReadable<TRowData>
-): boolean {
+export function isInteractionStateCurrent<TRowData>(state: InteractionStateReadable<TRowData>): boolean {
 	const interaction = state.interaction;
 	if (!interaction) return false;
 	return (

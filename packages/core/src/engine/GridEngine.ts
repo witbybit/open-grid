@@ -1366,7 +1366,9 @@ export class GridEngine<TRowData = unknown> {
 		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
 		return isDataCellSelectable(
 			visualRow,
-			pointer.columnInstanceId ? this.columns.getColumnByFieldOrInstanceId(pointer.columnInstanceId) : this.columns.getColumnDef(pointer.colField)
+			pointer.columnInstanceId
+				? this.columns.getColumnByFieldOrInstanceId(pointer.columnInstanceId)
+				: this.columns.getColumnDef(pointer.colField)
 		);
 	}
 

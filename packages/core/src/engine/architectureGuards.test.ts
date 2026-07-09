@@ -247,6 +247,17 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('getStoreFromApi');
 	});
 
+	it('GridView.tsx routes semantic interaction through the core event router', () => {
+		const content = readFileSync(resolve(REACT_ROOT, 'src', 'GridView.tsx'), 'utf-8');
+		expect(content).toContain('createGridInteractionEventRouter');
+		expect(content).not.toContain('navigationRef.current?.handleKeyDown');
+		expect(content).not.toContain('nav.handleMouseDown(');
+		expect(content).not.toContain('nav.handleMouseEnter(');
+		expect(content).not.toContain('nav.handleClick(');
+		expect(content).not.toContain('nav.setCellEditing(');
+		expect(content).not.toContain('dispatchEvent(GridEventName.cellClicked');
+	});
+
 	it('GridPortal.tsx does not cast to InternalGridApi', () => {
 		const content = readFileSync(resolve(REACT_ROOT, 'src', 'GridPortal.tsx'), 'utf-8');
 		expect(content).not.toContain('InternalGridApi');

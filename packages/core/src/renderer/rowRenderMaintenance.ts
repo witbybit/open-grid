@@ -131,7 +131,6 @@ export function repaintInvalidatedRows<TRowData>(deps: RowRenderMaintenanceDeps<
 			});
 		}
 	}
-
 }
 
 export function repaintInvalidatedCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {

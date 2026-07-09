@@ -51,9 +51,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		const access = this.runtime.getCellAccessByPointer(pointer);
 		if (access) return access.column;
 		if (pointer.columnInstanceId) {
-			return this.runtime
-				.getDisplayedColumns()
-				.find((column) => getColumnInstanceIdentity(column) === pointer.columnInstanceId);
+			return this.runtime.getDisplayedColumns().find((column) => getColumnInstanceIdentity(column) === pointer.columnInstanceId);
 		}
 		return this.runtime.getColumnDef(pointer.colField);
 	}

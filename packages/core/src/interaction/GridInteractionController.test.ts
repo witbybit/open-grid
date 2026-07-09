@@ -25,18 +25,26 @@ function createRuntime(overrides: Partial<GridPluginRuntime<TestRow>> = {}): Gri
 	const base: Partial<GridPluginRuntime<TestRow>> = {
 		getDisplayedColumns: () => displayedColumns as any,
 		getStateSnapshot: () => state,
-		getVisualRow: (index: number) => (index === 0 ? ({ kind: 'data', rowId: 'r1', id: 'r1', node: { id: 'r1', data: { id: 'r1', name: 'A' } } } as any) : null),
+		getVisualRow: (index: number) =>
+			index === 0 ? ({ kind: 'data', rowId: 'r1', id: 'r1', node: { id: 'r1', data: { id: 'r1', name: 'A' } } } as any) : null,
 		getVisualRowCount: () => 1,
 		getVisualIndexByRowId: (rowId: string) => (rowId === 'r1' ? 0 : null),
 		getVisibleRowRange: () => ({ startIdx: 0, endIdx: 0 }),
-		getRowModel: () => ({ getVisualRowCount: () => 1, getVisualRow: (index: number) => (index === 0 ? ({ kind: 'data', rowId: 'r1' } as any) : null), getVisualIndexByRowId: (rowId: string) => (rowId === 'r1' ? 0 : -1) }) as any,
+		getRowModel: () =>
+			({
+				getVisualRowCount: () => 1,
+				getVisualRow: (index: number) => (index === 0 ? ({ kind: 'data', rowId: 'r1' } as any) : null),
+				getVisualIndexByRowId: (rowId: string) => (rowId === 'r1' ? 0 : -1),
+			}) as any,
 		getColumnDef: (colField: string) => displayedColumns.find((column) => column.field === colField) as any,
 		getColumnField: (index: number) => displayedColumns[index]?.field ?? null,
 		getColumnIndex: (colField: string) => displayedColumns.findIndex((column) => column.field === colField),
-		getCellState: () => ({ isEditing: false } as any),
+		getCellState: () => ({ isEditing: false }) as any,
 		getCellAccessByPointer: (pointer: GridCellPointer) => {
 			const rowIndex = pointer.rowId === 'r1' ? 0 : -1;
-			const colIndex = displayedColumns.findIndex((column) => column.instanceId === pointer.columnInstanceId || column.field === pointer.colField);
+			const colIndex = displayedColumns.findIndex(
+				(column) => column.instanceId === pointer.columnInstanceId || column.field === pointer.colField
+			);
 			const column = colIndex >= 0 ? displayedColumns[colIndex] : null;
 			if (rowIndex < 0 || !column) return null;
 			return {
@@ -76,16 +84,14 @@ describe('GridInteractionController', () => {
 		const runtime = createRuntime();
 		const controller = new GridInteractionController(runtime);
 
-		controller.handleKeyDown(
-			{
-				key: 'ArrowRight',
-				ctrlKey: false,
-				metaKey: false,
-				altKey: false,
-				shiftKey: false,
-				preventDefault: vi.fn(),
-			} as unknown as KeyboardEvent
-		);
+		controller.handleKeyDown({
+			key: 'ArrowRight',
+			ctrlKey: false,
+			metaKey: false,
+			altKey: false,
+			shiftKey: false,
+			preventDefault: vi.fn(),
+		} as unknown as KeyboardEvent);
 
 		expect(runtime.selectCell).toHaveBeenCalledWith(
 			expect.objectContaining<GridCellPointer>({
@@ -122,15 +128,12 @@ describe('GridInteractionController', () => {
 		});
 		const controller = new GridInteractionController(runtime);
 
-		controller.handleDataRowClick(
-			{ rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: 'name-b' },
-			{
-				ctrlKey: false,
-				metaKey: false,
-				shiftKey: false,
-				preventDefault: vi.fn(),
-			} as unknown as MouseEvent
-		);
+		controller.handleDataRowClick({ rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: 'name-b' }, {
+			ctrlKey: false,
+			metaKey: false,
+			shiftKey: false,
+			preventDefault: vi.fn(),
+		} as unknown as MouseEvent);
 
 		expect(runtime.applyRowSelectionGesture).toHaveBeenCalledWith({
 			kind: 'replace',
@@ -165,16 +168,14 @@ describe('GridInteractionController', () => {
 		});
 		const controller = new GridInteractionController(runtime, { arrowKeyNavigationEdit: true });
 
-		controller.handleKeyDown(
-			{
-				key: 'Escape',
-				ctrlKey: false,
-				metaKey: false,
-				altKey: false,
-				shiftKey: false,
-				preventDefault: vi.fn(),
-			} as unknown as KeyboardEvent
-		);
+		controller.handleKeyDown({
+			key: 'Escape',
+			ctrlKey: false,
+			metaKey: false,
+			altKey: false,
+			shiftKey: false,
+			preventDefault: vi.fn(),
+		} as unknown as KeyboardEvent);
 
 		expect(getCellState).not.toHaveBeenCalled();
 		expect(runtime.stopEditing).toHaveBeenCalledWith(true);

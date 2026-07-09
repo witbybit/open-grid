@@ -227,11 +227,7 @@ describe('GridDataIntegrityManager authoritative state', () => {
 		const store = new GridStore<TestRow>(
 			{
 				getRowId: (row) => row.id,
-				columns: [
-					{ field: 'name', colId: 'name-a' },
-					{ field: 'name', colId: 'name-b' },
-					{ field: 'score' },
-				],
+				columns: [{ field: 'name', colId: 'name-a' }, { field: 'name', colId: 'name-b' }, { field: 'score' }],
 			},
 			{ dataIntegrity: INTEGRITY_CONFIG }
 		);

@@ -219,7 +219,13 @@ export { duplicateValueRule, missingRequiredRule } from './integrity.js';
 export type { TooltipParams, ValueFormatterParams } from './columnDef.js';
 export type { FloatingFilterRendererParams } from './renderer/floatingFilterRenderer.js';
 export { registerGridContextMenu, registerGridInteraction, type GridContextMenuHandle } from './gridPlugins.js';
-export type { GridNavigationOptions } from './interaction/GridInteractionController.js';
+export type { GridInteractionHandle, GridNavigationOptions } from './interaction/GridInteractionController.js';
+export {
+	createGridInteractionEventRouter,
+	type GridInteractionEventRouter,
+	type GridInteractionEventRouterDeps,
+	type GridInteractionEventTarget,
+} from './interaction/GridInteractionEventRouter.js';
 
 export {
 	LIGHT_THEME,

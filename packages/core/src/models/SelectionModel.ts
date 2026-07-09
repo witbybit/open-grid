@@ -30,7 +30,7 @@ export class SelectionModel {
 		};
 		const focusChanged = next.focus !== this.state.focus;
 		if (selection.focusOrigin === undefined) {
-			next.focusOrigin = next.focus ? (focusChanged ? next.source : this.state.focusOrigin ?? next.source) : null;
+			next.focusOrigin = next.focus ? (focusChanged ? next.source : (this.state.focusOrigin ?? next.source)) : null;
 		}
 		if (selection.version === undefined) {
 			const changed =
@@ -40,7 +40,7 @@ export class SelectionModel {
 				next.bounds !== this.state.bounds ||
 				next.source !== this.state.source ||
 				next.focusOrigin !== this.state.focusOrigin;
-			next.version = changed ? ++this.versionCounter : this.state.version ?? this.versionCounter;
+			next.version = changed ? ++this.versionCounter : (this.state.version ?? this.versionCounter);
 		}
 		if (
 			next.focus === this.state.focus &&

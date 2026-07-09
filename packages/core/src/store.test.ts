@@ -119,7 +119,7 @@ describe('GridStore generic row-store functionality', () => {
 		expect(first.focusOrigin).toBe('keyboard');
 		expect(first.version).toBeGreaterThan(0);
 		expect(second.focusOrigin).toBe('pointer');
-		expect((second.version ?? 0)).toBeGreaterThan(first.version ?? 0);
+		expect(second.version ?? 0).toBeGreaterThan(first.version ?? 0);
 
 		controller.dispose();
 		store.destroy();
