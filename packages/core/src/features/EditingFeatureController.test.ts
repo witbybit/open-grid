@@ -59,7 +59,9 @@ describe('EditingFeatureController', () => {
 		const feature = makeEditingFeature(store);
 
 		feature.startEdit('1', 'name');
-		expect(store.getState().activeEdit).toEqual({ rowId: '1', colField: 'name' });
+		expect(store.getState().activeEdit).toEqual(
+			expect.objectContaining({ rowId: '1', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+		);
 
 		ctrl.dispose();
 		store.destroy();
@@ -255,7 +257,9 @@ describe('EditingFeatureController', () => {
 				}),
 			})
 		);
-		expect(store.getState().activeEdit).toEqual({ rowId: '1', colField: 'name' });
+		expect(store.getState().activeEdit).toEqual(
+			expect.objectContaining({ rowId: '1', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+		);
 		expect(store.getCellValue('1', 'name')).toBe('Product A');
 		expect(store.canUndo()).toBe(false);
 

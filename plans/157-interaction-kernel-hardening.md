@@ -176,10 +176,10 @@ The following excerpts describe the live interaction architecture this plan repl
   - [ ] cell/range selection
   - [ ] row selection
 - [ ] Introduce canonical cell identity for interaction:
-  - [ ] `rowId`
-  - [ ] `columnInstanceId`
-  - [ ] stable displayed `colField` / `colId` as derived metadata only
-- [ ] Replace internal field-based focus/edit/range identity
+  - [x] `rowId`
+  - [x] `columnInstanceId`
+  - [x] stable displayed `colField` / `colId` as derived metadata only
+- [~] Replace internal field-based focus/edit/range identity
 - [ ] Keep public API compatibility only at the public boundary if required; no field-based identity inside core state after this phase
 - [ ] Add architecture guards prohibiting new field-only interaction identity in core interaction state
 
@@ -301,10 +301,10 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ## Initial execution checklist
 
-- [ ] Create the plan and keep it updated as phases land
-- [ ] Start with identity cutover before behavior migration
+- [x] Create the plan and keep it updated as phases land
+- [x] Start with identity cutover before behavior migration
 - [ ] Do not preserve two navigation/interaction stacks in parallel
-- [ ] Build and run focused interaction tests after each phase
+- [x] Build and run focused interaction tests after each phase
 - [ ] Remove deprecated code as soon as the replacement path is verified, not in a later “cleanup maybe” pass
 
 ## Suggested implementation order

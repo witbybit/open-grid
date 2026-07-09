@@ -24,6 +24,7 @@ import {
 } from './identityKeys.js';
 import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 import type { RenderRuntimeStats } from './renderTelemetry.js';
+import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
 
 function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: VisualRow<TRowData> | undefined): boolean {
 	if (a === b) return true;
@@ -450,8 +451,8 @@ export class PortalMountManager<TRowData = unknown> {
 		const getPriority = (mount: GridCellContentMount<TRowData>): number => {
 			const col = mount.col;
 			const node = mount.node;
-			if (activeEdit && node.id === activeEdit.rowId && col.field === activeEdit.colField) return 1000;
-			if (focusedCell && node.id === focusedCell.rowId && col.field === focusedCell.colField) return 900;
+			if (doesCellPointerMatchColumn(activeEdit, node.id, col)) return 1000;
+			if (doesCellPointerMatchColumn(focusedCell, node.id, col)) return 900;
 
 			const rowIndex = mount.rowIndex ?? rowModel?.getVisualIndexByRowId(node.id) ?? -1;
 			const colIndex = mount.colIndex ?? (this.engine ? this.engine.columns.getColumnIndex(col.field) : -1);

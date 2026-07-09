@@ -2,6 +2,7 @@ import type { InternalGridState } from '../state/GridState.js';
 import type { CellAccessRuntime } from '../engine/runtimePorts.js';
 import type { GridCellAccess } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
+import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
 import type { RowNode } from '../rowNode.js';
 import type { RowLoadState } from '../rowModel.js';
 import { createGridRowNodeFacade, type GridRowNode } from '../publicRowNode.js';
@@ -87,7 +88,7 @@ export class CellAccessModel<TRowData = unknown> {
 		const publicNode = this.createPublicRowNode(rowId, rowIndex, node);
 		const focusedCell = state.selection.focus;
 		const selectedBounds = state.selection.bounds;
-		const isFocused = focusedCell?.rowId === rowId && focusedCell?.colField === column.field;
+		const isFocused = doesCellPointerMatchColumn(focusedCell, rowId, column);
 		const isRowFocused = focusedCell?.rowId === rowId;
 		const isSelected =
 			!!selectedBounds &&
@@ -96,7 +97,7 @@ export class CellAccessModel<TRowData = unknown> {
 			colIndex >= selectedBounds.minCol &&
 			colIndex <= selectedBounds.maxCol;
 		const isRowSelected = this.runtime.isRowSelected(rowIndex);
-		const isEditing = state.activeEdit?.rowId === rowId && state.activeEdit?.colField === column.field;
+		const isEditing = doesCellPointerMatchColumn(state.activeEdit, rowId, column);
 		const isLoading = this.runtime.isRowLoading(rowId) || !!column.loading;
 
 		return {

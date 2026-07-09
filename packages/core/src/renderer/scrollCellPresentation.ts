@@ -8,6 +8,7 @@ import { hasMountedDataVersionDrifted, type VisualFreshness } from './visualFres
 import { getCellScrollPresentation } from './scrollPresentationMode.js';
 import { canFreezePortalForCellCtrl } from './controllerWarmDomGuards.js';
 import { createCellCtrl } from './controllers/CellCtrl.js';
+import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
 
 /**
  * Narrow, purpose-built dependency surface for the scroll presentation resolver — deliberately
@@ -305,7 +306,7 @@ export function resolveScrollCellPresentation<TRowData>(
 	}
 
 	const compiledPlan = ctx.plan.columnPlans[colIndex];
-	const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
+	const isEditing = doesCellPointerMatchColumn(ctx.activeEdit, node.id, col);
 	const rendererKind: 'primitive' | 'portal' | 'loading' = isRowLoading ? 'loading' : isEditing || compiledPlan?.isCustom ? 'portal' : 'primitive';
 	const scrollMode = compiledPlan?.mode;
 	const isDomRenderer = scrollMode === 'custom-dom';
@@ -381,7 +382,7 @@ export function resolveScrollCellPresentation<TRowData>(
 	// tree. A loading row with a custom-renderer column lets that renderer show its own loading
 	// state via portal mount (isLoading is threaded into the mount request below).
 	const portalCellKey = isEditing ? createEditRendererKey(node.id, getColumnInstanceIdentity(col)) : cellKey;
-	const isFocused = ctx.focusedCell?.rowId === node.id && ctx.focusedCell?.colField === col.field;
+	const isFocused = doesCellPointerMatchColumn(ctx.focusedCell, node.id, col);
 
 	const versionsFromCtx = (): VisualFreshness => ({
 		rowVersion: input.rowVersion,

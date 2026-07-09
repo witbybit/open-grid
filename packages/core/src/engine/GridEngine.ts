@@ -15,7 +15,8 @@ import type {
 	RowSelectionGestureSource,
 	RowSelectionScope,
 } from '../api/GridApi.js';
-import type { ColumnDef, GridRendererOptions } from '../columnDef.js';
+import { areCellPointersEqual } from '../interaction/cellPointer.js';
+import { getColumnInstanceIdentity, type ColumnDef, type GridRendererOptions } from '../columnDef.js';
 import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
 import {
 	asAllDataNodesCapableRowModel,
@@ -1287,12 +1288,12 @@ export class GridEngine<TRowData = unknown> {
 
 	private applySelectionRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'program'): void => {
 		const prevSelection = this.stateManager.getState().selection;
-		const validStart = this.isDataCellSelectable(start) ? start : null;
-		const validEnd = this.isDataCellSelectable(end) ? end : null;
-		if ((start || end) && (!validStart || !validEnd)) {
-			start = validStart;
-			end = validEnd;
-		}
+		const resolvedStart = this.resolveCellPointer(start);
+		const resolvedEnd = this.resolveCellPointer(end);
+		const validStart = this.isDataCellSelectable(resolvedStart) ? resolvedStart : null;
+		const validEnd = this.isDataCellSelectable(resolvedEnd) ? resolvedEnd : null;
+		start = validStart;
+		end = validEnd;
 		const range = start !== null && end !== null ? { start, end } : null;
 		const previewSelection = {
 			focus: end,
@@ -1301,7 +1302,8 @@ export class GridEngine<TRowData = unknown> {
 			bounds: this.selection.calculateRangeBounds(
 				range,
 				(id) => this.rowModel?.getVisualIndexByRowId(id) ?? -1,
-				(field) => this.columns.getColumnIndex(field)
+				(pointer) =>
+					pointer.columnInstanceId ? this.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId) : this.columns.getColumnIndex(pointer.colField)
 			),
 			source,
 		};
@@ -1313,13 +1315,13 @@ export class GridEngine<TRowData = unknown> {
 			source,
 		};
 		const events: GridCommitEvent<TRowData>[] = [];
-		if (prevSelection.focus !== previewSelection.focus) {
+		if (!areCellPointersEqual(prevSelection.focus, previewSelection.focus)) {
 			events.push({
 				type: GridEventName.focusChanged,
 				payload: (state) => ({ focus: state.selection.focus, selection: state.selection }),
 			});
 		}
-		const selectionChange = this.selection.describeChange(prevSelection, previewSelection, this.rowModel, this.stateManager.getState().columns);
+		const selectionChange = this.selection.describeChange(prevSelection, previewSelection, this.rowModel, this.columns.getDisplayedColumns());
 		events.push({
 			type: GridEventName.selectionChanged,
 			payload: (state) => ({
@@ -1360,6 +1362,19 @@ export class GridEngine<TRowData = unknown> {
 		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(pointer.rowId) : -1;
 		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
 		return isDataCellSelectable(visualRow, this.columns.getColumnDef(pointer.colField));
+	}
+
+	private resolveCellPointer(pointer: GridCellPointer | null): GridCellPointer | null {
+		if (!pointer) return null;
+		const column =
+			(pointer.columnInstanceId && this.columns.getColumnByInstanceId(pointer.columnInstanceId)) ?? this.columns.getColumnDef(pointer.colField);
+		if (!column) return null;
+		return {
+			rowId: pointer.rowId,
+			colField: column.field,
+			colId: column.colId ?? column.field,
+			columnInstanceId: getColumnInstanceIdentity(column),
+		};
 	}
 
 	public setColumns(columns: ColumnDef<TRowData>[], undoable = false): void {

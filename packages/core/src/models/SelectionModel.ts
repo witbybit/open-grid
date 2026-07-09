@@ -1,5 +1,7 @@
 import type { GridCellRange, GridCellPointer, GridSelectionSource, GridSelectionState, SelectionChangeResult } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
+import { getColumnInstanceIdentity } from '../columnDef.js';
+import { getCellPointerColumnKey } from '../interaction/cellPointer.js';
 import type { RowModel } from '../rowModel.js';
 import type { GridCellRangeBounds } from '../state/GridState.js';
 
@@ -70,7 +72,7 @@ export class SelectionModel {
 	public calculateRangeBounds(
 		range: GridCellRange | null,
 		getRowIndexById: (id: string) => number,
-		getColumnIndex: (field: string) => number
+		getColumnIndex: (pointer: GridCellPointer) => number
 	): GridCellRangeBounds | null {
 		if (!range) return null;
 
@@ -78,8 +80,8 @@ export class SelectionModel {
 		const endIdx = getRowIndexById(range.end.rowId);
 		if (startIdx === -1 || endIdx === -1) return null;
 
-		const startColIdx = getColumnIndex(range.start.colField);
-		const endColIdx = getColumnIndex(range.end.colField);
+		const startColIdx = getColumnIndex(range.start);
+		const endColIdx = getColumnIndex(range.end);
 		if (startColIdx === -1 || endColIdx === -1) return null;
 
 		return {
@@ -182,7 +184,7 @@ export class SelectionModel {
 		const seenRows = new Set<string>();
 		const addCell = (cell: GridCellPointer | null) => {
 			if (!cell) return;
-			const key = `${cell.rowId}:${cell.colField}`;
+			const key = `${cell.rowId}:${getCellPointerColumnKey(cell)}`;
 			if (seenCells.has(key)) return;
 			seenCells.add(key);
 			invalidatedCells.push(cell);
@@ -204,7 +206,12 @@ export class SelectionModel {
 				const visualRow = rowModel.getVisualRow(rowIdx);
 				const col = columns[colIdx];
 				if (visualRow?.kind === 'data' && col) {
-					addCell({ rowId: visualRow.rowId, colField: col.field });
+					addCell({
+						rowId: visualRow.rowId,
+						colField: col.field,
+						colId: 'colId' in col ? col.colId : undefined,
+						columnInstanceId: getColumnInstanceIdentity(col),
+					});
 					addRow(visualRow.rowId);
 				} else if (visualRow) {
 					addRow(visualRow.id);

@@ -27,6 +27,7 @@ import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
 import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
 import { getColumnInstanceIdentity } from '../columnDef.js';
+import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
 
 function isCellSelected(rowIndex: number, colIndex: number, selectionBounds: GridCellRangeBounds | null | undefined): boolean {
 	return (
@@ -39,7 +40,7 @@ function isCellSelected(rowIndex: number, colIndex: number, selectionBounds: Gri
 }
 
 function isCellFocused(rowId: string, colField: string, focusedCell: GridCellPointer | null | undefined): boolean {
-	return focusedCell?.rowId === rowId && focusedCell?.colField === colField;
+	return doesCellPointerMatchColumn(focusedCell, rowId, { field: colField });
 }
 
 export interface RenderScrollCoordinatorState<TRowData = unknown> {

@@ -62,13 +62,22 @@ export class EditingFeatureController<TRowData = unknown> {
 
 	public startEdit(rowId: string, colField: string): void {
 		if (!this.canEditCell(rowId, colField)) return;
+		const column = this.ctx.columns.getPrimaryColumnByField(colField);
+		if (!column) return;
 		if (this.checkCapability) {
 			const result = this.checkCapability('edit', { rowId, colField, source: 'api' });
 			if (!result.allowed) return;
 		}
 		this.ctx.applyChange({
 			reason: 'editing:start',
-			state: { activeEdit: { rowId, colField } },
+			state: {
+				activeEdit: {
+					rowId,
+					colField: column.field,
+					colId: column.colId ?? column.field,
+					columnInstanceId: column.instanceId,
+				},
+			},
 			invalidations: [
 				{ kind: 'cell', rowId, colId: colField, reason: 'edit started' },
 				{ kind: 'overlay', reason: 'edit started' },

@@ -476,9 +476,7 @@ export function bindAllDataCells<TRowData>(deps: RowCellBindingLaneDeps<TRowData
 		// Scroll frame: topology-owned reconciliation — bounded retention, no full releaseFn sweep.
 		// cellsByColumnInstanceId stays authoritative; cells leaving the visible+approach-band window
 		// are retained as a small LRU (cellSlotRetention.ts) and reused when they scroll back into view.
-		const focusedColumnInstanceId = ctx?.focusedCell?.colField
-			? (columns.find((c) => c.field === ctx.focusedCell!.colField) as InternalColumnDef<TRowData> | undefined)?.instanceId
-			: undefined;
+		const focusedColumnInstanceId = ctx?.focusedCell?.columnInstanceId;
 		reconcileCellTopologyForScroll(
 			slot,
 			columnTopology,

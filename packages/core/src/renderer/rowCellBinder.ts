@@ -36,6 +36,7 @@ import { getOrCreateCellCtrl, createRowCtrl, type RowCtrl } from './controllers/
 import type { CellCtrl } from './controllers/CellCtrl.js';
 import { CellCtrlStore } from './controllers/CellCtrlStore.js';
 import { resolveCellCtrlPresentationState } from './controllers/resolveCellCtrlPresentationState.js';
+import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
 
 const fallbackCellCtrlStores = new WeakMap<object, CellCtrlStore<any>>();
 
@@ -686,17 +687,17 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		});
 	const cellKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, getColumnInstanceIdentity(col));
 	const snapshot = getFreshCellSnapshot(deps, node.id, col, ctx);
-	const isFocused = !!(ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field);
-	const isEditing = !!(ctx.activeEdit && ctx.activeEdit.rowId === node.id && ctx.activeEdit.colField === col.field);
+	const isFocused = doesCellPointerMatchColumn(ctx.focusedCell, node.id, col);
+	const isEditing = doesCellPointerMatchColumn(ctx.activeEdit, node.id, col);
 	const cellCtrl = attachCellCtrl(deps, request, isEditing, isFocused);
 
 	// Focus tab-index bookkeeping is independent of which presentation gets resolved below —
 	// it applies whenever this cell is the focused cell, regardless of content.
-	if (ctx.focusedCell && ctx.focusedCell.rowId === node.id && ctx.focusedCell.colField === col.field) {
+	if (doesCellPointerMatchColumn(ctx.focusedCell, node.id, col)) {
 		cellSlot.element.tabIndex = -1;
 		cellSlot.hasTabIndex = true;
 		const programmaticScrollCell = deps.programmaticScrollCell;
-		const isProgrammatic = programmaticScrollCell && programmaticScrollCell.rowId === node.id && programmaticScrollCell.colField === col.field;
+		const isProgrammatic = doesCellPointerMatchColumn(programmaticScrollCell, node.id, col);
 		deps.setDeferredFocusCell(cellSlot.element);
 		if (isProgrammatic) deps.clearProgrammaticScrollCell();
 	}

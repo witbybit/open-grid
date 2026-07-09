@@ -503,10 +503,10 @@ describe('GridStore generic row-store functionality', () => {
 			expect.objectContaining({
 				payload: expect.objectContaining({
 					result: expect.objectContaining({
-						invalidatedCells: [
-							{ rowId: '1', colField: 'name' },
-							{ rowId: '2', colField: 'name' },
-						],
+						invalidatedCells: expect.arrayContaining([
+							expect.objectContaining({ rowId: '1', colField: 'name', columnInstanceId: expect.any(String) }),
+							expect.objectContaining({ rowId: '2', colField: 'name', columnInstanceId: expect.any(String) }),
+						]),
 						invalidatedRows: ['1', '2'],
 						overlayChanged: true,
 					}),

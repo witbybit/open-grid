@@ -13,6 +13,7 @@ import type { InternalGridState } from '../state/GridState.js';
 import type { VisualRow } from '../visualRow.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { SortModel } from '../rowModel.js';
+import { areCellPointersEqual } from '../interaction/cellPointer.js';
 
 export interface GridStoreSubscriptionsFacade<TRowData = unknown> {
 	subscribe(listener: GridSnapshotListener<TRowData>): () => void;
@@ -127,14 +128,9 @@ function areViewportRangesEqual(left: ViewportRange, right: ViewportRange): bool
 	return left.startIdx === right.startIdx && left.endIdx === right.endIdx;
 }
 
-function areCellPointersEqual(left: GridCellPointer | null, right: GridCellPointer | null): boolean {
-	return left === right || (!!left && !!right && left.rowId === right.rowId && left.colField === right.colField);
-}
-
 function areActiveEditsEqual(left: ActiveEditState | null, right: ActiveEditState | null): boolean {
 	return (
-		left === right ||
-		(!!left && !!right && left.rowId === right.rowId && left.colField === right.colField && left.validationError === right.validationError)
+		areCellPointersEqual(left, right) && (left?.validationError ?? null) === (right?.validationError ?? null)
 	);
 }
 

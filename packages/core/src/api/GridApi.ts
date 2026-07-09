@@ -1,6 +1,6 @@
 import type { FilterModel, SortModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
-import type { ColumnDef, CellRendererPhase } from '../columnDef.js';
+import type { ColumnDef, CellRendererPhase, ColumnInstanceId } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
@@ -82,6 +82,8 @@ export interface CellSubscription {
 export interface GridCellPointer {
 	rowId: string;
 	colField: string;
+	columnInstanceId?: ColumnInstanceId;
+	colId?: string;
 }
 
 export interface ActiveEditState extends GridCellPointer {
