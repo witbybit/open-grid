@@ -49,6 +49,26 @@ describe('InvalidationManager', () => {
 		expect(frame.reasons).toEqual(['edit']);
 	});
 
+	it('preserves column instance identity when invalidating GridCellPointer arrays', () => {
+		const manager = new InvalidationManager();
+
+		manager.invalidateCells(
+			[
+				{ rowId: 'row-1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' as any },
+				{ rowId: 'row-1', colField: 'name', colId: 'name-b', columnInstanceId: 'name-b' as any },
+			],
+			'selection'
+		);
+
+		const frame = manager.consume();
+
+		expect(frame.cellsByRowId.get('row-1')).toEqual(new Set(['name-a', 'name-b']));
+		expect(frame.invalidations).toEqual([
+			{ kind: 'cell', rowId: 'row-1', colId: 'name-a', reason: 'selection' },
+			{ kind: 'cell', rowId: 'row-1', colId: 'name-b', reason: 'selection' },
+		]);
+	});
+
 	it('tracks group and row range invalidations as first-class lanes', () => {
 		const manager = new InvalidationManager();
 

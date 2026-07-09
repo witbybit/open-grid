@@ -1,5 +1,6 @@
 import { GridEventName } from '../api/GridEvents.js';
 import type { BatchCellValueUpdate, GridCellPointer, RowDataTransaction } from '../api/GridApi.js';
+import { getCellPointerColumnKey } from '../interaction/cellPointer.js';
 import {
 	asAnyModelCellWritable,
 	asRowOrderCapableModel,
@@ -275,7 +276,7 @@ function toCellChangeSet(cells: readonly GridCellPointer[]): Map<string, Set<str
 			fields = new Set<string>();
 			changes.set(cell.rowId, fields);
 		}
-		fields.add(cell.colField);
+		fields.add(getCellPointerColumnKey(cell));
 	}
 	return changes;
 }
@@ -285,10 +286,11 @@ function createInvalidationsFromCells(cells: readonly GridCellPointer[]): GridIn
 	const rowIds = new Set<string>();
 	const cellKeys = new Set<string>();
 	for (const cell of cells) {
-		const key = `${cell.rowId}:${cell.colField}`;
+		const columnKey = getCellPointerColumnKey(cell);
+		const key = `${cell.rowId}:${columnKey}`;
 		if (!cellKeys.has(key)) {
 			cellKeys.add(key);
-			invalidations.push({ kind: 'cell', rowId: cell.rowId, colId: cell.colField, reason: 'cell' });
+			invalidations.push({ kind: 'cell', rowId: cell.rowId, colId: columnKey, reason: 'cell' });
 		}
 		rowIds.add(cell.rowId);
 	}
