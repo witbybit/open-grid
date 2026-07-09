@@ -27,6 +27,11 @@ interface ActiveCellEditorProps<TRowData = unknown> {
 	api: GridApi<TRowData>;
 }
 
+function activeEditMatchesCell(activeEdit: ActiveEditState | null | undefined, rowId: string, colField: string): boolean {
+	if (!activeEdit || activeEdit.rowId !== rowId) return false;
+	return activeEdit.colField === colField;
+}
+
 function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col, api }: ActiveCellEditorProps<TRowData>) {
 	const [localValue, setLocalValue] = useState<unknown>(value);
 	const localValueRef = useRef(localValue);
@@ -84,8 +89,7 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 			return value;
 		}, [api])
 	);
-	const validationError =
-		activeEditState?.rowId === rowId && activeEditState?.colField === colField ? (activeEditState.validationError ?? null) : null;
+	const validationError = activeEditMatchesCell(activeEditState, rowId, colField) ? (activeEditState.validationError ?? null) : null;
 
 	const handleCommit = useCallback(
 		(finalValue?: unknown) => {

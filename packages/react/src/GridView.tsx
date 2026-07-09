@@ -43,6 +43,15 @@ export interface GridViewProps<TRowData = unknown> {
 	autoRowHeight?: boolean;
 }
 
+function cellPointersMatch(left: GridCellPointer | null | undefined, right: GridCellPointer | null | undefined): boolean {
+	if (!left || !right) return false;
+	if (left.rowId !== right.rowId) return false;
+	if (left.columnInstanceId || right.columnInstanceId) {
+		return left.columnInstanceId === right.columnInstanceId;
+	}
+	return left.colField === right.colField;
+}
+
 function warnInitialOnlyGridViewProp(propName: string): void {
 	console.warn(
 		`[open-grid/react] Prop "${propName}" is initial-only for the current grid instance. ` +
@@ -312,7 +321,7 @@ export function GridView<TRowData = unknown>({
 
 			isGridActiveRef.current = true;
 			const state = apiRef.current.getStateSnapshot();
-			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
+			const isEditing = cellPointersMatch(state.activeEdit, pointer);
 			if (isEditing) return;
 
 			// Skip range selection for columns that have canDrag (drag handle) or disableCellRangeSelection set.
@@ -371,7 +380,7 @@ export function GridView<TRowData = unknown>({
 			if (!nav) return;
 
 			const state = apiRef.current.getStateSnapshot();
-			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
+			const isEditing = cellPointersMatch(state.activeEdit, pointer);
 			if (isEditing) return;
 
 			nav.handleClick(pointer, e);
@@ -388,7 +397,7 @@ export function GridView<TRowData = unknown>({
 			const { pointer } = target;
 
 			const state = apiRef.current.getStateSnapshot();
-			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
+			const isEditing = cellPointersMatch(state.activeEdit, pointer);
 			if (isEditing) return;
 
 			nav.setCellEditing(pointer.rowId, pointer.colField, true);
