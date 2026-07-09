@@ -1292,29 +1292,17 @@ export class GridEngine<TRowData = unknown> {
 		const resolvedEnd = this.resolveCellPointer(end);
 		const validStart = this.isDataCellSelectable(resolvedStart) ? resolvedStart : null;
 		const validEnd = this.isDataCellSelectable(resolvedEnd) ? resolvedEnd : null;
-		start = validStart;
-		end = validEnd;
-		const range = start !== null && end !== null ? { start, end } : null;
+		const committedSelection = this.selection.createSelectionRange(validStart, validEnd, source);
 		const previewSelection = {
-			focus: end,
-			anchor: start,
-			range,
+			...committedSelection,
 			bounds: this.selection.calculateRangeBounds(
-				range,
+				committedSelection.range,
 				(id) => this.rowModel?.getVisualIndexByRowId(id) ?? -1,
 				(pointer) =>
 					pointer.columnInstanceId
 						? this.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId)
 						: this.columns.getColumnIndex(pointer.colField)
 			),
-			source,
-		};
-		const committedSelection = {
-			focus: end,
-			anchor: start,
-			range,
-			bounds: null,
-			source,
 		};
 		const events: GridCommitEvent<TRowData>[] = [];
 		if (!areCellPointersEqual(prevSelection.focus, previewSelection.focus)) {

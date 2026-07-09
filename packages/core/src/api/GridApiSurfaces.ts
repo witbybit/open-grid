@@ -275,6 +275,7 @@ export interface GridPluginRuntime<TRowData = unknown> extends GridApi<TRowData>
 	getVisualRow(index: number): VisualRow<TRowData> | null;
 	getVisualRowCount(): number;
 	getVisualIndexByRowId(rowId: string): number | null;
+	getVisibleRowRange(): { startIdx: number; endIdx: number };
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
 	getRowModel(): import('../rowModel.js').RowModel<TRowData> | null;

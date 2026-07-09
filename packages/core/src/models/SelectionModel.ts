@@ -70,18 +70,29 @@ export class SelectionModel {
 		};
 	}
 
-	public extendSelection(anchor: GridCellPointer | null, end: GridCellPointer, source: GridSelectionSource = 'program'): GridSelectionState {
-		const start = anchor ?? this.state.anchor ?? this.state.focus ?? end;
+	public createSelectionRange(
+		start: GridCellPointer | null,
+		end: GridCellPointer | null,
+		source: GridSelectionSource = 'program'
+	): GridSelectionState {
+		const focus = end;
+		const anchor = start;
+		const range = start !== null && end !== null ? { start, end } : null;
 		const version = ++this.versionCounter;
 		return {
-			focus: end,
-			anchor: start,
-			range: { start, end },
+			focus,
+			anchor,
+			range,
 			bounds: null,
 			source,
-			focusOrigin: source,
+			focusOrigin: focus ? source : null,
 			version,
 		};
+	}
+
+	public extendSelection(anchor: GridCellPointer | null, end: GridCellPointer, source: GridSelectionSource = 'program'): GridSelectionState {
+		const start = anchor ?? this.state.anchor ?? this.state.focus ?? end;
+		return this.createSelectionRange(start, end, source);
 	}
 
 	public isRowSelected(rowIndex: number): boolean {

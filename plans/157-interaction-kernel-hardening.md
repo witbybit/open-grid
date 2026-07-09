@@ -188,7 +188,7 @@ The following excerpts describe the live interaction architecture this plan repl
 - [~] Add one core-owned `InteractionKernel` (final name up to implementation)
 - [ ] Move authoritative commands behind it:
     - [~] focus/move
-    - [ ] select/extend/clear range
+    - [~] select/extend/clear range
     - [~] row-selection gestures
     - [~] start/cancel/commit edit
     - [x] copy/paste command routing
@@ -205,8 +205,8 @@ The following excerpts describe the live interaction architecture this plan repl
     - [ ] `rowIndex` when useful as derived metadata
     - [~] `columnInstanceId`
     - [~] `colField` / `colId` as derived metadata
-    - [ ] focus origin
-    - [ ] version
+    - [x] focus origin
+    - [x] version
 - [ ] Make focus restoration virtualization-safe and controller-safe
 - [ ] Ensure focus clears or remaps honestly when row/column identity disappears
 - [~] Remove renderer-time field-to-instance recovery shims once focus state is instance-aware
@@ -222,7 +222,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [ ] loading/failed/placeholder rows
     - [ ] row-model unknown/estimated counts
     - [ ] editable-only navigation mode if still supported
-- [ ] Replace fixed `PageUp` / `PageDown` heuristics with viewport-aware navigation
+ - [~] Replace fixed `PageUp` / `PageDown` heuristics with viewport-aware navigation
 - [ ] Keep keyboard behavior test-driven during demolition so there is no regression in current capabilities
 
 ### Phase 5 - Editing lifecycle state machine
@@ -232,10 +232,10 @@ The following excerpts describe the live interaction architecture this plan repl
     - [ ] idle vs editing
     - [ ] `rowId`
     - [ ] `columnInstanceId`
-    - [ ] `startedBy`
-    - [ ] `draftValue`
-    - [ ] `originalValue`
-    - [ ] version
+    - [x] `startedBy`
+    - [x] `draftValue`
+    - [x] `originalValue`
+    - [x] version
 - [ ] Move editor lifecycle decisions into core:
     - [ ] start
     - [ ] update draft

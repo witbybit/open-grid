@@ -104,6 +104,12 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		return far !== -1 ? far : clamped;
 	}
 
+	private getViewportPageStep(): number {
+		const visibleRange = this.runtime.getVisibleRowRange();
+		const visibleCount = visibleRange.endIdx - visibleRange.startIdx + 1;
+		return Math.max(1, visibleCount);
+	}
+
 	private getDataRowIdsBetween(anchorRowId: string, targetRowId: string): string[] {
 		const rowModel = this.runtime.getRowModel();
 		if (!rowModel) return [];
@@ -258,7 +264,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 					break;
 				case 'PageUp':
 				case 'PageDown': {
-					const page = 10;
+					const page = this.getViewportPageStep();
 					nextRow = event.key === 'PageUp' ? this.clampToDataRow(row - page, 'down') : this.clampToDataRow(row + page, 'up');
 					handled = true;
 					break;

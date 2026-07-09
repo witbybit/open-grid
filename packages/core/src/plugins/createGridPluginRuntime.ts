@@ -169,6 +169,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		getVisualRow: source.getVisualRow,
 		getVisualRowCount: source.getVisualRowCount,
 		getVisualIndexByRowId: source.getVisualIndexByRowId,
+		getVisibleRowRange: source.getVisibleRowRange,
 		getRowModel: source.getRowModel,
 		integrity: source.integrity,
 		getVisibleColumnRange: source.getVisibleColumnRange,
