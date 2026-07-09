@@ -54,17 +54,18 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.dispatchEvent = deps.dispatchEvent;
 	}
 
-	private canEditCell(rowId: string, colField: string): boolean {
+	private canEditCell(rowId: string, colFieldOrInstanceId: string): boolean {
 		const rowModel = this.getRowModel();
 		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(rowId) : -1;
 		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
-		return canEditCell(visualRow, this.ctx.columns.getColumnDef(colField));
+		return canEditCell(visualRow, this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId));
 	}
 
-	public startEdit(rowId: string, colField: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
-		if (!this.canEditCell(rowId, colField)) return;
-		const column = this.ctx.columns.getPrimaryColumnByField(colField);
+	public startEdit(rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
+		if (!this.canEditCell(rowId, colFieldOrInstanceId)) return;
+		const column = this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId);
 		if (!column) return;
+		const colField = column.field;
 		const originalValue = this.data.getRawCellValue(rowId, colField);
 		const version = ++this.editVersion;
 		if (this.checkCapability) {

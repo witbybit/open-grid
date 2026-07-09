@@ -132,6 +132,7 @@ export type {
 export type { PersistedGridState as SerializableGridState } from './persistence/statePersistence.js';
 
 export { isDomCellRenderer } from './columnDef.js';
+export { areCellPointersEqual, doesCellPointerMatchColumn, getCellPointerColumnKey } from './interaction/cellPointer.js';
 export type {
 	FilterModel,
 	QuickFilterModel,

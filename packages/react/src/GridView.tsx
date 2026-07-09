@@ -1,4 +1,5 @@
 import {
+	areCellPointersEqual,
 	GridApi,
 	GridEventName,
 	GridCellClickParams,
@@ -41,15 +42,6 @@ export interface GridViewProps<TRowData = unknown> {
 	sidebar?: GridSidebarConfig<TRowData>;
 	enableChart?: boolean;
 	autoRowHeight?: boolean;
-}
-
-function cellPointersMatch(left: GridCellPointer | null | undefined, right: GridCellPointer | null | undefined): boolean {
-	if (!left || !right) return false;
-	if (left.rowId !== right.rowId) return false;
-	if (left.columnInstanceId || right.columnInstanceId) {
-		return left.columnInstanceId === right.columnInstanceId;
-	}
-	return left.colField === right.colField;
 }
 
 function warnInitialOnlyGridViewProp(propName: string): void {
@@ -321,11 +313,11 @@ export function GridView<TRowData = unknown>({
 
 			isGridActiveRef.current = true;
 			const state = apiRef.current.getStateSnapshot();
-			const isEditing = cellPointersMatch(state.activeEdit, pointer);
+			const isEditing = areCellPointersEqual(state.activeEdit, pointer);
 			if (isEditing) return;
 
 			// Skip range selection for columns that have canDrag (drag handle) or disableCellRangeSelection set.
-			const colDef = apiRef.current.getColumnDef(pointer.colField);
+			const colDef = hostRef.current?.adapterHandle.getCellAccessByPointer(pointer)?.column ?? apiRef.current.getColumnDef(pointer.colField);
 			if (colDef && (colDef.canDrag !== undefined || colDef.disableCellRangeSelection)) return;
 
 			cellEl.tabIndex = -1;
@@ -356,7 +348,7 @@ export function GridView<TRowData = unknown>({
 			if (!target) return;
 			const { pointer } = target;
 
-			const access = hostRef.current?.adapterHandle.getCellAccess(pointer.rowId, pointer.colField) ?? null;
+			const access = hostRef.current?.adapterHandle.getCellAccessByPointer(pointer) ?? null;
 			const clickParams = access
 				? {
 						rowId: access.rowId,
@@ -380,7 +372,7 @@ export function GridView<TRowData = unknown>({
 			if (!nav) return;
 
 			const state = apiRef.current.getStateSnapshot();
-			const isEditing = cellPointersMatch(state.activeEdit, pointer);
+			const isEditing = areCellPointersEqual(state.activeEdit, pointer);
 			if (isEditing) return;
 
 			nav.handleClick(pointer, e);
@@ -397,10 +389,10 @@ export function GridView<TRowData = unknown>({
 			const { pointer } = target;
 
 			const state = apiRef.current.getStateSnapshot();
-			const isEditing = cellPointersMatch(state.activeEdit, pointer);
+			const isEditing = areCellPointersEqual(state.activeEdit, pointer);
 			if (isEditing) return;
 
-			nav.setCellEditing(pointer.rowId, pointer.colField, true, 'mouse');
+			nav.setCellEditing(pointer.rowId, pointer.columnInstanceId ?? pointer.colField, true, 'mouse');
 		},
 		[getCellPointerFromEvent]
 	);

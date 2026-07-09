@@ -77,6 +77,8 @@ export interface GridAdapterHandle<TRowData = unknown> {
 	getCellPointerFromElement(element: Element): GridCellPointer | null;
 	/** Get full cell access data from a DOM element inside a cell. */
 	getCellAccessFromElement(element: Element): GridCellAccess<TRowData> | null;
+	/** Get full cell access data by logical cell pointer. */
+	getCellAccessByPointer(pointer: GridCellPointer): GridCellAccess<TRowData> | null;
 	/** Get full cell access data by row id and column field. */
 	getCellAccess(rowId: string, colField: string): GridCellAccess<TRowData> | null;
 	/** Get the visible descendant row ids for a group row. */
@@ -188,7 +190,10 @@ export function mountGridHost<TRowData>(
 		getCellAccessFromElement(element: Element) {
 			const pointer = adapterHandle.getCellPointerFromElement(element);
 			if (!pointer) return null;
-			return internalApi.getCellAccess(pointer.rowId, pointer.colField);
+			return internalApi.getCellAccessByPointer(pointer);
+		},
+		getCellAccessByPointer(pointer: GridCellPointer) {
+			return internalApi.getCellAccessByPointer(pointer);
 		},
 		getCellAccess(rowId: string, colField: string) {
 			return internalApi.getCellAccess(rowId, colField);

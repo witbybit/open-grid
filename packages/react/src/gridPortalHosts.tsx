@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, memo, createElement, type ComponentType } from 'react';
 import {
 	ColumnDef,
+	doesCellPointerMatchColumn,
 	GridApi,
 	GridEventName,
 	VisualRow,
@@ -25,16 +26,6 @@ interface ActiveCellEditorProps<TRowData = unknown> {
 	value: unknown;
 	col: ColumnDef<TRowData>;
 	api: GridApi<TRowData>;
-}
-
-function activeEditMatchesCell(activeEdit: ActiveEditState | null | undefined, rowId: string, colField: string, col?: ColumnDef<unknown>): boolean {
-	if (!activeEdit || activeEdit.rowId !== rowId) return false;
-	const instanceId = (activeEdit as ActiveEditState & { columnInstanceId?: string }).columnInstanceId;
-	const columnInstanceId = (col as (ColumnDef<unknown> & { instanceId?: string }) | undefined)?.instanceId;
-	if (instanceId || columnInstanceId) {
-		return instanceId === columnInstanceId;
-	}
-	return activeEdit.colField === colField;
 }
 
 function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col, api }: ActiveCellEditorProps<TRowData>) {
@@ -94,7 +85,7 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 			return value;
 		}, [api])
 	);
-	const validationError = activeEditMatchesCell(activeEditState, rowId, colField, col) ? (activeEditState.validationError ?? null) : null;
+	const validationError = doesCellPointerMatchColumn(activeEditState, rowId, col) ? (activeEditState.validationError ?? null) : null;
 
 	const handleCommit = useCallback(
 		(finalValue?: unknown) => {

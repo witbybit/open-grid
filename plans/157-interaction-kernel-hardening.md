@@ -218,12 +218,12 @@ The following excerpts describe the live interaction architecture this plan repl
 - [ ] Make navigation understand:
     - [ ] pinned columns
     - [ ] hidden columns
-    - [ ] duplicate-field columns via `columnInstanceId`
+    - [~] duplicate-field columns via `columnInstanceId`
     - [ ] loading/failed/placeholder rows
     - [ ] row-model unknown/estimated counts
     - [ ] editable-only navigation mode if still supported
  - [~] Replace fixed `PageUp` / `PageDown` heuristics with viewport-aware navigation
-- [ ] Keep keyboard behavior test-driven during demolition so there is no regression in current capabilities
+- [~] Keep keyboard behavior test-driven during demolition so there is no regression in current capabilities
 
 ### Phase 5 - Editing lifecycle state machine
 
@@ -237,10 +237,10 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] `originalValue`
     - [x] version
 - [ ] Move editor lifecycle decisions into core:
-    - [ ] start
-    - [ ] update draft
-    - [ ] commit
-    - [ ] cancel
+    - [x] start
+    - [x] update draft
+    - [x] commit
+    - [x] cancel
     - [ ] move-after-commit
     - [ ] restore focus
 - [ ] Keep committed writes on the existing canonical write path

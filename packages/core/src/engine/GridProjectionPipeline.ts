@@ -223,9 +223,9 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		const enrichPointer = (pointer: GridCellPointer | null): GridCellPointer | null => {
 			if (!pointer) return null;
 			if (rowModel.getVisualIndexByRowId(pointer.rowId) < 0) return null;
-			const column =
-				(pointer.columnInstanceId && this.deps.columns.getColumnByInstanceId(pointer.columnInstanceId)) ??
-				this.deps.columns.getColumnDef(pointer.colField);
+			const column = pointer.columnInstanceId
+				? this.deps.columns.getColumnByFieldOrInstanceId(pointer.columnInstanceId)
+				: this.deps.columns.getColumnDef(pointer.colField);
 			if (!column) return null;
 			const columnInstanceId = getColumnInstanceIdentity(column);
 			if (!columnInstanceId || this.deps.columns.getIndexMapper().idToVisualIndex(columnInstanceId) < 0) return null;
@@ -290,9 +290,9 @@ export class GridProjectionPipeline<TRowData = unknown> {
 	): InternalGridState<TRowData>['activeEdit'] {
 		if (!activeEdit) return activeEdit;
 		if (rowModel.getVisualIndexByRowId(activeEdit.rowId) < 0) return null;
-		const column =
-			(activeEdit.columnInstanceId && this.deps.columns.getColumnByInstanceId(activeEdit.columnInstanceId)) ??
-			this.deps.columns.getColumnDef(activeEdit.colField);
+		const column = activeEdit.columnInstanceId
+			? this.deps.columns.getColumnByFieldOrInstanceId(activeEdit.columnInstanceId)
+			: this.deps.columns.getColumnDef(activeEdit.colField);
 		if (!column) return null;
 		const columnInstanceId = getColumnInstanceIdentity(column);
 		if (this.deps.columns.getIndexMapper().idToVisualIndex(columnInstanceId) < 0) return null;

@@ -331,6 +331,11 @@ export class GridEngine<TRowData = unknown> {
 			getRawRowById: (rowId) => this.rowModel?.getRawRowById(rowId) ?? null,
 			getColumnIndex: (colField) => this.columns.getColumnIndex(colField),
 			getColumnDef: (colField) => this.columns.getColumnDef(colField),
+			getColumnIndexByFieldOrInstanceId: (fieldOrInstanceId) => {
+				const column = this.columns.getColumnByFieldOrInstanceId(fieldOrInstanceId);
+				return column ? this.columns.getIndexMapper().idToVisualIndex(column.instanceId) : -1;
+			},
+			getColumnByFieldOrInstanceId: (fieldOrInstanceId) => this.columns.getColumnByFieldOrInstanceId(fieldOrInstanceId),
 			getCellValue: (rowId, colField) => this.data.getCellValue(rowId, colField),
 			getRawCellValue: (rowId, colField) => this.data.getRawCellValue(rowId, colField),
 			getState: () => this.stateManager.getState(),
@@ -871,7 +876,7 @@ export class GridEngine<TRowData = unknown> {
 		return this.data.primeDisplayValue(rowId, colField);
 	}
 	public getCellDisplaySnapshot(rowId: string, colFieldOrInstanceId: string): CellDisplaySnapshot | undefined {
-		const column = this.columns.getPrimaryColumnByField(colFieldOrInstanceId);
+		const column = this.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId);
 		return this.cellDisplaySnapshots.get(rowId, column?.instanceId ?? colFieldOrInstanceId);
 	}
 	public getCheapDisplayValue(rowId: string, colField: string): string {
@@ -1351,13 +1356,17 @@ export class GridEngine<TRowData = unknown> {
 		const rowModel = this.getRowModel();
 		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(pointer.rowId) : -1;
 		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
-		return isDataCellSelectable(visualRow, this.columns.getColumnDef(pointer.colField));
+		return isDataCellSelectable(
+			visualRow,
+			pointer.columnInstanceId ? this.columns.getColumnByFieldOrInstanceId(pointer.columnInstanceId) : this.columns.getColumnDef(pointer.colField)
+		);
 	}
 
 	private resolveCellPointer(pointer: GridCellPointer | null): GridCellPointer | null {
 		if (!pointer) return null;
-		const column =
-			(pointer.columnInstanceId && this.columns.getColumnByInstanceId(pointer.columnInstanceId)) ?? this.columns.getColumnDef(pointer.colField);
+		const column = pointer.columnInstanceId
+			? this.columns.getColumnByFieldOrInstanceId(pointer.columnInstanceId)
+			: this.columns.getColumnDef(pointer.colField);
 		if (!column) return null;
 		return {
 			rowId: pointer.rowId,

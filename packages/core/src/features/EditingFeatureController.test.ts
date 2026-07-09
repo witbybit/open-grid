@@ -94,6 +94,32 @@ describe('EditingFeatureController', () => {
 		store.destroy();
 	});
 
+	it('startEdit resolves duplicate-field columns by instance id when provided', () => {
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 50 },
+			{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+			{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+			{ field: 'price', header: 'Price', width: 100 },
+		]);
+		const ctrl = makeController(store);
+		const feature = makeEditingFeature(store);
+		const secondNameColumn = store.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+
+		feature.startEdit('1', secondNameColumn.instanceId!);
+
+		expect(store.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: secondNameColumn.instanceId,
+			})
+		);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('updateEditDraft stores the current draft in activeEdit state', () => {
 		const store = makeStore();
 		const ctrl = makeController(store);

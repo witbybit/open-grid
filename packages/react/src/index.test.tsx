@@ -908,6 +908,42 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('should preserve duplicate-field column identity in cell click params', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{ field: 'name', header: 'Name A', width: 100, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 100, colId: 'name-b' },
+			],
+		});
+		const onCellClick = vi.fn();
+
+		const { container, unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} onCellClick={onCellClick} />
+			</GridProvider>
+		);
+
+		await waitFor(() => {
+			expect(container.querySelectorAll('.og-cell[data-col-field="name"]')).toHaveLength(2);
+		});
+
+		fireEvent.click(container.querySelectorAll('.og-cell[data-col-field="name"]')[1]!);
+
+		expect(onCellClick).toHaveBeenCalledWith(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colIndex: 1,
+				column: expect.objectContaining({ colId: 'name-b' }),
+				value: 'Product A',
+			})
+		);
+
+		unmount();
+		grid.api.destroy();
+	});
+
 	it('should not mix stale native text with custom renderer content after column topology changes', async () => {
 		const customColumns: ColumnDef<{ id: string; risk: string; col_999: string }>[] = [
 			{

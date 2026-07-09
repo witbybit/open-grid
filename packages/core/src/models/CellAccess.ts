@@ -58,11 +58,11 @@ export class CellAccessModel<TRowData = unknown> {
 		);
 	}
 
-	public getByPointer(rowId: string, colField: string, event?: Event): GridCellAccess<TRowData> | null {
+	public getByPointer(rowId: string, colFieldOrInstanceId: string, event?: Event): GridCellAccess<TRowData> | null {
 		const rowModel = this.runtime.getRowModel();
 		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(rowId) : -1;
-		const colIndex = this.runtime.getColumnIndex(colField);
-		const column = this.runtime.getColumnDef(colField);
+		const colIndex = this.runtime.getColumnIndexByFieldOrInstanceId(colFieldOrInstanceId);
+		const column = this.runtime.getColumnByFieldOrInstanceId(colFieldOrInstanceId);
 
 		if (!column) return null;
 

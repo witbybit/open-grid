@@ -294,6 +294,7 @@ export interface GridRendererApi<TRowData = unknown> extends GridApi<TRowData> {
 	getComputedCellValue(rowId: string, colField: string): unknown;
 	getCellState(rowId: string, colField: string): CellState;
 	getCellAccess(rowId: string, colField: string): GridCellAccess<TRowData> | null;
+	getCellAccessByPointer(pointer: GridCellPointer): GridCellAccess<TRowData> | null;
 	getRowOverscanPx(): number;
 	setRowOverscanPx(px: number): void;
 	getVisualRow(index: number): VisualRow<TRowData> | null;

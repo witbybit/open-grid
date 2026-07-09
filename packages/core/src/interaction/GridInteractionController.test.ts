@@ -115,4 +115,45 @@ describe('GridInteractionController', () => {
 			source: 'pointer',
 		});
 	});
+
+	it('uses activeEdit pointer identity instead of getCellState for keyboard edit handling', () => {
+		const getCellState = vi.fn(() => {
+			throw new Error('should not be called');
+		});
+		const runtime = createRuntime({
+			getCellState,
+			getStateSnapshot: () =>
+				({
+					selection: {
+						focus: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+						anchor: null,
+						range: null,
+						bounds: null,
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 1,
+					},
+					activeEdit: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+					columns: [
+						{ field: 'name', colId: 'name-a', instanceId: 'name-a' },
+						{ field: 'name', colId: 'name-b', instanceId: 'name-b' },
+					],
+				}) as GridStateSnapshot<TestRow>,
+		});
+		const controller = new GridInteractionController(runtime, { arrowKeyNavigationEdit: true });
+
+		controller.handleKeyDown(
+			{
+				key: 'Escape',
+				ctrlKey: false,
+				metaKey: false,
+				altKey: false,
+				shiftKey: false,
+				preventDefault: vi.fn(),
+			} as unknown as KeyboardEvent
+		);
+
+		expect(getCellState).not.toHaveBeenCalled();
+		expect(runtime.stopEditing).toHaveBeenCalledWith(true);
+	});
 });

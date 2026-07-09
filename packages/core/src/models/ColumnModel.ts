@@ -322,6 +322,10 @@ export class ColumnModel<TRowData = unknown> {
 		return this.columnsByInstanceId.get(instanceId);
 	}
 
+	public getColumnByFieldOrInstanceId(fieldOrInstanceId: string): InternalColumnDef<TRowData> | undefined {
+		return this.columnsByInstanceId.get(fieldOrInstanceId as ColumnInstanceId) ?? this.getPrimaryColumnByField(fieldOrInstanceId);
+	}
+
 	public getColumnByColId(colId: string): InternalColumnDef<TRowData> | undefined {
 		return this.columnsByColId.get(colId);
 	}

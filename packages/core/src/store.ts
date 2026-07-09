@@ -1237,6 +1237,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getCellAccess = (rowId: string, colField: string): GridCellAccess<TRowData> | null => this.engine.cellAccess.getByPointer(rowId, colField);
 
+	public getCellAccessByPointer = (pointer: GridCellPointer): GridCellAccess<TRowData> | null => {
+		const columnKey = pointer.columnInstanceId ?? pointer.colField;
+		return this.engine.cellAccess.getByPointer(pointer.rowId, columnKey);
+	};
+
 	public registerCellSubscription = (sub: CellSubscription): void => this.engine.registerCellSubscription(sub);
 
 	public unregisterCellSubscription = (sub: CellSubscription): void => this.engine.unregisterCellSubscription(sub);

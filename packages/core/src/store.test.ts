@@ -912,6 +912,41 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('resolves cell access by pointer identity for duplicate-field columns', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+		const duplicateNameColumn = store.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+
+		const access = store.getCellAccessByPointer({
+			rowId: '1',
+			colField: duplicateNameColumn.field,
+			colId: duplicateNameColumn.colId,
+			columnInstanceId: duplicateNameColumn.instanceId,
+		});
+
+		expect(access).toMatchObject({
+			rowId: '1',
+			colField: 'name',
+			colIndex: 2,
+		});
+		expect(access?.column).toMatchObject({
+			field: 'name',
+			colId: 'name-b',
+		});
+
+		controller.dispose();
+	});
+
 	it('rowsUpdated event exposes public row-node facades instead of internal mutable row nodes', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 150 }],

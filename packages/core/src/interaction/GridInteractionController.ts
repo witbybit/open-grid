@@ -121,6 +121,14 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		return Math.max(1, visibleCount);
 	}
 
+	private getEditTargetColumnIdentity(pointer: GridCellPointer): string {
+		return pointer.columnInstanceId ?? pointer.colField;
+	}
+
+	private isEditingPointer(pointer: GridCellPointer | null, activeEdit: GridCellPointer | null | undefined): boolean {
+		return !!pointer && areCellPointersEqual(pointer, activeEdit ?? null);
+	}
+
 	private getDataRowIdsBetween(anchorRowId: string, targetRowId: string): string[] {
 		const rowModel = this.runtime.getRowModel();
 		if (!rowModel) return [];
@@ -210,8 +218,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		if (!coords) return;
 		const { rowIdx: row, colIdx: col } = coords;
 		const maxCol = state.columns.length - 1;
-		const cellState = this.runtime.getCellState(active.rowId, active.colField);
-		const isEditing = cellState.isEditing;
+		const isEditing = this.isEditingPointer(active, state.activeEdit);
 
 		if (!isEditing) {
 			if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
@@ -286,7 +293,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 				case 'F2':
 				case 'Enter':
 					event.preventDefault();
-					this.setCellEditing(active.rowId, active.colField, true, 'keyboard');
+					this.setCellEditing(active.rowId, this.getEditTargetColumnIdentity(active), true, 'keyboard');
 					return;
 				case 'Delete':
 				case 'Backspace':
@@ -300,7 +307,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 				default:
 					if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
 						event.preventDefault();
-						this.setCellEditing(active.rowId, active.colField, true, 'keyboard');
+						this.setCellEditing(active.rowId, this.getEditTargetColumnIdentity(active), true, 'keyboard');
 					}
 					return;
 			}
@@ -316,7 +323,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 					this.rangeStart = targetPointer;
 					this.runtime.selectCell(targetPointer, 'keyboard');
 					if (this.options.arrowKeyNavigationEdit) {
-						this.setCellEditing(targetPointer.rowId, targetPointer.colField, true, 'keyboard');
+						this.setCellEditing(targetPointer.rowId, this.getEditTargetColumnIdentity(targetPointer), true, 'keyboard');
 					}
 				}
 			}
@@ -379,7 +386,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		this.rangeStart = target;
 		this.runtime.selectCell(target, 'keyboard');
 		if (startEditing && !areCellPointersEqual(target, active)) {
-			this.setCellEditing(target.rowId, target.colField, true, 'keyboard');
+			this.setCellEditing(target.rowId, this.getEditTargetColumnIdentity(target), true, 'keyboard');
 		}
 	}
 
@@ -391,7 +398,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		}
 		const state = this.runtime.getStateSnapshot();
 		const prevFocus = state.selection.focus;
-		if (prevFocus && !areCellPointersEqual(prevFocus, pointer) && this.runtime.getCellState(prevFocus.rowId, prevFocus.colField).isEditing) {
+		if (prevFocus && !areCellPointersEqual(prevFocus, pointer) && this.isEditingPointer(prevFocus, state.activeEdit)) {
 			this.commitEdit();
 		}
 		this.isSelecting = true;
@@ -405,7 +412,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		const state = this.runtime.getStateSnapshot();
 		const range = state.selection.range;
 		const isSingleCell = !range || areCellPointersEqual(range.start, range.end);
-		if (isSingleCell) this.setCellEditing(pointer.rowId, pointer.colField, true, 'mouse');
+		if (isSingleCell) this.setCellEditing(pointer.rowId, this.getEditTargetColumnIdentity(pointer), true, 'mouse');
 	};
 
 	public handleMouseEnter = (pointer: GridCellPointer): void => {
@@ -417,8 +424,8 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		this.isSelecting = false;
 	};
 
-	public setCellEditing(rowId: string, colField: string, isEditing: boolean, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
-		if (isEditing) this.runtime.startEditing(rowId, colField, source);
+	public setCellEditing(rowId: string, colFieldOrInstanceId: string, isEditing: boolean, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
+		if (isEditing) this.runtime.startEditing(rowId, colFieldOrInstanceId, source);
 		else this.runtime.stopEditing();
 	}
 
