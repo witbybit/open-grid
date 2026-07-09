@@ -9,9 +9,9 @@ import type {
 	GridHeaderMenuUnmount,
 } from './renderer/IGridRenderer.js';
 import type { GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';
-import type { ColumnDef, InternalColumnDef } from './columnDef.js';
+import type { ColumnDef, ColumnInstanceId, InternalColumnDef } from './columnDef.js';
 import { asGroupMetaCapableRowModel } from './rowModel.js';
-import { resolveGridHostComposition } from './internal/apiInternalBridge.js';
+import { resolveGridRuntimeComposition } from './internal/apiInternalBridge.js';
 
 export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {
 	const caps = (column as InternalColumnDef<TRowData>).cellRendererCapabilities;
@@ -73,7 +73,7 @@ export interface GridHost {
 }
 
 export interface GridAdapterHandle<TRowData = unknown> {
-	/** Resolve the cell pointer (rowId + colField) from a DOM element inside a cell. */
+	/** Resolve the bound cell pointer from a DOM element inside a cell. */
 	getCellPointerFromElement(element: Element): GridCellPointer | null;
 	/** Get full cell access data from a DOM element inside a cell. */
 	getCellAccessFromElement(element: Element): GridCellAccess<TRowData> | null;
@@ -92,10 +92,11 @@ export function mountGridHost<TRowData>(
 	container: HTMLElement,
 	options: GridHostOptions<TRowData> = {}
 ): GridHostWithAdapter<TRowData> {
-	const host = resolveGridHostComposition(api);
+	const runtime = resolveGridRuntimeComposition(api);
+	const host = runtime.host;
 	const engine = host.engine;
 	const internalApi = host.api;
-	const renderEngine = new RenderEngine(engine, internalApi);
+	const renderEngine = new RenderEngine(engine, internalApi, runtime.interactionController);
 
 	renderEngine.onMountCellContent = options.cellContent?.mountCellContent;
 	renderEngine.onUnmountCellContent = options.cellContent?.unmountCellContent;
@@ -164,13 +165,23 @@ export function mountGridHost<TRowData>(
 		getCellPointerFromElement(element: Element) {
 			const cellEl = element.closest('.og-cell') as HTMLElement | null;
 			if (!cellEl) return null;
-			const colField = cellEl.dataset.colField;
-			const rowEl = cellEl.closest('.og-row') as HTMLElement | null;
-			const rowIndex = Number(rowEl?.dataset.rowIndex);
-			const visualRow = Number.isFinite(rowIndex) ? internalApi.getVisualRow(rowIndex) : null;
-			const rowId = visualRow?.kind === 'data' ? visualRow.rowId : undefined;
-			if (!colField || !rowId) return null;
-			return { rowId, colField };
+			const cellSlot = (cellEl as HTMLElement & {
+				__cellSlot?: {
+					binding?: { rowId: string; colId: string } | null;
+					colField?: string;
+					columnInstanceId?: ColumnInstanceId;
+				};
+			}).__cellSlot;
+			const binding = cellSlot?.binding;
+			const colField = cellSlot?.colField ?? cellEl.dataset.colField;
+			const rowId = binding?.rowId ?? cellEl.dataset.rowId;
+			if (!rowId || !colField) return null;
+			return {
+				rowId,
+				colField,
+				colId: binding?.colId ?? colField,
+				columnInstanceId: cellSlot?.columnInstanceId,
+			};
 		},
 		getCellAccessFromElement(element: Element) {
 			const pointer = adapterHandle.getCellPointerFromElement(element);

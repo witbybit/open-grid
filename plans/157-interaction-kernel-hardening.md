@@ -185,17 +185,17 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 2 - Single interaction kernel surface
 
-- [ ] Add one core-owned `InteractionKernel` (final name up to implementation)
+- [~] Add one core-owned `InteractionKernel` (final name up to implementation)
 - [ ] Move authoritative commands behind it:
-  - [ ] focus/move
+  - [~] focus/move
   - [ ] select/extend/clear range
-  - [ ] row-selection gestures
-  - [ ] start/cancel/commit edit
-  - [ ] copy/paste command routing
+  - [~] row-selection gestures
+  - [~] start/cancel/commit edit
+  - [x] copy/paste command routing
   - [ ] ensure-visible / scroll-navigation follow-up
 - [ ] Define one input command vocabulary for keyboard/pointer/api origins
-- [ ] Make `GridEngine` route interaction APIs through this kernel instead of directly splitting logic across older controllers
-- [ ] Delete obsolete parallel interaction orchestration paths once the kernel is active
+- [~] Make `GridEngine` route interaction APIs through this kernel instead of directly splitting logic across older controllers
+- [~] Delete obsolete parallel interaction orchestration paths once the kernel is active
 
 ### Phase 3 - Focus model hardening
 
@@ -203,13 +203,13 @@ The following excerpts describe the live interaction architecture this plan repl
 - [ ] Track:
   - [ ] `rowId`
   - [ ] `rowIndex` when useful as derived metadata
-  - [ ] `columnInstanceId`
-  - [ ] `colField` / `colId` as derived metadata
+  - [~] `columnInstanceId`
+  - [~] `colField` / `colId` as derived metadata
   - [ ] focus origin
   - [ ] version
 - [ ] Make focus restoration virtualization-safe and controller-safe
 - [ ] Ensure focus clears or remaps honestly when row/column identity disappears
-- [ ] Remove renderer-time field-to-instance recovery shims once focus state is instance-aware
+- [~] Remove renderer-time field-to-instance recovery shims once focus state is instance-aware
 
 ### Phase 4 - Navigation engine replacement
 

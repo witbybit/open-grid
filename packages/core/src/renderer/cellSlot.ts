@@ -288,6 +288,10 @@ export class CellSlot<TRowData = unknown> {
 			this.element.dataset.colField = colField;
 			domUpdated = true;
 		}
+		if (this.element.dataset.columnInstanceId !== this.columnInstanceId) {
+			this.element.dataset.columnInstanceId = this.columnInstanceId;
+			domUpdated = true;
+		}
 		if (this.rowIndex !== rowIndex) {
 			this.rowIndex = rowIndex;
 			this.element.dataset.rowIndex = String(rowIndex);
@@ -497,6 +501,7 @@ export class CellSlot<TRowData = unknown> {
 		this.element.className = '';
 		this.element.removeAttribute('style');
 		delete this.element.dataset.colField;
+		delete this.element.dataset.columnInstanceId;
 		delete this.element.dataset.rowIndex;
 		delete this.element.dataset.rowId;
 		delete this.element.dataset.cellKey;

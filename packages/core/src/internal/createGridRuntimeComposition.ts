@@ -279,6 +279,7 @@ export function createGridRuntimeComposition<TRowData>({
 			setContainerElement: (container) => runtime.setContainerElement(container),
 		},
 		pluginController: runtime.getPluginController(),
+		interactionController: runtime.interactionController,
 	});
 	return frozen;
 }

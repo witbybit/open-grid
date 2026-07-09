@@ -1,5 +1,6 @@
 import type { GridApi, GridPluginController, InternalGridApi } from '../api/GridApi.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { GridInteractionController } from '../interaction/GridInteractionController.js';
 
 export interface GridHostComposition<TRowData = unknown> {
 	engine: GridEngine<TRowData>;
@@ -10,6 +11,7 @@ export interface GridHostComposition<TRowData = unknown> {
 export interface GridRuntimeComposition<TRowData = unknown> {
 	host: GridHostComposition<TRowData>;
 	pluginController: GridPluginController<TRowData>;
+	interactionController: GridInteractionController<TRowData>;
 }
 
 const apiRuntimeMap = new WeakMap<GridApi<unknown>, GridRuntimeComposition<unknown>>();
@@ -32,4 +34,8 @@ export function resolveGridHostComposition<TRowData>(api: GridApi<TRowData>): Gr
 
 export function resolveGridPluginController<TRowData>(api: GridApi<TRowData>): GridPluginController<TRowData> {
 	return resolveGridRuntimeComposition(api).pluginController;
+}
+
+export function resolveGridInteractionController<TRowData>(api: GridApi<TRowData>): GridInteractionController<TRowData> {
+	return resolveGridRuntimeComposition(api).interactionController;
 }

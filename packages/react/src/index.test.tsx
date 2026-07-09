@@ -432,7 +432,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		await waitFor(() => {
 			expect(grid.api.getCellValue('1', 'name')).toBe('Product A');
-			expect(grid.api.getStateSnapshot().activeEdit).toEqual({ rowId: '1', colField: 'name' });
+			expect(grid.api.getStateSnapshot().activeEdit).toEqual(
+				expect.objectContaining({ rowId: '1', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+			);
 		});
 		expect(blockedHandler).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -1068,12 +1070,18 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const childCell = (await screen.findByText('Child A')).closest('.og-cell') as HTMLElement;
 		fireEvent.mouseDown(childCell);
 		fireEvent.click(childCell);
-		expect(childGrid.api.getStateSnapshot().selection.focus).toEqual({ rowId: 'c1', colField: 'name' });
+		expect(childGrid.api.getStateSnapshot().selection.focus).toEqual(
+			expect.objectContaining({ rowId: 'c1', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+		);
 
 		fireEvent.keyDown(window, { key: 'ArrowDown' });
 
-		expect(parentGrid.api.getStateSnapshot().selection.focus).toEqual({ rowId: 'p1', colField: 'name' });
-		expect(childGrid.api.getStateSnapshot().selection.focus).toEqual({ rowId: 'c2', colField: 'name' });
+		expect(parentGrid.api.getStateSnapshot().selection.focus).toEqual(
+			expect.objectContaining({ rowId: 'p1', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+		);
+		expect(childGrid.api.getStateSnapshot().selection.focus).toEqual(
+			expect.objectContaining({ rowId: 'c2', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+		);
 
 		unmount();
 		parentGrid.api.destroy();

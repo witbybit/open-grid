@@ -321,7 +321,7 @@ export function GridView<TRowData = unknown>({
 
 			cellEl.tabIndex = -1;
 			cellEl.focus();
-			nav.handleMouseDown(pointer.rowId, pointer.colField, e);
+			nav.handleMouseDown(pointer, e);
 		},
 		[getCellPointerFromEvent]
 	);
@@ -336,7 +336,7 @@ export function GridView<TRowData = unknown>({
 
 			if (e.relatedTarget && cellEl.contains(e.relatedTarget as Node)) return;
 
-			nav.handleMouseEnter(pointer.rowId, pointer.colField);
+			nav.handleMouseEnter(pointer);
 		},
 		[getCellPointerFromEvent]
 	);
@@ -374,7 +374,7 @@ export function GridView<TRowData = unknown>({
 			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
 			if (isEditing) return;
 
-			nav.handleClick(pointer.rowId, pointer.colField, e);
+			nav.handleClick(pointer, e);
 		},
 		[getCellPointerFromEvent]
 	);

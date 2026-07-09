@@ -1,17 +1,9 @@
 import { GridContextMenuPlugin, type GridContextMenuOptions } from './contextMenu.js';
-import { GridNavigationController, type GridNavigationOptions } from './navigation.js';
+import type { GridInteractionHandle, GridNavigationOptions } from './interaction/GridInteractionController.js';
 import type { GridApi } from './api/GridApi.js';
-import { resolveGridPluginController } from './internal/apiInternalBridge.js';
+import { resolveGridInteractionController, resolveGridPluginController } from './internal/apiInternalBridge.js';
 
-export interface GridNavigationHandle {
-	handleKeyDown(event: KeyboardEvent): void;
-	handleMouseDown(rowId: string, colField: string, event: MouseEvent): void;
-	handleClick(rowId: string, colField: string, event: MouseEvent): void;
-	handleMouseEnter(rowId: string, colField: string): void;
-	handleMouseUp(): void;
-	setCellEditing(rowId: string, colField: string, isEditing: boolean): void;
-	dispose(): void;
-}
+export type GridNavigationHandle = GridInteractionHandle;
 
 export interface GridContextMenuHandle<TRowData = unknown> {
 	setOptions(options: GridContextMenuOptions<TRowData>): void;
@@ -20,22 +12,9 @@ export interface GridContextMenuHandle<TRowData = unknown> {
 }
 
 export function registerGridNavigation<TRowData>(api: GridApi<TRowData>, options: GridNavigationOptions = {}): GridNavigationHandle {
-	const pluginController = resolveGridPluginController(api);
-	const controller = new GridNavigationController<TRowData>(options);
-	pluginController.registerPlugin(controller);
-
-	return {
-		handleKeyDown: controller.handleKeyDown,
-		handleMouseDown: controller.handleMouseDown,
-		handleClick: controller.handleClick,
-		handleMouseEnter: controller.handleMouseEnter,
-		handleMouseUp: controller.handleMouseUp,
-		setCellEditing: controller.setCellEditing.bind(controller),
-		dispose() {
-			controller.dispose();
-			pluginController.unregisterPlugin(controller.name);
-		},
-	};
+	const controller = resolveGridInteractionController(api);
+	controller.updateOptions(options);
+	return controller;
 }
 
 export function registerGridContextMenu<TRowData>(

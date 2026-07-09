@@ -1069,7 +1069,9 @@ describe('RenderEngine', () => {
 		console.log('ROW TOPS:', store.engine.geometry.rowTops.slice(0, 20));
 		console.log('VIEWPORT HEIGHT:', store.engine.viewport.viewportHeight);
 
-		expect(store.getState().selection.focus).toEqual({ rowId: 'row-15', colField: 'name' });
+		expect(store.getState().selection.focus).toEqual(
+			expect.objectContaining({ rowId: 'row-15', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+		);
 		expect(store.engine.viewport.scrollTop).toBe(440);
 
 		renderer.unmount();

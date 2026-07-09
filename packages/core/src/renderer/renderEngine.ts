@@ -38,10 +38,12 @@ import { RenderPaintCoordinator, type RenderPaintCoordinatorState } from './rend
 import { RenderScrollCoordinator, type RenderScrollCoordinatorState } from './renderScrollCoordinator.js';
 import { RenderViewportCoordinator } from './renderViewportCoordinator.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { ColumnInstanceId } from '../columnDef.js';
 import type { GridApi, InternalGridApi } from '../api/GridApi.js';
 import { RowDragController } from '../features/RowDragController.js';
 import { RenderRuntimeState } from './renderRuntimeState.js';
 import { defaultGridScheduler } from './gridScheduler.js';
+import type { GridInteractionHandle } from '../interaction/GridInteractionController.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -79,6 +81,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private readonly layoutTransition: LayoutTransitionController<TRowData>;
 	private readonly rowDrag: RowDragController<TRowData>;
+	private readonly interactionController: GridInteractionHandle | null;
 	private _pendingTransition = false;
 
 	// Authoritative render lifecycle phase. Initialized first in constructor.
@@ -163,9 +166,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.portalMountManager.onUnmountHeaderMenu = callback;
 	}
 
-	constructor(engine: GridEngine<TRowData>, api?: InternalGridApi<TRowData>) {
+	constructor(engine: GridEngine<TRowData>, api?: InternalGridApi<TRowData>, interactionController: GridInteractionHandle | null = null) {
 		this.engine = engine;
 		this.api = api;
+		this.interactionController =
+			interactionController ??
+			((api as InternalGridApi<TRowData> & { interactionController?: GridInteractionHandle | null } | undefined)?.interactionController ?? null);
 		this._scrollCtx = {
 			isScrolling: true,
 			stateVersion: 0,
@@ -421,8 +427,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (scrollViewport) {
 			scrollViewport.addEventListener('mouseover', this.onRowMouseOver);
 			scrollViewport.addEventListener('mouseleave', this.onRowMouseLeave);
-			scrollViewport.addEventListener('click', this.rowRenderer.selectionPaint.onViewportClick);
-			scrollViewport.addEventListener('mousedown', this.rowRenderer.selectionPaint.onViewportMouseDown);
+			scrollViewport.addEventListener('click', this.onViewportInteractionClick);
+			scrollViewport.addEventListener('mousedown', this.onViewportInteractionMouseDown);
 			this.scrollEngine.bind(scrollViewport, this.onScroll);
 		}
 
@@ -512,8 +518,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (scrollViewport) {
 			scrollViewport.removeEventListener('mouseover', this.onRowMouseOver);
 			scrollViewport.removeEventListener('mouseleave', this.onRowMouseLeave);
-			scrollViewport.removeEventListener('click', this.rowRenderer.selectionPaint.onViewportClick);
-			scrollViewport.removeEventListener('mousedown', this.rowRenderer.selectionPaint.onViewportMouseDown);
+			scrollViewport.removeEventListener('click', this.onViewportInteractionClick);
+			scrollViewport.removeEventListener('mousedown', this.onViewportInteractionMouseDown);
 		}
 		this.columnInteractions.cleanup();
 		this.columnInteractions.setGroupPanel(null);
@@ -682,6 +688,45 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 	private onRowMouseLeave = (): void => {
 		this.setHoveredRowIndex(null);
+	};
+
+	private onViewportInteractionMouseDown = (event: MouseEvent): void => {
+		this.interactionController?.handleViewportMouseDown(event);
+	};
+
+	private onViewportInteractionClick = (event: MouseEvent): void => {
+		if (!this.interactionController || event.defaultPrevented || event.button !== 0) return;
+		const target = event.target as HTMLElement | null;
+		if (!target) return;
+		const checkbox = target.closest<HTMLInputElement>('input.og-row-checkbox');
+		if (checkbox) {
+			event.stopPropagation();
+			const rowId = checkbox.dataset.rowId;
+			if (rowId) this.interactionController.handleRowCheckboxClick(rowId, checkbox.checked, event);
+			return;
+		}
+		if (this.interactionController.isRowSelectionIgnoredTarget(target)) return;
+		const cellEl = target.closest<HTMLDivElement>('.og-cell');
+		if (!cellEl) return;
+		const cellSlot = (cellEl as HTMLDivElement & {
+			__cellSlot?: {
+				binding?: { rowId: string; colId: string } | null;
+				colField?: string;
+				columnInstanceId?: ColumnInstanceId;
+			};
+		}).__cellSlot;
+		const rowId = cellSlot?.binding?.rowId ?? cellEl.dataset.rowId;
+		const colField = cellSlot?.colField ?? cellEl.dataset.colField;
+		if (!rowId || !colField) return;
+		this.interactionController.handleDataRowClick(
+			{
+				rowId,
+				colField,
+				columnInstanceId: cellSlot?.columnInstanceId,
+				colId: cellSlot?.binding?.colId ?? colField,
+			},
+			event
+		);
 	};
 
 	private setHoveredRowIndex(rowIndex: number | null): void {

@@ -125,45 +125,19 @@ function useGridKeySelectorWithEquality<T, TRowData = unknown>(
  */
 export function useGridNavigationController<TRowData = unknown>(options: GridNavigationOptions = {}, enabled = true) {
 	const api = useGridApi<TRowData>();
-	const optionsRef = useRef(options);
-	optionsRef.current = options;
-	const controllerRef = useRef<GridNavigationHandle | null>(null);
-	const facadeRef = useRef<GridNavigationHandle | null>(null);
-
-	if (enabled && facadeRef.current == null) {
-		facadeRef.current = {
-			handleKeyDown: (event) => controllerRef.current?.handleKeyDown(event),
-			handleMouseDown: (rowId, colField, event) => controllerRef.current?.handleMouseDown(rowId, colField, event),
-			handleClick: (rowId, colField, event) => controllerRef.current?.handleClick(rowId, colField, event),
-			handleMouseEnter: (rowId, colField) => controllerRef.current?.handleMouseEnter(rowId, colField),
-			handleMouseUp: () => controllerRef.current?.handleMouseUp(),
-			setCellEditing: (rowId, colField, isEditing) => controllerRef.current?.setCellEditing(rowId, colField, isEditing),
-			dispose: () => controllerRef.current?.dispose(),
-		};
-	}
-
-	useEffect(() => {
-		if (!enabled) {
-			controllerRef.current = null;
-			return;
+	const controllerRef = useRef<GridNavigationHandle | null>(enabled ? registerGridNavigation<TRowData>(api, options) : null);
+	if (enabled) {
+		if (controllerRef.current == null) {
+			controllerRef.current = registerGridNavigation<TRowData>(api, options);
+		} else {
+			controllerRef.current.updateOptions(options);
 		}
-		const nav = registerGridNavigation<TRowData>(api, {
-			get editTrigger() {
-				return optionsRef.current.editTrigger;
-			},
-			get arrowKeyNavigationEdit() {
-				return optionsRef.current.arrowKeyNavigationEdit;
-			},
-		});
-		controllerRef.current = nav;
+	} else if (controllerRef.current != null) {
+		controllerRef.current = null;
+	}
+	useEffect(() => {
+		if (!enabled) controllerRef.current = null;
+	}, [enabled]);
 
-		return () => {
-			if (controllerRef.current === nav) {
-				controllerRef.current = null;
-			}
-			nav.dispose();
-		};
-	}, [api, enabled]);
-
-	return enabled ? facadeRef.current : null;
+	return enabled ? controllerRef.current : null;
 }

@@ -140,6 +140,7 @@ import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './feature
 import { makeNoopIntegrityApi } from './features/dataIntegrity/noopIntegrityApi.js';
 import { createGridStoreSubscriptions, type GridStoreSubscriptionsFacade } from './store/GridStoreSubscriptions.js';
 import { createGridStoreHostFacade, type GridStoreHostFacade } from './store/GridStoreHostFacade.js';
+import { GridInteractionController } from './interaction/GridInteractionController.js';
 
 export { validateRowIds } from './ids.js';
 
@@ -169,6 +170,7 @@ const _EMPTY_WS_STATE: GridWorkspaceState = {
  */
 export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> {
 	public engine: GridEngine<TRowData>;
+	public readonly interactionController: GridInteractionController<TRowData>;
 
 	private readonly viewportController: ViewportController<TRowData>;
 	private readonly pluginRuntime: GridPluginRuntime<TRowData>;
@@ -249,6 +251,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
 		this.pluginRuntime = createGridPluginRuntime(this as unknown as GridPluginRuntime<TRowData>);
 		this.pluginRegistry = new GridPluginRegistry<TRowData>(this.pluginRuntime, this.engine.runtimeFaults);
+		this.interactionController = new GridInteractionController<TRowData>(this as unknown as GridPluginRuntime<TRowData>);
 		this.subscriptionsFacade = createGridStoreSubscriptions<TRowData>({
 			subscribe: (listener) => this.engine.subscribe(listener),
 			subscribeToKey: (key, listener) => this.engine.subscribeToKey(key, listener),
