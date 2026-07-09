@@ -254,6 +254,8 @@ export class GridProjectionPipeline<TRowData = unknown> {
 				range: null,
 				bounds: null,
 				source: selection.source,
+				focusOrigin: null,
+				version: selection.version,
 			};
 		}
 

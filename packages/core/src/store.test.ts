@@ -95,6 +95,36 @@ describe('GridStore generic row-store functionality', () => {
 		store.destroy();
 	});
 
+	it('tracks focusOrigin and increments selection version as focus moves', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		const first = store.getState().selection;
+		store.selectCell({ rowId: '2', colField: 'name' }, 'pointer');
+		const second = store.getState().selection;
+
+		expect(first.focusOrigin).toBe('keyboard');
+		expect(first.version).toBeGreaterThan(0);
+		expect(second.focusOrigin).toBe('pointer');
+		expect((second.version ?? 0)).toBeGreaterThan(first.version ?? 0);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('suppresses unrelated selector wakeups for row, column, and integrity subscriptions', () => {
 		const store = new GridStore<TestRow>(
 			{

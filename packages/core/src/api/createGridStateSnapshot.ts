@@ -20,6 +20,8 @@ function cloneSelection(selection: GridSelectionState): GridSelectionState {
 			: null,
 		bounds: selection.bounds ? freezeCopy(selection.bounds) : null,
 		source: selection.source,
+		focusOrigin: selection.focusOrigin ?? null,
+		version: selection.version ?? 0,
 	});
 }
 

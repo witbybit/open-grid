@@ -201,6 +201,8 @@ export interface GridSelectionState {
 	range: GridCellRange | null;
 	bounds: GridCellRangeBounds | null;
 	source: GridSelectionSource;
+	focusOrigin?: GridSelectionSource | null;
+	version?: number;
 }
 
 export interface GridStateSnapshot<TRowData = unknown> {

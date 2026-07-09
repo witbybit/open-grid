@@ -6,12 +6,15 @@ import type { RowModel } from '../rowModel.js';
 import type { GridCellRangeBounds } from '../state/GridState.js';
 
 export class SelectionModel {
+	private versionCounter = 0;
 	private state: GridSelectionState = {
 		focus: null,
 		anchor: null,
 		range: null,
 		bounds: null,
 		source: 'program',
+		focusOrigin: null,
+		version: 0,
 	};
 
 	public init(): void {}
@@ -25,12 +28,28 @@ export class SelectionModel {
 			...this.state,
 			...selection,
 		};
+		const focusChanged = next.focus !== this.state.focus;
+		if (selection.focusOrigin === undefined) {
+			next.focusOrigin = next.focus ? (focusChanged ? next.source : this.state.focusOrigin ?? next.source) : null;
+		}
+		if (selection.version === undefined) {
+			const changed =
+				next.focus !== this.state.focus ||
+				next.anchor !== this.state.anchor ||
+				next.range !== this.state.range ||
+				next.bounds !== this.state.bounds ||
+				next.source !== this.state.source ||
+				next.focusOrigin !== this.state.focusOrigin;
+			next.version = changed ? ++this.versionCounter : this.state.version ?? this.versionCounter;
+		}
 		if (
 			next.focus === this.state.focus &&
 			next.anchor === this.state.anchor &&
 			next.range === this.state.range &&
 			next.bounds === this.state.bounds &&
-			next.source === this.state.source
+			next.source === this.state.source &&
+			next.focusOrigin === this.state.focusOrigin &&
+			next.version === this.state.version
 		) {
 			return this.state;
 		}
@@ -39,23 +58,29 @@ export class SelectionModel {
 	}
 
 	public createCellSelection(pointer: GridCellPointer | null, source: GridSelectionSource = 'program'): GridSelectionState {
+		const version = ++this.versionCounter;
 		return {
 			focus: pointer,
 			anchor: pointer,
 			range: pointer ? { start: pointer, end: pointer } : null,
 			bounds: null,
 			source,
+			focusOrigin: pointer ? source : null,
+			version,
 		};
 	}
 
 	public extendSelection(anchor: GridCellPointer | null, end: GridCellPointer, source: GridSelectionSource = 'program'): GridSelectionState {
 		const start = anchor ?? this.state.anchor ?? this.state.focus ?? end;
+		const version = ++this.versionCounter;
 		return {
 			focus: end,
 			anchor: start,
 			range: { start, end },
 			bounds: null,
 			source,
+			focusOrigin: source,
+			version,
 		};
 	}
 

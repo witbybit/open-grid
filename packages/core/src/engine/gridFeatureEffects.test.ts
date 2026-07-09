@@ -200,7 +200,13 @@ describe('Phase 0: gridFeatureEffects characterization', () => {
 			const ctrl = makeController(store);
 
 			store.startEditing('1', 'name');
-			expect(store.getState().activeEdit).toEqual({ rowId: '1', colField: 'name' });
+			expect(store.getState().activeEdit).toEqual(
+				expect.objectContaining({
+					rowId: '1',
+					colField: 'name',
+					startedBy: 'api',
+				})
+			);
 
 			ctrl.dispose();
 			store.destroy();
