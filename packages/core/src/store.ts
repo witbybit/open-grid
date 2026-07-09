@@ -98,7 +98,7 @@ export * from './api/GridEvents.js';
 export type { GridInitialState, ColumnState, GridCellRangeBounds } from './state/GridState.js';
 // ── Internal imports (for use by definitions in this file) ───────────────────
 import { RowNode } from './rowNode.js';
-import type { ColumnDef, GridStyleRule } from './columnDef.js';
+import type { ColumnDef, ColumnInstanceId, GridStyleRule } from './columnDef.js';
 import { validateColumns } from './columnDef.js';
 import type { VisualRow } from './visualRow.js';
 import type {
@@ -391,22 +391,14 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	): Promise<GridWriteResult> => this.engine.batchCellValuesAsync(updates, source);
 
 	public getCellState = (rowId: string, colField: string): CellState => {
-		const computedValue = this.getCellValue(rowId, colField);
 		const column = this.engine.columns.getColumnDef(colField);
-		const isEditing = column ? doesCellPointerMatchColumn(this.state.activeEdit, rowId, column) : false;
+		return this.buildCellState(rowId, colField, column);
+	};
 
-		let value = computedValue;
-		if (this.engine.hasFormula(rowId, colField)) {
-			value = this.engine.getFormula(rowId, colField);
-		} else {
-			value = this.engine.getRawCellValue(rowId, colField);
-		}
-
-		return {
-			value,
-			computedValue,
-			isEditing,
-		};
+	public getCellStateByPointer = (pointer: GridCellPointer): CellState | null => {
+		const access = this.getCellAccessByPointer(pointer);
+		if (!access) return null;
+		return this.buildCellState(access.rowId, access.colField, access.column);
 	};
 
 	public selectCell = (pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {
@@ -1241,6 +1233,28 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		const columnKey = pointer.columnInstanceId ?? pointer.colField;
 		return this.engine.cellAccess.getByPointer(pointer.rowId, columnKey);
 	};
+
+	private buildCellState(
+		rowId: string,
+		colField: string,
+		column: (Pick<ColumnDef<TRowData>, 'field'> & { instanceId?: ColumnInstanceId }) | undefined
+	): CellState {
+		const computedValue = this.getCellValue(rowId, colField);
+		const isEditing = column ? doesCellPointerMatchColumn(this.state.activeEdit, rowId, column) : false;
+
+		let value = computedValue;
+		if (this.engine.hasFormula(rowId, colField)) {
+			value = this.engine.getFormula(rowId, colField);
+		} else {
+			value = this.engine.getRawCellValue(rowId, colField);
+		}
+
+		return {
+			value,
+			computedValue,
+			isEditing,
+		};
+	}
 
 	public registerCellSubscription = (sub: CellSubscription): void => this.engine.registerCellSubscription(sub);
 

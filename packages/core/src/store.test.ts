@@ -947,6 +947,60 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('resolves cell state by pointer identity for duplicate-field columns', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+		const firstNameColumn = store.engine.columns.getDisplayedColumns()[1] as { field: string; colId?: string; instanceId?: string };
+		const duplicateNameColumn = store.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+		store.engine.stateManager.setState({
+			activeEdit: {
+				rowId: '1',
+				colField: duplicateNameColumn.field,
+				colId: duplicateNameColumn.colId,
+				columnInstanceId: duplicateNameColumn.instanceId,
+				draftValue: 'Draft B',
+				originalValue: 'Product A',
+				startedBy: 'api',
+				version: 1,
+			},
+		});
+
+		const activeState = store.getCellStateByPointer({
+			rowId: '1',
+			colField: duplicateNameColumn.field,
+			colId: duplicateNameColumn.colId,
+			columnInstanceId: duplicateNameColumn.instanceId,
+		});
+		const inactiveState = store.getCellStateByPointer({
+			rowId: '1',
+			colField: firstNameColumn.field,
+			colId: firstNameColumn.colId,
+			columnInstanceId: firstNameColumn.instanceId,
+		});
+
+		expect(activeState).toMatchObject({
+			value: 'Product A',
+			computedValue: 'Product A',
+			isEditing: true,
+		});
+		expect(inactiveState).toMatchObject({
+			value: 'Product A',
+			computedValue: 'Product A',
+			isEditing: false,
+		});
+
+		controller.dispose();
+	});
+
 	it('rowsUpdated event exposes public row-node facades instead of internal mutable row nodes', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 150 }],

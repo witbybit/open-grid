@@ -8,7 +8,7 @@ import type {
 	GridHeaderMenuMount,
 	GridHeaderMenuUnmount,
 } from './renderer/IGridRenderer.js';
-import type { GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';
+import type { CellState, GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';
 import type { ColumnDef, ColumnInstanceId, InternalColumnDef } from './columnDef.js';
 import { asGroupMetaCapableRowModel } from './rowModel.js';
 import { resolveGridRuntimeComposition } from './internal/apiInternalBridge.js';
@@ -75,6 +75,8 @@ export interface GridHost {
 export interface GridAdapterHandle<TRowData = unknown> {
 	/** Resolve the bound cell pointer from a DOM element inside a cell. */
 	getCellPointerFromElement(element: Element): GridCellPointer | null;
+	/** Get lightweight cell state by logical cell pointer. */
+	getCellStateByPointer(pointer: GridCellPointer): CellState | null;
 	/** Get full cell access data from a DOM element inside a cell. */
 	getCellAccessFromElement(element: Element): GridCellAccess<TRowData> | null;
 	/** Get full cell access data by logical cell pointer. */
@@ -191,6 +193,9 @@ export function mountGridHost<TRowData>(
 			const pointer = adapterHandle.getCellPointerFromElement(element);
 			if (!pointer) return null;
 			return internalApi.getCellAccessByPointer(pointer);
+		},
+		getCellStateByPointer(pointer: GridCellPointer) {
+			return internalApi.getCellStateByPointer(pointer);
 		},
 		getCellAccessByPointer(pointer: GridCellPointer) {
 			return internalApi.getCellAccessByPointer(pointer);

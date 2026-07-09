@@ -293,6 +293,7 @@ export interface GridRendererApi<TRowData = unknown> extends GridApi<TRowData> {
 	getCheapDisplayValue(rowId: string, colField: string): string;
 	getComputedCellValue(rowId: string, colField: string): unknown;
 	getCellState(rowId: string, colField: string): CellState;
+	getCellStateByPointer(pointer: GridCellPointer): CellState | null;
 	getCellAccess(rowId: string, colField: string): GridCellAccess<TRowData> | null;
 	getCellAccessByPointer(pointer: GridCellPointer): GridCellAccess<TRowData> | null;
 	getRowOverscanPx(): number;

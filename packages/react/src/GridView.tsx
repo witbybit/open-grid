@@ -317,7 +317,7 @@ export function GridView<TRowData = unknown>({
 			if (isEditing) return;
 
 			// Skip range selection for columns that have canDrag (drag handle) or disableCellRangeSelection set.
-			const colDef = hostRef.current?.adapterHandle.getCellAccessByPointer(pointer)?.column ?? apiRef.current.getColumnDef(pointer.colField);
+			const colDef = hostRef.current?.adapterHandle.getCellAccessByPointer(pointer)?.column;
 			if (colDef && (colDef.canDrag !== undefined || colDef.disableCellRangeSelection)) return;
 
 			cellEl.tabIndex = -1;
