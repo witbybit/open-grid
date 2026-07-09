@@ -1115,8 +1115,8 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
-	public startEdit(rowId: string, colField: string): void {
-		this.editingFeature.startEdit(rowId, colField);
+	public startEdit(rowId: string, colField: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
+		this.editingFeature.startEdit(rowId, colField, source);
 	}
 
 	public updateEditDraft(rowId: string, colField: string, value: unknown): void {

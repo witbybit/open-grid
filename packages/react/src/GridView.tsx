@@ -400,7 +400,7 @@ export function GridView<TRowData = unknown>({
 			const isEditing = cellPointersMatch(state.activeEdit, pointer);
 			if (isEditing) return;
 
-			nav.setCellEditing(pointer.rowId, pointer.colField, true);
+			nav.setCellEditing(pointer.rowId, pointer.colField, true, 'mouse');
 		},
 		[getCellPointerFromEvent]
 	);

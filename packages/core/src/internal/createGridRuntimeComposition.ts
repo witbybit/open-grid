@@ -137,7 +137,7 @@ export function createGridRuntimeComposition<TRowData>({
 		setStyleRules: (styleRules: GridInitialState<TRowData>['styleRules']) => runtime.setStyleRules(styleRules),
 		addEventListener: runtime.addEventListener,
 		dispatchEvent: runtime.dispatchEvent,
-		startEditing: (rowId: string, colField: string) => runtime.startEditing(rowId, colField),
+		startEditing: (rowId: string, colField: string, source?: 'keyboard' | 'mouse' | 'api') => runtime.startEditing(rowId, colField, source),
 		updateEditDraft: (rowId: string, colField: string, value: unknown) => runtime.updateEditDraft(rowId, colField, value),
 		stopEditing: (cancel?: boolean) => runtime.stopEditing(cancel),
 		commitEdit: (rowId: string, colField: string, value: unknown) => runtime.commitEdit(rowId, colField, value),

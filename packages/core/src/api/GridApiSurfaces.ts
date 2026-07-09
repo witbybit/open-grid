@@ -104,7 +104,7 @@ export interface GridSelectionEditingApi<TRowData = unknown> {
 	getSelectedRowIds(): string[];
 	isRowNodeSelected(rowId: string): boolean;
 	getSelectedRowCount(): number;
-	startEditing(rowId: string, colField: string): void;
+	startEditing(rowId: string, colField: string, source?: 'keyboard' | 'mouse' | 'api'): void;
 	updateEditDraft(rowId: string, colField: string, value: unknown): void;
 	stopEditing(cancel?: boolean): void;
 	commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean>;

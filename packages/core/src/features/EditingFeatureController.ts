@@ -61,7 +61,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		return canEditCell(visualRow, this.ctx.columns.getColumnDef(colField));
 	}
 
-	public startEdit(rowId: string, colField: string): void {
+	public startEdit(rowId: string, colField: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
 		if (!this.canEditCell(rowId, colField)) return;
 		const column = this.ctx.columns.getPrimaryColumnByField(colField);
 		if (!column) return;
@@ -81,7 +81,7 @@ export class EditingFeatureController<TRowData = unknown> {
 					columnInstanceId: column.instanceId,
 					originalValue,
 					draftValue: originalValue,
-					startedBy: 'api',
+					startedBy: source,
 					version,
 				},
 			},

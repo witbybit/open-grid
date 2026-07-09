@@ -887,8 +887,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.dispatchEvent(type, payload);
 	};
 
-	public startEditing = (rowId: string, colField: string): void => {
-		this.engine.startEdit(rowId, colField);
+	public startEditing = (rowId: string, colField: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void => {
+		this.engine.startEdit(rowId, colField, source);
 	};
 
 	public updateEditDraft = (rowId: string, colField: string, value: unknown): void => {

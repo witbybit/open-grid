@@ -14,7 +14,7 @@ export interface GridInteractionHandle {
 	handleClick(pointer: GridCellPointer, event: MouseEvent): void;
 	handleMouseEnter(pointer: GridCellPointer): void;
 	handleMouseUp(): void;
-	setCellEditing(rowId: string, colField: string, isEditing: boolean): void;
+	setCellEditing(rowId: string, colField: string, isEditing: boolean, source?: 'keyboard' | 'mouse' | 'api'): void;
 	handleRowCheckboxClick(rowId: string, checked: boolean, event: MouseEvent): void;
 	handleDataRowClick(pointer: GridCellPointer, event: MouseEvent): void;
 	isRowSelectionIgnoredTarget(el: Element | null): boolean;
@@ -264,7 +264,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 				case 'F2':
 				case 'Enter':
 					event.preventDefault();
-					this.setCellEditing(active.rowId, active.colField, true);
+					this.setCellEditing(active.rowId, active.colField, true, 'keyboard');
 					return;
 				case 'Delete':
 				case 'Backspace':
@@ -278,7 +278,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 				default:
 					if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
 						event.preventDefault();
-						this.setCellEditing(active.rowId, active.colField, true);
+						this.setCellEditing(active.rowId, active.colField, true, 'keyboard');
 					}
 					return;
 			}
@@ -294,7 +294,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 					this.rangeStart = targetPointer;
 					this.runtime.selectCell(targetPointer, 'keyboard');
 					if (this.options.arrowKeyNavigationEdit) {
-						this.setCellEditing(targetPointer.rowId, targetPointer.colField, true);
+						this.setCellEditing(targetPointer.rowId, targetPointer.colField, true, 'keyboard');
 					}
 				}
 			}
@@ -357,7 +357,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		this.rangeStart = target;
 		this.runtime.selectCell(target, 'keyboard');
 		if (startEditing && !areCellPointersEqual(target, active)) {
-			this.setCellEditing(target.rowId, target.colField, true);
+			this.setCellEditing(target.rowId, target.colField, true, 'keyboard');
 		}
 	}
 
@@ -387,7 +387,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		const state = this.runtime.getStateSnapshot();
 		const range = state.selection.range;
 		const isSingleCell = !range || areCellPointersEqual(range.start, range.end);
-		if (isSingleCell) this.setCellEditing(pointer.rowId, pointer.colField, true);
+		if (isSingleCell) this.setCellEditing(pointer.rowId, pointer.colField, true, 'mouse');
 	};
 
 	public handleMouseEnter = (pointer: GridCellPointer): void => {
@@ -399,8 +399,8 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		this.isSelecting = false;
 	};
 
-	public setCellEditing(rowId: string, colField: string, isEditing: boolean): void {
-		if (isEditing) this.runtime.startEditing(rowId, colField);
+	public setCellEditing(rowId: string, colField: string, isEditing: boolean, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
+		if (isEditing) this.runtime.startEditing(rowId, colField, source);
 		else this.runtime.stopEditing();
 	}
 

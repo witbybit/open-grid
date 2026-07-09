@@ -76,6 +76,24 @@ describe('EditingFeatureController', () => {
 		store.destroy();
 	});
 
+	it('startEdit records the real source when provided', () => {
+		const store = makeStore();
+		const ctrl = makeController(store);
+		const feature = makeEditingFeature(store);
+
+		feature.startEdit('1', 'name', 'keyboard');
+		expect(store.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				startedBy: 'keyboard',
+			})
+		);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('updateEditDraft stores the current draft in activeEdit state', () => {
 		const store = makeStore();
 		const ctrl = makeController(store);
