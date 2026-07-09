@@ -142,6 +142,7 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 						onChange: (val: unknown) => {
 							setLocalValue(val);
 							localValueRef.current = val;
+							api.updateEditDraft(rowId, colField, val);
 						},
 						api,
 						onCommit: handleCommit,
@@ -156,6 +157,7 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 					onChange={(e) => {
 						setLocalValue(e.target.value);
 						localValueRef.current = e.target.value;
+						api.updateEditDraft(rowId, colField, e.target.value);
 					}}
 					onMouseDown={(e) => e.stopPropagation()}
 					onDoubleClick={(e) => e.stopPropagation()}

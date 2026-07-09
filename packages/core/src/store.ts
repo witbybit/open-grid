@@ -891,6 +891,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.startEdit(rowId, colField);
 	};
 
+	public updateEditDraft = (rowId: string, colField: string, value: unknown): void => {
+		this.engine.updateEditDraft(rowId, colField, value);
+	};
+
 	public stopEditing = (cancel: boolean = false): void => {
 		this.engine.stopEdit(cancel);
 	};

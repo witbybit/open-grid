@@ -27,6 +27,7 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 }
 
 export class EditingFeatureController<TRowData = unknown> {
+	private editVersion = 0;
 	private readonly ctx: GridFeatureContext<TRowData>;
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly data: DataModel<TRowData>;
@@ -64,6 +65,8 @@ export class EditingFeatureController<TRowData = unknown> {
 		if (!this.canEditCell(rowId, colField)) return;
 		const column = this.ctx.columns.getPrimaryColumnByField(colField);
 		if (!column) return;
+		const originalValue = this.data.getRawCellValue(rowId, colField);
+		const version = ++this.editVersion;
 		if (this.checkCapability) {
 			const result = this.checkCapability('edit', { rowId, colField, source: 'api' });
 			if (!result.allowed) return;
@@ -76,6 +79,10 @@ export class EditingFeatureController<TRowData = unknown> {
 					colField: column.field,
 					colId: column.colId ?? column.field,
 					columnInstanceId: column.instanceId,
+					originalValue,
+					draftValue: originalValue,
+					startedBy: 'api',
+					version,
 				},
 			},
 			invalidations: [
@@ -86,6 +93,22 @@ export class EditingFeatureController<TRowData = unknown> {
 			events: [{ type: GridEventName.editStarted, payload: { rowId, colField } }],
 		});
 		this.notifyCellChange(rowId, colField, false);
+	}
+
+	public updateEditDraft(rowId: string, colField: string, value: unknown): void {
+		const activeEdit = this.ctx.getState().activeEdit;
+		if (!activeEdit || activeEdit.rowId !== rowId || activeEdit.colField !== colField) return;
+		if (Object.is(activeEdit.draftValue, value)) return;
+		this.ctx.applyChange({
+			reason: 'editing:update-draft',
+			state: {
+				activeEdit: {
+					...activeEdit,
+					draftValue: value,
+				},
+			},
+			domains: ['editing'],
+		});
 	}
 
 	public stopEdit(cancel = false): void {

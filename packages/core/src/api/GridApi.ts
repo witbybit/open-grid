@@ -88,6 +88,10 @@ export interface GridCellPointer {
 
 export interface ActiveEditState extends GridCellPointer {
 	validationError?: string | null;
+	draftValue?: unknown;
+	originalValue?: unknown;
+	startedBy?: 'keyboard' | 'mouse' | 'api';
+	version?: number;
 }
 
 export interface CellPointer {

@@ -60,7 +60,39 @@ describe('EditingFeatureController', () => {
 
 		feature.startEdit('1', 'name');
 		expect(store.getState().activeEdit).toEqual(
-			expect.objectContaining({ rowId: '1', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name',
+				columnInstanceId: expect.any(String),
+				originalValue: 'Product A',
+				draftValue: 'Product A',
+				startedBy: 'api',
+				version: 1,
+			})
+		);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('updateEditDraft stores the current draft in activeEdit state', () => {
+		const store = makeStore();
+		const ctrl = makeController(store);
+		const feature = makeEditingFeature(store);
+
+		feature.startEdit('1', 'name');
+		feature.updateEditDraft('1', 'name', 'Draft Name');
+
+		expect(store.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				originalValue: 'Product A',
+				draftValue: 'Draft Name',
+				startedBy: 'api',
+				version: 1,
+			})
 		);
 
 		ctrl.dispose();

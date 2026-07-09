@@ -130,7 +130,12 @@ function areViewportRangesEqual(left: ViewportRange, right: ViewportRange): bool
 
 function areActiveEditsEqual(left: ActiveEditState | null, right: ActiveEditState | null): boolean {
 	return (
-		areCellPointersEqual(left, right) && (left?.validationError ?? null) === (right?.validationError ?? null)
+		areCellPointersEqual(left, right) &&
+		(left?.validationError ?? null) === (right?.validationError ?? null) &&
+		Object.is(left?.draftValue, right?.draftValue) &&
+		Object.is(left?.originalValue, right?.originalValue) &&
+		(left?.startedBy ?? null) === (right?.startedBy ?? null) &&
+		(left?.version ?? null) === (right?.version ?? null)
 	);
 }
 

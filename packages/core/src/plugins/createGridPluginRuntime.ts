@@ -102,6 +102,7 @@ export function createGridPluginRuntime<TRowData>(source: GridPluginRuntime<TRow
 		addEventListener: source.addEventListener,
 		dispatchEvent: source.dispatchEvent,
 		startEditing: source.startEditing,
+		updateEditDraft: source.updateEditDraft,
 		stopEditing: source.stopEditing,
 		commitEdit: source.commitEdit,
 		getColumnState: source.getColumnState,

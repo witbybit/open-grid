@@ -105,6 +105,7 @@ export interface GridSelectionEditingApi<TRowData = unknown> {
 	isRowNodeSelected(rowId: string): boolean;
 	getSelectedRowCount(): number;
 	startEditing(rowId: string, colField: string): void;
+	updateEditDraft(rowId: string, colField: string, value: unknown): void;
 	stopEditing(cancel?: boolean): void;
 	commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean>;
 }

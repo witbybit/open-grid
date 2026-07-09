@@ -138,6 +138,7 @@ export function createGridRuntimeComposition<TRowData>({
 		addEventListener: runtime.addEventListener,
 		dispatchEvent: runtime.dispatchEvent,
 		startEditing: (rowId: string, colField: string) => runtime.startEditing(rowId, colField),
+		updateEditDraft: (rowId: string, colField: string, value: unknown) => runtime.updateEditDraft(rowId, colField, value),
 		stopEditing: (cancel?: boolean) => runtime.stopEditing(cancel),
 		commitEdit: (rowId: string, colField: string, value: unknown) => runtime.commitEdit(rowId, colField, value),
 		integrity: runtime.integrity,

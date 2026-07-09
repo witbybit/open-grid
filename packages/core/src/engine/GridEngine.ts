@@ -1119,6 +1119,10 @@ export class GridEngine<TRowData = unknown> {
 		this.editingFeature.startEdit(rowId, colField);
 	}
 
+	public updateEditDraft(rowId: string, colField: string, value: unknown): void {
+		this.editingFeature.updateEditDraft(rowId, colField, value);
+	}
+
 	public stopEdit(cancel = false): void {
 		this.editingFeature.stopEdit(cancel);
 	}

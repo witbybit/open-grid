@@ -235,6 +235,16 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(input.value).toBe('Product A');
 
 		fireEvent.change(input, { target: { value: 'Product B' } });
+		expect(grid.api.getStateSnapshot().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				draftValue: 'Product B',
+				originalValue: 'Product A',
+				startedBy: 'api',
+				version: expect.any(Number),
+			})
+		);
 		fireEvent.blur(input);
 
 		await waitFor(() => expect(grid.api.getCellValue('1', 'name')).toBe('Product B'));
@@ -336,6 +346,16 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(input.value).toBe('Product A');
 
 		fireEvent.change(input, { target: { value: 'Product B' } });
+		expect(grid.api.getStateSnapshot().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				draftValue: 'Product B',
+				originalValue: 'Product A',
+				startedBy: 'api',
+				version: expect.any(Number),
+			})
+		);
 		fireEvent.blur(input);
 
 		await waitFor(() => expect(grid.api.getCellValue('1', 'name')).toBe('Product B'));
