@@ -160,7 +160,7 @@ export class CellNotificationController<TRowData = unknown> {
 		}
 	}
 
-	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true): void {
+	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true, renderColId?: string): void {
 		this.deps.rowVersions.set(rowId, (this.deps.rowVersions.get(rowId) ?? 0) + 1);
 		this.deps.data.clearValueGetterCache(rowId, colField);
 		this.notifyCellSubscribers(rowId, colField);
@@ -170,7 +170,7 @@ export class CellNotificationController<TRowData = unknown> {
 			this.deps.eventBus.hasListeners(GridEventName.cellInvalidated) || this.deps.eventBus.hasListeners(GridEventName.renderInvalidated);
 		if (!hasRenderConsumer) return;
 
-		this.deps.invalidation.invalidateCell(rowId, colField, 'cell');
+		this.deps.invalidation.invalidateCell(rowId, renderColId ?? colField, 'cell');
 		this.deps.invalidation.invalidateRow(rowId, 'cell');
 		this.deps.eventBus.dispatchEvent(GridEventName.cellInvalidated, { rowId, colField });
 		this.deps.requestRender('cell-change');

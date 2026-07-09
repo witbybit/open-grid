@@ -15,7 +15,7 @@ import { GridAdapterContext } from './gridContext.js';
 import { GridHostWithAdapter, GridAdapterHandle, hasImperativeRendererCapability, mountGridHost } from './reactHostBridge.js';
 import { PortalManager, createPortalStore } from './GridPortal.js';
 import { flashCopiedCells } from './cellFlash.js';
-import { useGridNavigationController } from './hooks.js';
+import { useGridInteractionController } from './hooks.js';
 import { GridSidebar, GridSidebarConfig } from './sidebar/GridSidebar.js';
 import { GridChartOverlay } from './chart/GridChartOverlay.js';
 
@@ -230,7 +230,7 @@ export function GridView<TRowData = unknown>({
 		contextMenuRef.current?.setOptions(contextMenuOptionsRef.current ?? {});
 	}, [contextMenuOptions]);
 
-	const navigation = useGridNavigationController<TRowData>(
+	const navigation = useGridInteractionController<TRowData>(
 		{
 			editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
 			arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,

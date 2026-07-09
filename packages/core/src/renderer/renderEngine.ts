@@ -273,8 +273,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			},
 			syncHeaders: (frame) => this.headerRenderer.sync(frame),
 			syncOverlay: (frame) => this.overlayRenderer.sync(frame),
-			syncRows: (frame) => this.rowRenderer.repaintInvalidatedRowsAndCells(frame),
-			syncCells: (frame) => this.rowRenderer.repaintInvalidatedRowsAndCells(frame),
+			syncRows: (frame) => this.rowRenderer.repaintInvalidatedRows(frame),
+			syncCells: (frame) => this.rowRenderer.repaintInvalidatedCells(frame),
 			fullPaint: () => this.fullPaint(),
 		});
 

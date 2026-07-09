@@ -3,6 +3,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import { asSelectableDataRowModel } from '../rowModel.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
 import { computeGridLayoutPlan, type GridLayoutPlan, type HeaderCellLayout } from './layoutPlan.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { compileStyleRules, evaluateHeaderCellStyleRules } from '../styling/styleRules.js';
 import { GridMetric } from '../diagnostics/GridInstrumentation.js';
@@ -120,10 +121,11 @@ export class HeaderRenderer<TRowData = unknown> {
 		}
 
 		const state = this.engine.stateManager.getState();
+		const interaction = readInteractionState(state);
 		const compiledStyleRules = compileStyleRules(state.styleRules);
 		// bounds is only set when a range exists (drag / shift+arrow). For plain single-cell
 		// focus (click / arrow key) bounds is null, so fall back to the focus column's index.
-		const { bounds, focus } = state.selection;
+		const { bounds, focus } = interaction.cellSelection.selection;
 		const focusColIdx = focus !== null ? this.engine.columns.getColumnIndex(focus.colField) : -1;
 		const highlightMinCol = bounds !== null ? bounds.minCol : focusColIdx >= 0 ? focusColIdx : null;
 		const highlightMaxCol = bounds !== null ? bounds.maxCol : focusColIdx >= 0 ? focusColIdx : null;
@@ -260,7 +262,7 @@ export class HeaderRenderer<TRowData = unknown> {
 					const scopedIds = this.getSelectableDataRowIds(scope);
 					const totalDataRows = scopedIds.length;
 					const scopedSet = new Set(scopedIds);
-					const selectedCount = state.selectedRowIds.filter((rowId) => scopedSet.has(rowId)).length;
+					const selectedCount = interaction.rowSelection.selectedRowIds.filter((rowId) => scopedSet.has(rowId)).length;
 					const newChecked = selectedCount > 0 && selectedCount >= totalDataRows;
 					const newIndeterminate = selectedCount > 0 && selectedCount < totalDataRows;
 					checkbox.title = selectedCount > 0 ? `${selectedCount} of ${totalDataRows} rows selected` : `Select all ${totalDataRows} rows`;

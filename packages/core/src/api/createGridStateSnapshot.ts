@@ -1,4 +1,5 @@
 import type { ColumnDef } from '../columnDef.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 import type { FilterModel, SortModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { InternalGridState } from '../state/GridState.js';
@@ -63,14 +64,15 @@ function cloneColumns<TRowData>(columns: readonly ColumnDef<TRowData>[]): readon
 }
 
 export function createGridStateSnapshot<TRowData>(state: InternalGridState<TRowData>): GridStateSnapshot<TRowData> {
+	const interaction = readInteractionState(state);
 	return Object.freeze({
 		columns: cloneColumns(state.columns),
 		sortModel: cloneSortModel(state.sortModel),
 		filterModel: cloneFilterModel(state.filterModel),
 		queryModel: cloneQueryModel(state.queryModel ?? null),
-		selection: cloneSelection(state.selection),
-		selectedRowIds: Object.freeze(state.selectedRowIds.slice()),
-		activeEdit: cloneActiveEdit(state.activeEdit),
+		selection: cloneSelection(interaction.cellSelection.selection),
+		selectedRowIds: Object.freeze(interaction.rowSelection.selectedRowIds.slice()),
+		activeEdit: cloneActiveEdit(interaction.activeEdit.active),
 		loading: state.loading,
 		pagination: state.pagination ? freezeCopy(state.pagination) : undefined,
 		enableColumnReorder: state.enableColumnReorder,

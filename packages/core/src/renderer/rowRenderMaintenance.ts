@@ -10,6 +10,7 @@ import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { compileColumnTopology } from './columnTopology.js';
 import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 
 export interface RowCellBindRequest<TRowData = unknown> {
 	cellSlot: {
@@ -87,18 +88,19 @@ function getDisplayedColumnIndexesForInvalidation<TRowData>(columns: readonly Co
 	return getDisplayedColumnIndexesForField(columns, colIdOrField);
 }
 
-export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
+export function repaintInvalidatedRows<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
 	const rowModel = deps.engine.getVisualRowModel();
 	if (!rowModel) return;
 
 	const state = deps.engine.stateManager.getState();
+	const interaction = readInteractionState(state);
 	const columns = deps.engine.columns.getDisplayedColumns();
 	const plan = deps.engine.columns.getCompiledPlan();
 	const columnTopology = compileColumnTopology(plan);
 	const colCount = columns.length;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 
-	deps.selectionPaint.rebuildSelection(state.selectedRowIds);
+	deps.selectionPaint.rebuildSelection(interaction.rowSelection.selectedRowIds);
 
 	for (const rowId of frame.rows) {
 		const rowIndex = rowModel.getVisualIndexByRowId(rowId);
@@ -129,6 +131,19 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 			});
 		}
 	}
+
+}
+
+export function repaintInvalidatedCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
+	const rowModel = deps.engine.getVisualRowModel();
+	if (!rowModel) return;
+
+	const state = deps.engine.stateManager.getState();
+	const interaction = readInteractionState(state);
+	const columns = deps.engine.columns.getDisplayedColumns();
+	const plan = deps.engine.columns.getCompiledPlan();
+	const columnTopology = compileColumnTopology(plan);
+	const pinRightBaseLeft = plan.pinRightBaseLeft;
 
 	for (const [rowId, colFields] of frame.cellsByRowId) {
 		const rowIndex = rowModel.getVisualIndexByRowId(rowId);
@@ -190,6 +205,11 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 	}
 }
 
+export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
+	repaintInvalidatedRows(deps, frame);
+	repaintInvalidatedCells(deps, frame);
+}
+
 export function decorateDirtyCellsAfterScroll<TRowData>(
 	deps: RowRenderMaintenanceDeps<TRowData>,
 	options?: { maxCells?: number; lane?: PostScrollRepairLane }
@@ -208,6 +228,7 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 	}
 
 	const state = deps.engine.stateManager.getState();
+	const interaction = readInteractionState(state);
 	const columns = deps.engine.columns.getDisplayedColumns();
 	const plan = deps.engine.columns.getCompiledPlan();
 	const columnTopology = compileColumnTopology(plan);
@@ -219,8 +240,8 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 	const rowRange = deps.engine.viewport.getVisibleRowRange(rowCount);
 	const rowCenter = (rowRange.startIdx + rowRange.endIdx) / 2;
 	const colCenter = (colRange.startIdx + colRange.endIdx) / 2;
-	const activeEdit = state.activeEdit;
-	const focusedCell = state.selection.focus;
+	const activeEdit = interaction.activeEdit.active;
+	const focusedCell = interaction.focus.cell;
 
 	const getCellPriority = (cell: HTMLDivElement): number => {
 		const cs = (

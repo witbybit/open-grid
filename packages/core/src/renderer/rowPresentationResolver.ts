@@ -1,5 +1,6 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { InternalGridState } from '../state/GridState.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 import type { VisualRow } from '../visualRow.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { type CompiledStyleRules, evaluateDetailRowStyleRules, evaluateGroupRowStyleRules, evaluateRowStyleRules } from '../styling/styleRules.js';
@@ -107,8 +108,10 @@ export function resolveRowPresentation<TRowData>(
 			rowClassName = slotLastClassName;
 			markDirtyAfterScroll = shouldDeferWarmRowVisualRefresh;
 		} else {
-			const isFocusedRow = state.selection.focus?.rowId === node.id;
-			const isSelectedRow = !!state.selection.bounds && r >= state.selection.bounds.minRow && r <= state.selection.bounds.maxRow;
+			const interaction = readInteractionState(state);
+			const bounds = interaction.cellSelection.selection.bounds;
+			const isFocusedRow = interaction.focus.cell?.rowId === node.id;
+			const isSelectedRow = !!bounds && r >= bounds.minRow && r <= bounds.maxRow;
 			const isLoadingRow = deps.engine.data.isRowLoading(node.id);
 
 			if (r < pinTopRows) rowClassName += ' og-row-pinned-top';
@@ -131,7 +134,7 @@ export function resolveRowPresentation<TRowData>(
 					rs.isFocused = isFocusedRow;
 					rs.isSelected = isSelectedRow || isFocusedRow;
 					rs.isLoading = isLoadingRow;
-					rs.selection = state.selection;
+					rs.selection = interaction.cellSelection.selection;
 					const customRowClass = evaluateRowStyleRules(compiledStyleRules, node.data, rs);
 					if (customRowClass) rowClassName += ' ' + customRowClass;
 				} catch (e) {

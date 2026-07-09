@@ -9,7 +9,7 @@ import * as ReactPackage from './index.js';
 import { GridProvider } from './gridContext.js';
 import { GridView } from './GridView.js';
 import { GridEventName, Grid, useGridKeySelector, useGridApi, useGridSelector } from './index.js';
-import { useGridNavigationController } from './hooks.js';
+import { useGridInteractionController } from './hooks.js';
 import { PortalCell, PortalManager, createPortalStore } from './GridPortal.js';
 
 // Mock ResizeObserver for jsdom environment
@@ -49,8 +49,8 @@ const SelectorInspector = () => {
 	);
 };
 
-const NavigationControllerProbe = ({ onRender }: { onRender: (handle: ReturnType<typeof useGridNavigationController<TestRow>>) => void }) => {
-	const handle = useGridNavigationController<TestRow>({});
+const NavigationControllerProbe = ({ onRender }: { onRender: (handle: ReturnType<typeof useGridInteractionController<TestRow>>) => void }) => {
+	const handle = useGridInteractionController<TestRow>({});
 	onRender(handle);
 	return <span data-testid='nav-controller-present'>{handle ? 'yes' : 'no'}</span>;
 };
@@ -754,7 +754,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
 		let renderCount = 0;
-		const handles: Array<ReturnType<typeof useGridNavigationController<TestRow>>> = [];
+		const handles: Array<ReturnType<typeof useGridInteractionController<TestRow>>> = [];
 
 		const { rerender, unmount } = render(
 			<GridProvider api={grid.api}>

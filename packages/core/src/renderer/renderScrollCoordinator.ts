@@ -28,6 +28,7 @@ import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, merge
 import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
 import { getColumnInstanceIdentity } from '../columnDef.js';
 import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 
 function isCellSelected(rowIndex: number, colIndex: number, selectionBounds: GridCellRangeBounds | null | undefined): boolean {
 	return (
@@ -141,7 +142,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.deps.viewportRenderer.syncViewportScrollFromDom();
 
 		const state = this.deps.engine.stateManager.getState();
-		this.state.cachedHasSelectionOverlay = !!state.selection.bounds && !!this.deps.engine.getRowModel();
+		const interaction = readInteractionState(state);
+		this.state.cachedHasSelectionOverlay = !!interaction.cellSelection.selection.bounds && !!this.deps.engine.getRowModel();
 		this.updateCachedGeometryBoundsFromState(state.defaultColWidth, state.defaultRowHeight);
 
 		const candidateIdx = 1 - this.state.activeRenderWindowBufIdx;
@@ -190,7 +192,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			scrollCtx.loadingChangedDuringScroll = this.deps.rowRenderer.loadingVersion !== this.deps.rowRenderer.scrollStartLoadingVersion;
 			scrollCtx.selectionChangedDuringScroll = this.deps.engine.selectionVersion !== this.deps.rowRenderer.scrollStartSelectionVersion;
 			scrollCtx.globalChangedDuringScroll = state.globalVersion !== this.deps.rowRenderer.scrollStartGlobalVersion;
-			scrollCtx.activeEdit = state.activeEdit;
+			scrollCtx.activeEdit = interaction.activeEdit.active;
 			scrollCtx.hasDeferredCellStyleRules = compileStyleRules(state.styleRules).hasCellRules;
 			scrollCtx.hasCustomRenderers = plan.hasCustomRenderers;
 			scrollCtx.hasInsightDecorations = this.deps.engine.insights.size > 0;
@@ -200,8 +202,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			scrollCtx.visibleColRange.startIdx = nextWindow.visibleColStart ?? nextWindow.colStart;
 			scrollCtx.visibleColRange.endIdx = nextWindow.visibleColEnd ?? nextWindow.colEnd;
 			const visibleColRange = scrollCtx.visibleColRange;
-			scrollCtx.focusedCell = state.selection.focus;
-			scrollCtx.selectionBounds = state.selection.bounds ?? undefined;
+			scrollCtx.focusedCell = interaction.focus.cell;
+			scrollCtx.selectionBounds = interaction.cellSelection.selection.bounds ?? undefined;
 
 			this.deps.recycleViewport(true, scrollCtx, nextWindow);
 			this.scheduleApproachBandPrewarm(nextWindow);
@@ -340,9 +342,10 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		const rowModel = this.deps.engine.getVisualRowModel();
 		if (!rowModel) return;
 		const state = this.deps.engine.stateManager.getState();
+		const interaction = readInteractionState(state);
 		const compiledPlan = this.deps.engine.columns.getCompiledPlan();
-		const focusedCell = state.selection.focus;
-		const selectionBounds = state.selection.bounds;
+		const focusedCell = interaction.focus.cell;
+		const selectionBounds = interaction.cellSelection.selection.bounds;
 		const compiledStyleRules = compileStyleRules(state.styleRules);
 
 		const columns = this.deps.engine.columns.getDisplayedColumns();
@@ -519,7 +522,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 						styleScratch.value = displayValue;
 						styleScratch.rawValue = rawValue ?? displayValue;
 						styleScratch.isLoading = false;
-						styleScratch.selection = state.selection;
+						styleScratch.selection = interaction.cellSelection.selection;
 						const customCellClass = evaluateCellStyleRules(compiledStyleRules, col, visualRow.node.data, styleScratch);
 						if (customCellClass) stateClassName += stateClassName ? ` ${customCellClass}` : customCellClass;
 					}
@@ -613,7 +616,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 				styleScratch.value = primedValue;
 				styleScratch.rawValue = rawValue ?? primedValue;
 				styleScratch.isLoading = false;
-				styleScratch.selection = state.selection;
+				styleScratch.selection = interaction.cellSelection.selection;
 				const customCellClass = evaluateCellStyleRules(compiledStyleRules, col, visualRow.node.data, styleScratch);
 				if (customCellClass) stateClassName += stateClassName ? ` ${customCellClass}` : customCellClass;
 			}

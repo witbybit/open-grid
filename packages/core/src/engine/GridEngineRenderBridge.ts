@@ -60,8 +60,8 @@ export class GridEngineRenderBridge<TRowData = unknown> {
 		this.deps.cellNotifications.publishCommittedCellChanges(changes);
 	}
 
-	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true): void {
-		this.deps.cellNotifications.notifyCellChange(rowId, colField, includeRenderInvalidation);
+	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true, renderColId?: string): void {
+		this.deps.cellNotifications.notifyCellChange(rowId, colField, includeRenderInvalidation, renderColId);
 	}
 
 	public registerCellSubscription(sub: CellSubscription): void {

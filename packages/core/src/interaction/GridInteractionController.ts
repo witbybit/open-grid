@@ -1,6 +1,7 @@
 import type { GridCellPointer } from '../api/GridApi.js';
 import type { GridPluginRuntime } from '../api/GridApiSurfaces.js';
 import { areCellPointersEqual } from './cellPointer.js';
+import { readInteractionState } from './interactionState.js';
 import { getColumnInstanceIdentity, type ColumnDef } from '../columnDef.js';
 
 export interface GridNavigationOptions {
@@ -216,13 +217,14 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 
 	public handleKeyDown = (event: KeyboardEvent): void => {
 		const state = this.runtime.getStateSnapshot();
-		const active = state.selection.focus;
+		const interaction = readInteractionState(state);
+		const active = interaction.focus.cell;
 		if (!active) return;
 		const coords = this.getCoordsFromPointer(active);
 		if (!coords) return;
 		const { rowIdx: row, colIdx: col } = coords;
 		const maxCol = state.columns.length - 1;
-		const isEditing = this.isEditingPointer(active, state.activeEdit);
+		const isEditing = this.isEditingPointer(active, interaction.activeEdit.active);
 
 		if (!isEditing) {
 			if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
@@ -401,8 +403,9 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 			return;
 		}
 		const state = this.runtime.getStateSnapshot();
-		const prevFocus = state.selection.focus;
-		if (prevFocus && !areCellPointersEqual(prevFocus, pointer) && this.isEditingPointer(prevFocus, state.activeEdit)) {
+		const interaction = readInteractionState(state);
+		const prevFocus = interaction.focus.cell;
+		if (prevFocus && !areCellPointersEqual(prevFocus, pointer) && this.isEditingPointer(prevFocus, interaction.activeEdit.active)) {
 			this.commitEdit();
 		}
 		this.isSelecting = true;
@@ -414,7 +417,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		const trigger = this.options.editTrigger ?? 'doubleClick';
 		if (trigger !== 'singleClick') return;
 		const state = this.runtime.getStateSnapshot();
-		const range = state.selection.range;
+		const range = readInteractionState(state).cellSelection.selection.range;
 		const isSingleCell = !range || areCellPointersEqual(range.start, range.end);
 		if (isSingleCell) this.setCellEditing(pointer.rowId, this.getEditTargetColumnIdentity(pointer), true, 'mouse');
 	};

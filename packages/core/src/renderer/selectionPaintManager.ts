@@ -3,6 +3,7 @@ import type { InternalGridState } from '../state/GridState.js';
 import type { GridRowClassParams } from '../columnDef.js';
 import type { RowNode } from '../rowNode.js';
 import type { RowSlot } from './rowSlot.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 import { reportRendererFault } from './rendererFaults.js';
 import { compileStyleRules, evaluateRowStyleRules } from '../styling/styleRules.js';
 
@@ -18,7 +19,7 @@ import { compileStyleRules, evaluateRowStyleRules } from '../styling/styleRules.
 export class SelectionPaintManager<TRowData> {
 	public hoveredRowIndex: number | null = null;
 	public selectedRowIdSet: Set<string> | null = null;
-	private lastSelectedRowIdsRef: string[] | null = null;
+	private lastSelectedRowIdsRef: readonly string[] | null = null;
 
 	private readonly rowClassScratch: GridRowClassParams<TRowData> = {
 		row: null as unknown as TRowData,
@@ -32,7 +33,7 @@ export class SelectionPaintManager<TRowData> {
 
 	constructor(private readonly engine: GridEngine<TRowData>) {}
 
-	public rebuildSelection(selectedRowIds: string[]): void {
+	public rebuildSelection(selectedRowIds: readonly string[]): void {
 		if (this.lastSelectedRowIdsRef === selectedRowIds) {
 			return;
 		}
@@ -40,7 +41,7 @@ export class SelectionPaintManager<TRowData> {
 		this.selectedRowIdSet = selectedRowIds.length > 0 ? new Set(selectedRowIds) : null;
 	}
 
-	public getSelectedRowIdSet(selectedRowIds?: string[]): Set<string> | null {
+	public getSelectedRowIdSet(selectedRowIds?: readonly string[]): Set<string> | null {
 		if (selectedRowIds) {
 			this.rebuildSelection(selectedRowIds);
 		}
@@ -53,13 +54,16 @@ export class SelectionPaintManager<TRowData> {
 		rowIndex: number,
 		state = this.engine.stateManager.getState()
 	): void {
+		const interaction = readInteractionState(state);
 		const rowModel = this.engine.getRowModel();
 		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const pinTopRows = this.engine.viewport.pinTopRows;
 		const pinBottomRows = this.engine.viewport.pinBottomRows;
 
-		const isFocusedRow = state.selection.focus?.rowId === node.id;
-		const isSelectedRow = !!state.selection.bounds && rowIndex >= state.selection.bounds.minRow && rowIndex <= state.selection.bounds.maxRow;
+		const { focus, cellSelection } = interaction;
+		const bounds = cellSelection.selection.bounds;
+		const isFocusedRow = focus.cell?.rowId === node.id;
+		const isSelectedRow = !!bounds && rowIndex >= bounds.minRow && rowIndex <= bounds.maxRow;
 		const isLoadingRow = this.engine.data.isRowLoading(node.id);
 		let rowClassName = 'og-row';
 		if (rowIndex < pinTopRows) {
@@ -92,7 +96,7 @@ export class SelectionPaintManager<TRowData> {
 				rs.isFocused = isFocusedRow;
 				rs.isSelected = isSelectedRow || isFocusedRow;
 				rs.isLoading = isLoadingRow;
-				rs.selection = state.selection;
+				rs.selection = cellSelection.selection;
 				const customRowClass = evaluateRowStyleRules(compiledStyleRules, node.data, rs);
 				if (customRowClass) {
 					rowClassName += ' ' + customRowClass;

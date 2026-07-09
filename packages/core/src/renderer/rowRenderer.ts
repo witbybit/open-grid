@@ -31,6 +31,7 @@ import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
 import { computeRowWindowRetention } from './rowWindowRetention.js';
 import { ViewportPlanner, type ViewportPlan } from './viewportPlanner.js';
 import { LiveFrameBudget } from './liveFrameBudget.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 
 export class RowRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -309,7 +310,7 @@ export class RowRenderer<TRowData = unknown> {
 
 	public recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow): void {
 		const state = ctx?.state ?? this.engine.stateManager.getState();
-		this.selectionPaint.rebuildSelection(state.selectedRowIds);
+		this.selectionPaint.rebuildSelection(readInteractionState(state).rowSelection.selectedRowIds);
 		const nextWindow =
 			precomputedWindow ??
 			applyRenderWindowRuntimeLimits(computeRenderWindow(this.engine), state.runtimeLimits, () => {
@@ -352,8 +353,9 @@ export class RowRenderer<TRowData = unknown> {
 		// ── Vertical focus/edit row retention ─────────────────────────────────────────
 		// Mirrors the existing horizontal focused-column guard (reconcileCellTopologyForScroll) —
 		// a focused/editing row must never be virtualized fully out of the row-slot pool.
-		const focusedCellPointer = ctx?.focusedCell ?? state.selection.focus;
-		const activeEditCell = ctx?.activeEdit ?? state.activeEdit;
+		const interaction = readInteractionState(state);
+		const focusedCellPointer = ctx?.focusedCell ?? interaction.focus.cell;
+		const activeEditCell = ctx?.activeEdit ?? interaction.activeEdit.active;
 		const focusedRowIndex = focusedCellPointer && rowModel ? rowModel.getVisualIndexByRowId(focusedCellPointer.rowId) : undefined;
 		const editingRowIndex = activeEditCell && rowModel ? rowModel.getVisualIndexByRowId(activeEditCell.rowId) : undefined;
 		const { retainedRowIndices } = computeRowWindowRetention({ renderWindow: nextWindow, focusedRowIndex, editingRowIndex });
@@ -704,6 +706,14 @@ export class RowRenderer<TRowData = unknown> {
 
 	public repaintInvalidatedRowsAndCells(frame: InvalidationFrame): void {
 		this.runtime.repaintInvalidatedRowsAndCells(frame);
+	}
+
+	public repaintInvalidatedRows(frame: InvalidationFrame): void {
+		this.runtime.repaintInvalidatedRows(frame);
+	}
+
+	public repaintInvalidatedCells(frame: InvalidationFrame): void {
+		this.runtime.repaintInvalidatedCells(frame);
 	}
 
 	// ── Misc helpers ─────────────────────────────────────────────────────────────────

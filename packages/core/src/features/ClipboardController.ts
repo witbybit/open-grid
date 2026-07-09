@@ -4,6 +4,7 @@ import type { VisualRow } from '../visualRow.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import { GridEventName } from '../api/GridEvents.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
 import { dispatchWriteBlockedEvent, isWriteBlockedResult } from './writeBlockedEvent.js';
@@ -37,7 +38,7 @@ export class ClipboardController<TRowData = unknown> {
 
 	public async copySelectedRange(): Promise<void> {
 		const state = this.c.getState();
-		const selection = state.selection;
+		const selection = readInteractionState(state).cellSelection.selection;
 		const bounds = selection.bounds;
 
 		if (!bounds) {
@@ -64,7 +65,7 @@ export class ClipboardController<TRowData = unknown> {
 	public async pasteFromClipboard(): Promise<void> {
 		if (typeof navigator === 'undefined' || !navigator.clipboard) return;
 		const state = this.c.getState();
-		const selection = state.selection;
+		const selection = readInteractionState(state).cellSelection.selection;
 		const focus = selection.focus;
 		if (!focus) return;
 

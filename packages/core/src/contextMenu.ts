@@ -2,6 +2,7 @@ import type { GridApi, GridCellPointer, GridPlugin, GridPluginRuntime, GridSelec
 import { exportToCsv } from './export/csvExport.js';
 import { attachRovingMenuKeyboard } from './menuKeyboardNav.js';
 import { isFilterableColumn, buildFilterByValue, applyFilterToModel } from './filterOperations.js';
+import { readInteractionState } from './interaction/interactionState.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
 	rowId: string;
@@ -70,9 +71,10 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		if (this.options.disabled) return;
 
 		const state = this.runtime.getStateSnapshot();
+		const selection = readInteractionState(state).cellSelection.selection;
 		const access = this.runtime.getCellAccessByPointer(pointer);
 		let inSelection = false;
-		if (state.selection.bounds) {
+		if (selection.bounds) {
 			const rowModel = this.runtime.getRowModel();
 			if (rowModel) {
 				const clickedRowIdx = access?.rowIndex ?? rowModel.getVisualIndexByRowId(pointer.rowId);
@@ -81,7 +83,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 					(pointer.columnInstanceId
 						? state.columns.findIndex((column) => 'instanceId' in column && column.instanceId === pointer.columnInstanceId)
 						: state.columns.findIndex((column) => column.field === pointer.colField));
-				const bounds = state.selection.bounds;
+				const bounds = selection.bounds;
 				if (
 					clickedRowIdx >= bounds.minRow &&
 					clickedRowIdx <= bounds.maxRow &&
@@ -154,12 +156,13 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		this.menuElement = menu;
 
 		const state = this.runtime.getStateSnapshot();
+		const selection = readInteractionState(state).cellSelection.selection;
 		const params: ContextMenuParams<TRowData> = {
 			rowId,
 			colField,
 			pointer: activePointer,
 			api: this.runtime,
-			selection: state.selection,
+			selection,
 		};
 
 		const defaultItems: Array<GridContextMenuItem<TRowData>> = [

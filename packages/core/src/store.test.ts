@@ -125,6 +125,39 @@ describe('GridStore generic row-store functionality', () => {
 		store.destroy();
 	});
 
+	it('keeps internal interaction state synchronized with focus, edit, and row selection', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+			rowSelection: { mode: 'multiple' },
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		store.startEditing('1', 'name');
+		store.selectRows(['1']);
+
+		const state = store.getState();
+		expect(state.interaction?.focus.cell).toEqual(state.selection.focus);
+		expect(state.interaction?.focus.origin).toBe('keyboard');
+		expect(state.interaction?.focus.version).toBe(state.selection.version ?? 0);
+		expect(state.interaction?.cellSelection.selection).toBe(state.selection);
+		expect(state.interaction?.activeEdit.active).toBe(state.activeEdit);
+		expect(state.interaction?.rowSelection.selectedRowIds).toBe(state.selectedRowIds);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('suppresses unrelated selector wakeups for row, column, and integrity subscriptions', () => {
 		const store = new GridStore<TestRow>(
 			{
@@ -562,15 +595,17 @@ describe('GridStore generic row-store functionality', () => {
 		});
 
 		store.selectCell({ rowId: '1', colField: 'name' });
+		const firstSelectionColumnInstanceId = store.getState().selection.focus?.columnInstanceId;
 		void store.engine.invalidation.consume();
 
 		store.selectCell({ rowId: '2', colField: 'name' });
+		const secondSelectionColumnInstanceId = store.getState().selection.focus?.columnInstanceId;
 		const frame = store.engine.invalidation.consume();
 
 		expect(frame.headers).toBe(true);
 		expect(frame.overlay).toBe(true);
-		expect(frame.cellsByRowId.get('1')).toEqual(new Set(['name']));
-		expect(frame.cellsByRowId.get('2')).toEqual(new Set(['name']));
+		expect(frame.cellsByRowId.get('1')).toEqual(new Set([firstSelectionColumnInstanceId]));
+		expect(frame.cellsByRowId.get('2')).toEqual(new Set([secondSelectionColumnInstanceId]));
 		expect(frame.rows).toEqual(new Set(['1', '2']));
 		expect(frame.invalidations.filter((entry) => entry.kind === 'cell')).toHaveLength(2);
 		expect(frame.invalidations.filter((entry) => entry.kind === 'row')).toHaveLength(2);

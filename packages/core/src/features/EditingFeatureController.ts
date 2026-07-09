@@ -14,7 +14,7 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	data: DataModel<TRowData>;
-	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
+	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean, renderColId?: string) => void;
 	validateCommittedCells?: (
 		cells: readonly { rowId: string; colField: string }[],
 		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
@@ -32,7 +32,7 @@ export class EditingFeatureController<TRowData = unknown> {
 	private readonly ctx: GridFeatureContext<TRowData>;
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly data: DataModel<TRowData>;
-	private readonly notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
+	private readonly notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean, renderColId?: string) => void;
 	private readonly validateCommittedCells?: (
 		cells: readonly { rowId: string; colField: string }[],
 		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
@@ -97,13 +97,13 @@ export class EditingFeatureController<TRowData = unknown> {
 				},
 			},
 			invalidations: [
-				{ kind: 'cell', rowId, colId: colField, reason: 'edit started' },
+				{ kind: 'cell', rowId, colId: column.instanceId, reason: 'edit started' },
 				{ kind: 'overlay', reason: 'edit started' },
 			],
 			domains: ['editing'],
 			events: [{ type: GridEventName.editStarted, payload: { rowId, colField } }],
 		});
-		this.notifyCellChange(rowId, colField, false);
+		this.notifyCellChange(rowId, colField, false, column.instanceId);
 	}
 
 	public updateEditDraft(rowId: string, colFieldOrInstanceId: string, value: unknown): void {
@@ -131,13 +131,13 @@ export class EditingFeatureController<TRowData = unknown> {
 			reason: 'editing:stop',
 			state: { activeEdit: null },
 			invalidations: [
-				{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
+				{ kind: 'cell', rowId, colId: activeEdit.columnInstanceId ?? colField, reason: 'edit stopped' },
 				{ kind: 'overlay', reason: 'edit stopped' },
 			],
 			domains: ['editing'],
 			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel } }],
 		});
-		this.notifyCellChange(rowId, colField, false);
+		this.notifyCellChange(rowId, colField, false, activeEdit.columnInstanceId ?? colField);
 	}
 
 	public async commitEdit(rowId: string, colFieldOrInstanceId: string, value: unknown): Promise<boolean> {
@@ -217,7 +217,7 @@ export class EditingFeatureController<TRowData = unknown> {
 				},
 			],
 			invalidations: [
-				{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
+				{ kind: 'cell', rowId, colId: matchedActiveEdit?.columnInstanceId ?? colField, reason: 'edit stopped' },
 				{ kind: 'overlay', reason: 'edit stopped' },
 			],
 			domains: ['editing'],
@@ -233,7 +233,7 @@ export class EditingFeatureController<TRowData = unknown> {
 			return false;
 		}
 
-		this.notifyCellChange(rowId, colField, false);
+		this.notifyCellChange(rowId, colField, false, matchedActiveEdit?.columnInstanceId ?? colField);
 		await this.validateCommittedCells?.([{ rowId, colField }], 'edit');
 		return true;
 	}

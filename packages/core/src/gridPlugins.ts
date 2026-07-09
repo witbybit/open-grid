@@ -3,8 +3,6 @@ import type { GridInteractionHandle, GridNavigationOptions } from './interaction
 import type { GridApi, GridCellPointer } from './api/GridApi.js';
 import { resolveGridInteractionController, resolveGridPluginController } from './internal/apiInternalBridge.js';
 
-export type GridNavigationHandle = GridInteractionHandle;
-
 export interface GridContextMenuHandle<TRowData = unknown> {
 	setOptions(options: GridContextMenuOptions<TRowData>): void;
 	show(rowId: string, colField: string, clientX: number, clientY: number): void;
@@ -12,7 +10,7 @@ export interface GridContextMenuHandle<TRowData = unknown> {
 	dispose(): void;
 }
 
-export function registerGridNavigation<TRowData>(api: GridApi<TRowData>, options: GridNavigationOptions = {}): GridNavigationHandle {
+export function registerGridInteraction<TRowData>(api: GridApi<TRowData>, options: GridNavigationOptions = {}): GridInteractionHandle {
 	const controller = resolveGridInteractionController(api);
 	controller.updateOptions(options);
 	return controller;

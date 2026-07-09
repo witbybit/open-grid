@@ -16,6 +16,7 @@ import type {
 	RowSelectionScope,
 } from '../api/GridApi.js';
 import { areCellPointersEqual } from '../interaction/cellPointer.js';
+import { buildInteractionState } from '../interaction/interactionState.js';
 import { getColumnInstanceIdentity, type ColumnDef, type GridRendererOptions } from '../columnDef.js';
 import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
 import {
@@ -371,7 +372,8 @@ export class GridEngine<TRowData = unknown> {
 			cellNotifications: this.cellNotifications,
 			getRowModel: () => this.rowModel,
 			getRowHeightsList: (rowModel, rowHeightsRecord, defaultRowHeight) => this.getRowHeightsList(rowModel, rowHeightsRecord, defaultRowHeight),
-			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
+			notifyCellChange: (rowId, colField, includeRenderInvalidation, renderColId) =>
+				this.notifyCellChange(rowId, colField, includeRenderInvalidation, renderColId),
 		});
 
 		const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');
@@ -422,6 +424,11 @@ export class GridEngine<TRowData = unknown> {
 			colBuffer: config.colBuffer ?? 2,
 			runtimeLimits: config.runtimeLimits,
 			overscanAdaptive: config.overscanAdaptive,
+			interaction: buildInteractionState({
+				selection: initialSelection,
+				activeEdit: config.activeEdit || null,
+				selectedRowIds: config.selectedRowIds ?? [],
+			}),
 			integrity: _createEmptyIntegrityState<TRowData>(),
 		};
 
@@ -511,7 +518,8 @@ export class GridEngine<TRowData = unknown> {
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
 			data: this.data,
-			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
+			notifyCellChange: (rowId, colField, includeRenderInvalidation, renderColId) =>
+				this.notifyCellChange(rowId, colField, includeRenderInvalidation, renderColId),
 			validateCommittedCells: (cells, source) => this.dataIntegrity?.validateCommittedCells(cells, source) ?? Promise.resolve(),
 			validateWriteProposal: (updates, source) => this.dataIntegrity?.validateWriteProposal(updates, source) ?? Promise.resolve([]),
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
@@ -1245,8 +1253,8 @@ export class GridEngine<TRowData = unknown> {
 		this.renderBridge.publishCommittedCellChanges(changes, this.batchedUpdates);
 	}
 
-	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true): void {
-		this.renderBridge.notifyCellChange(rowId, colField, includeRenderInvalidation);
+	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true, renderColId?: string): void {
+		this.renderBridge.notifyCellChange(rowId, colField, includeRenderInvalidation, renderColId);
 	}
 
 	public registerCellSubscription = (sub: CellSubscription): void => {
@@ -1328,7 +1336,7 @@ export class GridEngine<TRowData = unknown> {
 			...selectionChange.invalidatedCells.map((cell) => ({
 				kind: 'cell' as const,
 				rowId: cell.rowId,
-				colId: cell.colField,
+				colId: cell.columnInstanceId ?? cell.colField,
 				reason: 'selection' as const,
 			})),
 			...selectionChange.invalidatedRows.map((rowId) => ({ kind: 'row' as const, rowId, reason: 'selection' as const })),

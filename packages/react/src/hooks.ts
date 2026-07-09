@@ -1,4 +1,4 @@
-import { GridApi, GridNavigationHandle, GridNavigationOptions, GridStateSnapshot, registerGridNavigation } from '@open-grid/core';
+import { GridApi, type GridInteractionHandle, GridNavigationOptions, GridStateSnapshot, registerGridInteraction } from '@open-grid/core';
 import { useCallback, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
 import { GridApiContext } from './gridContext.js';
 
@@ -123,12 +123,12 @@ function useGridKeySelectorWithEquality<T, TRowData = unknown>(
 /**
  * Controller integration hook mapping standard interaction event handlers.
  */
-export function useGridNavigationController<TRowData = unknown>(options: GridNavigationOptions = {}, enabled = true) {
+export function useGridInteractionController<TRowData = unknown>(options: GridNavigationOptions = {}, enabled = true) {
 	const api = useGridApi<TRowData>();
-	const controllerRef = useRef<GridNavigationHandle | null>(enabled ? registerGridNavigation<TRowData>(api, options) : null);
+	const controllerRef = useRef<GridInteractionHandle | null>(enabled ? registerGridInteraction<TRowData>(api, options) : null);
 	if (enabled) {
 		if (controllerRef.current == null) {
-			controllerRef.current = registerGridNavigation<TRowData>(api, options);
+			controllerRef.current = registerGridInteraction<TRowData>(api, options);
 		} else {
 			controllerRef.current.updateOptions(options);
 		}

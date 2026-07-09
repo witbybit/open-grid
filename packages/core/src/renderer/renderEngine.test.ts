@@ -1180,6 +1180,77 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('repaints only the old and new duplicate-field focus cells when focus moves by column instance', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [
+				{ field: 'name', header: 'Name A', width: 120, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 120, colId: 'name-b' },
+				{ field: 'name', header: 'Name C', width: 120, colId: 'name-c' },
+			],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-1', name: 'Alpha' }],
+			columns: store.getState().columns,
+		});
+		const displayedColumns = store.engine.columns.getDisplayedColumns() as Array<{ field: string; colId?: string; instanceId?: string }>;
+		const firstPointer = {
+			rowId: 'row-1',
+			colField: displayedColumns[0]!.field,
+			colId: displayedColumns[0]!.colId,
+			columnInstanceId: displayedColumns[0]!.instanceId,
+		};
+		const secondPointer = {
+			rowId: 'row-1',
+			colField: displayedColumns[1]!.field,
+			colId: displayedColumns[1]!.colId,
+			columnInstanceId: displayedColumns[1]!.instanceId,
+		};
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		store.selectCell(firstPointer, 'keyboard');
+		await Promise.resolve();
+		await Promise.resolve();
+		renderer.resetRenderStats();
+
+		store.selectCell(secondPointer, 'keyboard');
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const nameCells = Array.from(container.querySelectorAll<HTMLDivElement>('.og-cell[data-row-id="row-1"][data-col-field="name"]'));
+		expect(nameCells).toHaveLength(3);
+		expect(nameCells[0]?.className).not.toContain('og-cell-focused');
+		expect(nameCells[1]?.className).toContain('og-cell-focused');
+		expect(nameCells[2]?.className).not.toContain('og-cell-focused');
+		expect(renderer.getRenderStats().cellPaints).toBe(2);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 
 	it('records geometry invalidation without forcing a full paint for row and column resizing', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {

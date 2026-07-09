@@ -11,6 +11,7 @@ import type { CellNotificationController } from './CellNotificationController.js
 import type { GridSelectionState } from '../api/GridApi.js';
 import type { GridCellPointer } from '../api/GridApi.js';
 import { areCellPointersEqual } from '../interaction/cellPointer.js';
+import { buildInteractionState, isInteractionStateCurrent } from '../interaction/interactionState.js';
 import { getColumnInstanceIdentity } from '../columnDef.js';
 
 interface RangeBounds {
@@ -29,7 +30,7 @@ export interface GridProjectionPipelineDeps<TRowData = unknown> {
 	cellNotifications: CellNotificationController<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	getRowHeightsList: (rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number) => number[];
-	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
+	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean, renderColId?: string) => void;
 }
 
 export interface GridProjectionRunInput<TRowData = unknown> {
@@ -123,6 +124,17 @@ export class GridProjectionPipeline<TRowData = unknown> {
 			this.deps.selection.setSelection(currState.selection);
 		}
 
+		if ((updatedSet.has('selection') || updatedSet.has('activeEdit') || updatedSet.has('selectedRowIds')) && !isInteractionStateCurrent(currState)) {
+			const interaction = buildInteractionState({
+				selection: currState.selection,
+				activeEdit: currState.activeEdit,
+				selectedRowIds: currState.selectedRowIds,
+			});
+			const affectedKeys = phase.setDerivedState({ interaction });
+			for (const key of affectedKeys) updatedSet.add(key);
+			currState = phase.getState();
+		}
+
 		const needsRangeUpdate =
 			updatedSet.has('columns') ||
 			updatedSet.has('columnWidths') ||
@@ -166,21 +178,22 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		updatedSet: ReadonlySet<string>
 	): void {
 		const notifiedCells = new Set<string>();
-		const notifyCellOnce = (rowId: string, colField: string): void => {
-			const key = `${rowId}:${colField}`;
+		const notifyCellOnce = (cell: GridCellPointer): void => {
+			const renderColId = cell.columnInstanceId ?? cell.colField;
+			const key = `${cell.rowId}:${renderColId}`;
 			if (notifiedCells.has(key)) return;
 			notifiedCells.add(key);
-			this.deps.notifyCellChange(rowId, colField, false);
+			this.deps.notifyCellChange(cell.rowId, cell.colField, false, renderColId);
 		};
 
 		if (updatedSet.has('selection')) {
-			if (prevState.selection.focus) notifyCellOnce(prevState.selection.focus.rowId, prevState.selection.focus.colField);
-			if (currState.selection.focus) notifyCellOnce(currState.selection.focus.rowId, currState.selection.focus.colField);
+			if (prevState.selection.focus) notifyCellOnce(prevState.selection.focus);
+			if (currState.selection.focus) notifyCellOnce(currState.selection.focus);
 		}
 
 		if (updatedSet.has('activeEdit')) {
-			if (prevState.activeEdit) notifyCellOnce(prevState.activeEdit.rowId, prevState.activeEdit.colField);
-			if (currState.activeEdit) notifyCellOnce(currState.activeEdit.rowId, currState.activeEdit.colField);
+			if (prevState.activeEdit) notifyCellOnce(prevState.activeEdit);
+			if (currState.activeEdit) notifyCellOnce(currState.activeEdit);
 		}
 
 		if (updatedSet.has('selection')) {
@@ -196,7 +209,12 @@ export class GridProjectionPipeline<TRowData = unknown> {
 						const visualRow = activeRowModel.getVisualRow(rowIdx);
 						const col = displayedColumns[colIdx];
 						if (visualRow?.kind === 'data' && col) {
-							notifyCellOnce(visualRow.rowId, col.field);
+							notifyCellOnce({
+								rowId: visualRow.rowId,
+								colField: col.field,
+								colId: col.colId ?? col.field,
+								columnInstanceId: getColumnInstanceIdentity(col),
+							});
 						}
 					}
 				);

@@ -1,5 +1,6 @@
 import type { RowModel } from '../../rowModel.js';
 import type { InternalGridState } from '../../state/GridState.js';
+import { readInteractionState } from '../../interaction/interactionState.js';
 import type {
 	GridIntegrityCapabilityMatrix,
 	GridIntegrityRowRef,
@@ -132,7 +133,7 @@ export class CapabilityDrivenGridIntegrityRowProvider<TRowData> implements GridI
 		capability: GridIntegrityScopeCapability
 	): GridIntegrityRowsResult<TRowData> {
 		const refs: GridIntegrityRowRef<TRowData>[] = [];
-		for (const rowId of state.selectedRowIds ?? []) {
+		for (const rowId of readInteractionState(state).rowSelection.selectedRowIds) {
 			const node = rowModel.getRowNodeById?.(rowId) ?? null;
 			if (!node || node.data == null) continue;
 			refs.push({ rowId, row: node.data as TRowData, source: 'selected' });

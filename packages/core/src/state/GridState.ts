@@ -2,6 +2,7 @@ import type { FilterModel, QuickFilterModel, SortDirection, SortModel } from '..
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { ColumnDef, GridStyleRule, GridRendererOptions } from '../columnDef.js';
+import type { GridInteractionState } from '../interaction/interactionState.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { GridSelectionState, ActiveEditState, RowSelectionOptions } from '../api/GridApi.js';
@@ -203,6 +204,7 @@ export interface GridIntegrityState<TRowData = unknown> {
 export type InternalGridState<TRowData = unknown> = GridModelState<TRowData> &
 	GridRuntimeState &
 	GridUIState & {
+		interaction?: GridInteractionState;
 		integrity: GridIntegrityState<TRowData>;
 	};
 

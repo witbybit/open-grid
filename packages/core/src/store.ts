@@ -142,6 +142,7 @@ import { createGridStoreSubscriptions, type GridStoreSubscriptionsFacade } from 
 import { createGridStoreHostFacade, type GridStoreHostFacade } from './store/GridStoreHostFacade.js';
 import { GridInteractionController } from './interaction/GridInteractionController.js';
 import { doesCellPointerMatchColumn } from './interaction/cellPointer.js';
+import { readInteractionState } from './interaction/interactionState.js';
 
 export { validateRowIds } from './ids.js';
 
@@ -410,8 +411,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public extendSelection = (end: GridCellPointer, source: GridSelectionSource = 'api'): void => {
-		const state = this.getState();
-		this.engine.selectRange(state.selection.anchor ?? state.selection.focus ?? end, end, source);
+		const selection = readInteractionState(this.getState()).cellSelection.selection;
+		this.engine.selectRange(selection.anchor ?? selection.focus ?? end, end, source);
 	};
 
 	public applyRowSelectionGesture = (gesture: RowSelectionGesture): RowSelectionChangeResult | null => {
@@ -429,13 +430,11 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public clearRowSelection = (): void => this.engine.clearRowSelection('api');
 
-	public isRowNodeSelected = (rowId: string): boolean => {
-		return this.state.selectedRowIds.includes(rowId);
-	};
+	public isRowNodeSelected = (rowId: string): boolean => readInteractionState(this.state).rowSelection.selectedRowIds.includes(rowId);
 
-	public getSelectedRowCount = (): number => this.state.selectedRowIds.length;
+	public getSelectedRowCount = (): number => readInteractionState(this.state).rowSelection.selectedRowIds.length;
 
-	public getSelectedRowIds = (): string[] => this.state.selectedRowIds.slice();
+	public getSelectedRowIds = (): string[] => readInteractionState(this.state).rowSelection.selectedRowIds.slice();
 
 	public setColumnWidth = (colField: string, width: number): void => this.engine.resizeColumn(colField, width);
 	public autoSizeColumn = (colField: string, options?: AutoSizeColumnOptions): void => this.engine.autoSizeColumn(colField, options);
@@ -1240,7 +1239,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		column: (Pick<ColumnDef<TRowData>, 'field'> & { instanceId?: ColumnInstanceId }) | undefined
 	): CellState {
 		const computedValue = this.getCellValue(rowId, colField);
-		const isEditing = column ? doesCellPointerMatchColumn(this.state.activeEdit, rowId, column) : false;
+		const interaction = readInteractionState(this.state);
+		const isEditing = column ? doesCellPointerMatchColumn(interaction.activeEdit.active, rowId, column) : false;
 
 		let value = computedValue;
 		if (this.engine.hasFormula(rowId, colField)) {

@@ -37,6 +37,7 @@ import type { CellCtrl } from './controllers/CellCtrl.js';
 import { CellCtrlStore } from './controllers/CellCtrlStore.js';
 import { resolveCellCtrlPresentationState } from './controllers/resolveCellCtrlPresentationState.js';
 import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 
 const fallbackCellCtrlStores = new WeakMap<object, CellCtrlStore<any>>();
 
@@ -380,6 +381,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 		loadingVersion: snapshotVisualVersions.loadingVersion,
 		selectionVersion: deps.engine.selectionVersion,
 	};
+	const interaction = readInteractionState(state);
 	const cellCtrl = attachCellCtrl(deps, request, access.isEditing, access.isFocused);
 	const rowCtrl = request.rowCtrl ?? deps.engine.rowCtrls?.getOrCreate(node.id) ?? createRowCtrl(node.id);
 	cellCtrl.visualState.selected = access.isSelected;
@@ -451,7 +453,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 			s.value = access.value;
 			s.rawValue = access.rawValue;
 			s.isLoading = access.isLoading;
-			s.selection = state.selection;
+			s.selection = interaction.cellSelection.selection;
 			const customCellClass = evaluateCellStyleRules(compiledStyleRules, col, node.data, s);
 			if (customCellClass) cellClassName += ' ' + customCellClass;
 		} catch (e) {
@@ -473,7 +475,7 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 
 	if (col.checkboxSelection) {
 		const rowId = node.id;
-		const isChecked = !!deps.selectionPaint.getSelectedRowIdSet(state.selectedRowIds)?.has(rowId);
+		const isChecked = !!deps.selectionPaint.getSelectedRowIdSet(interaction.rowSelection.selectedRowIds)?.has(rowId);
 		cellClassName += ' og-cell-row-selector';
 		resolveCellCtrlPresentationState({
 			cellCtrl,
