@@ -76,6 +76,17 @@ function getDisplayedColumnIndexesForField<TRowData>(columns: readonly ColumnDef
 	return indexes;
 }
 
+function getDisplayedColumnIndexesForInvalidation<TRowData>(columns: readonly ColumnDef<TRowData>[], colIdOrField: string): number[] {
+	const exactIndexes: number[] = [];
+	for (let index = 0; index < columns.length; index++) {
+		const column = columns[index] as InternalColumnDef<TRowData> | undefined;
+		if (!column) continue;
+		if (column.instanceId === colIdOrField || column.colId === colIdOrField) exactIndexes.push(index);
+	}
+	if (exactIndexes.length > 0) return exactIndexes;
+	return getDisplayedColumnIndexesForField(columns, colIdOrField);
+}
+
 export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
 	const rowModel = deps.engine.getVisualRowModel();
 	if (!rowModel) return;
@@ -126,8 +137,8 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 		const row = rowModel.getVisualRow(rowIndex);
 		if (!slot || row?.kind !== 'data') continue;
 
-		for (const colField of colFields) {
-			for (const colIndex of getDisplayedColumnIndexesForField(columns, colField)) {
+		for (const colIdOrField of colFields) {
+			for (const colIndex of getDisplayedColumnIndexesForInvalidation(columns, colIdOrField)) {
 				const cellSlot = slot.getCellForCol(colIndex);
 				if (!cellSlot) continue;
 				const lane = columnTopology.byColumnId.get((columns[colIndex] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
@@ -150,8 +161,8 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 		}
 	}
 
-	for (const colField of frame.columns) {
-		for (const colIndex of getDisplayedColumnIndexesForField(columns, colField)) {
+	for (const colIdOrField of frame.columns) {
+		for (const colIndex of getDisplayedColumnIndexesForInvalidation(columns, colIdOrField)) {
 			const lane = columnTopology.byColumnId.get((columns[colIndex] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
 			for (const [rowIndex, slot] of deps.activeRows) {
 				const row = rowModel.getVisualRow(rowIndex);
