@@ -638,7 +638,7 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('navigation and contextMenu plugins do not depend on GridStore downcasts', () => {
-		const files = ['navigation.ts', 'contextMenu.ts'];
+		const files = ['interaction/GridInteractionController.ts', 'contextMenu.ts'];
 		for (const file of files) {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not reference GridStore`).not.toContain('GridStore');
@@ -1837,7 +1837,8 @@ describe('Architecture guardrails', () => {
 
 	it('gridHost mounts against the host composition handle instead of a concrete GridStore (Plans 112/117)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'gridHost.ts'), 'utf-8');
-		expect(content).toContain('resolveGridHostComposition(api)');
+		expect(content).toContain('resolveGridRuntimeComposition(api)');
+		expect(content).toContain('const host = runtime.host;');
 		expect(content).toContain('const internalApi = host.api;');
 		expect(content).toContain('host.setContainerElement(container);');
 		expect(content).not.toContain('resolveGridInternalStore(api)');
@@ -1860,9 +1861,10 @@ describe('Architecture guardrails', () => {
 
 	it('gridHost adapter types do not depend on store.ts type exports (Plan 112)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'gridHost.ts'), 'utf-8');
-		expect(content).toContain("import type { GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';");
+		expect(content).toContain("import type { CellState, GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';");
 		expect(content).not.toContain("import('./store.js').GridCellPointer");
 		expect(content).not.toContain("import('./store.js').GridCellAccess");
+		expect(content).not.toContain("import('./store.js').CellState");
 	});
 
 	it('GridStateFeatureController no longer contains raw write fallbacks (Plan 103)', () => {
@@ -2656,11 +2658,12 @@ describe('Architecture guardrails', () => {
 		it('selection commits keep bounds projection-owned and resolve event payloads after projection', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
 			expect(content).toContain('const previewSelection = {');
-			expect(content).toContain('const committedSelection = {');
-			expect(content).toContain('bounds: null,');
+			expect(content).toContain('const committedSelection = this.selection.createSelectionRange(validStart, validEnd, source);');
+			expect(content).toContain('bounds: this.selection.calculateRangeBounds(');
 			expect(content).toContain('payload: (state) => ({ focus: state.selection.focus, selection: state.selection })');
 			expect(content).toContain('selection: state.selection,');
 			expect(content).not.toContain('const selection = this.selection.setSelection(');
+			expect(content).toContain('state: { selection: committedSelection }');
 		});
 	});
 });
