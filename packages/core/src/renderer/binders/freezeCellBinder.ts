@@ -15,6 +15,7 @@ export function applyFreezeCellPresentation<TRowData>(input: DispatchCellPresent
 	switch (presentation.kind) {
 		case 'checkbox-selector': {
 			if (input.phase === 'scroll' && presentation.markDirty) deps.markCellDirtyAfterScroll(cellSlot.element);
+			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 			if (input.phase === 'full-bind' && runtime.checkbox) {
 				let checkbox = cellSlot.contentElement.querySelector<HTMLInputElement>('input[type="checkbox"].og-row-checkbox');
 				if (!checkbox) {
