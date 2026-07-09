@@ -229,7 +229,11 @@ export class GridProjectionPipeline<TRowData = unknown> {
 			if (!column) return null;
 			const columnInstanceId = getColumnInstanceIdentity(column);
 			if (!columnInstanceId || this.deps.columns.getIndexMapper().idToVisualIndex(columnInstanceId) < 0) return null;
-			if (pointer.columnInstanceId === columnInstanceId && pointer.colField === column.field && pointer.colId === (column.colId ?? column.field)) {
+			if (
+				pointer.columnInstanceId === columnInstanceId &&
+				pointer.colField === column.field &&
+				pointer.colId === (column.colId ?? column.field)
+			) {
 				return pointer;
 			}
 			return {

@@ -59,80 +59,80 @@ No compatibility hub preserving deprecated field-based identity internally.
 The following excerpts describe the live interaction architecture this plan replaces.
 
 - [packages/core/src/api/GridApi.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/api/GridApi.ts) defines public interaction state and still uses field-based cell identity:
-  - `GridCellPointer { rowId, colField }` at lines 82-85
-  - `ActiveEditState extends GridCellPointer` at lines 87-89
-  - `GridSelectionState` with `focus`, `anchor`, `range`, and `bounds` at lines 192-198
+    - `GridCellPointer { rowId, colField }` at lines 82-85
+    - `ActiveEditState extends GridCellPointer` at lines 87-89
+    - `GridSelectionState` with `focus`, `anchor`, `range`, and `bounds` at lines 192-198
 
 - [packages/core/src/models/SelectionModel.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/models/SelectionModel.ts) owns cell selection/range state mechanics, but range bounds still convert through row id + field:
-  - `calculateRangeBounds(...)` maps `range.start.colField` / `range.end.colField` to displayed column indexes at lines 70-90
-  - invalidated cells are keyed as `${rowId}:${colField}` at lines 183-188
+    - `calculateRangeBounds(...)` maps `range.start.colField` / `range.end.colField` to displayed column indexes at lines 70-90
+    - invalidated cells are keyed as `${rowId}:${colField}` at lines 183-188
 
 - [packages/core/src/models/EditModel.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/models/EditModel.ts) is only a shallow pointer holder:
-  - `private activeEdit: GridCellPointer | null = null` at lines 3-4
-  - there is no `draftValue`, `originalValue`, `startedBy`, `version`, or lifecycle state machine
+    - `private activeEdit: GridCellPointer | null = null` at lines 3-4
+    - there is no `draftValue`, `originalValue`, `startedBy`, `version`, or lifecycle state machine
 
 - [packages/core/src/navigation.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/navigation.ts) is the current keyboard/pointer navigation owner:
-  - pointer and keyboard commands are driven directly through `GridPluginRuntime`
-  - focus/edit/range movement is all field-based, via `GridCellPointer`
-  - `PageUp` / `PageDown` currently use a fixed `const page = 10` heuristic at lines 182-188
-  - printable-character editing, deletion, clipboard routing, selection drag, and edit movement all live here
+    - pointer and keyboard commands are driven directly through `GridPluginRuntime`
+    - focus/edit/range movement is all field-based, via `GridCellPointer`
+    - `PageUp` / `PageDown` currently use a fixed `const page = 10` heuristic at lines 182-188
+    - printable-character editing, deletion, clipboard routing, selection drag, and edit movement all live here
 
 - [packages/core/src/engine/GridEngine.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/engine/GridEngine.ts) already provides a strong central commit seam:
-  - `applySelectionRange(...)` performs core-owned selection/focus commit and invalidation at lines 1288-1348
-  - row-selection commands route through `RowSelectionFeatureController` at lines 1260-1285
-  - clipboard API calls route through `ClipboardController` at lines 945-952
+    - `applySelectionRange(...)` performs core-owned selection/focus commit and invalidation at lines 1288-1348
+    - row-selection commands route through `RowSelectionFeatureController` at lines 1260-1285
+    - clipboard API calls route through `ClipboardController` at lines 945-952
 
 - [packages/core/src/engine/GridProjectionPipeline.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/engine/GridProjectionPipeline.ts) currently normalizes selection/editing validity after row-model changes:
-  - `normalizeSelectionState(...)` clears or collapses selection when pointers go invalid at lines 216-243
-  - `normalizeActiveEdit(...)` nulls editing when row or column disappears at lines 245-253
-  - this normalization still uses row id + field, not row id + column instance id
+    - `normalizeSelectionState(...)` clears or collapses selection when pointers go invalid at lines 216-243
+    - `normalizeActiveEdit(...)` nulls editing when row or column disappears at lines 245-253
+    - this normalization still uses row id + field, not row id + column instance id
 
 - [packages/core/src/features/EditingFeatureController.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/features/EditingFeatureController.ts) already routes committed writes through core authority:
-  - `startEdit(...)` / `stopEdit(...)` own edit-start / edit-stop invalidations and events at lines 63-98
-  - `commitEdit(...)` validates and commits through `ctx.applyChange(...)` at lines 100-185
-  - but committed edit identity is still `rowId + colField`, and the controller does not own draft/original state
+    - `startEdit(...)` / `stopEdit(...)` own edit-start / edit-stop invalidations and events at lines 63-98
+    - `commitEdit(...)` validates and commits through `ctx.applyChange(...)` at lines 100-185
+    - but committed edit identity is still `rowId + colField`, and the controller does not own draft/original state
 
 - [packages/core/src/features/RowSelectionFeatureController.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/features/RowSelectionFeatureController.ts) is already relatively solid:
-  - row-selection gestures are core-owned and row-model-scope-aware at lines 13-153
-  - this should be folded into the final kernel rather than reimplemented in the adapter
+    - row-selection gestures are core-owned and row-model-scope-aware at lines 13-153
+    - this should be folded into the final kernel rather than reimplemented in the adapter
 
 - [packages/core/src/features/ClipboardController.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/features/ClipboardController.ts) currently derives copy/paste from selection bounds + displayed columns:
-  - copy/paste start from `selection.focus` and `selection.bounds` at lines 38-77
-  - paste iterates visible rows + displayed columns using field-based column access at lines 89-119
-  - this is structurally good, but it still depends on field/index identity rather than instance identity
+    - copy/paste start from `selection.focus` and `selection.bounds` at lines 38-77
+    - paste iterates visible rows + displayed columns using field-based column access at lines 89-119
+    - this is structurally good, but it still depends on field/index identity rather than instance identity
 
 - [packages/react/src/GridView.tsx](/C:/Users/rishi/witbybit/open-grid/packages/react/src/GridView.tsx) currently owns too much interaction assembly:
-  - global `keydown` / `mouseup` / `mousedown` activity tracking is wired in the adapter at lines 246-294
-  - the adapter resolves `.og-cell` DOM targets to logical pointers at lines 296-303
-  - the adapter manually focuses cells and forwards mouse/click/double-click/contextmenu behavior to the navigation plugin at lines 305-430
-  - this is the clearest sign that interaction orchestration is not yet core-owned enough
+    - global `keydown` / `mouseup` / `mousedown` activity tracking is wired in the adapter at lines 246-294
+    - the adapter resolves `.og-cell` DOM targets to logical pointers at lines 296-303
+    - the adapter manually focuses cells and forwards mouse/click/double-click/contextmenu behavior to the navigation plugin at lines 305-430
+    - this is the clearest sign that interaction orchestration is not yet core-owned enough
 
 - [packages/core/src/renderer/selectionPaintManager.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/renderer/selectionPaintManager.ts) still owns row-selection click behavior inside a renderer-facing class:
-  - delegated viewport click handling for checkbox and row clicks lives at lines 46-121
-  - this class mixes row-class paint concerns with semantic row-selection interaction
-  - this is a clean demolition target for Plan 157
+    - delegated viewport click handling for checkbox and row clicks lives at lines 46-121
+    - this class mixes row-class paint concerns with semantic row-selection interaction
+    - this is a clean demolition target for Plan 157
 
 - [packages/core/src/renderer/rowCellBindingLanes.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/renderer/rowCellBindingLanes.ts) shows the renderer is already column-instance-aware:
-  - row slots and cell slots are reconciled by `ColumnInstanceId`
-  - current focus recovery still derives a focused instance id from `focusedCell.colField` by searching displayed columns at lines 479-481
-  - this is a temporary bridge that Plan 157 should remove
+    - row slots and cell slots are reconciled by `ColumnInstanceId`
+    - current focus recovery still derives a focused instance id from `focusedCell.colField` by searching displayed columns at lines 479-481
+    - this is a temporary bridge that Plan 157 should remove
 
 - [packages/core/src/renderer/cellSlot.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/renderer/cellSlot.ts), [packages/core/src/renderer/rowSlot.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/renderer/rowSlot.ts), and [packages/core/src/renderer/viewportRenderer.ts](/C:/Users/rishi/witbybit/open-grid/packages/core/src/renderer/viewportRenderer.ts) already provide the physical identity and ARIA paint foundation:
-  - cell slots own stable `columnInstanceId`, `cellInstanceId`, `aria-colindex`, and `aria-selected`
-  - row slots own `aria-rowindex`
-  - viewport root owns `role="grid"`, `aria-rowcount`, and `aria-colcount`
-  - this means Plan 157 should derive accessibility from kernel state rather than inventing a second DOM-only system
+    - cell slots own stable `columnInstanceId`, `cellInstanceId`, `aria-colindex`, and `aria-selected`
+    - row slots own `aria-rowindex`
+    - viewport root owns `role="grid"`, `aria-rowcount`, and `aria-colcount`
+    - this means Plan 157 should derive accessibility from kernel state rather than inventing a second DOM-only system
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-| --- | --- | --- |
-| Core build | `corepack pnpm --filter @open-grid/core build` | exit 0 |
-| React build | `corepack pnpm --filter @open-grid/react build` | exit 0 |
-| Core tests | `corepack pnpm --filter @open-grid/core test` | all pass |
-| React tests | `corepack pnpm --filter @open-grid/react test` | all pass |
-| Architecture guards | `corepack pnpm --filter @open-grid/core exec vitest run src/engine/architectureGuards.test.ts` | all pass |
-| Focused interaction tests | `corepack pnpm --filter @open-grid/core exec vitest run src/models/SelectionModel.test.ts src/features/EditingFeatureController.test.ts src/features/RowSelectionFeatureController.test.ts src/features/ClipboardController.test.ts` | all pass |
+| Purpose                   | Command                                                                                                                                                                                                                              | Expected on success |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| Core build                | `corepack pnpm --filter @open-grid/core build`                                                                                                                                                                                       | exit 0              |
+| React build               | `corepack pnpm --filter @open-grid/react build`                                                                                                                                                                                      | exit 0              |
+| Core tests                | `corepack pnpm --filter @open-grid/core test`                                                                                                                                                                                        | all pass            |
+| React tests               | `corepack pnpm --filter @open-grid/react test`                                                                                                                                                                                       | all pass            |
+| Architecture guards       | `corepack pnpm --filter @open-grid/core exec vitest run src/engine/architectureGuards.test.ts`                                                                                                                                       | all pass            |
+| Focused interaction tests | `corepack pnpm --filter @open-grid/core exec vitest run src/models/SelectionModel.test.ts src/features/EditingFeatureController.test.ts src/features/RowSelectionFeatureController.test.ts src/features/ClipboardController.test.ts` | all pass            |
 
 ## Scope
 
@@ -171,14 +171,14 @@ The following excerpts describe the live interaction architecture this plan repl
 
 - [ ] Introduce a dedicated `InteractionKernelState` (or equivalent named core-owned structure)
 - [ ] Split interaction sub-state into explicit domains:
-  - [ ] focus
-  - [ ] active edit
-  - [ ] cell/range selection
-  - [ ] row selection
+    - [ ] focus
+    - [ ] active edit
+    - [ ] cell/range selection
+    - [ ] row selection
 - [ ] Introduce canonical cell identity for interaction:
-  - [x] `rowId`
-  - [x] `columnInstanceId`
-  - [x] stable displayed `colField` / `colId` as derived metadata only
+    - [x] `rowId`
+    - [x] `columnInstanceId`
+    - [x] stable displayed `colField` / `colId` as derived metadata only
 - [~] Replace internal field-based focus/edit/range identity
 - [ ] Keep public API compatibility only at the public boundary if required; no field-based identity inside core state after this phase
 - [ ] Add architecture guards prohibiting new field-only interaction identity in core interaction state
@@ -187,12 +187,12 @@ The following excerpts describe the live interaction architecture this plan repl
 
 - [~] Add one core-owned `InteractionKernel` (final name up to implementation)
 - [ ] Move authoritative commands behind it:
-  - [~] focus/move
-  - [ ] select/extend/clear range
-  - [~] row-selection gestures
-  - [~] start/cancel/commit edit
-  - [x] copy/paste command routing
-  - [ ] ensure-visible / scroll-navigation follow-up
+    - [~] focus/move
+    - [ ] select/extend/clear range
+    - [~] row-selection gestures
+    - [~] start/cancel/commit edit
+    - [x] copy/paste command routing
+    - [ ] ensure-visible / scroll-navigation follow-up
 - [ ] Define one input command vocabulary for keyboard/pointer/api origins
 - [~] Make `GridEngine` route interaction APIs through this kernel instead of directly splitting logic across older controllers
 - [~] Delete obsolete parallel interaction orchestration paths once the kernel is active
@@ -201,12 +201,12 @@ The following excerpts describe the live interaction architecture this plan repl
 
 - [ ] Replace the current implicit focus usage with an explicit focus state model
 - [ ] Track:
-  - [ ] `rowId`
-  - [ ] `rowIndex` when useful as derived metadata
-  - [~] `columnInstanceId`
-  - [~] `colField` / `colId` as derived metadata
-  - [ ] focus origin
-  - [ ] version
+    - [ ] `rowId`
+    - [ ] `rowIndex` when useful as derived metadata
+    - [~] `columnInstanceId`
+    - [~] `colField` / `colId` as derived metadata
+    - [ ] focus origin
+    - [ ] version
 - [ ] Make focus restoration virtualization-safe and controller-safe
 - [ ] Ensure focus clears or remaps honestly when row/column identity disappears
 - [~] Remove renderer-time field-to-instance recovery shims once focus state is instance-aware
@@ -216,12 +216,12 @@ The following excerpts describe the live interaction architecture this plan repl
 - [ ] Replace `GridNavigationController` as the semantic owner
 - [ ] Move keyboard navigation into the interaction kernel or a kernel-owned navigation engine
 - [ ] Make navigation understand:
-  - [ ] pinned columns
-  - [ ] hidden columns
-  - [ ] duplicate-field columns via `columnInstanceId`
-  - [ ] loading/failed/placeholder rows
-  - [ ] row-model unknown/estimated counts
-  - [ ] editable-only navigation mode if still supported
+    - [ ] pinned columns
+    - [ ] hidden columns
+    - [ ] duplicate-field columns via `columnInstanceId`
+    - [ ] loading/failed/placeholder rows
+    - [ ] row-model unknown/estimated counts
+    - [ ] editable-only navigation mode if still supported
 - [ ] Replace fixed `PageUp` / `PageDown` heuristics with viewport-aware navigation
 - [ ] Keep keyboard behavior test-driven during demolition so there is no regression in current capabilities
 
@@ -229,20 +229,20 @@ The following excerpts describe the live interaction architecture this plan repl
 
 - [ ] Replace shallow `EditModel` pointer storage with an explicit lifecycle state machine
 - [ ] Track:
-  - [ ] idle vs editing
-  - [ ] `rowId`
-  - [ ] `columnInstanceId`
-  - [ ] `startedBy`
-  - [ ] `draftValue`
-  - [ ] `originalValue`
-  - [ ] version
+    - [ ] idle vs editing
+    - [ ] `rowId`
+    - [ ] `columnInstanceId`
+    - [ ] `startedBy`
+    - [ ] `draftValue`
+    - [ ] `originalValue`
+    - [ ] version
 - [ ] Move editor lifecycle decisions into core:
-  - [ ] start
-  - [ ] update draft
-  - [ ] commit
-  - [ ] cancel
-  - [ ] move-after-commit
-  - [ ] restore focus
+    - [ ] start
+    - [ ] update draft
+    - [ ] commit
+    - [ ] cancel
+    - [ ] move-after-commit
+    - [ ] restore focus
 - [ ] Keep committed writes on the existing canonical write path
 - [ ] Reject edits honestly for loading/failed/placeholder rows and unsupported row-model states
 - [ ] Remove remaining adapter-owned semantic edit decisions
@@ -269,8 +269,8 @@ The following excerpts describe the live interaction architecture this plan repl
 - [ ] Reduce `packages/react/src/GridView.tsx` to thin DOM assembly + event forwarding only
 - [ ] Move semantic event routing out of the React adapter into core wherever feasible
 - [ ] Decide the cleanest final shape:
-  - [ ] core-provided DOM event binder
-  - [ ] or adapter-resolved pointer forwarding into kernel commands
+    - [ ] core-provided DOM event binder
+    - [ ] or adapter-resolved pointer forwarding into kernel commands
 - [ ] Delete legacy adapter-owned navigation/activity logic after the new flow is live
 - [ ] Keep React-specific responsibilities limited to portal/editor rendering assembly
 
@@ -278,13 +278,13 @@ The following excerpts describe the live interaction architecture this plan repl
 
 - [ ] Derive ARIA selection/focus/edit/read-only/invalid state from the kernel, not ad hoc per caller
 - [ ] Normalize:
-  - [ ] `aria-selected`
-  - [ ] `aria-rowindex`
-  - [ ] `aria-colindex`
-  - [ ] `aria-readonly`
-  - [ ] `aria-invalid`
-  - [ ] `tabIndex`
-  - [ ] active-cell focus contract
+    - [ ] `aria-selected`
+    - [ ] `aria-rowindex`
+    - [ ] `aria-colindex`
+    - [ ] `aria-readonly`
+    - [ ] `aria-invalid`
+    - [ ] `tabIndex`
+    - [ ] active-cell focus contract
 - [ ] Ensure virtualization does not break accessibility state truthfulness
 - [ ] Add regression tests around focus/editing/selection ARIA output
 
@@ -293,10 +293,10 @@ The following excerpts describe the live interaction architecture this plan repl
 - [ ] Delete deprecated internal interaction types and controllers that the kernel replaces
 - [ ] Delete parallel event routing and navigation ownership paths
 - [ ] Add architecture guards that lock in:
-  - [ ] single interaction kernel ownership
-  - [ ] no field-only focus/edit/range identity in core
-  - [ ] no semantic keyboard/pointer orchestration in React adapter
-  - [ ] no row-selection semantics inside renderer paint helpers
+    - [ ] single interaction kernel ownership
+    - [ ] no field-only focus/edit/range identity in core
+    - [ ] no semantic keyboard/pointer orchestration in React adapter
+    - [ ] no row-selection semantics inside renderer paint helpers
 - [ ] Add adversarial regression coverage for virtualization, duplicate fields, and async row-model interaction
 
 ## Initial execution checklist
@@ -329,23 +329,23 @@ Reasoning:
 ## Test plan
 
 - Add or update unit coverage in:
-  - `packages/core/src/models/SelectionModel.test.ts`
-  - `packages/core/src/features/EditingFeatureController.test.ts`
-  - `packages/core/src/features/RowSelectionFeatureController.test.ts`
-  - `packages/core/src/features/ClipboardController.test.ts`
-  - new kernel-focused tests if a new module is introduced
+    - `packages/core/src/models/SelectionModel.test.ts`
+    - `packages/core/src/features/EditingFeatureController.test.ts`
+    - `packages/core/src/features/RowSelectionFeatureController.test.ts`
+    - `packages/core/src/features/ClipboardController.test.ts`
+    - new kernel-focused tests if a new module is introduced
 - Add or update integration coverage for:
-  - duplicate-field focus identity
-  - horizontal reorder / virtualization preserving focused logical column instance
-  - editing survival and correct teardown during scroll
-  - loading/failed row navigation behavior
-  - row-selection scope honesty under infinite/server-page
-  - copy/paste correctness across duplicated fields and reordered columns
-  - no adapter-owned semantic interaction regressions
+    - duplicate-field focus identity
+    - horizontal reorder / virtualization preserving focused logical column instance
+    - editing survival and correct teardown during scroll
+    - loading/failed row navigation behavior
+    - row-selection scope honesty under infinite/server-page
+    - copy/paste correctness across duplicated fields and reordered columns
+    - no adapter-owned semantic interaction regressions
 - Use existing structure patterns from:
-  - `packages/core/src/featureComposition.gauntlet.test.ts`
-  - `packages/core/src/renderer/serverRuntimePerformance.test.ts`
-  - `packages/react/src/index.test.tsx`
+    - `packages/core/src/featureComposition.gauntlet.test.ts`
+    - `packages/core/src/renderer/serverRuntimePerformance.test.ts`
+    - `packages/react/src/index.test.tsx`
 
 ## Done criteria
 

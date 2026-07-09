@@ -165,13 +165,15 @@ export function mountGridHost<TRowData>(
 		getCellPointerFromElement(element: Element) {
 			const cellEl = element.closest('.og-cell') as HTMLElement | null;
 			if (!cellEl) return null;
-			const cellSlot = (cellEl as HTMLElement & {
-				__cellSlot?: {
-					binding?: { rowId: string; colId: string } | null;
-					colField?: string;
-					columnInstanceId?: ColumnInstanceId;
-				};
-			}).__cellSlot;
+			const cellSlot = (
+				cellEl as HTMLElement & {
+					__cellSlot?: {
+						binding?: { rowId: string; colId: string } | null;
+						colField?: string;
+						columnInstanceId?: ColumnInstanceId;
+					};
+				}
+			).__cellSlot;
 			const binding = cellSlot?.binding;
 			const colField = cellSlot?.colField ?? cellEl.dataset.colField;
 			const rowId = binding?.rowId ?? cellEl.dataset.rowId;

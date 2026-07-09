@@ -210,8 +210,10 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 			}
 		).__cellSlot;
 		if (!cs || cs.rowIndex < 0 || !cs.colField) return 0;
-		if (activeEdit && doesCellPointerMatchColumn(activeEdit, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })) return 6;
-		if (focusedCell && doesCellPointerMatchColumn(focusedCell, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })) return 5;
+		if (activeEdit && doesCellPointerMatchColumn(activeEdit, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any }))
+			return 6;
+		if (focusedCell && doesCellPointerMatchColumn(focusedCell, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any }))
+			return 5;
 
 		const isRowVisible = cs.rowIndex >= rowRange.startIdx && cs.rowIndex <= rowRange.endIdx;
 		const isColVisible = cs.colIndex >= colRange.startIdx && cs.colIndex <= colRange.endIdx;

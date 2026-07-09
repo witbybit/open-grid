@@ -171,7 +171,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.api = api;
 		this.interactionController =
 			interactionController ??
-			((api as InternalGridApi<TRowData> & { interactionController?: GridInteractionHandle | null } | undefined)?.interactionController ?? null);
+			(api as (InternalGridApi<TRowData> & { interactionController?: GridInteractionHandle | null }) | undefined)?.interactionController ??
+			null;
 		this._scrollCtx = {
 			isScrolling: true,
 			stateVersion: 0,
@@ -708,13 +709,15 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (this.interactionController.isRowSelectionIgnoredTarget(target)) return;
 		const cellEl = target.closest<HTMLDivElement>('.og-cell');
 		if (!cellEl) return;
-		const cellSlot = (cellEl as HTMLDivElement & {
-			__cellSlot?: {
-				binding?: { rowId: string; colId: string } | null;
-				colField?: string;
-				columnInstanceId?: ColumnInstanceId;
-			};
-		}).__cellSlot;
+		const cellSlot = (
+			cellEl as HTMLDivElement & {
+				__cellSlot?: {
+					binding?: { rowId: string; colId: string } | null;
+					colField?: string;
+					columnInstanceId?: ColumnInstanceId;
+				};
+			}
+		).__cellSlot;
 		const rowId = cellSlot?.binding?.rowId ?? cellEl.dataset.rowId;
 		const colField = cellSlot?.colField ?? cellEl.dataset.colField;
 		if (!rowId || !colField) return;

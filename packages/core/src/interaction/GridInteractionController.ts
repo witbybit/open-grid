@@ -29,7 +29,10 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	private rowSelectionAnchorId: string | null = null;
 	private options: GridNavigationOptions;
 
-	constructor(private readonly runtime: GridPluginRuntime<TRowData>, options: GridNavigationOptions = {}) {
+	constructor(
+		private readonly runtime: GridPluginRuntime<TRowData>,
+		options: GridNavigationOptions = {}
+	) {
 		this.options = options;
 	}
 
@@ -118,9 +121,11 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	}
 
 	private isMultipleRowSelectionEnabled(): boolean {
-		const internalState = (this.runtime as GridPluginRuntime<TRowData> & {
-			getState?: () => { rowSelection?: { mode?: 'single' | 'multiple' } | undefined };
-		}).getState?.();
+		const internalState = (
+			this.runtime as GridPluginRuntime<TRowData> & {
+				getState?: () => { rowSelection?: { mode?: 'single' | 'multiple' } | undefined };
+			}
+		).getState?.();
 		return internalState?.rowSelection?.mode !== 'single';
 	}
 
@@ -369,11 +374,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		}
 		const state = this.runtime.getStateSnapshot();
 		const prevFocus = state.selection.focus;
-		if (
-			prevFocus &&
-			!areCellPointersEqual(prevFocus, pointer) &&
-			this.runtime.getCellState(prevFocus.rowId, prevFocus.colField).isEditing
-		) {
+		if (prevFocus && !areCellPointersEqual(prevFocus, pointer) && this.runtime.getCellState(prevFocus.rowId, prevFocus.colField).isEditing) {
 			this.commitEdit();
 		}
 		this.isSelecting = true;

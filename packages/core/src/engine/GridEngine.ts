@@ -1303,7 +1303,9 @@ export class GridEngine<TRowData = unknown> {
 				range,
 				(id) => this.rowModel?.getVisualIndexByRowId(id) ?? -1,
 				(pointer) =>
-					pointer.columnInstanceId ? this.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId) : this.columns.getColumnIndex(pointer.colField)
+					pointer.columnInstanceId
+						? this.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId)
+						: this.columns.getColumnIndex(pointer.colField)
 			),
 			source,
 		};

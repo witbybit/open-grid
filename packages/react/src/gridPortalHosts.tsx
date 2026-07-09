@@ -27,15 +27,10 @@ interface ActiveCellEditorProps<TRowData = unknown> {
 	api: GridApi<TRowData>;
 }
 
-function activeEditMatchesCell(
-	activeEdit: ActiveEditState | null | undefined,
-	rowId: string,
-	colField: string,
-	col?: ColumnDef<unknown>
-): boolean {
+function activeEditMatchesCell(activeEdit: ActiveEditState | null | undefined, rowId: string, colField: string, col?: ColumnDef<unknown>): boolean {
 	if (!activeEdit || activeEdit.rowId !== rowId) return false;
 	const instanceId = (activeEdit as ActiveEditState & { columnInstanceId?: string }).columnInstanceId;
-	const columnInstanceId = (col as ColumnDef<unknown> & { instanceId?: string } | undefined)?.instanceId;
+	const columnInstanceId = (col as (ColumnDef<unknown> & { instanceId?: string }) | undefined)?.instanceId;
 	if (instanceId || columnInstanceId) {
 		return instanceId === columnInstanceId;
 	}
