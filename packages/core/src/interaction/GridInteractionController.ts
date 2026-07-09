@@ -1,7 +1,7 @@
 import type { GridCellPointer } from '../api/GridApi.js';
 import type { GridPluginRuntime } from '../api/GridApiSurfaces.js';
 import { areCellPointersEqual } from './cellPointer.js';
-import { getColumnInstanceIdentity } from '../columnDef.js';
+import { getColumnInstanceIdentity, type ColumnDef } from '../columnDef.js';
 
 export interface GridNavigationOptions {
 	editTrigger?: 'singleClick' | 'doubleClick';
@@ -42,15 +42,28 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 
 	public dispose(): void {}
 
+	private getDisplayedColumnAtIndex(colIdx: number): ColumnDef<TRowData> | undefined {
+		return this.runtime.getDisplayedColumns()[colIdx];
+	}
+
+	private resolvePointerColumn(pointer: GridCellPointer): ColumnDef<TRowData> | undefined {
+		if (pointer.columnInstanceId) {
+			return this.runtime
+				.getDisplayedColumns()
+				.find((column) => getColumnInstanceIdentity(column) === pointer.columnInstanceId);
+		}
+		return this.runtime.getColumnDef(pointer.colField);
+	}
+
 	private getPointerFromCoords(rowIdx: number, colIdx: number): GridCellPointer | null {
 		const visualRow = this.runtime.getVisualRow(rowIdx);
-		const colField = this.runtime.getColumnField(colIdx);
-		if (!visualRow || !colField || visualRow.kind !== 'data') return null;
-		const col = this.runtime.getColumnDef(colField);
+		const col = this.getDisplayedColumnAtIndex(colIdx);
+		if (!visualRow || !col || visualRow.kind !== 'data') return null;
+		const colField = col.field;
 		return {
 			rowId: visualRow.rowId,
 			colField,
-			columnInstanceId: col ? getColumnInstanceIdentity(col) : undefined,
+			columnInstanceId: getColumnInstanceIdentity(col),
 			colId: col?.colId ?? colField,
 		};
 	}
@@ -59,10 +72,8 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		if (!pointer) return null;
 		const rowIdx = this.runtime.getVisualIndexByRowId(pointer.rowId) ?? -1;
 		const colIdx = pointer.columnInstanceId
-			? this.runtime
-					.getDisplayedColumns()
-					.findIndex((column) => 'instanceId' in column && (column as { instanceId?: string }).instanceId === pointer.columnInstanceId)
-			: this.runtime.getColumnIndex(pointer.colField);
+			? this.runtime.getDisplayedColumns().findIndex((column) => getColumnInstanceIdentity(column) === pointer.columnInstanceId)
+			: this.runtime.getDisplayedColumns().findIndex((column) => column.colId === pointer.colId || column.field === pointer.colField);
 		if (rowIdx === -1 || colIdx === -1) return null;
 		return { rowIdx, colIdx };
 	}
@@ -168,7 +179,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	public handleDataRowClick(pointer: GridCellPointer, event: MouseEvent): void {
 		const state = this.runtime.getStateSnapshot();
 		if (!state.columns.some((col) => col.checkboxSelection)) return;
-		const col = this.runtime.getColumnDef(pointer.colField);
+		const col = this.resolvePointerColumn(pointer);
 		if (col?.checkboxSelection) return;
 		const rowIndex = this.runtime.getVisualIndexByRowId(pointer.rowId) ?? -1;
 		const row = rowIndex >= 0 ? this.runtime.getVisualRow(rowIndex) : null;
