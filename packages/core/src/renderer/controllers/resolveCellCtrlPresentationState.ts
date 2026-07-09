@@ -151,6 +151,9 @@ function hydrateCellCtrlFromScrollPresentation(
 }
 
 function hydrateCellCtrlFromFullBind(cellCtrl: CellCtrl, context: NonNullable<CellCtrlResolveContext['fullBind']>): CellCtrl {
+	const hasActivePortal = cellCtrl.rendererState.mode === 'live' || cellCtrl.rendererState.mode === 'frozen';
+	const releaseStalePortal = hasActivePortal && (context.contentMode !== 'portal' || cellCtrl.rendererState.portalKey !== context.portalKey);
+
 	cellCtrl.freshness = context.freshness;
 	cellCtrl.visualState.className = context.className;
 	cellCtrl.visualState.title = context.title;
@@ -178,7 +181,7 @@ function hydrateCellCtrlFromFullBind(cellCtrl: CellCtrl, context: NonNullable<Ce
 		className: context.className,
 		title: context.title,
 		validationError: context.validationError,
-		releaseStalePortal: false,
+		releaseStalePortal,
 		requiresFidelity: false,
 		freshness: context.freshness,
 		contentMode: context.contentMode,
