@@ -223,6 +223,40 @@ describe('GridDataIntegrityManager authoritative state', () => {
 		store.stopEditing(true);
 	});
 
+	it('treats a duplicate-field active editor as dirty for integrity streams', () => {
+		const store = new GridStore<TestRow>(
+			{
+				getRowId: (row) => row.id,
+				columns: [
+					{ field: 'name', colId: 'name-a' },
+					{ field: 'name', colId: 'name-b' },
+					{ field: 'score' },
+				],
+			},
+			{ dataIntegrity: INTEGRITY_CONFIG }
+		);
+		new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Local Name', score: 1 },
+				{ id: '2', name: 'Beta', score: 2 },
+			],
+			columns: store.getState().columns,
+		});
+		const secondNameColumn = store.engine.columns.getDisplayedColumns()[1] as { instanceId?: string };
+
+		store.startEditing('1', secondNameColumn.instanceId!);
+		const skipStream = store.integrity.createStream({ dirtyCellPolicy: 'skip', flashChanges: false });
+		skipStream.pushCells([{ rowId: '1', colField: 'name', value: 'Remote Name' }]);
+		skipStream.flush();
+
+		expect(store.getCellValue('1', 'name')).toBe('Local Name');
+		expect(store.engine.getState().integrity.liveStream.issues).toEqual(
+			expect.arrayContaining([expect.objectContaining({ type: 'streamSkipped', rowId: '1', colField: 'name' })])
+		);
+
+		store.stopEditing(true);
+	});
+
 	it('integrity row patches surface the same write result protocol as other canonical writes', () => {
 		const store = createStore();
 		const manager = recreateManager(store);

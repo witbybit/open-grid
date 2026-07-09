@@ -143,6 +143,39 @@ describe('EditingFeatureController', () => {
 		store.destroy();
 	});
 
+	it('updateEditDraft respects duplicate-field active editor instance identity', () => {
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 50 },
+			{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+			{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+			{ field: 'price', header: 'Price', width: 100 },
+		]);
+		const ctrl = makeController(store);
+		const feature = makeEditingFeature(store);
+		const firstNameColumn = store.engine.columns.getDisplayedColumns()[1] as { instanceId?: string };
+		const secondNameColumn = store.engine.columns.getDisplayedColumns()[2] as { instanceId?: string };
+
+		feature.startEdit('1', secondNameColumn.instanceId!);
+		feature.updateEditDraft('1', firstNameColumn.instanceId!, 'Wrong Column Draft');
+		expect(store.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				columnInstanceId: secondNameColumn.instanceId,
+				draftValue: 'Product A',
+			})
+		);
+
+		feature.updateEditDraft('1', secondNameColumn.instanceId!, 'Right Column Draft');
+		expect(store.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				columnInstanceId: secondNameColumn.instanceId,
+				draftValue: 'Right Column Draft',
+			})
+		);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('stopEdit clears activeEdit and fires editStopped event', () => {
 		const store = makeStore();
 		const ctrl = makeController(store);
@@ -199,6 +232,34 @@ describe('EditingFeatureController', () => {
 		expect(result).toBe(true);
 		expect(store.getState().activeEdit).toBeNull();
 		expect(store.canUndo()).toBe(true);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('commitEdit rejects a different duplicate-field column instance while another instance is active', async () => {
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 50 },
+			{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+			{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+			{ field: 'price', header: 'Price', width: 100 },
+		]);
+		const ctrl = makeController(store);
+		const feature = makeEditingFeature(store);
+		const firstNameColumn = store.engine.columns.getDisplayedColumns()[1] as { instanceId?: string };
+		const secondNameColumn = store.engine.columns.getDisplayedColumns()[2] as { instanceId?: string };
+
+		feature.startEdit('1', secondNameColumn.instanceId!);
+		const result = await feature.commitEdit('1', firstNameColumn.instanceId!, 'Wrong Column Commit');
+
+		expect(result).toBe(false);
+		expect(store.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				columnInstanceId: secondNameColumn.instanceId,
+				draftValue: 'Product A',
+			})
+		);
+		expect(store.getCellValue('1', 'name')).toBe('Product A');
 
 		ctrl.dispose();
 		store.destroy();

@@ -8,6 +8,7 @@ import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult }
 import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import { dispatchWriteBlockedEvent } from './writeBlockedEvent.js';
+import type { ActiveEditState } from '../api/GridApi.js';
 
 export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
@@ -61,6 +62,15 @@ export class EditingFeatureController<TRowData = unknown> {
 		return canEditCell(visualRow, this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId));
 	}
 
+	private doesEditIdentityMatch(activeEdit: ActiveEditState, rowId: string, colFieldOrInstanceId: string): boolean {
+		if (activeEdit.rowId !== rowId) return false;
+		return (
+			activeEdit.columnInstanceId === colFieldOrInstanceId ||
+			activeEdit.colId === colFieldOrInstanceId ||
+			activeEdit.colField === colFieldOrInstanceId
+		);
+	}
+
 	public startEdit(rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
 		if (!this.canEditCell(rowId, colFieldOrInstanceId)) return;
 		const column = this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId);
@@ -96,9 +106,9 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.notifyCellChange(rowId, colField, false);
 	}
 
-	public updateEditDraft(rowId: string, colField: string, value: unknown): void {
+	public updateEditDraft(rowId: string, colFieldOrInstanceId: string, value: unknown): void {
 		const activeEdit = this.ctx.getState().activeEdit;
-		if (!activeEdit || activeEdit.rowId !== rowId || activeEdit.colField !== colField) return;
+		if (!activeEdit || !this.doesEditIdentityMatch(activeEdit, rowId, colFieldOrInstanceId)) return;
 		if (Object.is(activeEdit.draftValue, value)) return;
 		this.ctx.applyChange({
 			reason: 'editing:update-draft',
@@ -130,7 +140,18 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.notifyCellChange(rowId, colField, false);
 	}
 
-	public async commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean> {
+	public async commitEdit(rowId: string, colFieldOrInstanceId: string, value: unknown): Promise<boolean> {
+		const activeEdit = this.ctx.getState().activeEdit;
+		const matchedActiveEdit = activeEdit && this.doesEditIdentityMatch(activeEdit, rowId, colFieldOrInstanceId) ? activeEdit : null;
+		if (activeEdit && activeEdit.rowId === rowId && !matchedActiveEdit) return false;
+
+		const resolvedColumn =
+			(matchedActiveEdit
+				? this.ctx.columns.getColumnByFieldOrInstanceId(matchedActiveEdit.columnInstanceId ?? matchedActiveEdit.colField)
+				: this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId)) ?? null;
+		if (!resolvedColumn) return false;
+		const colField = resolvedColumn.field;
+
 		if (this.checkCapability) {
 			const result = this.checkCapability('edit', { rowId, colField });
 			if (!result.allowed) {
@@ -143,8 +164,7 @@ export class EditingFeatureController<TRowData = unknown> {
 				return false;
 			}
 		}
-		const col = this.ctx.columns.getColumnDef(colField);
-		if (!col) return false;
+		const col = resolvedColumn;
 		const oldValue = this.data.getRawCellValue(rowId, colField);
 		const node = this.getRowModel()?.getRowNodeById(rowId);
 		if (!node) return false;

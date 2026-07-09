@@ -580,7 +580,14 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 	private _isCellDirty(rowId: string, colField: string): boolean {
 		// Check active editing
 		const editState = this.deps.ctx.getState().activeEdit;
-		if (doesCellPointerMatchColumn(editState, rowId, { field: colField })) return true;
+		if (
+			editState &&
+			this.deps.ctx.columns
+				.getDisplayedColumns()
+				.some((column) => column.field === colField && doesCellPointerMatchColumn(editState, rowId, column))
+		) {
+			return true;
+		}
 		// Check existing conflicts (a conflicted cell is locally dirty)
 		if (this.deps.ctx.getState().integrity.conflicts.cellConflictIndex[`${rowId}\0${colField}`]) return true;
 		return false;
