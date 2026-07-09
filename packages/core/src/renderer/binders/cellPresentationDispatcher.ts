@@ -1,4 +1,5 @@
 import type { CellRendererPhase, ColumnDef } from '../../columnDef.js';
+import { PortalRendererHandle } from '../cellRendererHandle.js';
 import type { CellCtrl } from '../controllers/CellCtrl.js';
 import type { RowCtrl } from '../controllers/RowCtrl.js';
 import type { RowCellBinderDeps } from '../rowCellBinder.js';
@@ -59,7 +60,20 @@ export interface DispatchCellPresentationInput<TRowData> {
  * its already-resolved state onto the physical CellSlot.
  */
 export function dispatchCellPresentation<TRowData>(input: DispatchCellPresentationInput<TRowData>): void {
-	switch (input.cellCtrl.presentationState.kind) {
+	const { cellSlot, cellCtrl, deps } = input;
+	const existing = cellSlot.renderer;
+	const nextPresentation = cellCtrl.presentationState;
+
+	if (existing instanceof PortalRendererHandle) {
+		const nextPortalKey =
+			nextPresentation.kind === 'live-renderer' || nextPresentation.kind === 'frozen-portal' ? nextPresentation.portalKey : undefined;
+
+		if (!nextPortalKey || existing.portalKey !== nextPortalKey) {
+			deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
+		}
+	}
+
+	switch (nextPresentation.kind) {
 		case 'buffered':
 		case 'primitive':
 		case 'loading':
