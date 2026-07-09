@@ -6,6 +6,7 @@ import { isFilterableColumn, buildFilterByValue, applyFilterToModel } from './fi
 export interface ContextMenuParams<TRowData = unknown> {
 	rowId: string;
 	colField: string;
+	pointer: GridCellPointer;
 	api: GridApi<TRowData>;
 	selection: GridSelectionState;
 }
@@ -62,6 +63,10 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	}
 
 	public show(rowId: string, colField: string, clientX: number, clientY: number): void {
+		this.showPointer({ rowId, colField }, clientX, clientY);
+	}
+
+	public showPointer(pointer: GridCellPointer, clientX: number, clientY: number): void {
 		if (this.options.disabled) return;
 
 		const state = this.runtime.getStateSnapshot();
@@ -69,8 +74,10 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		if (state.selection.bounds) {
 			const rowModel = this.runtime.getRowModel();
 			if (rowModel) {
-				const clickedRowIdx = rowModel.getVisualIndexByRowId(rowId);
-				const clickedColIdx = state.columns.findIndex((c) => c.field === colField);
+				const clickedRowIdx = rowModel.getVisualIndexByRowId(pointer.rowId);
+				const clickedColIdx = pointer.columnInstanceId
+					? state.columns.findIndex((column) => 'instanceId' in column && column.instanceId === pointer.columnInstanceId)
+					: state.columns.findIndex((column) => column.field === pointer.colField);
 				const bounds = state.selection.bounds;
 				if (
 					clickedRowIdx >= bounds.minRow &&
@@ -84,10 +91,10 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		}
 
 		if (!inSelection) {
-			this.runtime.selectCell({ rowId, colField }, 'pointer');
+			this.runtime.selectCell(pointer, 'pointer');
 		}
 
-		this.activePointer = { rowId, colField };
+		this.activePointer = pointer;
 		this.renderMenu(clientX, clientY);
 	}
 
@@ -147,6 +154,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const params: ContextMenuParams<TRowData> = {
 			rowId,
 			colField,
+			pointer: activePointer,
 			api: this.runtime,
 			selection: state.selection,
 		};

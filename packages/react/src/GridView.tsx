@@ -406,7 +406,7 @@ export function GridView<TRowData = unknown>({
 			const { pointer } = target;
 
 			e.preventDefault();
-			contextMenuRef.current.show(pointer.rowId, pointer.colField, e.clientX, e.clientY);
+			contextMenuRef.current.showPointer(pointer, e.clientX, e.clientY);
 		},
 		[getCellPointerFromEvent]
 	);
