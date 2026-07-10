@@ -258,10 +258,10 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 7 - Clipboard foundation rebased on kernel identity
 
-- [ ] Rebase clipboard source/target resolution on kernel-owned selection/focus state
-- [ ] Remove any remaining assumptions that field identity is authoritative
-- [ ] Keep copy/paste capability and integrity checks where they already belong
-- [ ] Ensure duplicate-field columns and reordered columns copy/paste against the correct logical columns
+- [x] Rebase clipboard source/target resolution on kernel-owned selection/focus state
+- [~] Remove any remaining assumptions that field identity is authoritative
+- [x] Keep copy/paste capability and integrity checks where they already belong
+- [x] Ensure duplicate-field columns and reordered columns copy/paste against the correct logical columns
 - [ ] Add regression tests for no stale visual-row dependence during copy/paste
 
 ### Phase 8 - Adapter de-thickening and event routing cleanup

@@ -497,6 +497,7 @@ export class GridEngine<TRowData = unknown> {
 		});
 		this.clipboard = new ClipboardController<TRowData>({
 			getState: () => this.stateManager.getState(),
+			getDisplayedColumns: () => this.columns.getDisplayedColumns(),
 			getVisualRow: (idx) => this.rowModel?.getVisualRow(idx) ?? null,
 			getVisualIndexByRowId: (id) => this.rowModel?.getVisualIndexByRowId(id) ?? null,
 			getCellValue: (rowId, colField) => this.data.getCellValue(rowId, colField),

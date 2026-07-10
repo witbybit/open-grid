@@ -149,6 +149,20 @@ describe('ClipboardController', () => {
 		store.destroy();
 	});
 
+	it('copySelectedRange follows displayed column order after reordering', async () => {
+		const store = makeStore();
+		const ctrl = makeController(store);
+
+		store.moveColumn('price', 1);
+		store.selectRange({ rowId: '1', colField: 'price' }, { rowId: '1', colField: 'name' });
+		await store.copySelectedRange();
+
+		expect(clip.writeText).toHaveBeenCalledWith('10\tAlpha');
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('copySelectedRange fires cellsCopied event with rowCount/colCount/text', async () => {
 		const store = makeStore();
 		const ctrl = makeController(store);
@@ -228,6 +242,22 @@ describe('ClipboardController', () => {
 		await store.pasteFromClipboard();
 
 		expect(store.getCellValue('1', 'name')).toBe('B:Gamma');
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('pasteFromClipboard follows displayed column order after reordering', async () => {
+		const store = makeStore();
+		const ctrl = makeController(store);
+
+		store.moveColumn('price', 1);
+		clip.setStored('77\tGamma');
+		store.selectCell({ rowId: '1', colField: 'price' });
+		await store.pasteFromClipboard();
+
+		expect(store.getCellValue('1', 'price')).toBe('77');
+		expect(store.getCellValue('1', 'name')).toBe('Gamma');
 
 		ctrl.dispose();
 		store.destroy();

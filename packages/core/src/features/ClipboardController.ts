@@ -13,6 +13,7 @@ import { dispatchWriteBlockedEvent, isWriteBlockedResult } from './writeBlockedE
 
 interface ClipboardContext<TRowData> {
 	getState(): InternalGridState<TRowData>;
+	getDisplayedColumns(): readonly ColumnDef<TRowData>[];
 	getVisualRow(rowIdx: number): VisualRow<TRowData> | null;
 	getVisualIndexByRowId(rowId: string): number | null;
 	getCellValue(rowId: string, colField: string): unknown;
@@ -45,7 +46,11 @@ export class ClipboardController<TRowData = unknown> {
 		pointer: { colField: string; colId?: string; columnInstanceId?: string },
 		state: InternalGridState<TRowData>
 	): number {
-		return findColumnIndexByCellPointer(state.columns, pointer);
+		return findColumnIndexByCellPointer(this.c.getDisplayedColumns(), pointer);
+	}
+
+	private getDisplayedColumnAtIndex(index: number): ColumnDef<TRowData> | undefined {
+		return this.c.getDisplayedColumns()[index];
 	}
 
 	public async copySelectedRange(): Promise<void> {
@@ -109,7 +114,7 @@ export class ClipboardController<TRowData = unknown> {
 				const cells = lines[r].split('\t');
 				let colsPasted = 0;
 				for (let c = 0; c < cells.length; c++) {
-					const col = state.columns[startCol + c] as ColumnDef<TRowData> | undefined;
+					const col = this.getDisplayedColumnAtIndex(startCol + c);
 					if (!col) break;
 					let value: unknown = cells[c];
 					if (col.onPaste) {
@@ -201,7 +206,7 @@ export class ClipboardController<TRowData = unknown> {
 			if (!vr || vr.kind !== 'data') continue;
 			const rowCells: string[] = [];
 			for (let c = minCol; c <= maxCol; c++) {
-				const col = state.columns[c] as ColumnDef<TRowData> | undefined;
+				const col = this.getDisplayedColumnAtIndex(c);
 				if (!col) continue;
 				if (this.c.checkCapability) {
 					const res = this.c.checkCapability('copy', { rowId: vr.rowId, colField: col.field });
