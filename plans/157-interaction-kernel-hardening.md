@@ -175,7 +175,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] active edit
     - [x] cell/range selection
     - [x] row selection
-- [ ] Introduce canonical cell identity for interaction:
+- [x] Introduce canonical cell identity for interaction:
     - [x] `rowId`
     - [x] `columnInstanceId`
     - [x] stable displayed `colField` / `colId` as derived metadata only
@@ -185,12 +185,12 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 2 - Single interaction kernel surface
 
-- [~] Add one core-owned `InteractionKernel` (final name up to implementation)
+- [x] Add one core-owned `InteractionKernel` (final name up to implementation)
 - [ ] Move authoritative commands behind it:
     - [~] focus/move
     - [~] select/extend/clear range
-    - [~] row-selection gestures
-    - [~] start/cancel/commit edit
+    - [x] row-selection gestures
+    - [x] start/cancel/commit edit
     - [x] copy/paste command routing
     - [ ] ensure-visible / scroll-navigation follow-up
 - [ ] Define one input command vocabulary for keyboard/pointer/api origins
@@ -213,8 +213,8 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 4 - Navigation engine replacement
 
-- [ ] Replace `GridNavigationController` as the semantic owner
-- [ ] Move keyboard navigation into the interaction kernel or a kernel-owned navigation engine
+- [x] Replace `GridNavigationController` as the semantic owner
+- [x] Move keyboard navigation into the interaction kernel or a kernel-owned navigation engine
 - [ ] Make navigation understand:
     - [ ] pinned columns
     - [ ] hidden columns
@@ -227,11 +227,11 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 5 - Editing lifecycle state machine
 
-- [ ] Replace shallow `EditModel` pointer storage with an explicit lifecycle state machine
+- [~] Replace shallow `EditModel` pointer storage with an explicit lifecycle state machine
 - [ ] Track:
-    - [ ] idle vs editing
-    - [ ] `rowId`
-    - [ ] `columnInstanceId`
+    - [~] idle vs editing
+    - [x] `rowId`
+    - [x] `columnInstanceId`
     - [x] `startedBy`
     - [x] `draftValue`
     - [x] `originalValue`
@@ -243,18 +243,18 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] cancel
     - [ ] move-after-commit
     - [ ] restore focus
-- [ ] Keep committed writes on the existing canonical write path
+- [x] Keep committed writes on the existing canonical write path
 - [ ] Reject edits honestly for loading/failed/placeholder rows and unsupported row-model states
 - [ ] Remove remaining adapter-owned semantic edit decisions
 
 ### Phase 6 - Row selection and range selection convergence
 
-- [ ] Fold row-selection gesture ownership into the kernel while preserving honest row-model scope semantics from Plan 156
-- [ ] Keep row selection keyed by `rowId` only
-- [ ] Make cell/range selection keyed by `rowId + columnInstanceId`
-- [ ] Define explicit range anchor semantics in core
-- [ ] Remove range-selection semantics from renderer/painter classes once the kernel owns them
-- [ ] Preserve honest `all` / `loaded` / `page` selection behavior across row models
+- [~] Fold row-selection gesture ownership into the kernel while preserving honest row-model scope semantics from Plan 156
+- [x] Keep row selection keyed by `rowId` only
+- [~] Make cell/range selection keyed by `rowId + columnInstanceId`
+- [x] Define explicit range anchor semantics in core
+- [x] Remove range-selection semantics from renderer/painter classes once the kernel owns them
+- [x] Preserve honest `all` / `loaded` / `page` selection behavior across row models
 
 ### Phase 7 - Clipboard foundation rebased on kernel identity
 
@@ -286,24 +286,24 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] `tabIndex`
     - [ ] active-cell focus contract
 - [ ] Ensure virtualization does not break accessibility state truthfulness
-- [ ] Add regression tests around focus/editing/selection ARIA output
+- [~] Add regression tests around focus/editing/selection ARIA output
 
 ### Phase 10 - Legacy demolition and guardrails
 
 - [ ] Delete deprecated internal interaction types and controllers that the kernel replaces
-- [ ] Delete parallel event routing and navigation ownership paths
+- [~] Delete parallel event routing and navigation ownership paths
 - [ ] Add architecture guards that lock in:
-    - [ ] single interaction kernel ownership
+    - [~] single interaction kernel ownership
     - [ ] no field-only focus/edit/range identity in core
-    - [ ] no semantic keyboard/pointer orchestration in React adapter
-    - [ ] no row-selection semantics inside renderer paint helpers
+    - [x] no semantic keyboard/pointer orchestration in React adapter
+    - [x] no row-selection semantics inside renderer paint helpers
 - [ ] Add adversarial regression coverage for virtualization, duplicate fields, and async row-model interaction
 
 ## Initial execution checklist
 
 - [x] Create the plan and keep it updated as phases land
 - [x] Start with identity cutover before behavior migration
-- [ ] Do not preserve two navigation/interaction stacks in parallel
+- [x] Do not preserve two navigation/interaction stacks in parallel
 - [x] Build and run focused interaction tests after each phase
 - [ ] Remove deprecated code as soon as the replacement path is verified, not in a later “cleanup maybe” pass
 
@@ -349,15 +349,15 @@ Reasoning:
 
 ## Done criteria
 
-- [ ] `corepack pnpm --filter @open-grid/core build` exits 0
+- [x] `corepack pnpm --filter @open-grid/core build` exits 0
 - [ ] `corepack pnpm --filter @open-grid/react build` exits 0
-- [ ] `corepack pnpm --filter @open-grid/core test` exits 0
-- [ ] `corepack pnpm --filter @open-grid/react test` exits 0
+- [x] `corepack pnpm --filter @open-grid/core test` exits 0
+- [x] `corepack pnpm --filter @open-grid/react test` exits 0
 - [ ] `corepack pnpm --filter @open-grid/core exec vitest run src/engine/architectureGuards.test.ts` exits 0
 - [ ] Core interaction state no longer uses field-only identity for focus/edit/range
-- [ ] `packages/core/src/navigation.ts` is either deleted or reduced to a non-semantic shim that is then removed before plan closure
-- [ ] `packages/react/src/GridView.tsx` no longer owns semantic keyboard/pointer interaction orchestration
-- [ ] Renderer paint helpers no longer own row-selection semantics
+- [x] `packages/core/src/navigation.ts` is either deleted or reduced to a non-semantic shim that is then removed before plan closure
+- [x] `packages/react/src/GridView.tsx` no longer owns semantic keyboard/pointer interaction orchestration
+- [x] Renderer paint helpers no longer own row-selection semantics
 - [ ] Clipboard/focus/editing/range behavior all route through one core-owned kernel
 - [ ] No files outside the intended implementation scope changed without explicit justification
 - [ ] `plans/README.md` status row updated
