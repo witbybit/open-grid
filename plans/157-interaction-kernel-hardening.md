@@ -222,7 +222,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [ ] loading/failed/placeholder rows
     - [ ] row-model unknown/estimated counts
     - [ ] editable-only navigation mode if still supported
-- [~] Replace fixed `PageUp` / `PageDown` heuristics with viewport-aware navigation
+- [x] Replace fixed `PageUp` / `PageDown` heuristics with viewport-aware navigation
 - [~] Keep keyboard behavior test-driven during demolition so there is no regression in current capabilities
 
 ### Phase 5 - Editing lifecycle state machine
@@ -262,7 +262,7 @@ The following excerpts describe the live interaction architecture this plan repl
 - [~] Remove any remaining assumptions that field identity is authoritative
 - [x] Keep copy/paste capability and integrity checks where they already belong
 - [x] Ensure duplicate-field columns and reordered columns copy/paste against the correct logical columns
-- [ ] Add regression tests for no stale visual-row dependence during copy/paste
+- [x] Add regression tests for no stale visual-row dependence during copy/paste
 
 ### Phase 8 - Adapter de-thickening and event routing cleanup
 

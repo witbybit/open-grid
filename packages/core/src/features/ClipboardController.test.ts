@@ -446,6 +446,45 @@ describe('ClipboardController', () => {
 		store.destroy();
 	});
 
+	it('pasteFromClipboard targets the focused row after sort reorders visual indexes', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 80 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+		});
+		const ctrl = makeController(store, [
+			{ id: '1', name: 'Alpha', price: 10 },
+			{ id: '2', name: 'Beta', price: 20 },
+		]);
+
+		store.selectCell({ rowId: '2', colField: 'name' });
+		store.setCellValue('2', 'price', 5);
+
+		expect(store.getVisualIndexByRowId('2')).toBe(0);
+		expect(store.getVisualIndexByRowId('1')).toBe(1);
+		expect(store.getStateSnapshot().selection.focus).toEqual(
+			expect.objectContaining({
+				rowId: '2',
+				colField: 'name',
+				columnInstanceId: expect.any(String),
+			})
+		);
+
+		clip.setStored('MovedFocus');
+		await store.pasteFromClipboard();
+
+		expect(clip.readText).toHaveBeenCalled();
+		expect(store.getCellValue('2', 'name')).toBe('MovedFocus');
+		expect(store.getCellValue('1', 'name')).toBe('Alpha');
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('copyRange copies explicit visual row/col bounds', async () => {
 		const store = makeStore();
 		const ctrl = makeController(store);

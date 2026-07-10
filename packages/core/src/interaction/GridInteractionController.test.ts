@@ -111,6 +111,48 @@ describe('GridInteractionController', () => {
 		);
 	});
 
+	it('does not navigate into hidden columns outside the displayed column set', () => {
+		const displayedColumns = [{ field: 'name', colId: 'name-a', instanceId: 'name-a' }] as any[];
+		const stateColumns = [...displayedColumns, { field: 'hidden', colId: 'hidden', instanceId: 'hidden', hidden: true }] as any[];
+		const runtime = createRuntime({
+			getDisplayedColumns: () => displayedColumns as any,
+			getStateSnapshot: () =>
+				({
+					selection: {
+						focus: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+						anchor: null,
+						range: null,
+						bounds: null,
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 1,
+					},
+					columns: stateColumns,
+				}) as GridStateSnapshot<TestRow>,
+			getColumnIndex: (colField: string) => displayedColumns.findIndex((column) => column.field === colField),
+		});
+		const controller = new GridInteractionController(runtime);
+
+		controller.handleKeyDown({
+			key: 'ArrowRight',
+			ctrlKey: false,
+			metaKey: false,
+			altKey: false,
+			shiftKey: false,
+			preventDefault: vi.fn(),
+		} as unknown as KeyboardEvent);
+
+		expect(runtime.selectCell).toHaveBeenCalledWith(
+			expect.objectContaining<GridCellPointer>({
+				rowId: 'r1',
+				colField: 'name',
+				colId: 'name-a',
+				columnInstanceId: 'name-a',
+			}),
+			'keyboard'
+		);
+	});
+
 	it('does not treat a non-checkbox duplicate-field column as the checkbox column', () => {
 		const displayedColumns = [
 			{ field: 'name', colId: 'name-a', instanceId: 'name-a', checkboxSelection: true },

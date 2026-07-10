@@ -38,8 +38,27 @@ interface CopyResult {
 export class ClipboardController<TRowData = unknown> {
 	constructor(private readonly c: ClipboardContext<TRowData>) {}
 
+	private getLiveSelectionBounds(
+		selection: ReturnType<typeof readInteractionState<TRowData>>['cellSelection']['selection'],
+		state: InternalGridState<TRowData>
+	): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null {
+		const range = selection.range;
+		if (!range) return null;
+		const startRow = this.c.getVisualIndexByRowId(range.start.rowId) ?? -1;
+		const endRow = this.c.getVisualIndexByRowId(range.end.rowId) ?? -1;
+		const startCol = this.getColumnIndexFromPointer(range.start, state);
+		const endCol = this.getColumnIndexFromPointer(range.end, state);
+		if (startRow === -1 || endRow === -1 || startCol === -1 || endCol === -1) return null;
+		return {
+			minRow: Math.min(startRow, endRow),
+			maxRow: Math.max(startRow, endRow),
+			minCol: Math.min(startCol, endCol),
+			maxCol: Math.max(startCol, endCol),
+		};
+	}
+
 	private resolveColumnFromPointer(pointer: { colField: string; colId?: string; columnInstanceId?: string }, state: InternalGridState<TRowData>) {
-		return findColumnByCellPointer(state.columns, pointer) as ColumnDef<TRowData> | undefined;
+		return findColumnByCellPointer(this.c.getDisplayedColumns(), pointer) as ColumnDef<TRowData> | undefined;
 	}
 
 	private getColumnIndexFromPointer(
@@ -56,7 +75,7 @@ export class ClipboardController<TRowData = unknown> {
 	public async copySelectedRange(): Promise<void> {
 		const state = this.c.getState();
 		const selection = readInteractionState(state).cellSelection.selection;
-		const bounds = selection.bounds;
+		const bounds = this.getLiveSelectionBounds(selection, state);
 
 		if (!bounds) {
 			const focus = selection.focus;
@@ -87,13 +106,14 @@ export class ClipboardController<TRowData = unknown> {
 		const selection = readInteractionState(state).cellSelection.selection;
 		const focus = selection.focus;
 		if (!focus) return;
+		const liveBounds = this.getLiveSelectionBounds(selection, state);
 
 		const focusRowIdx = this.c.getVisualIndexByRowId(focus.rowId) ?? -1;
 		const focusColIdx = this.getColumnIndexFromPointer(focus, state);
 		if (focusRowIdx === -1 || focusColIdx === -1) return;
 
-		const startRow = selection.bounds ? selection.bounds.minRow : focusRowIdx;
-		const startCol = selection.bounds ? selection.bounds.minCol : focusColIdx;
+		const startRow = liveBounds ? liveBounds.minRow : focusRowIdx;
+		const startCol = liveBounds ? liveBounds.minCol : focusColIdx;
 
 		try {
 			const text = await navigator.clipboard.readText();

@@ -216,8 +216,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	}
 
 	public handleDataRowClick(pointer: GridCellPointer, event: MouseEvent): void {
-		const state = this.runtime.getStateSnapshot();
-		if (!state.columns.some((col) => col.checkboxSelection)) return;
+		if (!this.runtime.getDisplayedColumns().some((col) => col.checkboxSelection)) return;
 		const col = this.resolvePointerColumn(pointer);
 		if (col?.checkboxSelection) return;
 		const rowIndex = this.runtime.getVisualIndexByRowId(pointer.rowId) ?? -1;
@@ -249,7 +248,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		const coords = this.getCoordsFromPointer(active);
 		if (!coords) return;
 		const { rowIdx: row, colIdx: col } = coords;
-		const maxCol = state.columns.length - 1;
+		const maxCol = this.runtime.getDisplayedColumns().length - 1;
 		const isEditing = this.isEditingPointer(active, interaction.activeEdit.active);
 
 		if (!isEditing) {
