@@ -111,6 +111,72 @@ describe('GridInteractionController', () => {
 		);
 	});
 
+	it('navigates across pinned and center displayed columns using displayed order', () => {
+		const displayedColumns = [
+			{ field: 'left', colId: 'left', instanceId: 'left', pinned: 'left' },
+			{ field: 'center', colId: 'center', instanceId: 'center' },
+			{ field: 'right', colId: 'right', instanceId: 'right', pinned: 'right' },
+		] as any[];
+		const runtime = createRuntime({
+			getDisplayedColumns: () => displayedColumns as any,
+			getStateSnapshot: () =>
+				({
+					selection: {
+						focus: { rowId: 'r1', colField: 'left', colId: 'left', columnInstanceId: 'left' },
+						anchor: null,
+						range: null,
+						bounds: null,
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 1,
+					},
+					columns: displayedColumns,
+				}) as GridStateSnapshot<TestRow>,
+			getColumnIndex: (colField: string) => displayedColumns.findIndex((column) => column.field === colField),
+			getCellAccessByPointer: (pointer: GridCellPointer) => {
+				const colIndex = displayedColumns.findIndex((column) => column.instanceId === pointer.columnInstanceId);
+				if (colIndex < 0) return null;
+				return {
+					rowId: pointer.rowId,
+					rowIndex: 0,
+					row: { id: 'r1', name: 'A' },
+					node: null,
+					colField: displayedColumns[colIndex].field,
+					colIndex,
+					column: displayedColumns[colIndex],
+					value: 'A',
+					rawValue: 'A',
+					isFocused: false,
+					isRowFocused: false,
+					isSelected: false,
+					isRowSelected: false,
+					isEditing: false,
+					isLoading: false,
+				} as any;
+			},
+		});
+		const controller = new GridInteractionController(runtime);
+
+		controller.handleKeyDown({
+			key: 'ArrowRight',
+			ctrlKey: false,
+			metaKey: false,
+			altKey: false,
+			shiftKey: false,
+			preventDefault: vi.fn(),
+		} as unknown as KeyboardEvent);
+
+		expect(runtime.selectCell).toHaveBeenCalledWith(
+			expect.objectContaining<GridCellPointer>({
+				rowId: 'r1',
+				colField: 'center',
+				colId: 'center',
+				columnInstanceId: 'center',
+			}),
+			'keyboard'
+		);
+	});
+
 	it('does not navigate into hidden columns outside the displayed column set', () => {
 		const displayedColumns = [{ field: 'name', colId: 'name-a', instanceId: 'name-a' }] as any[];
 		const stateColumns = [...displayedColumns, { field: 'hidden', colId: 'hidden', instanceId: 'hidden', hidden: true }] as any[];

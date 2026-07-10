@@ -216,9 +216,9 @@ The following excerpts describe the live interaction architecture this plan repl
 - [x] Replace `GridNavigationController` as the semantic owner
 - [x] Move keyboard navigation into the interaction kernel or a kernel-owned navigation engine
 - [ ] Make navigation understand:
-    - [ ] pinned columns
-    - [ ] hidden columns
-    - [~] duplicate-field columns via `columnInstanceId`
+    - [x] pinned columns
+    - [x] hidden columns
+    - [x] duplicate-field columns via `columnInstanceId`
     - [x] loading/failed/placeholder rows
     - [ ] row-model unknown/estimated counts
     - [ ] editable-only navigation mode if still supported
@@ -360,7 +360,7 @@ Reasoning:
 - [x] Renderer paint helpers no longer own row-selection semantics
 - [ ] Clipboard/focus/editing/range behavior all route through one core-owned kernel
 - [ ] No files outside the intended implementation scope changed without explicit justification
-- [ ] `plans/README.md` status row updated
+- [x] `plans/README.md` status row updated
 
 ## STOP conditions
 
