@@ -350,10 +350,10 @@ Reasoning:
 ## Done criteria
 
 - [x] `corepack pnpm --filter @open-grid/core build` exits 0
-- [ ] `corepack pnpm --filter @open-grid/react build` exits 0
+- [x] `corepack pnpm --filter @open-grid/react build` exits 0
 - [x] `corepack pnpm --filter @open-grid/core test` exits 0
 - [x] `corepack pnpm --filter @open-grid/react test` exits 0
-- [ ] `corepack pnpm --filter @open-grid/core exec vitest run src/engine/architectureGuards.test.ts` exits 0
+- [x] `corepack pnpm --filter @open-grid/core exec vitest run src/engine/architectureGuards.test.ts` exits 0
 - [ ] Core interaction state no longer uses field-only identity for focus/edit/range
 - [x] `packages/core/src/navigation.ts` is either deleted or reduced to a non-semantic shim that is then removed before plan closure
 - [x] `packages/react/src/GridView.tsx` no longer owns semantic keyboard/pointer interaction orchestration

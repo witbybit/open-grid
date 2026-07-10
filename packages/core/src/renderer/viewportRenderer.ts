@@ -13,6 +13,7 @@ export class ViewportRenderer<TRowData = unknown> {
 	public container: HTMLElement | null = null;
 	private lastAriaRowCount = -1;
 	private lastAriaColCount = -1;
+	private lastActiveDescendantId: string | null = null;
 	public scrollViewport: HTMLDivElement | null = null;
 
 	// Single rows container — all row elements live here (no separate left/right layers)
@@ -160,6 +161,7 @@ export class ViewportRenderer<TRowData = unknown> {
 		}
 		this.lastAriaRowCount = -1;
 		this.lastAriaColCount = -1;
+		this.lastActiveDescendantId = null;
 		if (this.styleTag && this.styleTag.parentNode) {
 			this.styleTag.remove();
 		}
@@ -229,6 +231,15 @@ export class ViewportRenderer<TRowData = unknown> {
 			const el = this.layers.get(d.id);
 			if (el) d.apply(el, plan);
 		}
+	}
+
+	public syncActiveDescendant(cell: HTMLElement | null): void {
+		if (!this.container) return;
+		const nextId = cell?.id ?? null;
+		if (this.lastActiveDescendantId === nextId) return;
+		this.lastActiveDescendantId = nextId;
+		if (nextId) this.container.setAttribute('aria-activedescendant', nextId);
+		else this.container.removeAttribute('aria-activedescendant');
 	}
 
 	public getLayoutPlan(): GridLayoutPlan | null {

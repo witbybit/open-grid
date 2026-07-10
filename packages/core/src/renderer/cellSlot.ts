@@ -181,6 +181,7 @@ export class CellSlot<TRowData = unknown> {
 		this.cellInstanceId = `ci${++_cellInstanceCounter}`;
 		this.portalHostId = `${this.cellInstanceId}-ph`;
 		this.element = element;
+		if (!element.id) element.id = `og-cell-${this.cellInstanceId}`;
 		(element as any).__cellSlot = this;
 		// ARIA grid semantics — role is static per element; positional/state attrs are
 		// written (guarded) in update().

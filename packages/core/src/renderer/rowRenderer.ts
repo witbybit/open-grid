@@ -32,6 +32,7 @@ import { computeRowWindowRetention } from './rowWindowRetention.js';
 import { ViewportPlanner, type ViewportPlan } from './viewportPlanner.js';
 import { LiveFrameBudget } from './liveFrameBudget.js';
 import { readInteractionState } from '../interaction/interactionState.js';
+import { syncRowRendererInteractionAccessibility } from './rowRendererAccessibility.js';
 
 export class RowRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -212,6 +213,7 @@ export class RowRenderer<TRowData = unknown> {
 		this.deferredFocusCell = null;
 		this.programmaticScrollCell = null;
 		this.currentWindow = null;
+		this.viewportRenderer.syncActiveDescendant(null);
 	}
 
 	public sync(_frame: InvalidationFrame): void {
@@ -235,6 +237,7 @@ export class RowRenderer<TRowData = unknown> {
 			this.fullWidthRenderer = new FullWidthRowRenderer<TRowData>(this.portalMountManager, this.rowPortalHosts);
 		}
 		this.activeRows.clear();
+		this.viewportRenderer.syncActiveDescendant(null);
 	}
 
 	// ── Pinned container management ──────────────────────────────────────────────────
@@ -701,6 +704,7 @@ export class RowRenderer<TRowData = unknown> {
 		}
 
 		this.currentWindow = nextWindow;
+		this.syncInteractionAccessibility(state);
 	}
 
 	// ── Lane cell binding helpers ────────────────────────────────────────────────────
@@ -759,5 +763,14 @@ export class RowRenderer<TRowData = unknown> {
 
 	public applyFocus(cell: HTMLDivElement): void {
 		this.runtime.applyFocus(cell);
+	}
+
+	public syncInteractionAccessibility(state?: ReturnType<GridEngine<TRowData>['stateManager']['getState']>): void {
+		syncRowRendererInteractionAccessibility({
+			engine: this.engine,
+			viewportRenderer: this.viewportRenderer,
+			activeRows: this.activeRows,
+			state: state ?? this.engine.stateManager.getState(),
+		});
 	}
 }

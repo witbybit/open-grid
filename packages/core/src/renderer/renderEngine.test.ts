@@ -246,6 +246,11 @@ describe('RenderEngine', () => {
 		renderer.fullPaint();
 		const selCell = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="name"]') as HTMLElement;
 		expect(selCell.getAttribute('aria-selected')).toBe('true');
+		expect(selCell.getAttribute('tabindex')).toBe('-1');
+
+		store.selectCell(null);
+		renderer.fullPaint();
+		expect(selCell.hasAttribute('tabindex')).toBe(false);
 
 		renderer.unmount();
 		controller.dispose();

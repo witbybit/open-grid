@@ -61,6 +61,7 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		} finally {
 			this.deps.portalMountManager.endCellReleaseTransaction();
 		}
+		this.deps.rowRenderer.syncInteractionAccessibility();
 		// Play the armed transition once the slots hold their NEW positions. A `full` frame
 		// (e.g. sort) is handled inside `fullPaintInternal`, which consumes the flag — so this
 		// only fires for the `viewport` path (group/tree/detail expansion → invalidateViewport),
@@ -112,6 +113,7 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		this.deps.headerRenderer.repaintHeaders(layoutPlan);
 		this.deps.floatingFilterRenderer.repaint(layoutPlan);
 		this.deps.overlayRenderer.repaintOverlay();
+		this.deps.rowRenderer.syncInteractionAccessibility(state);
 		this.deps.onAfterViewportPaint?.();
 	}
 }
