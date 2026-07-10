@@ -86,6 +86,11 @@ export interface GridCellPointer {
 	colId?: string;
 }
 
+export type CanonicalGridCellPointer = GridCellPointer & {
+	columnInstanceId: ColumnInstanceId;
+	colId: string;
+};
+
 export interface ActiveEditState extends GridCellPointer {
 	columnInstanceId: ColumnInstanceId;
 	colId: string;

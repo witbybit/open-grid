@@ -3,6 +3,7 @@ export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallbac
 import type { CellRendererHandle, CellPlacement } from './cellRendererHandle.js';
 import { isMountedCellVisuallyFresh } from './visualFreshness.js';
 import type { ColumnInstanceId } from '../columnDef.js';
+import type { CellCtrlAccessibilityState } from './controllers/CellCtrl.js';
 
 export interface CellSlotMountedVisualVersions {
 	insightVersion: number;
@@ -260,8 +261,15 @@ export class CellSlot<TRowData = unknown> {
 		this.rowId = '';
 	}
 
-	public syncAccessibilityState(input: { focused: boolean; readOnly: boolean; invalid: boolean }): boolean {
+	public syncAccessibilityState(input: CellCtrlAccessibilityState): boolean {
 		let domUpdated = false;
+
+		if (this.lastAriaSelected !== input.selected) {
+			this.lastAriaSelected = input.selected;
+			if (input.selected) this.element.setAttribute('aria-selected', 'true');
+			else this.element.removeAttribute('aria-selected');
+			domUpdated = true;
+		}
 
 		if (this.lastAriaReadOnly !== input.readOnly) {
 			this.lastAriaReadOnly = input.readOnly;
@@ -311,22 +319,13 @@ export class CellSlot<TRowData = unknown> {
 		rawValue: unknown,
 		formattedValue: string,
 		portalKey?: string,
-		dragShift = 0,
-		ariaSelected?: boolean
+		dragShift = 0
 	): boolean {
 		let domUpdated = false;
 
 		if (this.colIndex !== colIndex) {
 			this.colIndex = colIndex;
 			this.element.setAttribute('aria-colindex', String(colIndex + 1)); // ARIA: 1-based
-		}
-		// ARIA selection state — undefined means "leave unchanged" (the scroll bind path does
-		// not recompute selection, so it must not clobber it).
-		if (ariaSelected !== undefined && ariaSelected !== this.lastAriaSelected) {
-			this.lastAriaSelected = ariaSelected;
-			if (ariaSelected) this.element.setAttribute('aria-selected', 'true');
-			else this.element.removeAttribute('aria-selected');
-			domUpdated = true;
 		}
 		if (this.colField !== colField) {
 			this.colField = colField;
@@ -497,6 +496,10 @@ export class CellSlot<TRowData = unknown> {
 		this.lastMountedStyleVersion = -1;
 		this.lastMountedLoadingVersion = -1;
 		this.lastMountedSelectionVersion = -1;
+		if (this.lastAriaSelected !== undefined) {
+			this.lastAriaSelected = undefined;
+			this.element.removeAttribute('aria-selected');
+		}
 		if (this.hasTabIndex) {
 			this.element.removeAttribute('tabindex');
 			this.hasTabIndex = false;

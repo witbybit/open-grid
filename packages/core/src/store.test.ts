@@ -148,11 +148,69 @@ describe('GridStore generic row-store functionality', () => {
 
 		const state = store.getState();
 		expect(state.interaction?.focus.cell).toEqual(state.selection.focus);
+		expect(state.interaction?.focus.rowIndex).toBe(0);
 		expect(state.interaction?.focus.origin).toBe('keyboard');
 		expect(state.interaction?.focus.version).toBe(state.selection.version ?? 0);
-		expect(state.interaction?.cellSelection.selection).toBe(state.selection);
+		expect(state.interaction?.cellSelection.publicSelection).toBe(state.selection);
+		expect(state.interaction?.cellSelection.selection.focus).toEqual(state.selection.focus);
 		expect(state.interaction?.activeEdit.active).toBe(state.activeEdit);
 		expect(state.interaction?.rowSelection.selectedRowIds).toBe(state.selectedRowIds);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps interaction focus rowIndex synchronized after structural row reordering', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Bravo', price: 10 },
+				{ id: '2', name: 'Alpha', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		expect(store.getState().interaction?.focus.rowIndex).toBe(0);
+
+		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
+
+		expect(store.getState().selection.focus).toEqual(expect.objectContaining({ rowId: '1', colField: 'name' }));
+		expect(store.getState().interaction?.focus.rowIndex).toBe(1);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('canonicalizes interaction focus identity for duplicate-field runtime selection', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name', colId: 'name-b' }, 'api');
+
+		expect(store.getState().interaction?.focus.cell).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: expect.any(String),
+			})
+		);
 
 		controller.dispose();
 		store.destroy();

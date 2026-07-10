@@ -356,7 +356,12 @@ export class RowRenderer<TRowData = unknown> {
 		const interaction = readInteractionState(state);
 		const focusedCellPointer = ctx?.focusedCell ?? interaction.focus.cell;
 		const activeEditCell = ctx?.activeEdit ?? interaction.activeEdit.active;
-		const focusedRowIndex = focusedCellPointer && rowModel ? rowModel.getVisualIndexByRowId(focusedCellPointer.rowId) : undefined;
+		const focusedRowIndex =
+			ctx?.focusedCell || interaction.focus.rowIndex === null || interaction.focus.rowIndex === undefined
+				? focusedCellPointer && rowModel
+					? rowModel.getVisualIndexByRowId(focusedCellPointer.rowId)
+					: undefined
+				: interaction.focus.rowIndex;
 		const editingRowIndex = activeEditCell && rowModel ? rowModel.getVisualIndexByRowId(activeEditCell.rowId) : undefined;
 		const { retainedRowIndices } = computeRowWindowRetention({ renderWindow: nextWindow, focusedRowIndex, editingRowIndex });
 

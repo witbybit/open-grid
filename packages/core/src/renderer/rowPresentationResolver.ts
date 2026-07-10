@@ -110,7 +110,8 @@ export function resolveRowPresentation<TRowData>(
 		} else {
 			const interaction = readInteractionState(state);
 			const bounds = interaction.cellSelection.selection.bounds;
-			const isFocusedRow = interaction.focus.cell?.rowId === node.id;
+			const focusedRowId = interaction.focus.cell?.rowId ?? interaction.cellSelection.publicSelection.focus?.rowId ?? null;
+			const isFocusedRow = focusedRowId === node.id;
 			const isSelectedRow = !!bounds && r >= bounds.minRow && r <= bounds.maxRow;
 			const isLoadingRow = deps.engine.data.isRowLoading(node.id);
 

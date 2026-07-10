@@ -26,7 +26,7 @@ import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
 import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
-import { getColumnInstanceIdentity } from '../columnDef.js';
+import { getColumnInstanceIdentity, type ColumnDef, type ColumnInstanceId } from '../columnDef.js';
 import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
 import { readInteractionState } from '../interaction/interactionState.js';
 
@@ -40,8 +40,12 @@ function isCellSelected(rowIndex: number, colIndex: number, selectionBounds: Gri
 	);
 }
 
-function isCellFocused(rowId: string, colField: string, focusedCell: GridCellPointer | null | undefined): boolean {
-	return doesCellPointerMatchColumn(focusedCell, rowId, { field: colField });
+function isCellFocused<TRowData>(
+	rowId: string,
+	column: Pick<ColumnDef<TRowData>, 'field'> & { instanceId?: ColumnInstanceId },
+	focusedCell: GridCellPointer | null | undefined
+): boolean {
+	return doesCellPointerMatchColumn(focusedCell, rowId, column);
 }
 
 export interface RenderScrollCoordinatorState<TRowData = unknown> {
@@ -452,7 +456,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			if (!shouldPrimeDisplayValue) return true;
 			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
 			const hasInsightDecorations = cellDecorations.length > 0;
-			const isFocused = isCellFocused(rowId, col.field, focusedCell);
+			const isFocused = isCellFocused(rowId, col, focusedCell);
 			const isSelected = isCellSelected(rowIndex, colIndex, selectionBounds);
 			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
 			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
@@ -578,7 +582,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
 			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
 			const hasInsightDecorations = cellDecorations.length > 0;
-			const isFocused = isCellFocused(rowId, col.field, focusedCell);
+			const isFocused = isCellFocused(rowId, col, focusedCell);
 			const isSelected = isCellSelected(rowIndex, colIndex, selectionBounds);
 			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
 			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;

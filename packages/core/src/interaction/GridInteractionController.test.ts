@@ -334,13 +334,6 @@ describe('GridInteractionController', () => {
 			}),
 			'keyboard'
 		);
-		expect(runtime.extendSelection).toHaveBeenCalledWith(
-			expect.objectContaining<GridCellPointer>({
-				rowId: 'r1',
-				colId: 'name-b',
-				columnInstanceId: 'name-b',
-			}),
-			'keyboard'
-		);
+		expect(runtime.extendSelection).not.toHaveBeenCalled();
 	});
 });

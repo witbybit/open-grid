@@ -14,6 +14,7 @@ import type { VisualRow } from '../visualRow.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { SortModel } from '../rowModel.js';
 import { areCellPointersEqual } from '../interaction/cellPointer.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 
 export interface GridStoreSubscriptionsFacade<TRowData = unknown> {
 	subscribe(listener: GridSnapshotListener<TRowData>): () => void;
@@ -93,8 +94,19 @@ export function createGridStoreSubscriptions<TRowData>(deps: GridStoreSubscripti
 			subscribeSnapshotProjection(['visibleRowRange'], (state) => state.visibleRowRange, listener, areViewportRangesEqual),
 		subscribeToSelection: (listener) => subscribeSnapshotProjection(['selection'], (state) => state.selection, listener),
 		subscribeToFocusedCell: (listener) =>
-			subscribeSnapshotProjection(['selection'], (state) => state.selection.focus, listener, areCellPointersEqual),
-		subscribeToEditingCell: (listener) => subscribeSnapshotProjection(['activeEdit'], (state) => state.activeEdit, listener, areActiveEditsEqual),
+			subscribeSnapshotProjection(
+				['selection', 'interaction'],
+				(state) => readInteractionState(state).focus.cell,
+				listener,
+				areCellPointersEqual
+			),
+		subscribeToEditingCell: (listener) =>
+			subscribeSnapshotProjection(
+				['activeEdit', 'interaction'],
+				(state) => readInteractionState(state).activeEdit.active,
+				listener,
+				areActiveEditsEqual
+			),
 		subscribeToCell: (rowId, colField, listener) => {
 			const sub: CellSubscription = { rowId, colField, onStoreChange: listener };
 			deps.registerCellSubscription(sub);

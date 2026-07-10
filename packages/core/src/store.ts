@@ -253,7 +253,25 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
 		this.pluginRuntime = createGridPluginRuntime(this as unknown as GridPluginRuntime<TRowData>);
 		this.pluginRegistry = new GridPluginRegistry<TRowData>(this.pluginRuntime, this.engine.runtimeFaults);
-		this.interactionController = new GridInteractionController<TRowData>(this as unknown as GridPluginRuntime<TRowData>);
+		this.interactionController = new GridInteractionController<TRowData>(
+			this as unknown as GridPluginRuntime<TRowData>,
+			{},
+			{
+				selectCell: (pointer, source) => this.engine.selectRange(pointer, pointer, source),
+				selectRange: (start, end, source) => this.engine.selectRange(start, end, source),
+				applyRowSelectionGesture: (gesture) => this.engine.applyRowSelectionGesture(gesture),
+				selectRows: (rowIds, options) =>
+					options?.mode === 'replace' ? this.engine.replaceRowIds(rowIds, 'api') : this.engine.selectRowIds(rowIds, 'api'),
+				deselectRows: (rowIds) => this.engine.deselectRowIds(rowIds, 'api'),
+				startEditing: (rowId, colFieldOrInstanceId, source) => this.engine.startEdit(rowId, colFieldOrInstanceId, source),
+				updateEditDraft: (rowId, colFieldOrInstanceId, value) => this.engine.updateEditDraft(rowId, colFieldOrInstanceId, value),
+				stopEditing: (cancel) => this.engine.stopEdit(cancel),
+				commitEdit: (rowId, colFieldOrInstanceId, value) => this.engine.commitEdit(rowId, colFieldOrInstanceId, value),
+				setCellValue: (rowId, colField, value) => {
+					this.engine.setCellValue(rowId, colField, value);
+				},
+			}
+		);
 		this.subscriptionsFacade = createGridStoreSubscriptions<TRowData>({
 			subscribe: (listener) => this.engine.subscribe(listener),
 			subscribeToKey: (key, listener) => this.engine.subscribeToKey(key, listener),
@@ -403,20 +421,19 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public selectCell = (pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {
-		this.engine.selectRange(pointer, pointer, source);
+		this.interactionController.selectCell(pointer, source);
 	};
 
 	public selectRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {
-		this.engine.selectRange(start, end, source);
+		this.interactionController.selectRange(start, end, source);
 	};
 
 	public extendSelection = (end: GridCellPointer, source: GridSelectionSource = 'api'): void => {
-		const selection = readInteractionState(this.getState()).cellSelection.selection;
-		this.engine.selectRange(selection.anchor ?? selection.focus ?? end, end, source);
+		this.interactionController.extendSelection(end, source);
 	};
 
 	public applyRowSelectionGesture = (gesture: RowSelectionGesture): RowSelectionChangeResult | null => {
-		return this.engine.applyRowSelectionGesture(gesture);
+		return this.interactionController.applyRowSelectionGesture(gesture);
 	};
 
 	public selectRows = (rowIds: string[], options?: SelectRowsOptions): void =>
@@ -879,19 +896,19 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public startEditing = (rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void => {
-		this.engine.startEdit(rowId, colFieldOrInstanceId, source);
+		this.interactionController.startEdit(rowId, colFieldOrInstanceId, source);
 	};
 
 	public updateEditDraft = (rowId: string, colFieldOrInstanceId: string, value: unknown): void => {
-		this.engine.updateEditDraft(rowId, colFieldOrInstanceId, value);
+		this.interactionController.updateEditDraft(rowId, colFieldOrInstanceId, value);
 	};
 
 	public stopEditing = (cancel: boolean = false): void => {
-		this.engine.stopEdit(cancel);
+		this.interactionController.stopEdit(cancel);
 	};
 
 	public commitEdit = async (rowId: string, colFieldOrInstanceId: string, value: unknown): Promise<boolean> => {
-		return this.engine.editingFeature.commitEdit(rowId, colFieldOrInstanceId, value);
+		return this.interactionController.commitCellEdit(rowId, colFieldOrInstanceId, value);
 	};
 
 	// ── Data Integrity API ─────────────────────────────────────────────────────

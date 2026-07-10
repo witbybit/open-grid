@@ -1,5 +1,4 @@
 import { GridEventName, type GridEventPayloadMap } from '../api/GridEvents.js';
-import { areCellPointersEqual } from './cellPointer.js';
 import type { GridApi, GridCellClickParams, GridCellPointer } from '../api/GridApi.js';
 import type { GridCellAccess } from '../api/GridApi.js';
 import type { GridInteractionHandle } from './GridInteractionController.js';
@@ -126,8 +125,7 @@ export function createGridInteractionEventRouter<TRowData>(deps: GridInteraction
 			if (!target) return;
 
 			isGridActive = true;
-			const state = deps.getApi().getStateSnapshot();
-			if (areCellPointersEqual(state.activeEdit, target.pointer)) return;
+			if (interaction.isEditingCell(target.pointer)) return;
 
 			const colDef = target.access?.column;
 			if (colDef && (colDef.canDrag !== undefined || colDef.disableCellRangeSelection)) return;
@@ -152,8 +150,7 @@ export function createGridInteractionEventRouter<TRowData>(deps: GridInteraction
 
 			const interaction = deps.getInteraction();
 			if (!interaction) return;
-			const state = deps.getApi().getStateSnapshot();
-			if (areCellPointersEqual(state.activeEdit, target.pointer)) return;
+			if (interaction.isEditingCell(target.pointer)) return;
 			interaction.handleClick(target.pointer, event);
 		},
 
@@ -163,8 +160,7 @@ export function createGridInteractionEventRouter<TRowData>(deps: GridInteraction
 			const target = deps.resolveCellTarget(event);
 			if (!target) return;
 
-			const state = deps.getApi().getStateSnapshot();
-			if (areCellPointersEqual(state.activeEdit, target.pointer)) return;
+			if (interaction.isEditingCell(target.pointer)) return;
 			interaction.setCellEditing(target.pointer.rowId, target.pointer.columnInstanceId ?? target.pointer.colField, true, 'mouse');
 		},
 

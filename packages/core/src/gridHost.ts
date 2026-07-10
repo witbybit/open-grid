@@ -9,10 +9,12 @@ import type {
 	GridHeaderMenuUnmount,
 } from './renderer/IGridRenderer.js';
 import type { CellState, GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';
+import type { GridCellClickParams } from './api/GridApi.js';
 import type { ColumnDef, ColumnInstanceId, InternalColumnDef } from './columnDef.js';
 import { asGroupMetaCapableRowModel } from './rowModel.js';
 import { resolveGridInteractionController, resolveGridRuntimeComposition } from './internal/apiInternalBridge.js';
-import type { GridInteractionController } from './interaction/GridInteractionController.js';
+import { createGridInteractionEventRouter } from './interaction/GridInteractionEventRouter.js';
+import type { GridNavigationOptions } from './interaction/GridInteractionController.js';
 
 export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {
 	const caps = (column as InternalColumnDef<TRowData>).cellRendererCapabilities;
@@ -91,8 +93,63 @@ export interface GridAdapterHandle<TRowData = unknown> {
 }
 
 export type GridHostWithAdapter<TRowData = unknown> = GridHost & { adapterHandle: GridAdapterHandle<TRowData> };
-export { resolveGridInteractionController };
-export type { GridInteractionController };
+
+export interface GridInteractionSurfaceBinding {
+	updateOptions(options: GridNavigationOptions): void;
+	destroy(): void;
+}
+
+export interface GridInteractionSurfaceOptions<TRowData = unknown> {
+	container: HTMLElement;
+	adapterHandle: GridAdapterHandle<TRowData>;
+	getNavigationEnabled(): boolean;
+	isContextMenuEnabled(): boolean;
+	showContextMenu(pointer: GridCellPointer, clientX: number, clientY: number): void;
+	onCellClick?(params: GridCellClickParams<TRowData>): void;
+}
+
+export function bindGridInteractionSurface<TRowData>(
+	api: GridApi<TRowData>,
+	options: GridInteractionSurfaceOptions<TRowData>
+): GridInteractionSurfaceBinding {
+	const interactionController = resolveGridInteractionController(api);
+	const router = createGridInteractionEventRouter<TRowData>({
+		getApi: () => api,
+		getInteraction: () => (options.getNavigationEnabled() ? interactionController : null),
+		isEventWithinGrid: (target) => {
+			if (!(target instanceof HTMLElement)) return false;
+			return target.closest('.og-grid-container') === options.container;
+		},
+		resolveCellTarget: (event) => {
+			const cellEl = (event.target as HTMLElement).closest('.og-cell') as HTMLElement | null;
+			if (!cellEl || cellEl.closest('.og-grid-container') !== options.container) return null;
+			const pointer = options.adapterHandle.getCellPointerFromElement(cellEl);
+			if (!pointer) return null;
+			const access = options.adapterHandle.getCellAccessByPointer(pointer);
+			return { cellEl, pointer, access };
+		},
+		focusCellElement: (cellEl) => {
+			cellEl.tabIndex = -1;
+			cellEl.focus();
+		},
+		isContextMenuEnabled: () => options.isContextMenuEnabled(),
+		showContextMenu: (pointer, clientX, clientY) => {
+			options.showContextMenu(pointer, clientX, clientY);
+		},
+		onCellClick: (params) => {
+			options.onCellClick?.(params);
+		},
+	});
+	const unbind = router.bind(options.container);
+	return {
+		updateOptions(nextOptions) {
+			interactionController.updateOptions(nextOptions);
+		},
+		destroy() {
+			unbind();
+		},
+	};
+}
 
 export function mountGridHost<TRowData>(
 	api: GridApi<TRowData>,

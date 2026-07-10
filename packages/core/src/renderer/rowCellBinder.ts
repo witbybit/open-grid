@@ -368,6 +368,16 @@ function makeScrollDispatchInput<TRowData>(
 	};
 }
 
+function isCellSelectedInBounds(selectionBounds: ScrollRenderContext['selectionBounds'], rowIndex: number, colIndex: number): boolean {
+	return (
+		!!selectionBounds &&
+		rowIndex >= selectionBounds.minRow &&
+		rowIndex <= selectionBounds.maxRow &&
+		colIndex >= selectionBounds.minCol &&
+		colIndex <= selectionBounds.maxCol
+	);
+}
+
 export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, request: BindCellFullRequest<TRowData>): void {
 	deps.incrementFullCellBinds?.();
 	deps.incrementCellSlotRebinds?.();
@@ -687,6 +697,7 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	const isFocused = doesCellPointerMatchColumn(ctx.focusedCell, node.id, col);
 	const isEditing = doesCellPointerMatchColumn(ctx.activeEdit, node.id, col);
 	const cellCtrl = attachCellCtrl(deps, request, isEditing, isFocused);
+	cellCtrl.visualState.selected = isCellSelectedInBounds(ctx.selectionBounds, rowIndex, colIndex);
 
 	// Focus tab-index bookkeeping is independent of which presentation gets resolved below —
 	// it applies whenever this cell is the focused cell, regardless of content.

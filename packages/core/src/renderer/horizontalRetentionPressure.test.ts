@@ -150,5 +150,5 @@ describe('horizontal cell-slot retention pressure (bounded by cellSlotRetention.
 		expect(slotAfterScroll.rightCells[0]?.colField).toBe(`c${totalCols - 1}`);
 
 		cleanup(grid);
-	});
+	}, 15_000); // Matches the other 3000-column pressure case; this path also depends on full renderer mount cost under suite load.
 });

@@ -31,8 +31,7 @@ function applyLiveMountEmergencyShell<TRowData>(input: DispatchCellPresentationI
 		undefined,
 		'',
 		undefined,
-		0,
-		input.phase === 'full-bind' ? cellCtrl.visualState.selected : undefined
+		0
 	);
 	cellSlot.lastMountedRowVersion = rowVersion;
 	cellSlot.lastMountedGlobalVersion = runtime.globalVersion;
@@ -96,8 +95,7 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 			undefined,
 			'',
 			presentation.portalKey,
-			geometry.dragShift,
-			input.phase === 'full-bind' ? cellCtrl.visualState.selected : undefined
+			geometry.dragShift
 		);
 		if (presentation.recordVersions && 'rowId' in presentation.recordVersions)
 			stampMountedVersions(cellSlot, rowVersion, runtime.globalVersion, presentation.recordVersions);
@@ -178,8 +176,7 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 		undefined,
 		'',
 		presentation.portalKey,
-		geometry.dragShift,
-		input.phase === 'full-bind' ? cellCtrl.visualState.selected : undefined
+		geometry.dragShift
 	);
 	if (presentation.recordVersions && 'rowId' in presentation.recordVersions)
 		stampMountedVersions(cellSlot, rowVersion, runtime.globalVersion, presentation.recordVersions);

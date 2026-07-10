@@ -403,7 +403,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(stats.customRendererMountsDuringScroll).toBe(0);
 
 		cleanupGrid(grid);
-	});
+	}, 15_000); // 100k x 1000 synthetic grid setup can exceed 5s under full-suite load even when the bounded-work assertions hold.
 
 	it('avoids row-model lookups for stayed rows during a one-row vertical scroll', () => {
 		const store = new GridStore<{ id: string; name: string }>({
@@ -580,7 +580,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(getRowIndices(window).length * getColIndices(window).length).toBeLessThanOrEqual(220);
 
 		cleanupGrid(grid);
-	});
+	}, 15_000); // Large synthetic grid mount can exceed the default 5s suite timeout under full-load CI/local runs.
 
 	it('never leaves stale cell DOM attached to hot-recycled rows after violent custom-renderer scrolls', () => {
 		const grid = createWideGrid({ rows: 1000, cols: 24, custom: true, valueGetter: true });

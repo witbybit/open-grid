@@ -250,14 +250,15 @@ describe('Architecture guardrails', () => {
 
 	it('GridView.tsx routes semantic interaction through the core event router', () => {
 		const content = readFileSync(resolve(REACT_ROOT, 'src', 'GridView.tsx'), 'utf-8');
-		expect(content).toContain('createGridInteractionEventRouter');
-		expect(content).toContain('resolveGridInteractionController');
-		expect(content).toContain('router.bind(container)');
+		expect(content).toContain('bindGridInteractionSurface');
 		expect(content).not.toContain('navigationRef.current?.handleKeyDown');
 		expect(content).not.toContain('nav.handleMouseDown(');
 		expect(content).not.toContain('nav.handleMouseEnter(');
 		expect(content).not.toContain('nav.handleClick(');
 		expect(content).not.toContain('nav.setCellEditing(');
+		expect(content).not.toContain('createGridInteractionEventRouter');
+		expect(content).not.toContain('resolveGridInteractionController');
+		expect(content).not.toContain('router.bind(container)');
 		expect(content).not.toContain('useGridInteractionController');
 		expect(content).not.toContain('dispatchEvent(GridEventName.cellClicked');
 		expect(content).not.toContain("window.addEventListener('keydown'");
@@ -269,7 +270,52 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionController.ts'), 'utf-8');
 		expect(content).not.toContain('private rangeStart');
 		expect(content).toContain('private getSelectionAnchor()');
-		expect(content).toContain("this.runtime.extendSelection(targetPointer, 'keyboard')");
+		expect(content).toContain("this.extendSelection(targetPointer, 'keyboard')");
+	});
+
+	it('store public interaction APIs route through the interaction controller instead of split engine feature seams', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).toContain("public selectCell = (pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {");
+		expect(content).toContain('this.interactionController.selectCell(pointer, source);');
+		expect(content).toContain('this.interactionController.selectRange(start, end, source);');
+		expect(content).toContain('this.interactionController.extendSelection(end, source);');
+		expect(content).toContain('return this.interactionController.applyRowSelectionGesture(gesture);');
+		expect(content).toContain('this.interactionController.startEdit(rowId, colFieldOrInstanceId, source);');
+		expect(content).toContain('this.interactionController.updateEditDraft(rowId, colFieldOrInstanceId, value);');
+		expect(content).toContain('this.interactionController.stopEdit(cancel);');
+		expect(content).toContain('return this.interactionController.commitCellEdit(rowId, colFieldOrInstanceId, value);');
+		expect(content).not.toContain('return this.engine.editingFeature.commitEdit(');
+	});
+
+	it('portal mount prioritization derives focus/edit priority from interaction state instead of raw state slices', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'portalMountManager.ts'), 'utf-8');
+		expect(content).toContain("import { readInteractionState } from '../interaction/interactionState.js';");
+		expect(content).toContain('const interaction = flushState ? readInteractionState(flushState) : null;');
+		expect(content).toContain('const activeEdit = interaction?.activeEdit.active ?? null;');
+		expect(content).toContain('const focusedCell = interaction?.focus.cell ?? null;');
+		expect(content).not.toContain('const activeEdit = flushState?.activeEdit;');
+		expect(content).not.toContain('const focusedCell = flushState?.selection.focus;');
+	});
+
+	it('interaction event router asks the interaction controller about edit state instead of peeking at public snapshot activeEdit', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionEventRouter.ts'), 'utf-8');
+		expect(content).toContain('if (interaction.isEditingCell(target.pointer)) return;');
+		expect(content).not.toContain('getStateSnapshot().activeEdit');
+		expect(content).not.toContain('state.activeEdit');
+	});
+
+	it('GridDataIntegrityManager derives edit dirtiness from interaction state instead of raw activeEdit state', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridDataIntegrityManager.ts'), 'utf-8');
+		expect(content).toContain("import { readInteractionState } from '../../interaction/interactionState.js';");
+		expect(content).toContain('const editState = readInteractionState(this.deps.ctx.getState()).activeEdit.active;');
+		expect(content).not.toContain('const editState = this.deps.ctx.getState().activeEdit;');
+	});
+
+	it('renderScrollCoordinator focus matching uses full column identity instead of a field-only stub', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderScrollCoordinator.ts'), 'utf-8');
+		expect(content).toContain('return doesCellPointerMatchColumn(focusedCell, rowId, column);');
+		expect(content).toContain('const isFocused = isCellFocused(rowId, col, focusedCell);');
+		expect(content).not.toContain('return doesCellPointerMatchColumn(focusedCell, rowId, { field: colField });');
 	});
 
 	it('active edit state is column-instance authoritative inside the kernel', () => {
@@ -282,6 +328,34 @@ describe('Architecture guardrails', () => {
 		expect(editingContent).not.toContain('activeEdit.columnInstanceId ?? colField');
 		expect(editingContent).not.toContain('matchedActiveEdit.columnInstanceId ?? matchedActiveEdit.colField');
 		expect(interactionContent).not.toContain('activeEdit.columnInstanceId ?? activeEdit.colField');
+	});
+
+	it('interaction focus state stores canonical cell identity instead of a broad public pointer', () => {
+		const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+		const interactionStateContent = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'interactionState.ts'), 'utf-8');
+		expect(apiContent).toContain('export type CanonicalGridCellPointer = GridCellPointer & {');
+		expect(interactionStateContent).toContain('cell: CanonicalGridCellPointer | null;');
+		expect(interactionStateContent).toContain('rowIndex: number | null;');
+		expect(interactionStateContent).toContain('export interface CanonicalGridSelectionState {');
+		expect(interactionStateContent).toContain('selection: CanonicalGridSelectionState;');
+		expect(interactionStateContent).toContain('publicSelection: GridSelectionState;');
+		expect(interactionStateContent).toContain('function asCanonicalCellPointer(');
+	});
+
+	it('cell accessibility paint derives from CellCtrl state instead of binder-local aria booleans', () => {
+		const binderSharedContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'binders', 'binderShared.ts'), 'utf-8');
+		const cellCtrlContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'controllers', 'CellCtrl.ts'), 'utf-8');
+		const rowCellBinderContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBinder.ts'), 'utf-8');
+		expect(cellCtrlContent).toContain('export interface CellCtrlAccessibilityState {');
+		expect(cellCtrlContent).toContain('export function deriveCellCtrlAccessibilityState(cellCtrl: CellCtrl): CellCtrlAccessibilityState {');
+		expect(binderSharedContent).toContain('return cellSlot.syncAccessibilityState(deriveCellCtrlAccessibilityState(cellCtrl));');
+		expect(rowCellBinderContent).toContain('cellCtrl.visualState.selected = isCellSelectedInBounds(ctx.selectionBounds, rowIndex, colIndex);');
+	});
+
+	it('projection pipeline rebuilds interaction focus metadata when the visual row order changes', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridProjectionPipeline.ts'), 'utf-8');
+		expect(content).toContain("updatedSet.has('globalVersion')");
+		expect(content).toContain('getRowIndexByRowId: (rowId) => rowModel?.getVisualIndexByRowId(rowId) ?? null');
 	});
 
 	it('renderEngine.ts does not own row-selection gesture semantics directly', () => {
@@ -2024,6 +2098,14 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain("invalidateOverlay('selection')");
 		expect(content).not.toContain("invalidateHeaders('selection')");
 		expect(content).not.toContain("requestFlushGated('selection')");
+	});
+
+	it('RenderInvalidationCoordinator derives focus-follow scrolling from interaction state instead of selectionChanged payloads', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
+		expect(content).toContain("import { readInteractionState } from '../interaction/interactionState.js';");
+		expect(content).toContain('const interaction = readInteractionState(this.deps.engine.stateManager.getState());');
+		expect(content).toContain('const selection = interaction.cellSelection.selection;');
+		expect(content).not.toContain('const { selection } = event.payload;');
 	});
 
 	it('layout-panel commands own showGroupPanel/showFloatingFilters/showFilterChipBar invalidation instead of RenderInvalidationCoordinator (Plan 105)', () => {

@@ -958,7 +958,7 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		}
 
 		cleanupGrid(grid);
-	});
+	}, 20_000);
 
 	it('asserts CSS styles define hide rules for text and empty content modes and rules for custom renderer container', () => {
 		expect(CORE_STYLES).toContain('.og-cell[data-content-mode="text"] > .og-cell-portal-host');

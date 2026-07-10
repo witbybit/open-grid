@@ -25,6 +25,7 @@ import {
 import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 import type { RenderRuntimeStats } from './renderTelemetry.js';
 import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 
 function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: VisualRow<TRowData> | undefined): boolean {
 	if (a === b) return true;
@@ -436,8 +437,9 @@ export class PortalMountManager<TRowData = unknown> {
 		const outOfBudget = (): boolean => budgetUsed >= maxItems || (deadline !== undefined && processed > 0 && deadline.timeRemaining() <= 0);
 
 		const flushState = this.engine?.stateManager.getState();
-		const activeEdit = flushState?.activeEdit;
-		const focusedCell = flushState?.selection.focus;
+		const interaction = flushState ? readInteractionState(flushState) : null;
+		const activeEdit = interaction?.activeEdit.active ?? null;
+		const focusedCell = interaction?.focus.cell ?? null;
 		const rowModel = this.engine?.getRowModel();
 		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const columns = this.engine?.columns.getDisplayedColumns() ?? [];

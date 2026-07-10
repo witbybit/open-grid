@@ -38,6 +38,7 @@ import { ValidationIntegrityModule } from './modules/ValidationIntegrityModule.j
 import type { ValidationModuleDeps } from './modules/ValidationIntegrityModule.js';
 import { QualityIntegrityModule } from './modules/QualityIntegrityModule.js';
 import { DiffIntegrityModule } from './modules/DiffIntegrityModule.js';
+import { readInteractionState } from '../../interaction/interactionState.js';
 import { LiveStreamIntegrityModule } from './modules/LiveStreamIntegrityModule.js';
 import { ConflictIntegrityModule } from './modules/ConflictIntegrityModule.js';
 import { doesCellPointerMatchColumn } from '../../interaction/cellPointer.js';
@@ -579,7 +580,7 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 
 	private _isCellDirty(rowId: string, colField: string): boolean {
 		// Check active editing
-		const editState = this.deps.ctx.getState().activeEdit;
+		const editState = readInteractionState(this.deps.ctx.getState()).activeEdit.active;
 		if (
 			editState &&
 			this.deps.ctx.columns

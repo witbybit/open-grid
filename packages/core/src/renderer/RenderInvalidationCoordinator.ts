@@ -1,6 +1,7 @@
 import { GridEventName } from '../api/GridEvents.js';
 import type { GridCellPointer } from '../api/GridApi.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 import type { FrameCoordinator } from './frameCoordinator.js';
 import type { GeometryController } from './geometryController.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
@@ -51,9 +52,10 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		// model re-runs the pipeline for the new window on the same event.
 		this.unsubscribers.push(this.deps.engine.eventBus.addEventListener(GridEventName.paginationChanged, () => this.deps.resetScroll()));
 		this.unsubscribers.push(
-			this.deps.engine.eventBus.addEventListener(GridEventName.selectionChanged, (event) => {
-				const { selection } = event.payload;
-				if (selection?.focus && selection.source !== 'pointer') {
+			this.deps.engine.eventBus.addEventListener(GridEventName.selectionChanged, () => {
+				const interaction = readInteractionState(this.deps.engine.stateManager.getState());
+				const selection = interaction.cellSelection.selection;
+				if (selection.focus && selection.source !== 'pointer') {
 					this.deps.scrollCellIntoView(selection.focus);
 				}
 			})

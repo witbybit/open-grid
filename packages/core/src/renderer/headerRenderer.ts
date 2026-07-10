@@ -126,7 +126,7 @@ export class HeaderRenderer<TRowData = unknown> {
 		// bounds is only set when a range exists (drag / shift+arrow). For plain single-cell
 		// focus (click / arrow key) bounds is null, so fall back to the focus column's index.
 		const { bounds, focus } = interaction.cellSelection.selection;
-		const focusColIdx = focus !== null ? this.engine.columns.getColumnIndex(focus.colField) : -1;
+		const focusColIdx = focus !== null ? this.engine.columns.getIndexMapper().idToVisualIndex(focus.columnInstanceId) : -1;
 		const highlightMinCol = bounds !== null ? bounds.minCol : focusColIdx >= 0 ? focusColIdx : null;
 		const highlightMaxCol = bounds !== null ? bounds.maxCol : focusColIdx >= 0 ? focusColIdx : null;
 		const { pinLeftCount, pinRightCount } = layoutPlan.columns;

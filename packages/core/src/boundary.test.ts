@@ -235,7 +235,7 @@ describe('Public/internal boundary', () => {
 		});
 
 		it('matches the reviewed adapter-only runtime export snapshot', () => {
-			expect(Object.keys(internalApi).sort()).toEqual(['hasImperativeRendererCapability', 'mountGridHost', 'resolveGridInteractionController']);
+			expect(Object.keys(internalApi).sort()).toEqual(['bindGridInteractionSurface', 'hasImperativeRendererCapability', 'mountGridHost']);
 		});
 
 		it('does not export runtime bridge escape hatches', () => {

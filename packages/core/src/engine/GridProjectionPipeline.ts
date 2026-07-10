@@ -125,13 +125,14 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		}
 
 		if (
-			(updatedSet.has('selection') || updatedSet.has('activeEdit') || updatedSet.has('selectedRowIds')) &&
-			!isInteractionStateCurrent(currState)
+			(updatedSet.has('selection') || updatedSet.has('activeEdit') || updatedSet.has('selectedRowIds') || updatedSet.has('globalVersion')) &&
+			!isInteractionStateCurrent(currState, { getRowIndexByRowId: (rowId) => rowModel?.getVisualIndexByRowId(rowId) ?? null })
 		) {
 			const interaction = buildInteractionState({
 				selection: currState.selection,
 				activeEdit: currState.activeEdit,
 				selectedRowIds: currState.selectedRowIds,
+				getRowIndexByRowId: (rowId) => rowModel?.getVisualIndexByRowId(rowId) ?? null,
 			});
 			const affectedKeys = phase.setDerivedState({ interaction });
 			for (const key of affectedKeys) updatedSet.add(key);

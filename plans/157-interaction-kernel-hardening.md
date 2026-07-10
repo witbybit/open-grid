@@ -169,19 +169,19 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 1 - Canonical interaction state and identity cutover
 
-- [ ] Introduce a dedicated `InteractionKernelState` (or equivalent named core-owned structure)
-- [ ] Split interaction sub-state into explicit domains:
-    - [ ] focus
-    - [ ] active edit
-    - [ ] cell/range selection
-    - [ ] row selection
+- [x] Introduce a dedicated `InteractionKernelState` (or equivalent named core-owned structure)
+- [x] Split interaction sub-state into explicit domains:
+    - [x] focus
+    - [x] active edit
+    - [x] cell/range selection
+    - [x] row selection
 - [ ] Introduce canonical cell identity for interaction:
     - [x] `rowId`
     - [x] `columnInstanceId`
     - [x] stable displayed `colField` / `colId` as derived metadata only
 - [~] Replace internal field-based focus/edit/range identity
 - [ ] Keep public API compatibility only at the public boundary if required; no field-based identity inside core state after this phase
-- [ ] Add architecture guards prohibiting new field-only interaction identity in core interaction state
+- [x] Add architecture guards prohibiting new field-only interaction identity in core interaction state
 
 ### Phase 2 - Single interaction kernel surface
 
@@ -199,12 +199,12 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 3 - Focus model hardening
 
-- [ ] Replace the current implicit focus usage with an explicit focus state model
+- [x] Replace the current implicit focus usage with an explicit focus state model
 - [ ] Track:
-    - [ ] `rowId`
-    - [ ] `rowIndex` when useful as derived metadata
-    - [~] `columnInstanceId`
-    - [~] `colField` / `colId` as derived metadata
+    - [x] `rowId`
+    - [x] `rowIndex` when useful as derived metadata
+    - [x] `columnInstanceId`
+    - [x] `colField` / `colId` as derived metadata
     - [x] focus origin
     - [x] version
 - [ ] Make focus restoration virtualization-safe and controller-safe
@@ -266,24 +266,24 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 8 - Adapter de-thickening and event routing cleanup
 
-- [ ] Reduce `packages/react/src/GridView.tsx` to thin DOM assembly + event forwarding only
-- [ ] Move semantic event routing out of the React adapter into core wherever feasible
+- [~] Reduce `packages/react/src/GridView.tsx` to thin DOM assembly + event forwarding only
+- [~] Move semantic event routing out of the React adapter into core wherever feasible
 - [ ] Decide the cleanest final shape:
-    - [ ] core-provided DOM event binder
+    - [x] core-provided DOM event binder
     - [ ] or adapter-resolved pointer forwarding into kernel commands
-- [ ] Delete legacy adapter-owned navigation/activity logic after the new flow is live
-- [ ] Keep React-specific responsibilities limited to portal/editor rendering assembly
+- [x] Delete legacy adapter-owned navigation/activity logic after the new flow is live
+- [~] Keep React-specific responsibilities limited to portal/editor rendering assembly
 
 ### Phase 9 - Accessibility state derivation
 
-- [ ] Derive ARIA selection/focus/edit/read-only/invalid state from the kernel, not ad hoc per caller
+- [~] Derive ARIA selection/focus/edit/read-only/invalid state from the kernel, not ad hoc per caller
 - [ ] Normalize:
-    - [ ] `aria-selected`
+    - [x] `aria-selected`
     - [ ] `aria-rowindex`
     - [ ] `aria-colindex`
-    - [ ] `aria-readonly`
-    - [ ] `aria-invalid`
-    - [ ] `tabIndex`
+    - [x] `aria-readonly`
+    - [x] `aria-invalid`
+    - [x] `tabIndex`
     - [ ] active-cell focus contract
 - [ ] Ensure virtualization does not break accessibility state truthfulness
 - [ ] Add regression tests around focus/editing/selection ARIA output

@@ -2,7 +2,6 @@ import {
 	GridApi,
 	GridEventName,
 	GridCellClickParams,
-	createGridInteractionEventRouter,
 	GridContextMenuOptions,
 	GridContextMenuHandle,
 	type GridEventPayloadMap,
@@ -14,10 +13,10 @@ import { GridAdapterContext } from './gridContext.js';
 import {
 	GridHostWithAdapter,
 	GridAdapterHandle,
+	bindGridInteractionSurface,
 	hasImperativeRendererCapability,
 	mountGridHost,
-	resolveGridInteractionController,
-	type GridInteractionController,
+	type GridInteractionSurfaceBinding,
 } from './reactHostBridge.js';
 import { PortalManager, createPortalStore } from './GridPortal.js';
 import { flashCopiedCells } from './cellFlash.js';
@@ -80,8 +79,6 @@ export function GridView<TRowData = unknown>({
 	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const hostRef = useRef<GridHostWithAdapter<TRowData> | null>(null);
-	const apiRef = useRef(api);
-	apiRef.current = api;
 	const [adapterHandle, setAdapterHandle] = useState<GridAdapterHandle<unknown> | null>(null);
 	const warnedInitialOnlyPropsRef = useRef(new Set<string>());
 	const sidebarDefaultOpenRef = useRef(sidebar?.defaultOpen);
@@ -200,8 +197,29 @@ export function GridView<TRowData = unknown>({
 		});
 		hostRef.current = host;
 		setAdapterHandle(host.adapterHandle as GridAdapterHandle<unknown>);
+		const interactionBinding = bindGridInteractionSurface(api, {
+			container,
+			adapterHandle: host.adapterHandle,
+			getNavigationEnabled: () => !!enableNavigationRef.current,
+			isContextMenuEnabled: () => !!enableContextMenuRef.current && !!contextMenuRef.current,
+			showContextMenu: (pointer, clientX, clientY) => {
+				contextMenuRef.current?.showPointer(pointer, clientX, clientY);
+			},
+			onCellClick: (params) => {
+				onCellClickRef.current?.(params);
+			},
+		});
+		interactionBindingRef.current = interactionBinding;
+		interactionBinding.updateOptions({
+			editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
+			arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
+		});
 
 		return () => {
+			if (interactionBindingRef.current === interactionBinding) {
+				interactionBindingRef.current = null;
+			}
+			interactionBinding.destroy();
 			hostRef.current = null;
 			setAdapterHandle(null);
 			host.destroy();
@@ -233,16 +251,7 @@ export function GridView<TRowData = unknown>({
 		contextMenuRef.current?.setOptions(contextMenuOptionsRef.current ?? {});
 	}, [contextMenuOptions]);
 
-	const interactionControllerRef = useRef<GridInteractionController<TRowData> | null>(null);
-	if (interactionControllerRef.current == null) {
-		interactionControllerRef.current = resolveGridInteractionController(api);
-	}
-	useEffect(() => {
-		interactionControllerRef.current?.updateOptions({
-			editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
-			arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
-		});
-	}, [navigationOptions.arrowKeyNavigationEdit, navigationOptions.editTrigger]);
+	const interactionBindingRef = useRef<GridInteractionSurfaceBinding | null>(null);
 	const onCellClickRef = useRef(onCellClick);
 	onCellClickRef.current = onCellClick;
 	const enableNavigationRef = useRef(enableNavigation);
@@ -251,42 +260,11 @@ export function GridView<TRowData = unknown>({
 	enableContextMenuRef.current = enableContextMenu;
 
 	useEffect(() => {
-		interactionControllerRef.current = resolveGridInteractionController(api);
-	}, [api]);
-
-	useEffect(() => {
-		const router = createGridInteractionEventRouter<TRowData>({
-			getApi: () => apiRef.current,
-			getInteraction: () => (enableNavigationRef.current ? interactionControllerRef.current : null),
-			isEventWithinGrid: (target) => {
-				const container = containerRef.current;
-				if (!container || !(target instanceof HTMLElement)) return false;
-				return target.closest('.og-grid-container') === container;
-			},
-			resolveCellTarget: (event) => {
-				const cellEl = (event.target as HTMLElement).closest('.og-cell') as HTMLElement | null;
-				if (!cellEl || cellEl.closest('.og-grid-container') !== containerRef.current) return null;
-				const pointer = hostRef.current?.adapterHandle.getCellPointerFromElement(cellEl) ?? null;
-				if (!pointer) return null;
-				const access = hostRef.current?.adapterHandle.getCellAccessByPointer(pointer) ?? null;
-				return { cellEl, pointer, access };
-			},
-			focusCellElement: (cellEl) => {
-				cellEl.tabIndex = -1;
-				cellEl.focus();
-			},
-			isContextMenuEnabled: () => !!enableContextMenuRef.current && !!contextMenuRef.current,
-			showContextMenu: (pointer, clientX, clientY) => {
-				contextMenuRef.current?.showPointer(pointer, clientX, clientY);
-			},
-			onCellClick: (params) => {
-				onCellClickRef.current?.(params);
-			},
+		interactionBindingRef.current?.updateOptions({
+			editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
+			arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
 		});
-		const container = containerRef.current;
-		if (!container) return;
-		return router.bind(container);
-	}, []);
+	}, [navigationOptions.arrowKeyNavigationEdit, navigationOptions.editTrigger]);
 
 	useEffect(() => {
 		let cancelFlash: (() => void) | undefined;

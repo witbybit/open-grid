@@ -377,7 +377,7 @@ export class GridEngine<TRowData = unknown> {
 		});
 
 		const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');
-		const initialActiveEdit = this.normalizeInitialActiveEdit(config.activeEdit ?? null);
+		const initialActiveEdit = this.normalizeInitialActiveEdit(config.activeEdit ?? null, config.columns);
 
 		// Set initial state
 		const initialState: InternalGridState<TRowData> = {
@@ -1140,6 +1140,10 @@ export class GridEngine<TRowData = unknown> {
 		this.editingFeature.stopEdit(cancel);
 	}
 
+	public commitEdit(rowId: string, colFieldOrInstanceId: string, value: unknown): Promise<boolean> {
+		return this.editingFeature.commitEdit(rowId, colFieldOrInstanceId, value);
+	}
+
 	public registerRowModel(rowModel: RowModel<TRowData>): void {
 		this.rowModel = rowModel;
 		// Refresh coordinates
@@ -1380,10 +1384,18 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	private normalizeInitialActiveEdit(
-		activeEdit: GridCellPointer | import('../api/GridApi.js').ActiveEditState | null
+		activeEdit: GridCellPointer | import('../api/GridApi.js').ActiveEditState | null,
+		columns: readonly ColumnDef<TRowData>[]
 	): import('../api/GridApi.js').ActiveEditState | null {
 		if (!activeEdit) return null;
-		const pointer = this.resolveCellPointer(activeEdit);
+		const column = findColumnByCellPointer(columns, activeEdit);
+		if (!column) return null;
+		const pointer = {
+			rowId: activeEdit.rowId,
+			colField: column.field,
+			colId: column.colId ?? column.field,
+			columnInstanceId: getColumnInstanceIdentity(column),
+		};
 		if (!pointer?.columnInstanceId || !pointer.colId) return null;
 		return {
 			...activeEdit,

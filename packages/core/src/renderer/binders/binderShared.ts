@@ -5,7 +5,7 @@ import { mergeCellSnapshotTitle, type CellDisplaySnapshot } from '../cellDisplay
 import type { VisualFreshness } from '../visualFreshness.js';
 import type { RowCellBinderDeps } from '../rowCellBinder.js';
 import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
-import type { CellCtrl } from '../controllers/CellCtrl.js';
+import { deriveCellCtrlAccessibilityState, type CellCtrl } from '../controllers/CellCtrl.js';
 
 /**
  * Shared helpers used by every presentation-mode binder (primitiveCellBinder.ts, liveCellBinder.ts,
@@ -42,11 +42,7 @@ export function applyCellTitlesAndValidation(
 }
 
 export function applyCellAccessibilityState<TRowData>(cellSlot: CellSlot<TRowData>, cellCtrl: CellCtrl): boolean {
-	return cellSlot.syncAccessibilityState({
-		focused: cellCtrl.visualState.focused,
-		readOnly: cellCtrl.visualState.readOnly,
-		invalid: !!cellCtrl.visualState.validationError,
-	});
+	return cellSlot.syncAccessibilityState(deriveCellCtrlAccessibilityState(cellCtrl));
 }
 
 /** Stamps the cell slot's mounted-version bookkeeping from a resolved presentation's freshness

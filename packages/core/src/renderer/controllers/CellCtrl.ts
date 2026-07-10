@@ -49,6 +49,13 @@ export interface CellCtrlPresentationState {
 	freshness: VisualFreshness;
 }
 
+export interface CellCtrlAccessibilityState {
+	focused: boolean;
+	selected: boolean;
+	readOnly: boolean;
+	invalid: boolean;
+}
+
 export function isControllerWorkStillValid(input: {
 	token: ControllerWorkToken;
 	cellCtrl: CellCtrl | undefined;
@@ -116,6 +123,15 @@ export interface CellCtrl {
 	};
 
 	presentationState: CellCtrlPresentationState;
+}
+
+export function deriveCellCtrlAccessibilityState(cellCtrl: CellCtrl): CellCtrlAccessibilityState {
+	return {
+		focused: cellCtrl.visualState.focused,
+		selected: cellCtrl.visualState.selected,
+		readOnly: cellCtrl.visualState.readOnly,
+		invalid: !!cellCtrl.visualState.validationError,
+	};
 }
 
 export interface CreateCellCtrlInput {

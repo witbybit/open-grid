@@ -62,7 +62,8 @@ export class SelectionPaintManager<TRowData> {
 
 		const { focus, cellSelection } = interaction;
 		const bounds = cellSelection.selection.bounds;
-		const isFocusedRow = focus.cell?.rowId === node.id;
+		const focusedRowId = focus.cell?.rowId ?? cellSelection.publicSelection.focus?.rowId ?? null;
+		const isFocusedRow = focusedRowId === node.id;
 		const isSelectedRow = !!bounds && rowIndex >= bounds.minRow && rowIndex <= bounds.maxRow;
 		const isLoadingRow = this.engine.data.isRowLoading(node.id);
 		let rowClassName = 'og-row';
