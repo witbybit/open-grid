@@ -279,8 +279,8 @@ The following excerpts describe the live interaction architecture this plan repl
 - [~] Derive ARIA selection/focus/edit/read-only/invalid state from the kernel, not ad hoc per caller
 - [ ] Normalize:
     - [x] `aria-selected`
-    - [ ] `aria-rowindex`
-    - [ ] `aria-colindex`
+    - [x] `aria-rowindex`
+    - [x] `aria-colindex`
     - [x] `aria-readonly`
     - [x] `aria-invalid`
     - [x] `tabIndex`
