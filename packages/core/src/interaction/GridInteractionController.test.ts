@@ -191,6 +191,90 @@ describe('GridInteractionController', () => {
 		});
 	});
 
+	it('skips loading, failed, and placeholder rows during vertical keyboard navigation', () => {
+		const displayedColumns = [{ field: 'name', colId: 'name-a', instanceId: 'name-a' }] as any[];
+		const runtime = createRuntime({
+			getDisplayedColumns: () => displayedColumns as any,
+			getStateSnapshot: () =>
+				({
+					selection: {
+						focus: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+						anchor: null,
+						range: null,
+						bounds: null,
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 1,
+					},
+					columns: displayedColumns,
+				}) as GridStateSnapshot<TestRow>,
+			getVisualRow: (index: number) =>
+				[
+					{ kind: 'data', rowId: 'r1', id: 'r1', node: { id: 'r1', data: { id: 'r1', name: 'A' } } },
+					{ kind: 'loading', id: 'loading-1', rowIndex: 1 },
+					{ kind: 'failed', id: 'failed-2', rowIndex: 2, error: 'boom', retryable: true },
+					{ kind: 'placeholder', id: 'placeholder-3', rowIndex: 3, reason: 'waiting' },
+					{ kind: 'data', rowId: 'r2', id: 'r2', node: { id: 'r2', data: { id: 'r2', name: 'B' } } },
+				][index] as any,
+			getVisualRowCount: () => 5,
+			getVisualIndexByRowId: (rowId: string) => (rowId === 'r1' ? 0 : rowId === 'r2' ? 4 : null),
+			getRowModel: () =>
+				({
+					getVisualRowCount: () => 5,
+					getVisualRow: (index: number) =>
+						[
+							{ kind: 'data', rowId: 'r1' },
+							{ kind: 'loading', id: 'loading-1', rowIndex: 1 },
+							{ kind: 'failed', id: 'failed-2', rowIndex: 2, error: 'boom', retryable: true },
+							{ kind: 'placeholder', id: 'placeholder-3', rowIndex: 3, reason: 'waiting' },
+							{ kind: 'data', rowId: 'r2' },
+						][index] as any,
+					getVisualIndexByRowId: (rowId: string) => (rowId === 'r1' ? 0 : rowId === 'r2' ? 4 : -1),
+				}) as any,
+			getCellAccessByPointer: (pointer: GridCellPointer) => {
+				const rowIndex = pointer.rowId === 'r1' ? 0 : pointer.rowId === 'r2' ? 4 : -1;
+				if (rowIndex < 0) return null;
+				return {
+					rowId: pointer.rowId,
+					rowIndex,
+					row: { id: pointer.rowId, name: pointer.rowId === 'r1' ? 'A' : 'B' },
+					node: null,
+					colField: 'name',
+					colIndex: 0,
+					column: displayedColumns[0],
+					value: pointer.rowId === 'r1' ? 'A' : 'B',
+					rawValue: pointer.rowId === 'r1' ? 'A' : 'B',
+					isFocused: false,
+					isRowFocused: false,
+					isSelected: false,
+					isRowSelected: false,
+					isEditing: false,
+					isLoading: false,
+				} as any;
+			},
+		});
+		const controller = new GridInteractionController(runtime);
+
+		controller.handleKeyDown({
+			key: 'ArrowDown',
+			ctrlKey: false,
+			metaKey: false,
+			altKey: false,
+			shiftKey: false,
+			preventDefault: vi.fn(),
+		} as unknown as KeyboardEvent);
+
+		expect(runtime.selectCell).toHaveBeenCalledWith(
+			expect.objectContaining<GridCellPointer>({
+				rowId: 'r2',
+				colField: 'name',
+				colId: 'name-a',
+				columnInstanceId: 'name-a',
+			}),
+			'keyboard'
+		);
+	});
+
 	it('uses activeEdit pointer identity instead of getCellState for keyboard edit handling', () => {
 		const getCellState = vi.fn(() => {
 			throw new Error('should not be called');

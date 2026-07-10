@@ -219,7 +219,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [ ] pinned columns
     - [ ] hidden columns
     - [~] duplicate-field columns via `columnInstanceId`
-    - [ ] loading/failed/placeholder rows
+    - [x] loading/failed/placeholder rows
     - [ ] row-model unknown/estimated counts
     - [ ] editable-only navigation mode if still supported
 - [x] Replace fixed `PageUp` / `PageDown` heuristics with viewport-aware navigation
