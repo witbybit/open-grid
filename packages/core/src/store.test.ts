@@ -1138,6 +1138,111 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('clears focus honestly when the focused column disappears from the displayed set', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		expect(store.getState().interaction?.focus.cell).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				columnInstanceId: expect.any(String),
+			})
+		);
+
+		store.setColumnsVisible(['name'], false);
+
+		expect(store.getState().selection.focus).toBeNull();
+		expect(store.getState().selection.anchor).toBeNull();
+		expect(store.getState().selection.range).toBeNull();
+		expect(store.getState().interaction?.focus.cell).toBeNull();
+		expect(store.getState().interaction?.focus.rowIndex).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('clears active edit honestly when the edited column disappears from the displayed set', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150, editable: true },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.startEditing('1', 'name', 'keyboard');
+		expect(store.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				columnInstanceId: expect.any(String),
+			})
+		);
+
+		store.setColumnsVisible(['name'], false);
+
+		expect(store.getState().activeEdit).toBeNull();
+		expect(store.getState().interaction?.activeEdit.active).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('clears focus honestly when the focused row disappears from the visual row model', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'drop', price: 10 },
+				{ id: '2', name: 'keep', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		expect(store.getState().interaction?.focus.cell).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				columnInstanceId: expect.any(String),
+			})
+		);
+
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'keep' } });
+
+		expect(store.getVisualIndexByRowId('1')).toBeNull();
+		expect(store.getState().selection.focus).toBeNull();
+		expect(store.getState().selection.anchor).toBeNull();
+		expect(store.getState().selection.range).toBeNull();
+		expect(store.getState().interaction?.focus.cell).toBeNull();
+		expect(store.getState().interaction?.focus.rowIndex).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('rowsUpdated event exposes public row-node facades instead of internal mutable row nodes', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 150 }],

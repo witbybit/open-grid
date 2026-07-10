@@ -208,8 +208,8 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] focus origin
     - [x] version
 - [ ] Make focus restoration virtualization-safe and controller-safe
-- [ ] Ensure focus clears or remaps honestly when row/column identity disappears
-- [~] Remove renderer-time field-to-instance recovery shims once focus state is instance-aware
+- [x] Ensure focus clears or remaps honestly when row/column identity disappears
+- [x] Remove renderer-time field-to-instance recovery shims once focus state is instance-aware
 
 ### Phase 4 - Navigation engine replacement
 

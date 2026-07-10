@@ -1,5 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { GridCellPointer } from '../api/GridApi.js';
+import type { CanonicalGridCellPointer } from '../api/GridApi.js';
 import { readInteractionState } from '../interaction/interactionState.js';
 import type { CellSlot } from './cellSlot.js';
 import type { RowSlot } from './rowSlot.js';
@@ -17,7 +17,7 @@ export function syncRowRendererInteractionAccessibility<TRowData>(
 ): void {
 	const { engine, viewportRenderer, activeRows, state } = input;
 	const interaction = readInteractionState(state);
-	const focusedCell = interaction.focus.cell ?? interaction.cellSelection.publicSelection.focus ?? null;
+	const focusedCell = interaction.focus.cell;
 	if (!focusedCell) {
 		syncFocusedCellAccessibilityFromDom(viewportRenderer);
 		return;
@@ -31,12 +31,9 @@ export function syncRowRendererInteractionAccessibility<TRowData>(
 	}
 
 	const rowSlot = activeRows.get(focusedRowIndex);
-	const columnIndex = focusedCell.columnInstanceId
-		? engine.columns.getIndexMapper().idToVisualIndex(focusedCell.columnInstanceId)
-		: engine.columns.getColumnIndex(focusedCell.colField);
+	const columnIndex = engine.columns.getIndexMapper().idToVisualIndex(focusedCell.columnInstanceId);
 	const cellSlot =
-		(focusedCell.columnInstanceId ? rowSlot?.cellsByColumnInstanceId.get(focusedCell.columnInstanceId) : undefined) ??
-		(columnIndex >= 0 ? rowSlot?.getCellForCol(columnIndex) : undefined);
+		rowSlot?.cellsByColumnInstanceId.get(focusedCell.columnInstanceId) ?? (columnIndex >= 0 ? rowSlot?.getCellForCol(columnIndex) : undefined);
 	const focusedCellEl = resolveFocusedCellElement(viewportRenderer, focusedCell, cellSlot);
 	if (!focusedCellEl) {
 		syncFocusedCellAccessibilityFromDom(viewportRenderer);
@@ -57,7 +54,7 @@ function syncFocusedCellAccessibilityFromDom<TRowData>(viewportRenderer: Viewpor
 
 function resolveFocusedCellElement<TRowData>(
 	viewportRenderer: ViewportRenderer<TRowData>,
-	focusedCell: GridCellPointer,
+	focusedCell: CanonicalGridCellPointer,
 	cellSlot: CellSlot<TRowData> | undefined
 ): HTMLDivElement | null {
 	if (cellSlot && cellSlot.binding?.rowId === focusedCell.rowId && cellSlot.element.parentElement !== null) {
@@ -71,11 +68,7 @@ function resolveFocusedCellElement<TRowData>(
 	if (!cells) return null;
 	for (const cell of cells) {
 		if (cell.dataset.rowId !== focusedCell.rowId) continue;
-		if (focusedCell.columnInstanceId && cell.dataset.columnInstanceId === focusedCell.columnInstanceId) {
-			ensureFocusedCellId(cell);
-			return cell;
-		}
-		if (cell.dataset.colField === focusedCell.colField) {
+		if (cell.dataset.columnInstanceId === focusedCell.columnInstanceId) {
 			ensureFocusedCellId(cell);
 			return cell;
 		}
