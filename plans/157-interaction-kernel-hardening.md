@@ -241,10 +241,10 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] update draft
     - [x] commit
     - [x] cancel
-    - [ ] move-after-commit
-    - [ ] restore focus
+    - [x] move-after-commit
+    - [x] restore focus
 - [x] Keep committed writes on the existing canonical write path
-- [ ] Reject edits honestly for loading/failed/placeholder rows and unsupported row-model states
+- [x] Reject edits honestly for loading/failed/placeholder rows and unsupported row-model states
 - [ ] Remove remaining adapter-owned semantic edit decisions
 
 ### Phase 6 - Row selection and range selection convergence

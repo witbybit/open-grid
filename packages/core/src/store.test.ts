@@ -1205,6 +1205,33 @@ describe('GridStore generic row-store functionality', () => {
 		store.destroy();
 	});
 
+	it('restores logical focus to the edited cell when edit is cancelled', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150, editable: true },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		const focusedBeforeEdit = store.getState().selection.focus;
+
+		store.startEditing('1', 'name', 'keyboard');
+		store.stopEditing(true);
+
+		expect(store.getState().activeEdit).toBeNull();
+		expect(store.getState().selection.focus).toEqual(focusedBeforeEdit);
+		expect(store.getState().interaction?.focus.cell).toEqual(focusedBeforeEdit);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('clears focus honestly when the focused row disappears from the visual row model', () => {
 		const store = new GridStore<TestRow>({
 			columns: [

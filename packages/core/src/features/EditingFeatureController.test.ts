@@ -4,6 +4,7 @@ import type { EditingFeatureControllerDeps } from './EditingFeatureController.js
 import type { GridFeatureContext } from './GridFeatureContext.js';
 import { GridStore, GridEventName } from '../store.js';
 import { ClientRowModelController } from '../rowModel.js';
+import { createMinimalRowModel } from '../testUtils/createMinimalRowModel.js';
 
 interface TestRow {
 	id: string;
@@ -94,6 +95,34 @@ describe('EditingFeatureController', () => {
 		store.destroy();
 	});
 
+	it('startEdit passes the real interaction source into edit capability checks', () => {
+		const store = makeStore();
+		const ctrl = makeController(store);
+		const engine = (store as any).engine;
+		const checkCapability = vi.fn(() => ({ allowed: true }));
+		const feature = new EditingFeatureController<TestRow>({
+			ctx: getFeatureContext(store),
+			getRowModel: () => engine.getRowModel(),
+			data: engine.data,
+			notifyCellChange: (rowId, colField) => engine.notifyCellChange(rowId, colField),
+			checkCapability,
+		});
+
+		feature.startEdit('1', 'name', 'keyboard');
+
+		expect(checkCapability).toHaveBeenCalledWith(
+			'edit',
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				source: 'keyboard',
+			})
+		);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('startEdit resolves duplicate-field columns by instance id when provided', () => {
 		const store = makeStore([
 			{ field: 'id', header: 'ID', width: 50 },
@@ -118,6 +147,43 @@ describe('EditingFeatureController', () => {
 
 		ctrl.dispose();
 		store.destroy();
+	});
+
+	it.each([
+		['loading'],
+		['failed'],
+		['placeholder'],
+	] as const)('startEdit rejects %s visual rows', (kind) => {
+		const applyChange = vi.fn();
+		const data = {
+			getRawCellValue: vi.fn(() => 'Product A'),
+		} as any;
+		const rowModel = createMinimalRowModel<TestRow>({
+			visualRows: [
+				kind === 'loading'
+					? { kind: 'loading', id: 'loading-0', rowIndex: 0 }
+					: kind === 'failed'
+						? { kind: 'failed', id: 'failed-0', rowIndex: 0, error: 'boom', retryable: true }
+						: { kind: 'placeholder', id: 'placeholder-0', rowIndex: 0, reason: 'waiting' },
+			],
+		});
+		const feature = new EditingFeatureController<TestRow>({
+			ctx: {
+				columns: {
+					getColumnByFieldOrInstanceId: () => ({ field: 'name', colId: 'name', instanceId: 'name' }),
+				},
+				getState: () => ({ activeEdit: null }),
+				applyChange,
+			} as any,
+			getRowModel: () => rowModel,
+			data,
+			notifyCellChange: vi.fn(),
+		});
+
+		feature.startEdit('1', 'name');
+
+		expect(applyChange).not.toHaveBeenCalled();
+		expect(data.getRawCellValue).not.toHaveBeenCalled();
 	});
 
 	it('updateEditDraft stores the current draft in activeEdit state', () => {

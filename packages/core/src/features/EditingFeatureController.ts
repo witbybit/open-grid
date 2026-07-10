@@ -79,7 +79,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		const originalValue = this.data.getRawCellValue(rowId, colField);
 		const version = ++this.editVersion;
 		if (this.checkCapability) {
-			const result = this.checkCapability('edit', { rowId, colField, source: 'api' });
+			const result = this.checkCapability('edit', { rowId, colField, source });
 			if (!result.allowed) return;
 		}
 		this.ctx.applyChange({
