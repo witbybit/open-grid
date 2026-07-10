@@ -200,7 +200,7 @@ The following excerpts describe the live interaction architecture this plan repl
 ### Phase 3 - Focus model hardening
 
 - [x] Replace the current implicit focus usage with an explicit focus state model
-- [ ] Track:
+- [x] Track:
     - [x] `rowId`
     - [x] `rowIndex` when useful as derived metadata
     - [x] `columnInstanceId`
@@ -236,7 +236,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] `draftValue`
     - [x] `originalValue`
     - [x] version
-- [ ] Move editor lifecycle decisions into core:
+- [x] Move editor lifecycle decisions into core:
     - [x] start
     - [x] update draft
     - [x] commit
@@ -276,17 +276,17 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 9 - Accessibility state derivation
 
-- [~] Derive ARIA selection/focus/edit/read-only/invalid state from the kernel, not ad hoc per caller
-- [ ] Normalize:
+- [x] Derive ARIA selection/focus/edit/read-only/invalid state from the kernel, not ad hoc per caller
+- [x] Normalize:
     - [x] `aria-selected`
     - [x] `aria-rowindex`
     - [x] `aria-colindex`
     - [x] `aria-readonly`
     - [x] `aria-invalid`
     - [x] `tabIndex`
-    - [ ] active-cell focus contract
-- [ ] Ensure virtualization does not break accessibility state truthfulness
-- [~] Add regression tests around focus/editing/selection ARIA output
+    - [x] active-cell focus contract
+- [x] Ensure virtualization does not break accessibility state truthfulness
+- [x] Add regression tests around focus/editing/selection ARIA output
 
 ### Phase 10 - Legacy demolition and guardrails
 

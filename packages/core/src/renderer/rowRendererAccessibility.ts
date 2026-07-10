@@ -12,9 +12,7 @@ interface SyncRowRendererInteractionAccessibilityInput<TRowData> {
 	state: ReturnType<GridEngine<TRowData>['stateManager']['getState']>;
 }
 
-export function syncRowRendererInteractionAccessibility<TRowData>(
-	input: SyncRowRendererInteractionAccessibilityInput<TRowData>
-): void {
+export function syncRowRendererInteractionAccessibility<TRowData>(input: SyncRowRendererInteractionAccessibilityInput<TRowData>): void {
 	const { engine, viewportRenderer, activeRows, state } = input;
 	const interaction = readInteractionState(state);
 	const focusedCell = interaction.focus.cell;

@@ -188,11 +188,7 @@ describe('EditingFeatureController', () => {
 		store.destroy();
 	});
 
-	it.each([
-		['loading'],
-		['failed'],
-		['placeholder'],
-	] as const)('startEdit rejects %s visual rows', (kind) => {
+	it.each([['loading'], ['failed'], ['placeholder']] as const)('startEdit rejects %s visual rows', (kind) => {
 		const applyChange = vi.fn();
 		const data = {
 			getRawCellValue: vi.fn(() => 'Product A'),

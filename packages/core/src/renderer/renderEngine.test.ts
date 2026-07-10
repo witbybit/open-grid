@@ -257,6 +257,54 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('syncs aria-activedescendant from the kernel-owned focused cell and clears it when focus is removed', () => {
+		const store = new GridStore<{ id: string; name: string; val: string }>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 100 },
+				{ field: 'val', header: 'Val', width: 100 },
+			],
+			defaultRowHeight: 30,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 8 }, (_, i) => ({ id: `row-${i}`, name: `N${i}`, val: `V${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), { rows, columns: store.getState().columns });
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 400,
+			bottom: 300,
+			width: 400,
+			height: 300,
+			toJSON: () => ({}),
+		} as DOMRect);
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.fullPaint();
+
+		store.selectCell({ rowId: 'row-2', colField: 'val' }, 'keyboard');
+		renderer.fullPaint();
+
+		const focusedCell = container.querySelector('.og-cell[data-row-id="row-2"][data-col-field="val"]') as HTMLElement;
+		expect(focusedCell.getAttribute('tabindex')).toBe('-1');
+		expect(focusedCell.id).toMatch(/^og-cell-/);
+		expect(container.getAttribute('aria-activedescendant')).toBe(focusedCell.id);
+
+		store.selectCell(null, 'keyboard');
+		renderer.fullPaint();
+		expect(container.hasAttribute('aria-activedescendant')).toBe(false);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('releases out-of-range cells when columns shrink with right pinning enabled', () => {
 		const wideColumns = [
 			{ field: 'risk', header: 'Risk', width: 120 },
@@ -1069,15 +1117,14 @@ describe('RenderEngine', () => {
 		await Promise.resolve();
 		await Promise.resolve();
 
-		console.log('FOCUS STATE:', store.getState().selection.focus);
-		console.log('ROW HEIGHTS:', store.engine.geometry.rowHeights.slice(0, 20));
-		console.log('ROW TOPS:', store.engine.geometry.rowTops.slice(0, 20));
-		console.log('VIEWPORT HEIGHT:', store.engine.viewport.viewportHeight);
-
 		expect(store.getState().selection.focus).toEqual(
 			expect.objectContaining({ rowId: 'row-15', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
 		);
 		expect(store.engine.viewport.scrollTop).toBe(440);
+		const focusedCell = container.querySelector('.og-cell[data-row-id="row-15"][data-col-field="name"]') as HTMLElement;
+		expect(focusedCell.getAttribute('tabindex')).toBe('-1');
+		expect(focusedCell.id).toMatch(/^og-cell-/);
+		expect(container.getAttribute('aria-activedescendant')).toBe(focusedCell.id);
 
 		renderer.unmount();
 		controller.dispose();
