@@ -123,6 +123,45 @@ describe('EditingFeatureController', () => {
 		store.destroy();
 	});
 
+	it('commitEdit passes the original interaction source into edit capability checks', async () => {
+		const store = makeStore();
+		const ctrl = makeController(store);
+		const engine = (store as any).engine;
+		const checkCapability = vi.fn(() => ({ allowed: true }));
+		const feature = new EditingFeatureController<TestRow>({
+			ctx: getFeatureContext(store),
+			getRowModel: () => engine.getRowModel(),
+			data: engine.data,
+			notifyCellChange: (rowId, colField) => engine.notifyCellChange(rowId, colField),
+			checkCapability,
+		});
+
+		feature.startEdit('1', 'name', 'keyboard');
+		await feature.commitEdit('1', 'name', 'Updated Name');
+
+		expect(checkCapability).toHaveBeenNthCalledWith(
+			1,
+			'edit',
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				source: 'keyboard',
+			})
+		);
+		expect(checkCapability).toHaveBeenNthCalledWith(
+			2,
+			'edit',
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				source: 'keyboard',
+			})
+		);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('startEdit resolves duplicate-field columns by instance id when provided', () => {
 		const store = makeStore([
 			{ field: 'id', header: 'ID', width: 50 },

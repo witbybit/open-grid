@@ -154,7 +154,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		const renderColId = matchedActiveEdit?.columnInstanceId ?? resolvedColumn.instanceId;
 
 		if (this.checkCapability) {
-			const result = this.checkCapability('edit', { rowId, colField });
+			const result = this.checkCapability('edit', { rowId, colField, source: matchedActiveEdit?.startedBy ?? 'api' });
 			if (!result.allowed) {
 				dispatchWriteBlockedEvent(
 					this.dispatchEvent,
