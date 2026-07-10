@@ -11,7 +11,8 @@ import type {
 import type { CellState, GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';
 import type { ColumnDef, ColumnInstanceId, InternalColumnDef } from './columnDef.js';
 import { asGroupMetaCapableRowModel } from './rowModel.js';
-import { resolveGridRuntimeComposition } from './internal/apiInternalBridge.js';
+import { resolveGridInteractionController, resolveGridRuntimeComposition } from './internal/apiInternalBridge.js';
+import type { GridInteractionController } from './interaction/GridInteractionController.js';
 
 export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {
 	const caps = (column as InternalColumnDef<TRowData>).cellRendererCapabilities;
@@ -90,6 +91,8 @@ export interface GridAdapterHandle<TRowData = unknown> {
 }
 
 export type GridHostWithAdapter<TRowData = unknown> = GridHost & { adapterHandle: GridAdapterHandle<TRowData> };
+export { resolveGridInteractionController };
+export type { GridInteractionController };
 
 export function mountGridHost<TRowData>(
 	api: GridApi<TRowData>,

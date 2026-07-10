@@ -1,9 +1,11 @@
 import type { ColumnDef } from '../columnDef.js';
+import { getColumnInstanceIdentity } from '../columnDef.js';
 import type { GridWriteResult } from '../api/GridApi.js';
 import type { VisualRow } from '../visualRow.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import { GridEventName } from '../api/GridEvents.js';
+import { findColumnByCellPointer, findColumnIndexByCellPointer } from '../interaction/cellPointer.js';
 import { readInteractionState } from '../interaction/interactionState.js';
 import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
@@ -13,7 +15,6 @@ interface ClipboardContext<TRowData> {
 	getState(): InternalGridState<TRowData>;
 	getVisualRow(rowIdx: number): VisualRow<TRowData> | null;
 	getVisualIndexByRowId(rowId: string): number | null;
-	getColumnIndex(colField: string): number;
 	getCellValue(rowId: string, colField: string): unknown;
 	getCheapDisplayValue(rowId: string, colField: string): string;
 	getRawRowById(rowId: string): TRowData | null;
@@ -36,6 +37,17 @@ interface CopyResult {
 export class ClipboardController<TRowData = unknown> {
 	constructor(private readonly c: ClipboardContext<TRowData>) {}
 
+	private resolveColumnFromPointer(pointer: { colField: string; colId?: string; columnInstanceId?: string }, state: InternalGridState<TRowData>) {
+		return findColumnByCellPointer(state.columns, pointer) as ColumnDef<TRowData> | undefined;
+	}
+
+	private getColumnIndexFromPointer(
+		pointer: { colField: string; colId?: string; columnInstanceId?: string },
+		state: InternalGridState<TRowData>
+	): number {
+		return findColumnIndexByCellPointer(state.columns, pointer);
+	}
+
 	public async copySelectedRange(): Promise<void> {
 		const state = this.c.getState();
 		const selection = readInteractionState(state).cellSelection.selection;
@@ -44,7 +56,9 @@ export class ClipboardController<TRowData = unknown> {
 		if (!bounds) {
 			const focus = selection.focus;
 			if (!focus) return;
-			const text = this._getCellText(focus.rowId, focus.colField, state);
+			const column = this.resolveColumnFromPointer(focus, state);
+			if (!column) return;
+			const text = this._getCellText(focus.rowId, column, state);
 			await this._writeToClipboard(text);
 			this.c.dispatchEvent(GridEventName.cellsCopied, {
 				cells: [{ rowId: focus.rowId, colField: focus.colField }],
@@ -70,7 +84,7 @@ export class ClipboardController<TRowData = unknown> {
 		if (!focus) return;
 
 		const focusRowIdx = this.c.getVisualIndexByRowId(focus.rowId) ?? -1;
-		const focusColIdx = this.c.getColumnIndex(focus.colField);
+		const focusColIdx = this.getColumnIndexFromPointer(focus, state);
 		if (focusRowIdx === -1 || focusColIdx === -1) return;
 
 		const startRow = selection.bounds ? selection.bounds.minRow : focusRowIdx;
@@ -193,7 +207,7 @@ export class ClipboardController<TRowData = unknown> {
 					const res = this.c.checkCapability('copy', { rowId: vr.rowId, colField: col.field });
 					if (!res.allowed) continue;
 				}
-				rowCells.push(this._getCellText(vr.rowId, col.field, state));
+				rowCells.push(this._getCellText(vr.rowId, col, state));
 				cells.push({ rowId: vr.rowId, colField: col.field });
 			}
 			rows.push(rowCells.join('\t'));
@@ -208,8 +222,8 @@ export class ClipboardController<TRowData = unknown> {
 		};
 	}
 
-	private _getCellText(rowId: string, colField: string, state: InternalGridState<TRowData>): string {
-		const col = state.columns.find((c) => c.field === colField) as ColumnDef<TRowData> | undefined;
+	private _getCellText(rowId: string, col: ColumnDef<TRowData>, state: InternalGridState<TRowData>): string {
+		const colField = col.field;
 		if (col?.onCopy) {
 			const row = this.c.getRawRowById(rowId);
 			if (row !== null) {

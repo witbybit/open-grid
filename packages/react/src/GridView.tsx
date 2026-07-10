@@ -11,10 +11,16 @@ import {
 } from '@open-grid/core';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { GridAdapterContext } from './gridContext.js';
-import { GridHostWithAdapter, GridAdapterHandle, hasImperativeRendererCapability, mountGridHost } from './reactHostBridge.js';
+import {
+	GridHostWithAdapter,
+	GridAdapterHandle,
+	hasImperativeRendererCapability,
+	mountGridHost,
+	resolveGridInteractionController,
+	type GridInteractionController,
+} from './reactHostBridge.js';
 import { PortalManager, createPortalStore } from './GridPortal.js';
 import { flashCopiedCells } from './cellFlash.js';
-import { useGridInteractionController } from './hooks.js';
 import { GridSidebar, GridSidebarConfig } from './sidebar/GridSidebar.js';
 import { GridChartOverlay } from './chart/GridChartOverlay.js';
 
@@ -227,24 +233,31 @@ export function GridView<TRowData = unknown>({
 		contextMenuRef.current?.setOptions(contextMenuOptionsRef.current ?? {});
 	}, [contextMenuOptions]);
 
-	const navigation = useGridInteractionController<TRowData>(
-		{
+	const interactionControllerRef = useRef<GridInteractionController<TRowData> | null>(null);
+	if (interactionControllerRef.current == null) {
+		interactionControllerRef.current = resolveGridInteractionController(api);
+	}
+	useEffect(() => {
+		interactionControllerRef.current?.updateOptions({
 			editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
 			arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
-		},
-		enableNavigation
-	);
-	const navigationRef = useRef(navigation);
-	navigationRef.current = navigation;
+		});
+	}, [navigationOptions.arrowKeyNavigationEdit, navigationOptions.editTrigger]);
 	const onCellClickRef = useRef(onCellClick);
 	onCellClickRef.current = onCellClick;
+	const enableNavigationRef = useRef(enableNavigation);
+	enableNavigationRef.current = enableNavigation;
 	const enableContextMenuRef = useRef(enableContextMenu);
 	enableContextMenuRef.current = enableContextMenu;
 
 	useEffect(() => {
+		interactionControllerRef.current = resolveGridInteractionController(api);
+	}, [api]);
+
+	useEffect(() => {
 		const router = createGridInteractionEventRouter<TRowData>({
 			getApi: () => apiRef.current,
-			getInteraction: () => navigationRef.current,
+			getInteraction: () => (enableNavigationRef.current ? interactionControllerRef.current : null),
 			isEventWithinGrid: (target) => {
 				const container = containerRef.current;
 				if (!container || !(target instanceof HTMLElement)) return false;
@@ -271,32 +284,8 @@ export function GridView<TRowData = unknown>({
 			},
 		});
 		const container = containerRef.current;
-		if (container) {
-			container.addEventListener('focusin', router.handleContainerFocusIn);
-			container.addEventListener('focusout', router.handleContainerFocusOut);
-			container.addEventListener('mousedown', router.handleContainerMouseDown);
-			container.addEventListener('mouseover', router.handleContainerMouseOver);
-			container.addEventListener('click', router.handleContainerClick);
-			container.addEventListener('dblclick', router.handleContainerDoubleClick);
-			container.addEventListener('contextmenu', router.handleContainerContextMenu);
-		}
-		window.addEventListener('keydown', router.handleWindowKeyDown);
-		window.addEventListener('mouseup', router.handleWindowMouseUp);
-		document.addEventListener('mousedown', router.handleDocumentMouseDown, true);
-		return () => {
-			window.removeEventListener('keydown', router.handleWindowKeyDown);
-			window.removeEventListener('mouseup', router.handleWindowMouseUp);
-			document.removeEventListener('mousedown', router.handleDocumentMouseDown, true);
-			if (container) {
-				container.removeEventListener('focusin', router.handleContainerFocusIn);
-				container.removeEventListener('focusout', router.handleContainerFocusOut);
-				container.removeEventListener('mousedown', router.handleContainerMouseDown);
-				container.removeEventListener('mouseover', router.handleContainerMouseOver);
-				container.removeEventListener('click', router.handleContainerClick);
-				container.removeEventListener('dblclick', router.handleContainerDoubleClick);
-				container.removeEventListener('contextmenu', router.handleContainerContextMenu);
-			}
-		};
+		if (!container) return;
+		return router.bind(container);
 	}, []);
 
 	useEffect(() => {

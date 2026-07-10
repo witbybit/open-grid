@@ -218,8 +218,8 @@ export { required, email, min, max, number, date, oneOf, regex, customCellRule }
 export { duplicateValueRule, missingRequiredRule } from './integrity.js';
 export type { TooltipParams, ValueFormatterParams } from './columnDef.js';
 export type { FloatingFilterRendererParams } from './renderer/floatingFilterRenderer.js';
-export { registerGridContextMenu, registerGridInteraction, type GridContextMenuHandle } from './gridPlugins.js';
-export type { GridInteractionHandle, GridNavigationOptions } from './interaction/GridInteractionController.js';
+export { registerGridContextMenu, type GridContextMenuHandle } from './gridPlugins.js';
+export type { GridNavigationOptions } from './interaction/GridInteractionController.js';
 export {
 	createGridInteractionEventRouter,
 	type GridInteractionEventRouter,

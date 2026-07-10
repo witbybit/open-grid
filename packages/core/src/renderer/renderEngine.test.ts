@@ -3404,6 +3404,8 @@ describe('RenderEngine', () => {
 			expect(decoratedCell.className).toContain('og-cell-validation-error');
 			expect(decoratedCell.className).toContain('og-cell-readonly');
 			expect(decoratedCell.dataset.validationError).toBe('Needs review');
+			expect(decoratedCell.getAttribute('aria-invalid')).toBe('true');
+			expect(decoratedCell.getAttribute('aria-readonly')).toBe('true');
 			expect(decoratedCell.title).toContain('Tip:row-10');
 			expect(decoratedCell.title).toContain('Needs review');
 			const stats = renderer.getRenderStats();

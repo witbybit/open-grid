@@ -5,6 +5,11 @@ import { GridInteractionController } from './GridInteractionController.js';
 
 type TestRow = { id: string; name: string };
 
+async function flushAsyncWork(): Promise<void> {
+	await Promise.resolve();
+	await Promise.resolve();
+}
+
 function createRuntime(overrides: Partial<GridPluginRuntime<TestRow>> = {}): GridPluginRuntime<TestRow> {
 	const displayedColumns = [
 		{ field: 'name', colId: 'name-a', instanceId: 'name-a' },
@@ -66,11 +71,13 @@ function createRuntime(overrides: Partial<GridPluginRuntime<TestRow>> = {}): Gri
 			} as any;
 		},
 		selectCell: vi.fn(),
+		selectRange: vi.fn(),
 		extendSelection: vi.fn(),
 		copySelectedRange: vi.fn(async () => {}),
 		pasteFromClipboard: vi.fn(async () => {}),
 		startEditing: vi.fn(),
 		stopEditing: vi.fn(),
+		commitEdit: vi.fn(async () => true),
 		setCellValue: vi.fn(),
 		applyRowSelectionGesture: vi.fn(),
 		selectRows: vi.fn(),
@@ -179,5 +186,161 @@ describe('GridInteractionController', () => {
 
 		expect(getCellState).not.toHaveBeenCalled();
 		expect(runtime.stopEditing).toHaveBeenCalledWith(true);
+	});
+
+	it('moves edit selection only after a successful commit result', async () => {
+		const commitEdit = vi.fn(async () => true);
+		const runtime = createRuntime({
+			commitEdit,
+			getStateSnapshot: () =>
+				({
+					selection: {
+						focus: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+						anchor: null,
+						range: null,
+						bounds: null,
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 1,
+					},
+					activeEdit: {
+						rowId: 'r1',
+						colField: 'name',
+						colId: 'name-a',
+						columnInstanceId: 'name-a',
+						draftValue: 'Draft A',
+					},
+					columns: [
+						{ field: 'name', colId: 'name-a', instanceId: 'name-a' },
+						{ field: 'name', colId: 'name-b', instanceId: 'name-b' },
+					],
+				}) as GridStateSnapshot<TestRow>,
+		});
+		const controller = new GridInteractionController(runtime, { arrowKeyNavigationEdit: true });
+
+		controller.handleKeyDown({
+			key: 'ArrowRight',
+			ctrlKey: false,
+			metaKey: false,
+			altKey: false,
+			shiftKey: false,
+			preventDefault: vi.fn(),
+		} as unknown as KeyboardEvent);
+
+		await flushAsyncWork();
+
+		expect(commitEdit).toHaveBeenCalledWith('r1', 'name-a', 'Draft A');
+		expect(runtime.selectCell).toHaveBeenCalledWith(
+			expect.objectContaining<GridCellPointer>({
+				rowId: 'r1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: 'name-b',
+			}),
+			'keyboard'
+		);
+		expect(runtime.startEditing).toHaveBeenCalledWith('r1', 'name-b', 'keyboard');
+	});
+
+	it('does not move edit selection when the commit result is rejected', async () => {
+		const commitEdit = vi.fn(async () => false);
+		const runtime = createRuntime({
+			commitEdit,
+			getStateSnapshot: () =>
+				({
+					selection: {
+						focus: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+						anchor: null,
+						range: null,
+						bounds: null,
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 1,
+					},
+					activeEdit: {
+						rowId: 'r1',
+						colField: 'name',
+						colId: 'name-a',
+						columnInstanceId: 'name-a',
+						draftValue: 'Draft A',
+					},
+					columns: [
+						{ field: 'name', colId: 'name-a', instanceId: 'name-a' },
+						{ field: 'name', colId: 'name-b', instanceId: 'name-b' },
+					],
+				}) as GridStateSnapshot<TestRow>,
+		});
+		const controller = new GridInteractionController(runtime, { arrowKeyNavigationEdit: true });
+
+		controller.handleKeyDown({
+			key: 'ArrowRight',
+			ctrlKey: false,
+			metaKey: false,
+			altKey: false,
+			shiftKey: false,
+			preventDefault: vi.fn(),
+		} as unknown as KeyboardEvent);
+
+		await flushAsyncWork();
+
+		expect(commitEdit).toHaveBeenCalledWith('r1', 'name-a', 'Draft A');
+		expect(runtime.selectCell).not.toHaveBeenCalled();
+		expect(runtime.startEditing).not.toHaveBeenCalled();
+	});
+
+	it('extends from the authoritative selection anchor instead of a controller-local shadow anchor', () => {
+		const runtime = createRuntime({
+			getStateSnapshot: () =>
+				({
+					selection: {
+						focus: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+						anchor: { rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: 'name-b' },
+						range: {
+							start: { rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: 'name-b' },
+							end: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+						},
+						bounds: { minRow: 0, maxRow: 0, minCol: 0, maxCol: 1 },
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 2,
+					},
+					columns: [
+						{ field: 'name', colId: 'name-a', instanceId: 'name-a' },
+						{ field: 'name', colId: 'name-b', instanceId: 'name-b' },
+					],
+				}) as GridStateSnapshot<TestRow>,
+		});
+		const controller = new GridInteractionController(runtime);
+
+		controller.handleKeyDown({
+			key: 'ArrowRight',
+			ctrlKey: false,
+			metaKey: false,
+			altKey: false,
+			shiftKey: true,
+			preventDefault: vi.fn(),
+		} as unknown as KeyboardEvent);
+
+		expect(runtime.selectRange).toHaveBeenCalledWith(
+			expect.objectContaining<GridCellPointer>({
+				rowId: 'r1',
+				colId: 'name-b',
+				columnInstanceId: 'name-b',
+			}),
+			expect.objectContaining<GridCellPointer>({
+				rowId: 'r1',
+				colId: 'name-a',
+				columnInstanceId: 'name-a',
+			}),
+			'keyboard'
+		);
+		expect(runtime.extendSelection).toHaveBeenCalledWith(
+			expect.objectContaining<GridCellPointer>({
+				rowId: 'r1',
+				colId: 'name-b',
+				columnInstanceId: 'name-b',
+			}),
+			'keyboard'
+		);
 	});
 });

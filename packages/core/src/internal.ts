@@ -5,11 +5,13 @@
 export {
 	hasImperativeRendererCapability,
 	mountGridHost,
+	resolveGridInteractionController,
 	type GridAdapterHandle,
 	type GridCellContentAdapter,
 	type GridHeaderMenuAdapter,
 	type GridHost,
 	type GridHostOptions,
 	type GridHostWithAdapter,
+	type GridInteractionController,
 	type GridRowContentAdapter,
 } from './gridHost.js';

@@ -1,19 +1,12 @@
 import { GridContextMenuPlugin, type GridContextMenuOptions } from './contextMenu.js';
-import type { GridInteractionHandle, GridNavigationOptions } from './interaction/GridInteractionController.js';
 import type { GridApi, GridCellPointer } from './api/GridApi.js';
-import { resolveGridInteractionController, resolveGridPluginController } from './internal/apiInternalBridge.js';
+import { resolveGridPluginController } from './internal/apiInternalBridge.js';
 
 export interface GridContextMenuHandle<TRowData = unknown> {
 	setOptions(options: GridContextMenuOptions<TRowData>): void;
 	show(rowId: string, colField: string, clientX: number, clientY: number): void;
 	showPointer(pointer: GridCellPointer, clientX: number, clientY: number): void;
 	dispose(): void;
-}
-
-export function registerGridInteraction<TRowData>(api: GridApi<TRowData>, options: GridNavigationOptions = {}): GridInteractionHandle {
-	const controller = resolveGridInteractionController(api);
-	controller.updateOptions(options);
-	return controller;
 }
 
 export function registerGridContextMenu<TRowData>(

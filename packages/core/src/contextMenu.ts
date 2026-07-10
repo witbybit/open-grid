@@ -2,6 +2,7 @@ import type { GridApi, GridCellPointer, GridPlugin, GridPluginRuntime, GridSelec
 import { exportToCsv } from './export/csvExport.js';
 import { attachRovingMenuKeyboard } from './menuKeyboardNav.js';
 import { isFilterableColumn, buildFilterByValue, applyFilterToModel } from './filterOperations.js';
+import { findColumnIndexByCellPointer } from './interaction/cellPointer.js';
 import { readInteractionState } from './interaction/interactionState.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
@@ -78,11 +79,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 			const rowModel = this.runtime.getRowModel();
 			if (rowModel) {
 				const clickedRowIdx = access?.rowIndex ?? rowModel.getVisualIndexByRowId(pointer.rowId);
-				const clickedColIdx =
-					access?.colIndex ??
-					(pointer.columnInstanceId
-						? state.columns.findIndex((column) => 'instanceId' in column && column.instanceId === pointer.columnInstanceId)
-						: state.columns.findIndex((column) => column.field === pointer.colField));
+				const clickedColIdx = access?.colIndex ?? findColumnIndexByCellPointer(state.columns, pointer);
 				const bounds = selection.bounds;
 				if (
 					clickedRowIdx >= bounds.minRow &&

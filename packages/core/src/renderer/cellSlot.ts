@@ -159,6 +159,8 @@ export class CellSlot<TRowData = unknown> {
 	public lastWidth = -1; // column width px
 	public lastShift = 0; // live column-reorder preview offset px; 0 = none
 	public lastAriaSelected: boolean | undefined = undefined; // ARIA selection state cache
+	public lastAriaReadOnly: boolean | undefined = undefined;
+	public lastAriaInvalid: boolean | undefined = undefined;
 	public lastClassName = '';
 	public lastContentMode: CellContentMode = 'empty';
 	public lastPortalKey: string | undefined = undefined;
@@ -228,6 +230,17 @@ export class CellSlot<TRowData = unknown> {
 			this.lastAriaSelected = undefined;
 			this.element.removeAttribute('aria-selected');
 		}
+		if (this.lastAriaReadOnly !== undefined) {
+			this.lastAriaReadOnly = undefined;
+			this.element.removeAttribute('aria-readonly');
+		}
+		if (this.lastAriaInvalid !== undefined) {
+			this.lastAriaInvalid = undefined;
+			this.element.removeAttribute('aria-invalid');
+		}
+		if (this.hasTabIndex) {
+			this.element.removeAttribute('tabindex');
+		}
 		if (this.element.style.visibility) {
 			this.element.style.visibility = '';
 		}
@@ -245,6 +258,38 @@ export class CellSlot<TRowData = unknown> {
 		this.colField = '';
 		this.rowIndex = -1;
 		this.rowId = '';
+	}
+
+	public syncAccessibilityState(input: { focused: boolean; readOnly: boolean; invalid: boolean }): boolean {
+		let domUpdated = false;
+
+		if (this.lastAriaReadOnly !== input.readOnly) {
+			this.lastAriaReadOnly = input.readOnly;
+			if (input.readOnly) this.element.setAttribute('aria-readonly', 'true');
+			else this.element.removeAttribute('aria-readonly');
+			domUpdated = true;
+		}
+
+		if (this.lastAriaInvalid !== input.invalid) {
+			this.lastAriaInvalid = input.invalid;
+			if (input.invalid) this.element.setAttribute('aria-invalid', 'true');
+			else this.element.removeAttribute('aria-invalid');
+			domUpdated = true;
+		}
+
+		if (input.focused) {
+			if (!this.hasTabIndex || this.element.getAttribute('tabindex') !== '-1') {
+				this.element.tabIndex = -1;
+				this.hasTabIndex = true;
+				domUpdated = true;
+			}
+		} else if (this.hasTabIndex) {
+			this.element.removeAttribute('tabindex');
+			this.hasTabIndex = false;
+			domUpdated = true;
+		}
+
+		return domUpdated;
 	}
 
 	/**
@@ -452,10 +497,17 @@ export class CellSlot<TRowData = unknown> {
 		this.lastMountedStyleVersion = -1;
 		this.lastMountedLoadingVersion = -1;
 		this.lastMountedSelectionVersion = -1;
-		// Use JS-side flag to skip DOM read in hot path.
 		if (this.hasTabIndex) {
 			this.element.removeAttribute('tabindex');
 			this.hasTabIndex = false;
+		}
+		if (this.lastAriaReadOnly !== undefined) {
+			this.lastAriaReadOnly = undefined;
+			this.element.removeAttribute('aria-readonly');
+		}
+		if (this.lastAriaInvalid !== undefined) {
+			this.lastAriaInvalid = undefined;
+			this.element.removeAttribute('aria-invalid');
 		}
 		if (this.element.style.visibility) {
 			this.element.style.visibility = '';
@@ -481,6 +533,14 @@ export class CellSlot<TRowData = unknown> {
 		if (this.lastAriaSelected !== undefined) {
 			this.lastAriaSelected = undefined;
 			this.element.removeAttribute('aria-selected');
+		}
+		if (this.lastAriaReadOnly !== undefined) {
+			this.lastAriaReadOnly = undefined;
+			this.element.removeAttribute('aria-readonly');
+		}
+		if (this.lastAriaInvalid !== undefined) {
+			this.lastAriaInvalid = undefined;
+			this.element.removeAttribute('aria-invalid');
 		}
 		this.lastClassName = '';
 		this.lastContentMode = 'empty';

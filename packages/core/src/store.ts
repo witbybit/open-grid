@@ -878,20 +878,20 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.dispatchEvent(type, payload);
 	};
 
-	public startEditing = (rowId: string, colField: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void => {
-		this.engine.startEdit(rowId, colField, source);
+	public startEditing = (rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void => {
+		this.engine.startEdit(rowId, colFieldOrInstanceId, source);
 	};
 
-	public updateEditDraft = (rowId: string, colField: string, value: unknown): void => {
-		this.engine.updateEditDraft(rowId, colField, value);
+	public updateEditDraft = (rowId: string, colFieldOrInstanceId: string, value: unknown): void => {
+		this.engine.updateEditDraft(rowId, colFieldOrInstanceId, value);
 	};
 
 	public stopEditing = (cancel: boolean = false): void => {
 		this.engine.stopEdit(cancel);
 	};
 
-	public commitEdit = async (rowId: string, colField: string, value: unknown): Promise<boolean> => {
-		return this.engine.editingFeature.commitEdit(rowId, colField, value);
+	public commitEdit = async (rowId: string, colFieldOrInstanceId: string, value: unknown): Promise<boolean> => {
+		return this.engine.editingFeature.commitEdit(rowId, colFieldOrInstanceId, value);
 	};
 
 	// ── Data Integrity API ─────────────────────────────────────────────────────

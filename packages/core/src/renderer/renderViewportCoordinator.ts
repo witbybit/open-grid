@@ -1,6 +1,9 @@
 import { computeScrollTarget } from './scrollIntoView.js';
 import { computeGridLayoutPlan, type GridLayoutPlan } from './layoutPlan.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { GridCellPointer } from '../api/GridApi.js';
+import { getColumnInstanceIdentity } from '../columnDef.js';
+import { findColumnByCellPointer } from '../interaction/cellPointer.js';
 import type { RenderRuntimeStats } from './renderTelemetry.js';
 import type { RenderWindow } from './renderWindow.js';
 import type { RowRenderer } from './rowRenderer.js';
@@ -35,15 +38,22 @@ export class RenderViewportCoordinator<TRowData = unknown> {
 	}
 
 	public scrollCellIntoView(rowId: string, colField: string): void {
-		this.deps.rowRenderer.programmaticScrollCell = { rowId, colField };
+		this.scrollCellPointerIntoView({ rowId, colField });
+	}
+
+	public scrollCellPointerIntoView(pointer: GridCellPointer): void {
+		const resolvedPointer = this.resolveProgrammaticScrollPointer(pointer);
+		this.deps.rowRenderer.programmaticScrollCell = resolvedPointer;
 		const scrollViewport = this.deps.viewportRenderer.scrollViewport;
 		if (!scrollViewport) return;
 
 		const rowModel = this.deps.engine.getRowModel();
 		if (!rowModel) return;
 
-		const rowIndex = rowModel.getVisualIndexByRowId(rowId);
-		const colIndex = this.deps.engine.columns.getColumnIndex(colField);
+		const rowIndex = rowModel.getVisualIndexByRowId(resolvedPointer.rowId);
+		const colIndex = resolvedPointer.columnInstanceId
+			? this.deps.engine.columns.getIndexMapper().idToVisualIndex(resolvedPointer.columnInstanceId)
+			: this.deps.engine.columns.getColumnIndex(resolvedPointer.colField);
 		if (rowIndex === null || rowIndex === -1 || colIndex === -1) return;
 
 		const layoutPlan = this.deps.viewportRenderer.getLayoutPlan() ?? this.syncLayoutPlan();
@@ -75,6 +85,17 @@ export class RenderViewportCoordinator<TRowData = unknown> {
 			this.deps.scrollEngine.scrollTo(target.top, target.left);
 			this.deps.requestScrollFrame();
 		}
+	}
+
+	private resolveProgrammaticScrollPointer(pointer: GridCellPointer): GridCellPointer {
+		const column = findColumnByCellPointer(this.deps.engine.columns.getDisplayedColumns(), pointer);
+		if (!column) return pointer;
+		return {
+			rowId: pointer.rowId,
+			colField: column.field,
+			colId: column.colId ?? column.field,
+			columnInstanceId: getColumnInstanceIdentity(column),
+		};
 	}
 
 	public scrollRowIntoView(rowId: string): void {

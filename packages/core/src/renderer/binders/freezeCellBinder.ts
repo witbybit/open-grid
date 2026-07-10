@@ -1,7 +1,7 @@
 import { recordCellSlotMountedVisualVersions } from '../cellSlot.js';
 import { createCellRendererLifecycle } from '../lifecycle/cellRendererLifecycle.js';
 import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
-import { applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
+import { applyCellAccessibilityState, applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
 
 /**
  * scrollPresentation: 'freeze' - an existing live portal may remain visually frozen during scroll;
@@ -29,6 +29,7 @@ export function applyFreezeCellPresentation<TRowData>(input: DispatchCellPresent
 				checkbox.title = runtime.checkbox.title;
 				if (checkbox.checked !== runtime.checkbox.checked) checkbox.checked = runtime.checkbox.checked;
 			}
+			applyCellAccessibilityState(cellSlot, cellCtrl);
 			const didWrite = cellSlot.update(
 				geometry.colIndex,
 				cellCtrl.field,
@@ -61,6 +62,7 @@ export function applyFreezeCellPresentation<TRowData>(input: DispatchCellPresent
 			const portalHost = deps.getCellPortalHost(cellSlot.element);
 			if (portalHost) lifecycle.freeze({ cellCtrl, host: portalHost });
 			applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+			applyCellAccessibilityState(cellSlot, cellCtrl);
 			if (input.phase === 'scroll' && presentation.markDirty) deps.markCellDirtyAfterScroll(cellSlot.element);
 
 			if (presentation.captureFrozenHtml && presentation.recordVersions && 'rowId' in presentation.recordVersions && portalHost?.innerHTML) {
@@ -123,6 +125,7 @@ export function applyFreezeCellPresentation<TRowData>(input: DispatchCellPresent
 			if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 			if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 			applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+			applyCellAccessibilityState(cellSlot, cellCtrl);
 			const didWrite = cellSlot.update(
 				geometry.colIndex,
 				cellCtrl.field,

@@ -23,15 +23,18 @@ import type { PortalCellProps, PortalData, PortalStore } from './gridPortalTypes
 interface ActiveCellEditorProps<TRowData = unknown> {
 	rowId: string;
 	colField: string;
+	colId: string;
+	columnInstanceId?: string;
 	value: unknown;
 	col: ColumnDef<TRowData>;
 	api: GridApi<TRowData>;
 }
 
-function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col, api }: ActiveCellEditorProps<TRowData>) {
+function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, colId, columnInstanceId, value, col, api }: ActiveCellEditorProps<TRowData>) {
 	const [localValue, setLocalValue] = useState<unknown>(value);
 	const localValueRef = useRef(localValue);
 	localValueRef.current = localValue;
+	const editColumnKey = columnInstanceId ?? colId ?? colField;
 
 	const isCommittedRef = useRef(false);
 
@@ -47,12 +50,12 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 					// External stop (e.g. navigation) without a prior commitEdit — run the full
 					// commit path (validation + valueSetter) rather than bypassing with setCellValue.
 					isCommittedRef.current = true;
-					void api.commitEdit(rowId, colField, localValueRef.current);
+					void api.commitEdit(rowId, editColumnKey, localValueRef.current);
 				}
 			}
 		});
 		return () => unsubscribe();
-	}, [api, rowId, colField]);
+	}, [api, rowId, colField, editColumnKey]);
 
 	// activeEdit subscription lives here — only this mounted instance subscribes, not every cell
 	// Memoize the getSnapshot function to cache the activeEdit state and avoid infinite loops
@@ -93,9 +96,9 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 			isCommittedRef.current = true;
 			const isEvent = finalValue && typeof finalValue === 'object' && ('nativeEvent' in finalValue || 'target' in finalValue);
 			const valToCommit = finalValue !== undefined && !isEvent ? finalValue : localValueRef.current;
-			void api.commitEdit(rowId, colField, valToCommit);
+			void api.commitEdit(rowId, editColumnKey, valToCommit);
 		},
-		[api, rowId, colField]
+		[api, rowId, editColumnKey]
 	);
 
 	const handleCancel = useCallback(() => {
@@ -125,11 +128,13 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 					{createElement(CustomEditor, {
 						rowId,
 						colField,
+						colId,
+						columnInstanceId,
 						value: localValue,
 						onChange: (val: unknown) => {
 							setLocalValue(val);
 							localValueRef.current = val;
-							api.updateEditDraft(rowId, colField, val);
+							api.updateEditDraft(rowId, editColumnKey, val);
 						},
 						api,
 						onCommit: handleCommit,
@@ -144,7 +149,7 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 					onChange={(e) => {
 						setLocalValue(e.target.value);
 						localValueRef.current = e.target.value;
-						api.updateEditDraft(rowId, colField, e.target.value);
+						api.updateEditDraft(rowId, editColumnKey, e.target.value);
 					}}
 					onMouseDown={(e) => e.stopPropagation()}
 					onDoubleClick={(e) => e.stopPropagation()}
@@ -224,11 +229,21 @@ function PortalCellInner<TRowData = unknown>({
 		iCol?.cellRenderer && !isDomCellRenderer(iCol.cellRenderer)
 			? (iCol.cellRenderer as unknown as ComponentType<Record<string, unknown>>)
 			: undefined;
+	const colId = col.colId ?? col.field;
+	const columnInstanceId = 'instanceId' in col ? (col.instanceId as string | undefined) : undefined;
 
 	return (
 		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', position: 'relative' }}>
 			{isEditing ? (
-				<ActiveCellEditor<TRowData> rowId={rowId} colField={colField} value={value} col={col} api={api} />
+				<ActiveCellEditor<TRowData>
+					rowId={rowId}
+					colField={colField}
+					colId={colId}
+					columnInstanceId={columnInstanceId}
+					value={value}
+					col={col}
+					api={api}
+				/>
 			) : CustomRenderer && rowData ? (
 				createElement(CustomRenderer, {
 					value,
@@ -236,7 +251,8 @@ function PortalCellInner<TRowData = unknown>({
 					row: rowData,
 					rowId,
 					colField,
-					colId: colField,
+					colId,
+					columnInstanceId,
 					isScrolling: !!isScrolling,
 					phase: phase ?? 'initial',
 					isFocused: !!isFocused,

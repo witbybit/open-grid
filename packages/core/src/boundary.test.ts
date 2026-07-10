@@ -121,7 +121,6 @@ describe('Public/internal boundary', () => {
 				'oneOf',
 				'regex',
 				'registerGridContextMenu',
-				'registerGridInteraction',
 				'required',
 				'resolveColumnFilterDef',
 				'summarizeAnalysisState',
@@ -236,7 +235,7 @@ describe('Public/internal boundary', () => {
 		});
 
 		it('matches the reviewed adapter-only runtime export snapshot', () => {
-			expect(Object.keys(internalApi).sort()).toEqual(['hasImperativeRendererCapability', 'mountGridHost']);
+			expect(Object.keys(internalApi).sort()).toEqual(['hasImperativeRendererCapability', 'mountGridHost', 'resolveGridInteractionController']);
 		});
 
 		it('does not export runtime bridge escape hatches', () => {

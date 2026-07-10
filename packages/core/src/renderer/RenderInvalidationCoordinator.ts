@@ -1,4 +1,5 @@
 import { GridEventName } from '../api/GridEvents.js';
+import type { GridCellPointer } from '../api/GridApi.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { FrameCoordinator } from './frameCoordinator.js';
 import type { GeometryController } from './geometryController.js';
@@ -14,7 +15,7 @@ export interface RenderInvalidationCoordinatorDeps<TRowData = unknown> {
 	frameCoordinator: FrameCoordinator;
 	runtimeState: RenderRuntimeState;
 	syncLayoutPlan: () => void;
-	scrollCellIntoView: (rowId: string, colField: string) => void;
+	scrollCellIntoView: (pointer: GridCellPointer) => void;
 	resetScroll: () => void;
 	updateCachedGeometryBounds: () => void;
 	markFlushPendingAfterScroll: () => void;
@@ -53,7 +54,7 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 			this.deps.engine.eventBus.addEventListener(GridEventName.selectionChanged, (event) => {
 				const { selection } = event.payload;
 				if (selection?.focus && selection.source !== 'pointer') {
-					this.deps.scrollCellIntoView(selection.focus.rowId, selection.focus.colField);
+					this.deps.scrollCellIntoView(selection.focus);
 				}
 			})
 		);

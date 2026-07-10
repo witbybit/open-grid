@@ -22,6 +22,7 @@ export interface GridInteractionEventRouterDeps<TRowData = unknown> {
 }
 
 export interface GridInteractionEventRouter {
+	bind(container: HTMLElement, options?: { window?: Window; document?: Document }): () => void;
 	handleWindowKeyDown(event: KeyboardEvent): void;
 	handleWindowMouseUp(): void;
 	handleDocumentMouseDown(event: MouseEvent): void;
@@ -62,6 +63,33 @@ export function createGridInteractionEventRouter<TRowData>(deps: GridInteraction
 	};
 
 	return {
+		bind(container, options = {}) {
+			const targetWindow = options.window ?? window;
+			const targetDocument = options.document ?? document;
+			container.addEventListener('focusin', this.handleContainerFocusIn);
+			container.addEventListener('focusout', this.handleContainerFocusOut);
+			container.addEventListener('mousedown', this.handleContainerMouseDown);
+			container.addEventListener('mouseover', this.handleContainerMouseOver);
+			container.addEventListener('click', this.handleContainerClick);
+			container.addEventListener('dblclick', this.handleContainerDoubleClick);
+			container.addEventListener('contextmenu', this.handleContainerContextMenu);
+			targetWindow.addEventListener('keydown', this.handleWindowKeyDown);
+			targetWindow.addEventListener('mouseup', this.handleWindowMouseUp);
+			targetDocument.addEventListener('mousedown', this.handleDocumentMouseDown, true);
+			return () => {
+				targetWindow.removeEventListener('keydown', this.handleWindowKeyDown);
+				targetWindow.removeEventListener('mouseup', this.handleWindowMouseUp);
+				targetDocument.removeEventListener('mousedown', this.handleDocumentMouseDown, true);
+				container.removeEventListener('focusin', this.handleContainerFocusIn);
+				container.removeEventListener('focusout', this.handleContainerFocusOut);
+				container.removeEventListener('mousedown', this.handleContainerMouseDown);
+				container.removeEventListener('mouseover', this.handleContainerMouseOver);
+				container.removeEventListener('click', this.handleContainerClick);
+				container.removeEventListener('dblclick', this.handleContainerDoubleClick);
+				container.removeEventListener('contextmenu', this.handleContainerContextMenu);
+			};
+		},
+
 		handleWindowKeyDown(event) {
 			const interaction = deps.getInteraction();
 			if (!interaction) return;

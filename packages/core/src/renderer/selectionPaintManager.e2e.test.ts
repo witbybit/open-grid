@@ -5,11 +5,9 @@ import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
 
 /**
- * DOM-level regression coverage for the delegated click/mousedown listeners on the viewport
- * container (SelectionPaintManager.onViewportClick/onViewportMouseDown) — added alongside Plan 154
- * Task 10's centralization of what used to be per-cell/per-checkbox/per-drag-handle listeners in
- * rowCellBinder.ts. No DOM-dispatch-level tests existed for these interactions before this pass, so
- * these lock in the pre-existing behavior the centralization must preserve.
+ * DOM-level regression coverage for the delegated viewport interaction router used by RenderEngine.
+ * These assertions lock in row-selection semantics after they were moved out of renderer paint helpers
+ * and into interaction-owned routing during Plan 157.
  */
 
 interface Row {
@@ -79,7 +77,7 @@ function cellFor(container: HTMLElement, rowId: string, field: string): HTMLElem
 	return el as HTMLElement;
 }
 
-describe('SelectionPaintManager — delegated viewport click/mousedown', () => {
+describe('GridViewportInteractionRouter — delegated viewport click/mousedown', () => {
 	it('clicking a data cell replaces the selection with that row (requires a checkbox column present)', () => {
 		// onDataCellClick's own gate — pre-existing behavior, not something Task 10 changes: cell-click
 		// row selection is only active when the grid has a checkboxSelection column defined somewhere.

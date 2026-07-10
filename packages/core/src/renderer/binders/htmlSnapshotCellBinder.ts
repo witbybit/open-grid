@@ -1,5 +1,5 @@
 import { recordCellSlotMountedVisualVersions } from '../cellSlot.js';
-import { applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
+import { applyCellAccessibilityState, applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
 import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
 import { createCellRendererLifecycle } from '../lifecycle/cellRendererLifecycle.js';
 
@@ -18,6 +18,7 @@ export function applyHtmlSnapshotCellPresentation<TRowData>(input: DispatchCellP
 		if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 		if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 		applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+		applyCellAccessibilityState(cellSlot, cellCtrl);
 		const didWrite = cellSlot.update(
 			geometry.colIndex,
 			cellCtrl.field,
@@ -47,6 +48,7 @@ export function applyHtmlSnapshotCellPresentation<TRowData>(input: DispatchCellP
 	if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 	if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 	applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+	applyCellAccessibilityState(cellSlot, cellCtrl);
 	// HTML snapshot path: inject the static clone of the last fidelity render into the
 	// portal host so the cell looks identical to its settled state during scroll. The host
 	// is inert — no React fiber, no event handlers — and the fidelity lane will replace it

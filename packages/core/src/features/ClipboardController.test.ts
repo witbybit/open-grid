@@ -126,6 +126,29 @@ describe('ClipboardController', () => {
 		store.destroy();
 	});
 
+	it('copySelectedRange uses the focused duplicate-field column instance for onCopy', async () => {
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 80 },
+			{ field: 'name', header: 'Name A', width: 150, colId: 'name-a', onCopy: () => 'COPY-A' },
+			{ field: 'name', header: 'Name B', width: 150, colId: 'name-b', onCopy: () => 'COPY-B' },
+		]);
+		const ctrl = makeController(store, [{ id: '1', name: 'Alpha', price: 10 }]);
+		const duplicateNameColumn = store.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+
+		store.selectCell({
+			rowId: '1',
+			colField: duplicateNameColumn.field,
+			colId: duplicateNameColumn.colId,
+			columnInstanceId: duplicateNameColumn.instanceId,
+		});
+		await store.copySelectedRange();
+
+		expect(clip.writeText).toHaveBeenCalledWith('COPY-B');
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('copySelectedRange fires cellsCopied event with rowCount/colCount/text', async () => {
 		const store = makeStore();
 		const ctrl = makeController(store);
@@ -181,6 +204,30 @@ describe('ClipboardController', () => {
 		// onPaste returns 84 (42 * 2); the updated row data should reflect this
 		const row = store.getRowModel()?.getRawRowById('1') as { price: number } | undefined;
 		expect(row?.price).toBe(84);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('pasteFromClipboard uses the focused duplicate-field column instance for onPaste', async () => {
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 80 },
+			{ field: 'name', header: 'Name A', width: 150, colId: 'name-a', onPaste: ({ pastedText }: { pastedText: string }) => `A:${pastedText}` },
+			{ field: 'name', header: 'Name B', width: 150, colId: 'name-b', onPaste: ({ pastedText }: { pastedText: string }) => `B:${pastedText}` },
+		]);
+		const ctrl = makeController(store, [{ id: '1', name: 'Alpha', price: 10 }]);
+		const duplicateNameColumn = store.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+
+		clip.setStored('Gamma');
+		store.selectCell({
+			rowId: '1',
+			colField: duplicateNameColumn.field,
+			colId: duplicateNameColumn.colId,
+			columnInstanceId: duplicateNameColumn.instanceId,
+		});
+		await store.pasteFromClipboard();
+
+		expect(store.getCellValue('1', 'name')).toBe('B:Gamma');
 
 		ctrl.dispose();
 		store.destroy();

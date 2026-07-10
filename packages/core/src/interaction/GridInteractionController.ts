@@ -1,6 +1,6 @@
 import type { GridCellPointer } from '../api/GridApi.js';
 import type { GridPluginRuntime } from '../api/GridApiSurfaces.js';
-import { areCellPointersEqual } from './cellPointer.js';
+import { areCellPointersEqual, findColumnByCellPointer, findColumnIndexByCellPointer } from './cellPointer.js';
 import { readInteractionState } from './interactionState.js';
 import { getColumnInstanceIdentity, type ColumnDef } from '../columnDef.js';
 
@@ -26,7 +26,6 @@ export interface GridInteractionHandle {
 
 export class GridInteractionController<TRowData = unknown> implements GridInteractionHandle {
 	private isSelecting = false;
-	private rangeStart: GridCellPointer | null = null;
 	private rowSelectionAnchorId: string | null = null;
 	private options: GridNavigationOptions;
 
@@ -50,10 +49,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	private resolvePointerColumn(pointer: GridCellPointer): ColumnDef<TRowData> | undefined {
 		const access = this.runtime.getCellAccessByPointer(pointer);
 		if (access) return access.column;
-		if (pointer.columnInstanceId) {
-			return this.runtime.getDisplayedColumns().find((column) => getColumnInstanceIdentity(column) === pointer.columnInstanceId);
-		}
-		return this.runtime.getColumnDef(pointer.colField);
+		return findColumnByCellPointer(this.runtime.getDisplayedColumns(), pointer);
 	}
 
 	private getPointerFromCoords(rowIdx: number, colIdx: number): GridCellPointer | null {
@@ -74,9 +70,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		const access = this.runtime.getCellAccessByPointer(pointer);
 		if (access) return { rowIdx: access.rowIndex, colIdx: access.colIndex };
 		const rowIdx = this.runtime.getVisualIndexByRowId(pointer.rowId) ?? -1;
-		const colIdx = pointer.columnInstanceId
-			? this.runtime.getDisplayedColumns().findIndex((column) => getColumnInstanceIdentity(column) === pointer.columnInstanceId)
-			: this.runtime.getDisplayedColumns().findIndex((column) => column.colId === pointer.colId || column.field === pointer.colField);
+		const colIdx = findColumnIndexByCellPointer(this.runtime.getDisplayedColumns(), pointer);
 		if (rowIdx === -1 || colIdx === -1) return null;
 		return { rowIdx, colIdx };
 	}
@@ -130,6 +124,11 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 
 	private isEditingPointer(pointer: GridCellPointer | null, activeEdit: GridCellPointer | null | undefined): boolean {
 		return !!pointer && areCellPointersEqual(pointer, activeEdit ?? null);
+	}
+
+	private getSelectionAnchor(): GridCellPointer | null {
+		const selection = readInteractionState(this.runtime.getStateSnapshot()).cellSelection.selection;
+		return selection.anchor ?? selection.focus ?? null;
 	}
 
 	private getDataRowIdsBetween(anchorRowId: string, targetRowId: string): string[] {
@@ -265,7 +264,6 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 					if (tabDest) {
 						const ptr = this.getPointerFromCoords(tabDest.row, tabDest.col);
 						if (ptr) {
-							this.rangeStart = ptr;
 							this.runtime.selectCell(ptr, 'keyboard');
 						}
 					}
@@ -320,11 +318,12 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 				const targetPointer = this.getPointerFromCoords(nextRow, nextCol);
 				if (!targetPointer) return;
 				if (event.shiftKey) {
-					const start = this.rangeStart || active;
-					this.rangeStart = start;
+					const start = this.getSelectionAnchor() ?? active;
+					if (!areCellPointersEqual(start, active)) {
+						this.runtime.selectRange(start, active, 'keyboard');
+					}
 					this.runtime.extendSelection(targetPointer, 'keyboard');
 				} else {
-					this.rangeStart = targetPointer;
 					this.runtime.selectCell(targetPointer, 'keyboard');
 					if (this.options.arrowKeyNavigationEdit) {
 						this.setCellEditing(targetPointer.rowId, this.getEditTargetColumnIdentity(targetPointer), true, 'keyboard');
@@ -337,44 +336,46 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		switch (event.key) {
 			case 'ArrowUp': {
 				event.preventDefault();
-				this.commitEdit();
 				const upRow = this.getNextDataRowIndex(row, 'up');
-				if (upRow !== -1) this.moveEditSelection(upRow, col, active);
+				if (upRow !== -1) {
+					void this.commitAndMoveSelection(active, { row: upRow, col }, this.options.arrowKeyNavigationEdit);
+				}
 				break;
 			}
 			case 'ArrowDown': {
 				event.preventDefault();
-				this.commitEdit();
 				const downRow = this.getNextDataRowIndex(row, 'down');
-				if (downRow !== -1) this.moveEditSelection(downRow, col, active);
+				if (downRow !== -1) {
+					void this.commitAndMoveSelection(active, { row: downRow, col }, this.options.arrowKeyNavigationEdit);
+				}
 				break;
 			}
 			case 'ArrowLeft':
 				if (this.options.arrowKeyNavigationEdit) {
 					event.preventDefault();
-					this.commitEdit();
-					this.moveEditSelection(row, Math.max(0, col - 1), active);
+					void this.commitAndMoveSelection(active, { row, col: Math.max(0, col - 1) }, true);
 				}
 				break;
 			case 'ArrowRight':
 				if (this.options.arrowKeyNavigationEdit) {
 					event.preventDefault();
-					this.commitEdit();
-					this.moveEditSelection(row, Math.min(maxCol, col + 1), active);
+					void this.commitAndMoveSelection(active, { row, col: Math.min(maxCol, col + 1) }, true);
 				}
 				break;
 			case 'Enter': {
 				event.preventDefault();
-				this.commitEdit();
 				const nextRowIdx = this.getNextDataRowIndex(row, 'down');
-				if (nextRowIdx !== -1) this.moveEditSelection(nextRowIdx, col, active, true);
+				if (nextRowIdx !== -1) {
+					void this.commitAndMoveSelection(active, { row: nextRowIdx, col }, true);
+				}
 				break;
 			}
 			case 'Tab': {
 				event.preventDefault();
-				this.commitEdit();
 				const tabDest = this.getTabTarget(row, col, maxCol, !event.shiftKey);
-				if (tabDest) this.moveEditSelection(tabDest.row, tabDest.col, active, true);
+				if (tabDest) {
+					void this.commitAndMoveSelection(active, { row: tabDest.row, col: tabDest.col }, true);
+				}
 				break;
 			}
 			case 'Escape':
@@ -387,11 +388,20 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	private moveEditSelection(row: number, col: number, active: GridCellPointer, startEditing = this.options.arrowKeyNavigationEdit): void {
 		const target = this.getPointerFromCoords(row, col);
 		if (!target) return;
-		this.rangeStart = target;
 		this.runtime.selectCell(target, 'keyboard');
 		if (startEditing && !areCellPointersEqual(target, active)) {
 			this.setCellEditing(target.rowId, this.getEditTargetColumnIdentity(target), true, 'keyboard');
 		}
+	}
+
+	private async commitAndMoveSelection(
+		active: GridCellPointer,
+		target: { row: number; col: number },
+		startEditing = this.options.arrowKeyNavigationEdit
+	): Promise<void> {
+		const committed = await this.commitEdit();
+		if (!committed) return;
+		this.moveEditSelection(target.row, target.col, active, startEditing);
 	}
 
 	public handleMouseDown = (pointer: GridCellPointer, event: MouseEvent): void => {
@@ -407,7 +417,6 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 			this.commitEdit();
 		}
 		this.isSelecting = true;
-		this.rangeStart = pointer;
 		this.runtime.selectCell(pointer, 'pointer');
 	};
 
@@ -421,7 +430,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	};
 
 	public handleMouseEnter = (pointer: GridCellPointer): void => {
-		if (!this.isSelecting || !this.rangeStart) return;
+		if (!this.isSelecting || !this.getSelectionAnchor()) return;
 		this.runtime.extendSelection(pointer, 'pointer');
 	};
 
@@ -434,8 +443,13 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		else this.runtime.stopEditing();
 	}
 
-	public commitEdit(): void {
-		this.runtime.stopEditing(false);
+	public async commitEdit(): Promise<boolean> {
+		const activeEdit = readInteractionState(this.runtime.getStateSnapshot()).activeEdit.active;
+		if (!activeEdit) {
+			this.runtime.stopEditing(false);
+			return true;
+		}
+		return this.runtime.commitEdit(activeEdit.rowId, activeEdit.columnInstanceId, activeEdit.draftValue);
 	}
 
 	public cancelEdit(): void {

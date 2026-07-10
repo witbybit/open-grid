@@ -140,6 +140,46 @@ describe('GridContextMenuPlugin', () => {
 		});
 	});
 
+	it('should preserve a duplicate-field single-cell selection when showPointer only has duplicate colId metadata', () => {
+		rowController.dispose();
+		plugin.onDestroy();
+
+		store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID' },
+				{ field: 'name', header: 'Name A', colId: 'name-a' },
+				{ field: 'name', header: 'Name B', colId: 'name-b' },
+				{ field: 'price', header: 'Price' },
+			],
+		});
+		rowController = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'r1', name: 'Product A', price: 100 },
+				{ id: 'r2', name: 'Product B', price: 200 },
+			],
+			columns: store.getState().columns,
+		});
+		plugin = new GridContextMenuPlugin<TestRow>();
+		store.registerPlugin(plugin);
+		testPlugin = plugin as unknown as ContextMenuTestPlugin;
+
+		store.selectCell({ rowId: 'r1', colField: 'name', colId: 'name-b' }, 'api');
+		plugin.showPointer({ rowId: 'r1', colField: 'name', colId: 'name-b' }, 100, 100);
+
+		expect(store.getState().selection.focus).toEqual(
+			expect.objectContaining({
+				rowId: 'r1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: expect.any(String),
+			})
+		);
+		expect(store.getState().selection.range).toEqual({
+			start: expect.objectContaining({ rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: expect.any(String) }),
+			end: expect.objectContaining({ rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: expect.any(String) }),
+		});
+	});
+
 	it('should copy selected range to clipboard in Excel-compatible TSV format', () => {
 		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 

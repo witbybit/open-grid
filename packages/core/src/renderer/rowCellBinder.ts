@@ -390,8 +390,6 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 	let cellClassName = baseCellClassName;
 	if (access.isFocused) {
 		cellClassName += ' og-cell-focused';
-		cellSlot.element.tabIndex = -1;
-		cellSlot.hasTabIndex = true;
 		const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
 		if (
 			activeEl &&
@@ -408,9 +406,6 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 				deps.applyFocus(cellSlot.element);
 			}
 		}
-	} else if (cellSlot.hasTabIndex) {
-		cellSlot.element.removeAttribute('tabindex');
-		cellSlot.hasTabIndex = false;
 	}
 
 	if (access.isSelected) cellClassName += ' og-cell-selected';
@@ -696,8 +691,6 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	// Focus tab-index bookkeeping is independent of which presentation gets resolved below —
 	// it applies whenever this cell is the focused cell, regardless of content.
 	if (doesCellPointerMatchColumn(ctx.focusedCell, node.id, col)) {
-		cellSlot.element.tabIndex = -1;
-		cellSlot.hasTabIndex = true;
 		const programmaticScrollCell = deps.programmaticScrollCell;
 		const isProgrammatic = doesCellPointerMatchColumn(programmaticScrollCell, node.id, col);
 		deps.setDeferredFocusCell(cellSlot.element);

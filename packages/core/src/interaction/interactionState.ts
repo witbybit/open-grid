@@ -30,22 +30,37 @@ type InteractionStateReadable<TRowData> = Pick<InternalGridState<TRowData>, 'sel
 	selectedRowIds: readonly string[];
 };
 
+function normalizeSelectionState(selection: GridSelectionState | undefined): GridSelectionState {
+	return (
+		selection ?? {
+			focus: null,
+			anchor: null,
+			range: null,
+			bounds: null,
+			source: 'api',
+			focusOrigin: null,
+			version: 0,
+		}
+	);
+}
+
 export function buildInteractionState(input: {
-	selection: GridSelectionState;
+	selection?: GridSelectionState;
 	activeEdit: ActiveEditState | null;
 	selectedRowIds: readonly string[];
 }): GridInteractionState {
+	const selection = normalizeSelectionState(input.selection);
 	return {
 		focus: {
-			cell: input.selection.focus,
-			origin: input.selection.focusOrigin ?? input.selection.source ?? null,
-			version: input.selection.version ?? 0,
+			cell: selection.focus,
+			origin: selection.focusOrigin ?? selection.source ?? null,
+			version: selection.version ?? 0,
 		},
 		activeEdit: {
 			active: input.activeEdit,
 		},
 		cellSelection: {
-			selection: input.selection,
+			selection,
 		},
 		rowSelection: {
 			selectedRowIds: input.selectedRowIds,
@@ -67,12 +82,13 @@ export function readInteractionState<TRowData>(state: InteractionStateReadable<T
 export function isInteractionStateCurrent<TRowData>(state: InteractionStateReadable<TRowData>): boolean {
 	const interaction = state.interaction;
 	if (!interaction) return false;
+	const selection = normalizeSelectionState(state.selection);
 	return (
-		interaction.cellSelection.selection === state.selection &&
+		interaction.cellSelection.selection === selection &&
 		interaction.activeEdit.active === state.activeEdit &&
 		interaction.rowSelection.selectedRowIds === state.selectedRowIds &&
-		interaction.focus.cell === state.selection.focus &&
-		interaction.focus.origin === (state.selection.focusOrigin ?? state.selection.source ?? null) &&
-		interaction.focus.version === (state.selection.version ?? 0)
+		interaction.focus.cell === selection.focus &&
+		interaction.focus.origin === (selection.focusOrigin ?? selection.source ?? null) &&
+		interaction.focus.version === (selection.version ?? 0)
 	);
 }

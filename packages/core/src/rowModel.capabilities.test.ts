@@ -755,9 +755,9 @@ describe('Server page loading state publication', () => {
 
 		store.selectRange({ rowId: '1', colField: 'name' }, { rowId: '2', colField: 'amount' });
 		store.startEditing('1', 'name');
-		expect(store.getState().selection.focus).toEqual({ rowId: '2', colField: 'amount' });
-		expect(store.getState().selection.anchor).toEqual({ rowId: '1', colField: 'name' });
-		expect(store.getState().activeEdit).toEqual({ rowId: '1', colField: 'name' });
+		expect(store.getState().selection.focus).toEqual(expect.objectContaining({ rowId: '2', colField: 'amount' }));
+		expect(store.getState().selection.anchor).toEqual(expect.objectContaining({ rowId: '1', colField: 'name' }));
+		expect(store.getState().activeEdit).toEqual(expect.objectContaining({ rowId: '1', colField: 'name' }));
 
 		ctrl.goToPage(1);
 
@@ -991,9 +991,9 @@ describe('Infinite block reload — stale row map cleanup', () => {
 
 		store.selectRange({ rowId: 'A', colField: 'name' }, { rowId: 'B', colField: 'amount' });
 		store.startEditing('A', 'name');
-		expect(store.getState().selection.focus).toEqual({ rowId: 'B', colField: 'amount' });
-		expect(store.getState().selection.anchor).toEqual({ rowId: 'A', colField: 'name' });
-		expect(store.getState().activeEdit).toEqual({ rowId: 'A', colField: 'name' });
+		expect(store.getState().selection.focus).toEqual(expect.objectContaining({ rowId: 'B', colField: 'amount' }));
+		expect(store.getState().selection.anchor).toEqual(expect.objectContaining({ rowId: 'A', colField: 'name' }));
+		expect(store.getState().activeEdit).toEqual(expect.objectContaining({ rowId: 'A', colField: 'name' }));
 
 		ctrl.setDatasource({
 			getRows: vi.fn().mockResolvedValueOnce({

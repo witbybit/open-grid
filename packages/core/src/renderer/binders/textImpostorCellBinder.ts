@@ -1,6 +1,6 @@
 import { recordCellSlotMountedVisualVersions } from '../cellSlot.js';
 import { isHtmlSnapshotPresentation } from '../scrollPresentationMode.js';
-import { applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
+import { applyCellAccessibilityState, applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
 import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
 import { createCellRendererLifecycle } from '../lifecycle/cellRendererLifecycle.js';
 
@@ -21,6 +21,7 @@ export function applyTextImpostorCellPresentation<TRowData>(input: DispatchCellP
 		if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 		if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 		applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+		applyCellAccessibilityState(cellSlot, cellCtrl);
 		const didWrite = cellSlot.update(
 			geometry.colIndex,
 			cellCtrl.field,
@@ -46,6 +47,7 @@ export function applyTextImpostorCellPresentation<TRowData>(input: DispatchCellP
 	if (presentation.releaseStalePortal) lifecycle.release({ cellCtrl, reason: 'invalidated', cellElement: cellSlot.element });
 	if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 	applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+	applyCellAccessibilityState(cellSlot, cellCtrl);
 	const didWrite = cellSlot.update(
 		geometry.colIndex,
 		cellCtrl.field,

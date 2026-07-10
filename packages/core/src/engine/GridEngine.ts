@@ -15,7 +15,7 @@ import type {
 	RowSelectionGestureSource,
 	RowSelectionScope,
 } from '../api/GridApi.js';
-import { areCellPointersEqual } from '../interaction/cellPointer.js';
+import { areCellPointersEqual, findColumnByCellPointer } from '../interaction/cellPointer.js';
 import { buildInteractionState } from '../interaction/interactionState.js';
 import { getColumnInstanceIdentity, type ColumnDef, type GridRendererOptions } from '../columnDef.js';
 import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
@@ -377,6 +377,7 @@ export class GridEngine<TRowData = unknown> {
 		});
 
 		const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');
+		const initialActiveEdit = this.normalizeInitialActiveEdit(config.activeEdit ?? null);
 
 		// Set initial state
 		const initialState: InternalGridState<TRowData> = {
@@ -389,7 +390,7 @@ export class GridEngine<TRowData = unknown> {
 			defaultRowHeight: config.defaultRowHeight || 40,
 			defaultColWidth: config.defaultColWidth || 100,
 			enableColumnReorder: config.enableColumnReorder ?? true,
-			activeEdit: config.activeEdit || null,
+			activeEdit: initialActiveEdit,
 			sortModel: config.sortModel || null,
 			filterModel: config.filterModel || null,
 			quickFilterModel: config.quickFilterModel || null,
@@ -426,7 +427,7 @@ export class GridEngine<TRowData = unknown> {
 			overscanAdaptive: config.overscanAdaptive,
 			interaction: buildInteractionState({
 				selection: initialSelection,
-				activeEdit: config.activeEdit || null,
+				activeEdit: initialActiveEdit,
 				selectedRowIds: config.selectedRowIds ?? [],
 			}),
 			integrity: _createEmptyIntegrityState<TRowData>(),
@@ -498,7 +499,6 @@ export class GridEngine<TRowData = unknown> {
 			getState: () => this.stateManager.getState(),
 			getVisualRow: (idx) => this.rowModel?.getVisualRow(idx) ?? null,
 			getVisualIndexByRowId: (id) => this.rowModel?.getVisualIndexByRowId(id) ?? null,
-			getColumnIndex: (f) => this.columns.getColumnIndex(f),
 			getCellValue: (rowId, colField) => this.data.getCellValue(rowId, colField),
 			getCheapDisplayValue: (rowId, colField) => this.data.getCheapDisplayValue(rowId, colField),
 			getRawRowById: (rowId) => this.rowModel?.getRawRowById(rowId) ?? null,
@@ -1128,12 +1128,12 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
-	public startEdit(rowId: string, colField: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
-		this.editingFeature.startEdit(rowId, colField, source);
+	public startEdit(rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
+		this.editingFeature.startEdit(rowId, colFieldOrInstanceId, source);
 	}
 
-	public updateEditDraft(rowId: string, colField: string, value: unknown): void {
-		this.editingFeature.updateEditDraft(rowId, colField, value);
+	public updateEditDraft(rowId: string, colFieldOrInstanceId: string, value: unknown): void {
+		this.editingFeature.updateEditDraft(rowId, colFieldOrInstanceId, value);
 	}
 
 	public stopEdit(cancel = false): void {
@@ -1364,25 +1364,33 @@ export class GridEngine<TRowData = unknown> {
 		const rowModel = this.getRowModel();
 		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(pointer.rowId) : -1;
 		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
-		return isDataCellSelectable(
-			visualRow,
-			pointer.columnInstanceId
-				? this.columns.getColumnByFieldOrInstanceId(pointer.columnInstanceId)
-				: this.columns.getColumnDef(pointer.colField)
-		);
+		return isDataCellSelectable(visualRow, findColumnByCellPointer(this.columns.getDisplayedColumns(), pointer));
 	}
 
 	private resolveCellPointer(pointer: GridCellPointer | null): GridCellPointer | null {
 		if (!pointer) return null;
-		const column = pointer.columnInstanceId
-			? this.columns.getColumnByFieldOrInstanceId(pointer.columnInstanceId)
-			: this.columns.getColumnDef(pointer.colField);
+		const column = findColumnByCellPointer(this.columns.getDisplayedColumns(), pointer);
 		if (!column) return null;
 		return {
 			rowId: pointer.rowId,
 			colField: column.field,
 			colId: column.colId ?? column.field,
 			columnInstanceId: getColumnInstanceIdentity(column),
+		};
+	}
+
+	private normalizeInitialActiveEdit(
+		activeEdit: GridCellPointer | import('../api/GridApi.js').ActiveEditState | null
+	): import('../api/GridApi.js').ActiveEditState | null {
+		if (!activeEdit) return null;
+		const pointer = this.resolveCellPointer(activeEdit);
+		if (!pointer?.columnInstanceId || !pointer.colId) return null;
+		return {
+			...activeEdit,
+			rowId: pointer.rowId,
+			colField: pointer.colField,
+			colId: pointer.colId,
+			columnInstanceId: pointer.columnInstanceId,
 		};
 	}
 

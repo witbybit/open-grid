@@ -44,6 +44,7 @@ import { RowDragController } from '../features/RowDragController.js';
 import { RenderRuntimeState } from './renderRuntimeState.js';
 import { defaultGridScheduler } from './gridScheduler.js';
 import type { GridInteractionHandle } from '../interaction/GridInteractionController.js';
+import { createGridViewportInteractionRouter } from '../interaction/GridViewportInteractionRouter.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -78,6 +79,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public readonly stickyGroupRenderer: StickyGroupRenderer<TRowData>;
 	private readonly invalidationCoordinator: RenderInvalidationCoordinator<TRowData>;
 	private readonly headerMenu: HeaderMenuController<TRowData>;
+	private readonly viewportInteractionRouter: ReturnType<typeof createGridViewportInteractionRouter>;
 
 	private readonly layoutTransition: LayoutTransitionController<TRowData>;
 	private readonly rowDrag: RowDragController<TRowData>;
@@ -406,7 +408,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			syncLayoutPlan: () => {
 				this.viewportCoordinator.syncLayoutPlan();
 			},
-			scrollCellIntoView: (rowId, colField) => this.viewportCoordinator.scrollCellIntoView(rowId, colField),
+			scrollCellIntoView: (pointer) => this.viewportCoordinator.scrollCellPointerIntoView(pointer),
 			resetScroll: () => this.scrollEngine.scrollTo(0, this.engine.viewport.scrollLeft),
 			updateCachedGeometryBounds: () => this.updateCachedGeometryBounds(),
 			markFlushPendingAfterScroll: () => {
@@ -415,6 +417,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			markViewportDirtyAfterScroll: () => {
 				this.scrollCoordinator.markViewportDirtyAfterScroll();
 			},
+		});
+		this.viewportInteractionRouter = createGridViewportInteractionRouter({
+			getInteraction: () => this.interactionController,
+			resolveCellPointer: (target) => this.resolveViewportInteractionPointer(target),
 		});
 	}
 
@@ -692,23 +698,21 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	};
 
 	private onViewportInteractionMouseDown = (event: MouseEvent): void => {
-		this.interactionController?.handleViewportMouseDown(event);
+		this.viewportInteractionRouter.handleViewportMouseDown(event);
 	};
 
 	private onViewportInteractionClick = (event: MouseEvent): void => {
-		if (!this.interactionController || event.defaultPrevented || event.button !== 0) return;
-		const target = event.target as HTMLElement | null;
-		if (!target) return;
-		const checkbox = target.closest<HTMLInputElement>('input.og-row-checkbox');
-		if (checkbox) {
-			event.stopPropagation();
-			const rowId = checkbox.dataset.rowId;
-			if (rowId) this.interactionController.handleRowCheckboxClick(rowId, checkbox.checked, event);
-			return;
-		}
-		if (this.interactionController.isRowSelectionIgnoredTarget(target)) return;
+		this.viewportInteractionRouter.handleViewportClick(event);
+	};
+
+	private resolveViewportInteractionPointer(target: Element): {
+		rowId: string;
+		colField: string;
+		columnInstanceId?: ColumnInstanceId;
+		colId?: string;
+	} | null {
 		const cellEl = target.closest<HTMLDivElement>('.og-cell');
-		if (!cellEl) return;
+		if (!cellEl) return null;
 		const cellSlot = (
 			cellEl as HTMLDivElement & {
 				__cellSlot?: {
@@ -720,17 +724,14 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		).__cellSlot;
 		const rowId = cellSlot?.binding?.rowId ?? cellEl.dataset.rowId;
 		const colField = cellSlot?.colField ?? cellEl.dataset.colField;
-		if (!rowId || !colField) return;
-		this.interactionController.handleDataRowClick(
-			{
-				rowId,
-				colField,
-				columnInstanceId: cellSlot?.columnInstanceId,
-				colId: cellSlot?.binding?.colId ?? colField,
-			},
-			event
-		);
-	};
+		if (!rowId || !colField) return null;
+		return {
+			rowId,
+			colField,
+			columnInstanceId: cellSlot?.columnInstanceId,
+			colId: cellSlot?.binding?.colId ?? colField,
+		};
+	}
 
 	private setHoveredRowIndex(rowIndex: number | null): void {
 		if (this.rowRenderer.hoveredRowIndex === rowIndex) return;

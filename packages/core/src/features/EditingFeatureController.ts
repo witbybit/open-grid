@@ -131,13 +131,13 @@ export class EditingFeatureController<TRowData = unknown> {
 			reason: 'editing:stop',
 			state: { activeEdit: null },
 			invalidations: [
-				{ kind: 'cell', rowId, colId: activeEdit.columnInstanceId ?? colField, reason: 'edit stopped' },
+				{ kind: 'cell', rowId, colId: activeEdit.columnInstanceId, reason: 'edit stopped' },
 				{ kind: 'overlay', reason: 'edit stopped' },
 			],
 			domains: ['editing'],
 			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel } }],
 		});
-		this.notifyCellChange(rowId, colField, false, activeEdit.columnInstanceId ?? colField);
+		this.notifyCellChange(rowId, colField, false, activeEdit.columnInstanceId);
 	}
 
 	public async commitEdit(rowId: string, colFieldOrInstanceId: string, value: unknown): Promise<boolean> {
@@ -147,10 +147,11 @@ export class EditingFeatureController<TRowData = unknown> {
 
 		const resolvedColumn =
 			(matchedActiveEdit
-				? this.ctx.columns.getColumnByFieldOrInstanceId(matchedActiveEdit.columnInstanceId ?? matchedActiveEdit.colField)
+				? this.ctx.columns.getColumnByFieldOrInstanceId(matchedActiveEdit.columnInstanceId)
 				: this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId)) ?? null;
 		if (!resolvedColumn) return false;
 		const colField = resolvedColumn.field;
+		const renderColId = matchedActiveEdit?.columnInstanceId ?? resolvedColumn.instanceId;
 
 		if (this.checkCapability) {
 			const result = this.checkCapability('edit', { rowId, colField });
@@ -217,7 +218,7 @@ export class EditingFeatureController<TRowData = unknown> {
 				},
 			],
 			invalidations: [
-				{ kind: 'cell', rowId, colId: matchedActiveEdit?.columnInstanceId ?? colField, reason: 'edit stopped' },
+				{ kind: 'cell', rowId, colId: renderColId, reason: 'edit stopped' },
 				{ kind: 'overlay', reason: 'edit stopped' },
 			],
 			domains: ['editing'],
@@ -233,7 +234,7 @@ export class EditingFeatureController<TRowData = unknown> {
 			return false;
 		}
 
-		this.notifyCellChange(rowId, colField, false, matchedActiveEdit?.columnInstanceId ?? colField);
+		this.notifyCellChange(rowId, colField, false, renderColId);
 		await this.validateCommittedCells?.([{ rowId, colField }], 'edit');
 		return true;
 	}

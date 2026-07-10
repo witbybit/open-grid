@@ -9,7 +9,6 @@ import * as ReactPackage from './index.js';
 import { GridProvider } from './gridContext.js';
 import { GridView } from './GridView.js';
 import { GridEventName, Grid, useGridKeySelector, useGridApi, useGridSelector } from './index.js';
-import { useGridInteractionController } from './hooks.js';
 import { PortalCell, PortalManager, createPortalStore } from './GridPortal.js';
 
 // Mock ResizeObserver for jsdom environment
@@ -47,12 +46,6 @@ const SelectorInspector = () => {
 			<span data-testid='api-exists'>{api ? 'yes' : 'no'}</span>
 		</div>
 	);
-};
-
-const NavigationControllerProbe = ({ onRender }: { onRender: (handle: ReturnType<typeof useGridInteractionController<TestRow>>) => void }) => {
-	const handle = useGridInteractionController<TestRow>({});
-	onRender(handle);
-	return <span data-testid='nav-controller-present'>{handle ? 'yes' : 'no'}</span>;
 };
 
 const ApiSurfaceInspector = () => {
@@ -748,49 +741,6 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
-	it('should expose a stable navigation controller handle without effect-driven rerender churn', async () => {
-		const grid = createTestGrid<TestRow>({
-			rows: [{ id: '1', name: 'Cell Content' }],
-			columns: [{ field: 'name', header: 'Name', width: 100 }],
-		});
-		let renderCount = 0;
-		const handles: Array<ReturnType<typeof useGridInteractionController<TestRow>>> = [];
-
-		const { rerender, unmount } = render(
-			<GridProvider api={grid.api}>
-				<NavigationControllerProbe
-					onRender={(handle) => {
-						renderCount++;
-						handles.push(handle);
-					}}
-				/>
-			</GridProvider>
-		);
-
-		expect(screen.getByTestId('nav-controller-present').textContent).toBe('yes');
-		await act(async () => {});
-		expect(renderCount).toBe(1);
-		expect(handles[0]).not.toBeNull();
-
-		rerender(
-			<GridProvider api={grid.api}>
-				<NavigationControllerProbe
-					onRender={(handle) => {
-						renderCount++;
-						handles.push(handle);
-					}}
-				/>
-			</GridProvider>
-		);
-
-		await act(async () => {});
-		expect(renderCount).toBe(2);
-		expect(handles[1]).toBe(handles[0]);
-
-		unmount();
-		grid.api.destroy();
-	});
-
 	it('should keep custom renderer portals mounted when renderer column layout changes', async () => {
 		// This test verifies the cycle: custom renderer columns visible → replace with native columns → restore
 		// custom renderer columns. Uses the same code path (releaseAll + full repaint) as a column reorder.
@@ -941,6 +891,120 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		);
 
 		unmount();
+		grid.api.destroy();
+	});
+
+	it('should pass canonical duplicate-field column identity to custom renderers', () => {
+		const rendererProps: Record<string, unknown>[] = [];
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{ field: 'name', header: 'Name A', width: 100, colId: 'name-a' },
+				{
+					field: 'name',
+					header: 'Name B',
+					width: 100,
+					colId: 'name-b',
+					renderer: {
+						kind: 'react',
+						component: (props: any) => {
+							rendererProps.push(props as Record<string, unknown>);
+							return <span data-testid='duplicate-renderer'>{String(props.colId)}</span>;
+						},
+					},
+				},
+			],
+		});
+
+		const duplicateColumn = grid.api.getDisplayedColumns()[1]!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
+
+		render(
+			<GridProvider api={grid.api}>
+				<PortalCell rowId='1' colField='name' value='Product A' col={duplicateColumn} node={node} isEditing={false} isLoading={false} />
+			</GridProvider>
+		);
+
+		expect(screen.getByTestId('duplicate-renderer').textContent).toBe('name-b');
+		expect(rendererProps[0]).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: duplicateColumn.instanceId,
+			})
+		);
+
+		grid.api.destroy();
+	});
+
+	it('should pass canonical duplicate-field column identity to custom editors and route draft updates by instance id', async () => {
+		const editorProps: Record<string, unknown>[] = [];
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{ field: 'name', header: 'Name A', width: 100, colId: 'name-a' },
+				{
+					field: 'name',
+					header: 'Name B',
+					width: 100,
+					colId: 'name-b',
+					cellEditor: (props) => {
+						editorProps.push(props as unknown as Record<string, unknown>);
+						return (
+							<input
+								data-testid='duplicate-editor'
+								value={String(props.value)}
+								onChange={(e) => props.onChange(e.target.value)}
+								onBlur={() => props.onCommit()}
+							/>
+						);
+					},
+				},
+			],
+		});
+
+		const duplicateColumn = grid.api.getDisplayedColumns()[1]!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
+
+		act(() => {
+			grid.api.startEditing('1', duplicateColumn.instanceId!);
+		});
+
+		render(
+			<GridProvider api={grid.api}>
+				<PortalCell rowId='1' colField='name' value='Product A' col={duplicateColumn} node={node} isEditing={true} isLoading={false} />
+			</GridProvider>
+		);
+
+		const input = screen.getByTestId('duplicate-editor') as HTMLInputElement;
+		fireEvent.change(input, { target: { value: 'Product B' } });
+
+		expect(editorProps[0]).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: duplicateColumn.instanceId,
+			})
+		);
+		expect(grid.api.getStateSnapshot().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: duplicateColumn.instanceId,
+				draftValue: 'Product B',
+			})
+		);
+
+		fireEvent.blur(input);
+
+		await waitFor(() => {
+			expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
+			expect(grid.api.getStateSnapshot().activeEdit).toBeNull();
+		});
+
 		grid.api.destroy();
 	});
 

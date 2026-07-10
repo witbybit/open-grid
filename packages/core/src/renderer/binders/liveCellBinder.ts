@@ -1,5 +1,5 @@
 import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
-import { applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
+import { applyCellAccessibilityState, applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
 import { createCellRendererLifecycle } from '../lifecycle/cellRendererLifecycle.js';
 
 function isOverscanLiveExecution<TRowData>(input: DispatchCellPresentationInput<TRowData>): boolean {
@@ -17,6 +17,7 @@ function applyLiveMountEmergencyShell<TRowData>(input: DispatchCellPresentationI
 	deps.incrementLiveReactEmergencyShellsDuringScroll?.();
 	if (input.phase === 'scroll') deps.markCellDirtyAfterScroll(cellSlot.element);
 	applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+	applyCellAccessibilityState(cellSlot, cellCtrl);
 	const didWrite = cellSlot.update(
 		geometry.colIndex,
 		cellCtrl.field,
@@ -81,6 +82,7 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 		cellSlot.lastMountedRowVersion = rowVersion;
 		cellSlot.lastMountedGlobalVersion = runtime.globalVersion;
 		applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+		applyCellAccessibilityState(cellSlot, cellCtrl);
 		const didWrite = cellSlot.update(
 			geometry.colIndex,
 			cellCtrl.field,
@@ -162,6 +164,7 @@ export function applyLiveCellPresentation<TRowData>(input: DispatchCellPresentat
 		});
 	}
 	applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+	applyCellAccessibilityState(cellSlot, cellCtrl);
 	const didWrite = cellSlot.update(
 		geometry.colIndex,
 		cellCtrl.field,

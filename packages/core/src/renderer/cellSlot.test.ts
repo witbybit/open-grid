@@ -283,3 +283,35 @@ describe('CellSlot transient style reset', () => {
 		expect(slot.lastPortalKey).toBe('portal-key');
 	});
 });
+
+describe('CellSlot accessibility sync - Plan 157 kernel-derived cell ARIA state', () => {
+	it('syncs focus, readonly, and invalid state without binder-local DOM ownership', () => {
+		const slot = new CellSlot(document.createElement('div'));
+
+		expect(slot.syncAccessibilityState({ focused: true, readOnly: true, invalid: true })).toBe(true);
+		expect(slot.element.getAttribute('tabindex')).toBe('-1');
+		expect(slot.element.getAttribute('aria-readonly')).toBe('true');
+		expect(slot.element.getAttribute('aria-invalid')).toBe('true');
+
+		expect(slot.syncAccessibilityState({ focused: false, readOnly: false, invalid: false })).toBe(true);
+		expect(slot.element.hasAttribute('tabindex')).toBe(false);
+		expect(slot.element.hasAttribute('aria-readonly')).toBe(false);
+		expect(slot.element.hasAttribute('aria-invalid')).toBe(false);
+	});
+
+	it('clears synced accessibility attributes on hot unbind and reset', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		slot.syncAccessibilityState({ focused: true, readOnly: true, invalid: true });
+
+		slot.unbindHot();
+		expect(slot.element.hasAttribute('tabindex')).toBe(false);
+		expect(slot.element.hasAttribute('aria-readonly')).toBe(false);
+		expect(slot.element.hasAttribute('aria-invalid')).toBe(false);
+
+		slot.syncAccessibilityState({ focused: true, readOnly: true, invalid: true });
+		slot.reset();
+		expect(slot.element.hasAttribute('tabindex')).toBe(false);
+		expect(slot.element.hasAttribute('aria-readonly')).toBe(false);
+		expect(slot.element.hasAttribute('aria-invalid')).toBe(false);
+	});
+});

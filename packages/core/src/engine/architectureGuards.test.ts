@@ -182,6 +182,7 @@ describe('Architecture guardrails', () => {
 		expect(engineContent).toContain('this.viewportCoordinator.syncLayoutPlan()');
 		expect(engineContent).toContain('this.viewportCoordinator.recycleViewport(false, undefined, layoutPlan.renderWindow)');
 		expect(engineContent).toContain('this.viewportCoordinator.scrollCellIntoView(rowId, colField)');
+		expect(engineContent).toContain('this.viewportCoordinator.scrollCellPointerIntoView(pointer)');
 		expect(engineContent).not.toContain('computeGridLayoutPlan(');
 		expect(engineContent).not.toContain('computeScrollTarget(');
 	});
@@ -250,12 +251,44 @@ describe('Architecture guardrails', () => {
 	it('GridView.tsx routes semantic interaction through the core event router', () => {
 		const content = readFileSync(resolve(REACT_ROOT, 'src', 'GridView.tsx'), 'utf-8');
 		expect(content).toContain('createGridInteractionEventRouter');
+		expect(content).toContain('resolveGridInteractionController');
+		expect(content).toContain('router.bind(container)');
 		expect(content).not.toContain('navigationRef.current?.handleKeyDown');
 		expect(content).not.toContain('nav.handleMouseDown(');
 		expect(content).not.toContain('nav.handleMouseEnter(');
 		expect(content).not.toContain('nav.handleClick(');
 		expect(content).not.toContain('nav.setCellEditing(');
+		expect(content).not.toContain('useGridInteractionController');
 		expect(content).not.toContain('dispatchEvent(GridEventName.cellClicked');
+		expect(content).not.toContain("window.addEventListener('keydown'");
+		expect(content).not.toContain("window.addEventListener('mouseup'");
+		expect(content).not.toContain("document.addEventListener('mousedown'");
+	});
+
+	it('GridInteractionController does not keep a shadow range anchor outside authoritative selection state', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionController.ts'), 'utf-8');
+		expect(content).not.toContain('private rangeStart');
+		expect(content).toContain('private getSelectionAnchor()');
+		expect(content).toContain("this.runtime.extendSelection(targetPointer, 'keyboard')");
+	});
+
+	it('active edit state is column-instance authoritative inside the kernel', () => {
+		const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+		const editingContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'EditingFeatureController.ts'), 'utf-8');
+		const interactionContent = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionController.ts'), 'utf-8');
+		expect(apiContent).toContain('export interface ActiveEditState extends GridCellPointer {');
+		expect(apiContent).toContain('columnInstanceId: ColumnInstanceId;');
+		expect(apiContent).toContain('colId: string;');
+		expect(editingContent).not.toContain('activeEdit.columnInstanceId ?? colField');
+		expect(editingContent).not.toContain('matchedActiveEdit.columnInstanceId ?? matchedActiveEdit.colField');
+		expect(interactionContent).not.toContain('activeEdit.columnInstanceId ?? activeEdit.colField');
+	});
+
+	it('renderEngine.ts does not own row-selection gesture semantics directly', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderEngine.ts'), 'utf-8');
+		expect(content).toContain('createGridViewportInteractionRouter');
+		expect(content).not.toContain('handleRowCheckboxClick(');
+		expect(content).not.toContain('handleDataRowClick(');
 	});
 
 	it('GridPortal.tsx does not cast to InternalGridApi', () => {

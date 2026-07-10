@@ -87,6 +87,8 @@ export interface GridCellPointer {
 }
 
 export interface ActiveEditState extends GridCellPointer {
+	columnInstanceId: ColumnInstanceId;
+	colId: string;
 	validationError?: string | null;
 	draftValue?: unknown;
 	originalValue?: unknown;
@@ -335,6 +337,7 @@ export interface CellRendererProps<TRowData = unknown, TValue = unknown> {
 	rowId: string;
 	colField: string;
 	colId?: string;
+	columnInstanceId?: ColumnInstanceId;
 	isScrolling?: boolean;
 	phase?: CellRendererPhase;
 	isFocused?: boolean;
@@ -346,6 +349,8 @@ export interface CellRendererProps<TRowData = unknown, TValue = unknown> {
 export interface CellEditorProps<TRowData = unknown, TValue = unknown> {
 	rowId: string;
 	colField: string;
+	colId?: string;
+	columnInstanceId?: ColumnInstanceId;
 	value: TValue;
 	onChange: (value: TValue) => void;
 	api: PublicGridApi<TRowData>;

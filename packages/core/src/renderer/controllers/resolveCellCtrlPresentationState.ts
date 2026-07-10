@@ -123,6 +123,7 @@ function hydrateCellCtrlFromScrollPresentation(
 	cellCtrl.visualState.validationError = getPresentationValidationError(presentation);
 	cellCtrl.visualState.focused = 'isFocused' in presentation ? presentation.isFocused : cellCtrl.visualState.focused;
 	cellCtrl.visualState.editing = 'isEditing' in presentation ? presentation.isEditing : cellCtrl.visualState.editing;
+	cellCtrl.visualState.readOnly = presentation.className.includes('og-cell-readonly');
 	cellCtrl.valueState.formattedValue = 'formattedValue' in presentation ? presentation.formattedValue : '';
 	cellCtrl.valueState.displayText = cellCtrl.valueState.formattedValue;
 	cellCtrl.valueState.loading = presentation.kind === 'html-pending';
@@ -155,6 +156,7 @@ function hydrateCellCtrlFromFullBind(cellCtrl: CellCtrl, context: NonNullable<Ce
 	cellCtrl.visualState.className = context.className;
 	cellCtrl.visualState.title = context.title;
 	cellCtrl.visualState.validationError = context.validationError;
+	cellCtrl.visualState.readOnly = context.className.includes('og-cell-readonly');
 	cellCtrl.valueState.value = context.value;
 	cellCtrl.valueState.formattedValue = context.formattedValue;
 	cellCtrl.valueState.displayText = context.formattedValue;

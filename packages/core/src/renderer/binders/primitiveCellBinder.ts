@@ -1,5 +1,5 @@
 import type { DispatchCellPresentationInput } from './cellPresentationDispatcher.js';
-import { applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
+import { applyCellAccessibilityState, applyCellTitlesAndValidation, recordDispatchWrite, stampMountedVersions } from './binderShared.js';
 
 /**
  * scrollPresentation: 'primitive' — fast text/class patch, no renderer, no portal, no HTML snapshot.
@@ -14,6 +14,7 @@ export function applyPrimitiveCellPresentation<TRowData>(input: DispatchCellPres
 		case 'buffered': {
 			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 			applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+			applyCellAccessibilityState(cellSlot, cellCtrl);
 			const didWrite = cellSlot.update(
 				geometry.colIndex,
 				cellCtrl.field,
@@ -39,6 +40,7 @@ export function applyPrimitiveCellPresentation<TRowData>(input: DispatchCellPres
 			if (input.phase === 'scroll' && presentation.markDirty) deps.markCellDirtyAfterScroll(cellSlot.element);
 			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 			applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+			applyCellAccessibilityState(cellSlot, cellCtrl);
 			const didWrite = cellSlot.update(
 				geometry.colIndex,
 				cellCtrl.field,
@@ -64,6 +66,7 @@ export function applyPrimitiveCellPresentation<TRowData>(input: DispatchCellPres
 			deps.cellRenderer.ensureLoadingSkeleton(cellSlot.element);
 			if (presentation.releaseStalePortal) deps.releaseCellPortal(cellSlot.element, false, 'invalidated');
 			applyCellTitlesAndValidation(cellSlot.element, presentation.title ?? null, '', presentation.validationError);
+			applyCellAccessibilityState(cellSlot, cellCtrl);
 			const didWrite = cellSlot.update(
 				geometry.colIndex,
 				cellCtrl.field,

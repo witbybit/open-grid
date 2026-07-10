@@ -54,7 +54,6 @@ describe('React public boundary', () => {
 			'resolveColumnFilterDef',
 			'themeToCSSVariables',
 			'useGridApi',
-			'useGridInteractionController',
 			'useGridKeySelector',
 			'useGridSelector',
 		]);

@@ -463,9 +463,18 @@ describe('GridStore generic row-store functionality', () => {
 			filterModel: { name: { type: 'text', operator: 'contains', value: 'A' } },
 			queryModel,
 			selectedRowIds: ['1'],
-			activeEdit: { rowId: '1', colField: 'name', validationError: 'Required' },
 			pagination: { pageSize: 25, page: 2 },
 			groupBy: ['name'],
+		});
+		const nameColumn = store.engine.columns.getDisplayedColumns()[1] as { field: string; colId?: string; instanceId?: string };
+		store.engine.stateManager.setState({
+			activeEdit: {
+				rowId: '1',
+				colField: nameColumn.field,
+				colId: nameColumn.colId ?? nameColumn.field,
+				columnInstanceId: nameColumn.instanceId as any,
+				validationError: 'Required',
+			},
 		});
 		const snapshot = store.getStateSnapshot();
 		const liveBefore = store.getState();
@@ -1032,6 +1041,41 @@ describe('GridStore generic row-store functionality', () => {
 			computedValue: 'Product A',
 			isEditing: false,
 		});
+
+		controller.dispose();
+	});
+
+	it('normalizes duplicate-field selection by colId when columnInstanceId is absent', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name', colId: 'name-b' }, 'api');
+
+		expect(store.getState().selection.focus).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: expect.any(String),
+			})
+		);
+		expect(store.getState().selection.anchor).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: expect.any(String),
+			})
+		);
 
 		controller.dispose();
 	});
