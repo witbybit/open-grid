@@ -34,7 +34,7 @@ function validateInfiniteBlockResponse<TRowData>(
 	rows: readonly TRowData[],
 	blockSize: number,
 	getRowId: (row: TRowData) => string,
-	options?: { totalCount?: number; blockStartRow?: number }
+	options?: { totalCount?: number; lastRow?: number; hasMore?: boolean; blockStartRow?: number }
 ): void {
 	if (rows.length > blockSize) {
 		throw new Error(`Infinite datasource returned ${rows.length} rows for block size ${blockSize}`);
@@ -52,6 +52,27 @@ function validateInfiniteBlockResponse<TRowData>(
 			);
 		}
 	}
+	if (typeof options?.lastRow === 'number') {
+		if (options.lastRow < 0) {
+			throw new Error(`Infinite datasource returned negative lastRow ${options.lastRow}`);
+		}
+		const blockStartRow = options.blockStartRow ?? 0;
+		const minimumReachableCount = blockStartRow + rows.length;
+		if (options.lastRow < minimumReachableCount) {
+			throw new Error(
+				`Infinite datasource returned lastRow ${options.lastRow}, which is smaller than the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
+	}
+	if (
+		typeof options?.totalCount === 'number' &&
+		typeof options?.lastRow === 'number' &&
+		options.totalCount !== options.lastRow
+	) {
+		throw new Error(
+			`Infinite datasource returned conflicting totalCount ${options.totalCount} and lastRow ${options.lastRow}`
+		);
+	}
 
 	const seenRowIds = new Set<string>();
 	for (const row of rows) {
@@ -61,6 +82,19 @@ function validateInfiniteBlockResponse<TRowData>(
 		}
 		seenRowIds.add(rowId);
 	}
+}
+
+function resolveInfiniteTerminalCount(options: {
+	totalCount?: number;
+	lastRow?: number;
+	hasMore?: boolean;
+	blockStartRow: number;
+	returnedRowCount: number;
+}): number | undefined {
+	if (typeof options.totalCount === 'number') return options.totalCount;
+	if (typeof options.lastRow === 'number') return options.lastRow;
+	if (options.hasMore === false) return options.blockStartRow + options.returnedRowCount;
+	return undefined;
 }
 
 export interface InfiniteGetRowsParams {
@@ -74,7 +108,7 @@ export interface InfiniteGetRowsParams {
 }
 
 export interface InfiniteDatasource<TRowData = unknown> {
-	getRows(params: InfiniteGetRowsParams): Promise<{ rows: TRowData[]; totalCount?: number }>;
+	getRows(params: InfiniteGetRowsParams): Promise<{ rows: TRowData[]; totalCount?: number; lastRow?: number; hasMore?: boolean }>;
 }
 
 export interface InfiniteRowModelOptions<TData = unknown> {
@@ -653,9 +687,18 @@ export class InfiniteRowModelController<TData = unknown>
 			if (!this.isRequestTokenCurrent(requestToken)) return;
 			validateInfiniteBlockResponse(response.rows, this.blockSize, (row) => this.runtime.getRowId(row as TData), {
 				totalCount: response.totalCount,
+				lastRow: response.lastRow,
+				hasMore: response.hasMore,
 				blockStartRow: startRow,
 			});
 			this.validateInfiniteBlockPlacement(response.rows, block.startRow, block.endRow);
+			const terminalCount = resolveInfiniteTerminalCount({
+				totalCount: response.totalCount,
+				lastRow: response.lastRow,
+				hasMore: response.hasMore,
+				blockStartRow: startRow,
+				returnedRowCount: response.rows.length,
+			});
 
 			const blockRows = Array.from({ length: this.blockSize }, () => null as RowNode<TData> | null);
 			response.rows.forEach((row, idx) => {
@@ -678,7 +721,7 @@ export class InfiniteRowModelController<TData = unknown>
 				requestToken.queryVersion,
 				blockRows,
 				response.rows.length,
-				response.totalCount
+				terminalCount
 			);
 			this.evictOverflowBlocks();
 			this.rebuildBlockDerivedIndexes();
@@ -692,7 +735,7 @@ export class InfiniteRowModelController<TData = unknown>
 				blockIndex,
 				loadedBlockStart: startRow,
 				loadedBlockEnd: startRow + response.rows.length - 1,
-				totalRecords: response.totalCount ?? this.blockCache.getVisualRowCount(),
+				totalRecords: terminalCount ?? this.blockCache.getVisualRowCount(),
 				durationMs: requestFinishedAt - requestStartedAt,
 			});
 		} catch (error) {

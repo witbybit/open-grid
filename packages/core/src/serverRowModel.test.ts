@@ -1466,4 +1466,72 @@ describe('InfiniteRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('treats hasMore false as a terminal infinite row count without totalCount', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockResolvedValue({
+				rows: [
+					{ id: '1', name: 'Alpha' },
+					{ id: '2', name: 'Beta' },
+				],
+				hasMore: false,
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getKnownRowCount()).toBe(2);
+		expect(controller.getRowCountKind()).toBe('known');
+		expect(controller.getVisualRowCount()).toBe(2);
+		expect(controller.getVisualRow(1)?.kind).toBe('data');
+		expect(controller.getRowLoadState(2)).toEqual({ kind: 'missing' });
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('treats lastRow as the terminal infinite row count without totalCount', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockResolvedValue({
+				rows: Array.from({ length: 50 }, (_, index) => ({
+					id: `row-${index}`,
+					name: `Row ${index}`,
+				})),
+				lastRow: 50,
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getKnownRowCount()).toBe(50);
+		expect(controller.getRowCountKind()).toBe('known');
+		expect(controller.getVisualRowCount()).toBe(50);
+		expect(controller.getVisualRow(49)?.kind).toBe('data');
+		expect(controller.getVisualRow(50)).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
 });
