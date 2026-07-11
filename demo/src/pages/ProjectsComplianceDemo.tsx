@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Grid, type ColumnDef, type CellRendererProps, type GridApi, type GridReadyEvent } from '@open-grid/react';
+import { Grid, type ColumnDef, type CellRendererProps, type GridApi, type GridReadyEvent, GridInitialState, StyleRule } from '@open-grid/react';
 import {
 	Building2,
 	ChevronRight,
@@ -1366,7 +1366,7 @@ const makeActionsRenderer = (onAddSubproject: (projectId: string) => void) => {
 // Style rules config (defined at module level so it's stable)
 // ============================================================================
 
-const STYLE_RULES = [
+const STYLE_RULES: StyleRule<ProjectRow>[] = [
 	{
 		kind: 'row' as const,
 		when: (row: ProjectRow) => !row.parentId,
@@ -1441,13 +1441,21 @@ export default function ProjectsComplianceDemo({ onGridReady }: ProjectsComplian
 				field: 'name',
 				header: 'PROJECT / SUBPROJECT',
 				width: 340,
-				renderer: { kind: 'react', component: ProjectNameRenderer },
+				renderer: {
+					kind: 'react',
+					component: ProjectNameRenderer,
+					capabilities: { scrollPresentation: 'live', live: { priority: 'high', allowEmergencyShell: true } },
+				},
 			},
 			{
 				field: 'location',
 				header: 'LOCATION',
 				width: 160,
-				renderer: { kind: 'react', component: LocationRenderer },
+				renderer: {
+					kind: 'react',
+					component: LocationRenderer,
+					capabilities: { scrollPresentation: 'live', live: { priority: 'high', allowEmergencyShell: true } },
+				},
 			},
 			{
 				field: 'subprojectCount',
@@ -1465,7 +1473,11 @@ export default function ProjectsComplianceDemo({ onGridReady }: ProjectsComplian
 				field: 'compliance',
 				header: 'COMPLIANCE',
 				width: 180,
-				renderer: { kind: 'react', component: ComplianceRenderer },
+				renderer: {
+					kind: 'react',
+					component: ComplianceRenderer,
+					capabilities: { scrollPresentation: 'live', live: { priority: 'high', allowEmergencyShell: true } },
+				},
 			},
 			{
 				field: 'critical',
@@ -1480,31 +1492,36 @@ export default function ProjectsComplianceDemo({ onGridReady }: ProjectsComplian
 				renderer: { kind: 'react', component: WarningsRenderer },
 			},
 			{
-				field: 'actions' as any,
+				field: 'actions',
 				header: 'ACTIONS',
 				width: 140,
 				valueGetter: () => null,
-				renderer: { kind: 'react', component: ActionsRenderer as any },
+				renderer: {
+					kind: 'react',
+					component: ActionsRenderer,
+					capabilities: { scrollPresentation: 'live', live: { priority: 'high', allowEmergencyShell: true } },
+				},
 			},
 		],
 		[ActionsRenderer]
 	);
 
 	const treeInitialState = useMemo(
-		() => ({
-			rowModelConfig: {
-				type: 'client',
-				treeData: {
-					enabled: true,
-					getParentId: (row: ProjectRow) => row.parentId,
+		() =>
+			({
+				rowModelConfig: {
+					type: 'client',
+					treeData: {
+						enabled: true,
+						getParentId: (row: ProjectRow) => row.parentId,
+					},
 				},
-			},
-			expansion: {
-				groups: {},
-				treeRows: { p1: true } as Record<string, true>,
-				details: {},
-			},
-		}),
+				expansion: {
+					groups: {},
+					treeRows: { p1: true } as Record<string, true>,
+					details: {},
+				},
+			}) as GridInitialState<ProjectRow>,
 		[]
 	);
 
@@ -1626,7 +1643,7 @@ export default function ProjectsComplianceDemo({ onGridReady }: ProjectsComplian
 						rowModelType='client'
 						rows={filteredRows}
 						columns={columns}
-						initialState={treeInitialState as any}
+						initialState={treeInitialState}
 						styleRules={STYLE_RULES}
 						enableNavigation={false}
 						onGridReady={handleGridReady}
