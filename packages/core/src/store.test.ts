@@ -1102,6 +1102,107 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
+	it('preserves duplicate-field editing identity on loaded async row models', async () => {
+		const columns = [
+			{ field: 'id', header: 'ID', width: 50 },
+			{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+			{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+		] satisfies ColumnDef<TestRow>[];
+
+		const infiniteStore = new GridStore<TestRow>({
+			columns,
+			getRowId: (row) => row.id,
+		});
+		const infiniteController = new InfiniteRowModelController<TestRow>(infiniteStore.getInfiniteRowModelRuntime(), {
+			columns: infiniteStore.getState().columns,
+			getRowId: (row) => row.id,
+			blockSize: 25,
+			datasource: {
+				getRows: vi.fn().mockResolvedValue({
+					rows: [{ id: '1', name: 'Alpha', price: 10 }],
+					totalCount: 1,
+				}),
+			},
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const infiniteNameA = infiniteStore.engine.columns.getDisplayedColumns()[1] as { field: string; colId?: string; instanceId?: string };
+		const infiniteNameB = infiniteStore.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+		infiniteStore.startEditing('1', infiniteNameB.instanceId!, 'api');
+
+		const infiniteActive = infiniteStore.getCellStateByPointer({
+			rowId: '1',
+			colField: infiniteNameB.field,
+			colId: infiniteNameB.colId,
+			columnInstanceId: infiniteNameB.instanceId,
+		});
+		const infiniteInactive = infiniteStore.getCellStateByPointer({
+			rowId: '1',
+			colField: infiniteNameA.field,
+			colId: infiniteNameA.colId,
+			columnInstanceId: infiniteNameA.instanceId,
+		});
+
+		expect(infiniteActive?.isEditing).toBe(true);
+		expect(infiniteInactive?.isEditing).toBe(false);
+		expect(infiniteStore.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colId: 'name-b',
+				columnInstanceId: infiniteNameB.instanceId,
+			})
+		);
+
+		const serverStore = new GridStore<TestRow>({
+			columns,
+			getRowId: (row) => row.id,
+		});
+		const serverController = new ServerPageRowModelController<TestRow>(serverStore.getServerPageRowModelRuntime(), {
+			columns: serverStore.getState().columns,
+			getRowId: (row) => row.id,
+			pagination: { pageSize: 10 },
+			datasource: {
+				getPage: vi.fn().mockResolvedValue({
+					rows: [{ id: '2', name: 'Beta', price: 20 }],
+					totalRowCount: 1,
+				}),
+			},
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const serverNameA = serverStore.engine.columns.getDisplayedColumns()[1] as { field: string; colId?: string; instanceId?: string };
+		const serverNameB = serverStore.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+		serverStore.startEditing('2', serverNameB.instanceId!, 'api');
+
+		const serverActive = serverStore.getCellStateByPointer({
+			rowId: '2',
+			colField: serverNameB.field,
+			colId: serverNameB.colId,
+			columnInstanceId: serverNameB.instanceId,
+		});
+		const serverInactive = serverStore.getCellStateByPointer({
+			rowId: '2',
+			colField: serverNameA.field,
+			colId: serverNameA.colId,
+			columnInstanceId: serverNameA.instanceId,
+		});
+
+		expect(serverActive?.isEditing).toBe(true);
+		expect(serverInactive?.isEditing).toBe(false);
+		expect(serverStore.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '2',
+				colId: 'name-b',
+				columnInstanceId: serverNameB.instanceId,
+			})
+		);
+
+		infiniteController.dispose();
+		infiniteStore.destroy();
+		serverController.dispose();
+		serverStore.destroy();
+	});
+
 	it('normalizes duplicate-field selection by colId when columnInstanceId is absent', () => {
 		const store = new GridStore<TestRow>({
 			columns: [

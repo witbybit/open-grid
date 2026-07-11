@@ -297,7 +297,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [~] no field-only focus/edit/range identity in core
     - [x] no semantic keyboard/pointer orchestration in React adapter
     - [x] no row-selection semantics inside renderer paint helpers
-- [ ] Add adversarial regression coverage for virtualization, duplicate fields, and async row-model interaction
+- [~] Add adversarial regression coverage for virtualization, duplicate fields, and async row-model interaction
 
 ## Initial execution checklist
 

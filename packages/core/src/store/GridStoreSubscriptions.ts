@@ -1,7 +1,7 @@
 import type {
 	ActiveEditState,
+	CanonicalGridCellPointer,
 	CellSubscription,
-	GridCellPointer,
 	GridSnapshotKeyListener,
 	GridSnapshotListener,
 	GridSnapshotSelector,
@@ -13,7 +13,7 @@ import type { InternalGridState } from '../state/GridState.js';
 import type { VisualRow } from '../visualRow.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { SortModel } from '../rowModel.js';
-import { areCellPointersEqual } from '../interaction/cellPointer.js';
+import { areCanonicalCellPointersEqual } from '../interaction/cellPointer.js';
 import { readInteractionState } from '../interaction/interactionState.js';
 
 export interface GridStoreSubscriptionsFacade<TRowData = unknown> {
@@ -98,7 +98,7 @@ export function createGridStoreSubscriptions<TRowData>(deps: GridStoreSubscripti
 				['selection', 'interaction'],
 				(state) => readInteractionState(state).focus.cell,
 				listener,
-				areCellPointersEqual
+				areFocusedCellsEqual
 			),
 		subscribeToEditingCell: (listener) =>
 			subscribeSnapshotProjection(
@@ -140,9 +140,13 @@ function areViewportRangesEqual(left: ViewportRange, right: ViewportRange): bool
 	return left.startIdx === right.startIdx && left.endIdx === right.endIdx;
 }
 
+function areFocusedCellsEqual(left: CanonicalGridCellPointer | null, right: CanonicalGridCellPointer | null): boolean {
+	return areCanonicalCellPointersEqual(left, right);
+}
+
 function areActiveEditsEqual(left: ActiveEditState | null, right: ActiveEditState | null): boolean {
 	return (
-		areCellPointersEqual(left, right) &&
+		areCanonicalCellPointersEqual(left, right) &&
 		(left?.validationError ?? null) === (right?.validationError ?? null) &&
 		Object.is(left?.draftValue, right?.draftValue) &&
 		Object.is(left?.originalValue, right?.originalValue) &&
