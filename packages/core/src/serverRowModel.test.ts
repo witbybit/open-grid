@@ -145,6 +145,71 @@ describe('InfiniteRowModelController', () => {
 		});
 	});
 
+	it('publishes a core refresh invalidation when a non-zero infinite block resolves', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let resolveSecondBlock!: (value: { rows: TestRow[]; totalCount: number }) => void;
+		const applyRefreshInvalidation = vi.spyOn(store.engine, 'applyRowModelRefreshInvalidation');
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (params.startRow === 0) {
+					return Promise.resolve({
+						rows: Array.from({ length: 50 }, (_, index) => ({
+							id: `row-${index}`,
+							name: `Row ${index}`,
+						})),
+						totalCount: 100,
+					});
+				}
+				return new Promise((resolve) => {
+					resolveSecondBlock = resolve as typeof resolveSecondBlock;
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		applyRefreshInvalidation.mockClear();
+
+		controller.ensureRange(50, 50, 'test');
+		expect(controller.getVisualRow(50)?.kind).toBe('loading');
+
+		resolveSecondBlock({
+			rows: Array.from({ length: 50 }, (_, index) => ({
+				id: `row-${50 + index}`,
+				name: `Row ${50 + index}`,
+			})),
+			totalCount: 100,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(50)?.kind).toBe('data');
+		expect(applyRefreshInvalidation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changed: true,
+				previousRowCount: 100,
+				nextRowCount: 100,
+				changedStartIndex: 50,
+				changedEndIndex: 99,
+			}),
+			expect.objectContaining({
+				invalidationReason: 'viewport',
+				requestRenderReason: 'rows:infinite-block-loaded',
+			})
+		);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('ignores an older request for the same block when a newer retry request wins by requestId', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,

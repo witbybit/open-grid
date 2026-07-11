@@ -526,6 +526,7 @@ export class InfiniteRowModelController<TData = unknown>
 		const queryState = this.getQueryState();
 		const block = this.blockCache.beginLoad(blockIndex, this.blockSize, requestId, queryState.queryVersion);
 		const requestStartedAt = InfiniteBlockCache.now();
+		const previousRowCount = this.blockCache.getVisualRowCount();
 
 		if (blockIndex === 0) this.runtime.setLoadingState(true);
 
@@ -571,6 +572,7 @@ export class InfiniteRowModelController<TData = unknown>
 				response.totalCount
 			);
 			this.rebuildBlockDerivedIndexes();
+			this.publishBlockRefresh(block, previousRowCount, 'rows:infinite-block-loaded');
 
 			this.runtime.clearFormulas();
 			this.runtime.setLoadingState(this.blockCache.getLoadingBlockCount() > 0);
@@ -588,6 +590,7 @@ export class InfiniteRowModelController<TData = unknown>
 			const message = toErrorMessage(error);
 			this.blockCache.markFailed(blockIndex, this.blockSize, requestToken.requestId, requestToken.queryVersion, message);
 			this.rebuildBlockDerivedIndexes();
+			this.publishBlockRefresh(block, previousRowCount, 'rows:infinite-block-load-failed');
 			this.runtime.dispatchInfiniteBlockLoadFailed({
 				blockIndex,
 				startRow,
@@ -688,5 +691,28 @@ export class InfiniteRowModelController<TData = unknown>
 
 	private isRetryReason(reason?: string): boolean {
 		return reason === 'row-node-retry-load' || reason === 'retry' || reason === 'force-reload';
+	}
+
+	private publishBlockRefresh(
+		block: InfiniteBlock<TData>,
+		previousRowCount: number,
+		requestRenderReason: 'rows:infinite-block-loaded' | 'rows:infinite-block-load-failed'
+	): void {
+		const nextRowCount = this.blockCache.getVisualRowCount();
+		const maxVisibleIndex = nextRowCount > 0 ? nextRowCount - 1 : block.endRow;
+		this.runtime.applyRefreshInvalidation(
+			{
+				changed: true,
+				reason: 'refresh',
+				previousRowCount,
+				nextRowCount,
+				changedStartIndex: block.startRow,
+				changedEndIndex: Math.max(block.startRow, Math.min(block.endRow, maxVisibleIndex)),
+			},
+			{
+				invalidationReason: 'viewport',
+				requestRenderReason,
+			}
+		);
 	}
 }
