@@ -193,7 +193,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] start/cancel/commit edit
     - [x] copy/paste command routing
     - [x] ensure-visible / scroll-navigation follow-up
-- [ ] Define one input command vocabulary for keyboard/pointer/api origins
+- [x] Define one input command vocabulary for keyboard/pointer/api origins
 - [~] Make `GridEngine` route interaction APIs through this kernel instead of directly splitting logic across older controllers
 - [~] Delete obsolete parallel interaction orchestration paths once the kernel is active
 

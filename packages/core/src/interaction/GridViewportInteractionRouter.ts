@@ -14,7 +14,7 @@ export interface GridViewportInteractionRouter {
 export function createGridViewportInteractionRouter(deps: GridViewportInteractionRouterDeps): GridViewportInteractionRouter {
 	return {
 		handleViewportMouseDown(event) {
-			deps.getInteraction()?.handleViewportMouseDown(event);
+			deps.getInteraction()?.dispatchInput({ kind: 'viewport-mouse-down', event });
 		},
 
 		handleViewportClick(event) {
@@ -28,7 +28,7 @@ export function createGridViewportInteractionRouter(deps: GridViewportInteractio
 			if (checkbox) {
 				event.stopPropagation();
 				const rowId = checkbox.dataset.rowId;
-				if (rowId) interaction.handleRowCheckboxClick(rowId, checkbox.checked, event);
+				if (rowId) interaction.dispatchInput({ kind: 'row-checkbox-click', rowId, checked: checkbox.checked, event });
 				return;
 			}
 
@@ -37,7 +37,7 @@ export function createGridViewportInteractionRouter(deps: GridViewportInteractio
 			const pointer = deps.resolveCellPointer(target);
 			if (!pointer) return;
 
-			interaction.handleDataRowClick(pointer, event);
+			interaction.dispatchInput({ kind: 'data-row-click', pointer, event });
 		},
 	};
 }

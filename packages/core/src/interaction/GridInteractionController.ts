@@ -27,7 +27,19 @@ export interface GridInteractionCommandPort {
 	setCellValue(rowId: string, colField: string, value: unknown): void;
 }
 
+export type GridInteractionInputCommand =
+	| { kind: 'key-down'; event: KeyboardEvent }
+	| { kind: 'mouse-down-cell'; pointer: GridCellPointer; event: MouseEvent }
+	| { kind: 'cell-click'; pointer: GridCellPointer; event: MouseEvent }
+	| { kind: 'cell-enter'; pointer: GridCellPointer }
+	| { kind: 'mouse-up' }
+	| { kind: 'set-cell-editing'; rowId: string; colFieldOrInstanceId: string; isEditing: boolean; source?: 'keyboard' | 'mouse' | 'api' }
+	| { kind: 'row-checkbox-click'; rowId: string; checked: boolean; event: MouseEvent }
+	| { kind: 'data-row-click'; pointer: GridCellPointer; event: MouseEvent }
+	| { kind: 'viewport-mouse-down'; event: MouseEvent };
+
 export interface GridInteractionHandle {
+	dispatchInput(command: GridInteractionInputCommand): void;
 	handleKeyDown(event: KeyboardEvent): void;
 	handleMouseDown(pointer: GridCellPointer, event: MouseEvent): void;
 	handleClick(pointer: GridCellPointer, event: MouseEvent): void;
@@ -78,6 +90,38 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	}
 
 	public dispose(): void {}
+
+	public dispatchInput(command: GridInteractionInputCommand): void {
+		switch (command.kind) {
+			case 'key-down':
+				this.handleKeyDown(command.event);
+				return;
+			case 'mouse-down-cell':
+				this.handleMouseDown(command.pointer, command.event);
+				return;
+			case 'cell-click':
+				this.handleClick(command.pointer);
+				return;
+			case 'cell-enter':
+				this.handleMouseEnter(command.pointer);
+				return;
+			case 'mouse-up':
+				this.handleMouseUp();
+				return;
+			case 'set-cell-editing':
+				this.setCellEditing(command.rowId, command.colFieldOrInstanceId, command.isEditing, command.source);
+				return;
+			case 'row-checkbox-click':
+				this.handleRowCheckboxClick(command.rowId, command.checked, command.event);
+				return;
+			case 'data-row-click':
+				this.handleDataRowClick(command.pointer, command.event);
+				return;
+			case 'viewport-mouse-down':
+				this.handleViewportMouseDown(command.event);
+				return;
+		}
+	}
 
 	private getDisplayedColumnAtIndex(colIdx: number): ColumnDef<TRowData> | undefined {
 		return this.runtime.getDisplayedColumns()[colIdx];

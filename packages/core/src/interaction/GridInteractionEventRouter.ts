@@ -94,12 +94,12 @@ export function createGridInteractionEventRouter<TRowData>(deps: GridInteraction
 			if (!interaction) return;
 			const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
 			if (deps.isEventWithinGrid(activeEl) || isGridActive) {
-				interaction.handleKeyDown(event);
+				interaction.dispatchInput({ kind: 'key-down', event });
 			}
 		},
 
 		handleWindowMouseUp() {
-			deps.getInteraction()?.handleMouseUp();
+			deps.getInteraction()?.dispatchInput({ kind: 'mouse-up' });
 		},
 
 		handleDocumentMouseDown(event) {
@@ -131,7 +131,7 @@ export function createGridInteractionEventRouter<TRowData>(deps: GridInteraction
 			if (colDef && (colDef.canDrag !== undefined || colDef.disableCellRangeSelection)) return;
 
 			deps.focusCellElement(target.cellEl);
-			interaction.handleMouseDown(target.pointer, event);
+			interaction.dispatchInput({ kind: 'mouse-down-cell', pointer: target.pointer, event });
 		},
 
 		handleContainerMouseOver(event) {
@@ -140,7 +140,7 @@ export function createGridInteractionEventRouter<TRowData>(deps: GridInteraction
 			const target = deps.resolveCellTarget(event);
 			if (!target) return;
 			if (event.relatedTarget && target.cellEl.contains(event.relatedTarget as Node)) return;
-			interaction.handleMouseEnter(target.pointer);
+			interaction.dispatchInput({ kind: 'cell-enter', pointer: target.pointer });
 		},
 
 		handleContainerClick(event) {
@@ -151,7 +151,7 @@ export function createGridInteractionEventRouter<TRowData>(deps: GridInteraction
 			const interaction = deps.getInteraction();
 			if (!interaction) return;
 			if (interaction.isEditingCell(target.pointer)) return;
-			interaction.handleClick(target.pointer, event);
+			interaction.dispatchInput({ kind: 'cell-click', pointer: target.pointer, event });
 		},
 
 		handleContainerDoubleClick(event) {
@@ -162,7 +162,13 @@ export function createGridInteractionEventRouter<TRowData>(deps: GridInteraction
 
 			if (interaction.isEditingCell(target.pointer)) return;
 			if (!target.pointer.columnInstanceId) return;
-			interaction.setCellEditing(target.pointer.rowId, target.pointer.columnInstanceId, true, 'mouse');
+			interaction.dispatchInput({
+				kind: 'set-cell-editing',
+				rowId: target.pointer.rowId,
+				colFieldOrInstanceId: target.pointer.columnInstanceId,
+				isEditing: true,
+				source: 'mouse',
+			});
 		},
 
 		handleContainerContextMenu(event) {

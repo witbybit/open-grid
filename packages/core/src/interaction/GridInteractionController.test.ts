@@ -556,6 +556,23 @@ describe('GridInteractionController', () => {
 		expect(runtime.startEditing).not.toHaveBeenCalled();
 	});
 
+	it('dispatchInput routes typed input commands through the kernel surface', () => {
+		const runtime = createRuntime();
+		const controller = new GridInteractionController(runtime);
+
+		controller.dispatchInput({ kind: 'mouse-up' });
+		controller.dispatchInput({
+			kind: 'set-cell-editing',
+			rowId: 'r1',
+			colFieldOrInstanceId: 'name-a',
+			isEditing: true,
+			source: 'mouse',
+		});
+
+		expect(runtime.stopEditing).not.toHaveBeenCalled();
+		expect(runtime.startEditing).toHaveBeenCalledWith('r1', 'name-a', 'mouse');
+	});
+
 	it('extends from the authoritative selection anchor instead of a controller-local shadow anchor', () => {
 		const runtime = createRuntime({
 			getStateSnapshot: () =>

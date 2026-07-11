@@ -314,6 +314,17 @@ describe('Architecture guardrails', () => {
 
 	it('interaction event router asks the interaction controller about edit state instead of peeking at public snapshot activeEdit', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionEventRouter.ts'), 'utf-8');
+		expect(content).toContain('interaction.dispatchInput({ kind: \'key-down\', event });');
+		expect(content).toContain("deps.getInteraction()?.dispatchInput({ kind: 'mouse-up' });");
+		expect(content).toContain("interaction.dispatchInput({ kind: 'mouse-down-cell', pointer: target.pointer, event });");
+		expect(content).toContain("interaction.dispatchInput({ kind: 'cell-enter', pointer: target.pointer });");
+		expect(content).toContain("interaction.dispatchInput({ kind: 'cell-click', pointer: target.pointer, event });");
+		expect(content).toContain("kind: 'set-cell-editing'");
+		expect(content).not.toContain('interaction.handleKeyDown(event);');
+		expect(content).not.toContain('interaction.handleMouseDown(target.pointer, event);');
+		expect(content).not.toContain('interaction.handleMouseEnter(target.pointer);');
+		expect(content).not.toContain('interaction.handleClick(target.pointer, event);');
+		expect(content).not.toContain('interaction.setCellEditing(target.pointer.rowId, target.pointer.columnInstanceId, true, \'mouse\');');
 		expect(content).toContain('if (interaction.isEditingCell(target.pointer)) return;');
 		expect(content).not.toContain('getStateSnapshot().activeEdit');
 		expect(content).not.toContain('state.activeEdit');
@@ -393,6 +404,15 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('createGridViewportInteractionRouter');
 		expect(content).not.toContain('handleRowCheckboxClick(');
 		expect(content).not.toContain('handleDataRowClick(');
+	});
+
+	it('viewport interaction router dispatches typed kernel input commands instead of calling row gesture handlers directly', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridViewportInteractionRouter.ts'), 'utf-8');
+		expect(content).toContain("deps.getInteraction()?.dispatchInput({ kind: 'viewport-mouse-down', event });");
+		expect(content).toContain("interaction.dispatchInput({ kind: 'row-checkbox-click', rowId, checked: checkbox.checked, event });");
+		expect(content).toContain("interaction.dispatchInput({ kind: 'data-row-click', pointer, event });");
+		expect(content).not.toContain('interaction.handleRowCheckboxClick(rowId, checkbox.checked, event);');
+		expect(content).not.toContain('interaction.handleDataRowClick(pointer, event);');
 	});
 
 	it('GridPortal.tsx does not cast to InternalGridApi', () => {
