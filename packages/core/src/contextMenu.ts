@@ -1,8 +1,9 @@
-import type { GridApi, GridCellPointer, GridPlugin, GridPluginRuntime, GridSelectionState } from './api/GridApi.js';
+import type { CanonicalGridCellPointer, GridApi, GridCellPointer, GridPlugin, GridPluginRuntime, GridSelectionState } from './api/GridApi.js';
 import { exportToCsv } from './export/csvExport.js';
 import { attachRovingMenuKeyboard } from './menuKeyboardNav.js';
 import { isFilterableColumn, buildFilterByValue, applyFilterToModel } from './filterOperations.js';
-import { findColumnIndexByCellPointer } from './interaction/cellPointer.js';
+import { findColumnByCellPointer, findColumnIndexByCellPointer } from './interaction/cellPointer.js';
+import { getColumnInstanceIdentity, type ColumnDef } from './columnDef.js';
 import { readInteractionState } from './interaction/interactionState.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
@@ -49,7 +50,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	private runtime!: GridPluginRuntime<TRowData>;
 	private menuElement: HTMLDivElement | null = null;
 	private detachKeyboardNav: (() => void) | null = null;
-	private activePointer: GridCellPointer | null = null;
+	private activePointer: CanonicalGridCellPointer | null = null;
 	private options: GridContextMenuOptions<TRowData>;
 
 	constructor(options: GridContextMenuOptions<TRowData> = {}) {
@@ -68,19 +69,32 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		this.showPointer({ rowId, colField }, clientX, clientY);
 	}
 
+	private resolveCanonicalPointer(pointer: GridCellPointer, columns: readonly ColumnDef<TRowData>[]): CanonicalGridCellPointer | null {
+		const column = findColumnByCellPointer(columns, pointer);
+		if (!column) return null;
+		return {
+			rowId: pointer.rowId,
+			colField: column.field,
+			colId: column.colId ?? column.field,
+			columnInstanceId: getColumnInstanceIdentity(column),
+		};
+	}
+
 	public showPointer(pointer: GridCellPointer, clientX: number, clientY: number): void {
 		if (this.options.disabled) return;
 
 		const state = this.runtime.getStateSnapshot();
+		const canonicalPointer = this.resolveCanonicalPointer(pointer, state.columns);
+		if (!canonicalPointer) return;
 		const selection = readInteractionState(state).cellSelection.selection;
-		const explicitColIdx = findColumnIndexByCellPointer(state.columns, pointer);
-		const access = this.runtime.getCellAccessByPointer(pointer);
+		const explicitColIdx = findColumnIndexByCellPointer(state.columns, canonicalPointer);
+		const access = this.runtime.getCellAccessByPointer(canonicalPointer);
 		let inSelection = false;
 		if (selection.bounds) {
 			const rowModel = this.runtime.getRowModel();
 			if (rowModel) {
-				const clickedRowIdx = access?.rowIndex ?? rowModel.getVisualIndexByRowId(pointer.rowId);
-				const clickedColIdx = (pointer.columnInstanceId || pointer.colId) && explicitColIdx >= 0 ? explicitColIdx : (access?.colIndex ?? explicitColIdx);
+				const clickedRowIdx = access?.rowIndex ?? rowModel.getVisualIndexByRowId(canonicalPointer.rowId);
+				const clickedColIdx = explicitColIdx >= 0 ? explicitColIdx : (access?.colIndex ?? explicitColIdx);
 				const bounds = selection.bounds;
 				if (
 					clickedRowIdx >= bounds.minRow &&
@@ -94,10 +108,10 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		}
 
 		if (!inSelection) {
-			this.runtime.selectCell(pointer, 'pointer');
+			this.runtime.selectCell(canonicalPointer, 'pointer');
 		}
 
-		this.activePointer = pointer;
+		this.activePointer = canonicalPointer;
 		this.renderMenu(clientX, clientY);
 	}
 

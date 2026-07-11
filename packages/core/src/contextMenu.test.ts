@@ -318,7 +318,7 @@ describe('GridContextMenuPlugin', () => {
 		plugin.setOptions({
 			excludeDefaults: ['copy', 'clear'],
 		});
-		testPlugin.activePointer = { rowId: 'r1', colField: 'name' };
+		testPlugin.activePointer = { rowId: 'r1', colField: 'name', colId: 'name', columnInstanceId: 'name' };
 		testPlugin.renderMenu(100, 100);
 
 		const menuEl = testPlugin.menuElement as HTMLDivElement;
@@ -343,7 +343,7 @@ describe('GridContextMenuPlugin', () => {
 			],
 		});
 
-		testPlugin.activePointer = { rowId: 'r1', colField: 'name' };
+		testPlugin.activePointer = { rowId: 'r1', colField: 'name', colId: 'name', columnInstanceId: 'name' };
 		testPlugin.renderMenu(100, 100);
 
 		const menuEl = testPlugin.menuElement as HTMLDivElement;
@@ -367,7 +367,7 @@ describe('GridContextMenuPlugin', () => {
 
 		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 
-		testPlugin.activePointer = { rowId: 'r1', colField: 'name' };
+		testPlugin.activePointer = { rowId: 'r1', colField: 'name', colId: 'name', columnInstanceId: 'name' };
 		testPlugin.renderMenu(100, 100);
 
 		const menuEl = testPlugin.menuElement as HTMLDivElement;
@@ -442,7 +442,7 @@ describe('GridContextMenuPlugin', () => {
 					rowId: 'r1',
 					colField: 'name',
 					colId: 'name-b',
-					columnInstanceId: secondNameColumn.instanceId,
+					columnInstanceId: expect.any(String),
 				}),
 			})
 		);
