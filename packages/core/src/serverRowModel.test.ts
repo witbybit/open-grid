@@ -1534,4 +1534,54 @@ describe('InfiniteRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('does not terminalize a short infinite block when hasMore explicitly stays true', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (params.startRow === 0) {
+					return Promise.resolve({
+						rows: Array.from({ length: 20 }, (_, index) => ({
+							id: `row-${index}`,
+							name: `Row ${index}`,
+						})),
+						hasMore: true,
+					});
+				}
+				return Promise.resolve({
+					rows: [{ id: 'row-50', name: 'Row 50' }],
+					hasMore: false,
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getKnownRowCount()).toBeNull();
+		expect(controller.getRowCountKind()).toBe('estimated');
+		expect(controller.getVisualRowCount()).toBe(70);
+		expect(controller.getVisualRow(19)?.kind).toBe('data');
+		expect(controller.getRowLoadState(20)).toEqual({ kind: 'missing' });
+		expect(controller.getRowLoadState(50)).toEqual({ kind: 'loading', reason: 'infinite-block' });
+
+		controller.ensureRange(50, 50, 'test');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(50)?.kind).toBe('data');
+		expect(controller.getKnownRowCount()).toBe(51);
+		expect(controller.getVisualRowCount()).toBe(51);
+
+		controller.dispose();
+		store.destroy();
+	});
 });

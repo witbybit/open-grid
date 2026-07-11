@@ -217,7 +217,8 @@ class InfiniteBlockCache<TData = unknown> {
 		queryVersion: number,
 		rows: Array<RowNode<TData> | null>,
 		returnedRowCount: number,
-		totalCount?: number
+		totalCount?: number,
+		options?: { canInferTerminalFromShortBlock?: boolean }
 	): InfiniteBlock<TData> {
 		const block = this.ensureBlock(blockIndex, blockSize);
 		block.status = 'loaded';
@@ -231,7 +232,7 @@ class InfiniteBlockCache<TData = unknown> {
 			this.knownRowCount = Math.max(0, totalCount);
 			this.estimatedRowCount = Math.max(this.estimatedRowCount, this.knownRowCount);
 			this.trimCommittedRowsToKnownCount();
-		} else if (returnedRowCount < blockSize) {
+		} else if (returnedRowCount < blockSize && options?.canInferTerminalFromShortBlock !== false) {
 			this.knownRowCount = Math.max(0, block.startRow + returnedRowCount);
 			this.estimatedRowCount = Math.max(this.estimatedRowCount, this.knownRowCount);
 			this.trimCommittedRowsToKnownCount();
@@ -699,6 +700,7 @@ export class InfiniteRowModelController<TData = unknown>
 				blockStartRow: startRow,
 				returnedRowCount: response.rows.length,
 			});
+			const canInferTerminalFromShortBlock = response.hasMore !== true;
 
 			const blockRows = Array.from({ length: this.blockSize }, () => null as RowNode<TData> | null);
 			response.rows.forEach((row, idx) => {
@@ -721,7 +723,8 @@ export class InfiniteRowModelController<TData = unknown>
 				requestToken.queryVersion,
 				blockRows,
 				response.rows.length,
-				terminalCount
+				terminalCount,
+				{ canInferTerminalFromShortBlock }
 			);
 			this.evictOverflowBlocks();
 			this.rebuildBlockDerivedIndexes();
