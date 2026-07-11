@@ -257,7 +257,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			this as unknown as GridPluginRuntime<TRowData>,
 			{},
 			{
-				selectCell: (pointer, source) => this.engine.selectRange(pointer, pointer, source),
+				selectCell: (pointer, source) => this.engine.selectCell(pointer, source),
 				selectRange: (start, end, source) => this.engine.selectRange(start, end, source),
 				applyRowSelectionGesture: (gesture) => this.engine.applyRowSelectionGesture(gesture),
 				selectRows: (rowIds, options) =>

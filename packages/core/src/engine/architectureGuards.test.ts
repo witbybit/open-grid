@@ -275,6 +275,8 @@ describe('Architecture guardrails', () => {
 
 	it('store public interaction APIs route through the interaction controller instead of split engine feature seams', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).toContain('selectCell: (pointer, source) => this.engine.selectCell(pointer, source),');
+		expect(content).not.toContain('selectCell: (pointer, source) => this.engine.selectRange(pointer, pointer, source),');
 		expect(content).toContain("public selectCell = (pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {");
 		expect(content).toContain('this.interactionController.selectCell(pointer, source);');
 		expect(content).toContain('this.interactionController.selectRange(start, end, source);');

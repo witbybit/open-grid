@@ -945,6 +945,10 @@ export class GridEngine<TRowData = unknown> {
 		this.applySelectionRange(start, end, source);
 	}
 
+	public selectCell(pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void {
+		this.applySelectionRange(pointer, pointer, source);
+	}
+
 	public resizeColumn(colField: string, width: number, undoable = true): void {
 		this.columnFeature.resizeColumn(colField, width, undoable);
 	}

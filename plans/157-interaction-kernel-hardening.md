@@ -195,7 +195,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] ensure-visible / scroll-navigation follow-up
 - [x] Define one input command vocabulary for keyboard/pointer/api origins
 - [~] Make `GridEngine` route interaction APIs through this kernel instead of directly splitting logic across older controllers
-- [~] Delete obsolete parallel interaction orchestration paths once the kernel is active
+- [x] Delete obsolete parallel interaction orchestration paths once the kernel is active
 
 ### Phase 3 - Focus model hardening
 
@@ -227,7 +227,7 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 5 - Editing lifecycle state machine
 
-- [~] Replace shallow `EditModel` pointer storage with an explicit lifecycle state machine
+- [x] Replace shallow `EditModel` pointer storage with an explicit lifecycle state machine
 - [ ] Track:
     - [x] idle vs editing
     - [x] `rowId`
@@ -268,9 +268,9 @@ The following excerpts describe the live interaction architecture this plan repl
 
 - [x] Reduce `packages/react/src/GridView.tsx` to thin DOM assembly + event forwarding only
 - [x] Move semantic event routing out of the React adapter into core wherever feasible
-- [ ] Decide the cleanest final shape:
+- [x] Decide the cleanest final shape:
     - [x] core-provided DOM event binder
-    - [ ] or adapter-resolved pointer forwarding into kernel commands
+    - [x] adapter-resolved pointer forwarding into kernel commands was intentionally not kept as a parallel semantic owner
 - [x] Delete legacy adapter-owned navigation/activity logic after the new flow is live
 - [x] Keep React-specific responsibilities limited to portal/editor rendering assembly
 
