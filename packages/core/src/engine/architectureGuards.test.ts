@@ -280,11 +280,19 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('this.interactionController.selectRange(start, end, source);');
 		expect(content).toContain('this.interactionController.extendSelection(end, source);');
 		expect(content).toContain('return this.interactionController.applyRowSelectionGesture(gesture);');
+		expect(content).toContain('public copySelectedRange = (): Promise<void> => this.interactionController.copySelectedRange();');
+		expect(content).toContain('public pasteFromClipboard = (): Promise<void> => this.interactionController.pasteFromClipboard();');
+		expect(content).toContain('this.interactionController.scrollToCell(rowId, colField, options);');
+		expect(content).toContain('this.interactionController.scrollToRow(rowId, options);');
 		expect(content).toContain('this.interactionController.startEdit(rowId, colFieldOrInstanceId, source);');
 		expect(content).toContain('this.interactionController.updateEditDraft(rowId, colFieldOrInstanceId, value);');
 		expect(content).toContain('this.interactionController.stopEdit(cancel);');
 		expect(content).toContain('return this.interactionController.commitCellEdit(rowId, colFieldOrInstanceId, value);');
 		expect(content).not.toContain('return this.engine.editingFeature.commitEdit(');
+		expect(content).not.toContain('public copySelectedRange = (): Promise<void> => this.engine.copySelectedRange();');
+		expect(content).not.toContain('public pasteFromClipboard = (): Promise<void> => this.engine.pasteFromClipboard();');
+		expect(content).not.toContain('this.hostFacade.scrollCellIntoView(rowId, colField);');
+		expect(content).not.toContain('this.hostFacade.scrollRowIntoView(rowId);');
 	});
 
 	it('portal mount prioritization derives focus/edit priority from interaction state instead of raw state slices', () => {
@@ -313,7 +321,7 @@ describe('Architecture guardrails', () => {
 
 	it('renderScrollCoordinator focus matching uses full column identity instead of a field-only stub', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderScrollCoordinator.ts'), 'utf-8');
-		expect(content).toContain('return doesCellPointerMatchColumn(focusedCell, rowId, column);');
+		expect(content).toContain('return doesCanonicalCellPointerMatchColumn(focusedCell, rowId, column);');
 		expect(content).toContain('const isFocused = isCellFocused(rowId, col, focusedCell);');
 		expect(content).not.toContain('return doesCellPointerMatchColumn(focusedCell, rowId, { field: colField });');
 	});
@@ -322,12 +330,16 @@ describe('Architecture guardrails', () => {
 		const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
 		const editingContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'EditingFeatureController.ts'), 'utf-8');
 		const interactionContent = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionController.ts'), 'utf-8');
+		const eventRouterContent = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionEventRouter.ts'), 'utf-8');
 		expect(apiContent).toContain('export interface ActiveEditState extends GridCellPointer {');
 		expect(apiContent).toContain('columnInstanceId: ColumnInstanceId;');
 		expect(apiContent).toContain('colId: string;');
 		expect(editingContent).not.toContain('activeEdit.columnInstanceId ?? colField');
 		expect(editingContent).not.toContain('matchedActiveEdit.columnInstanceId ?? matchedActiveEdit.colField');
+		expect(editingContent).not.toContain('activeEdit.colId === colFieldOrInstanceId');
+		expect(editingContent).not.toContain('activeEdit.colField === colFieldOrInstanceId');
 		expect(interactionContent).not.toContain('activeEdit.columnInstanceId ?? activeEdit.colField');
+		expect(eventRouterContent).not.toContain('target.pointer.columnInstanceId ?? target.pointer.colField');
 	});
 
 	it('interaction focus state stores canonical cell identity instead of a broad public pointer', () => {
@@ -2786,10 +2798,26 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain('const previewSelection = {');
 			expect(content).toContain('const committedSelection = this.selection.createSelectionRange(validStart, validEnd, source);');
 			expect(content).toContain('bounds: this.selection.calculateRangeBounds(');
+			expect(content).toContain('if (!pointer.columnInstanceId) return -1;');
+			expect(content).toContain('findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId })');
+			expect(content).not.toContain('this.columns.getColumnIndex(pointer.colField)');
 			expect(content).toContain('payload: (state) => ({ focus: state.selection.focus, selection: state.selection })');
 			expect(content).toContain('selection: state.selection,');
 			expect(content).not.toContain('const selection = this.selection.setSelection(');
 			expect(content).toContain('state: { selection: committedSelection }');
+		});
+
+		it('GridProjectionPipeline recomputes selection bounds from canonical column identity instead of field fallback', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridProjectionPipeline.ts'), 'utf-8');
+			expect(content).toContain('if (!pointer.columnInstanceId) return -1;');
+			expect(content).toContain(
+				'findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId })'
+			);
+			expect(content).not.toContain('this.deps.columns.getColumnIndex(pointer.colField)');
+			expect(content).not.toContain('pointer.colField === column.field');
+			expect(content).not.toContain('pointer.colId === (column.colId ?? column.field)');
+			expect(content).not.toContain('activeEdit.colField === column.field');
+			expect(content).not.toContain('activeEdit.colId === (column.colId ?? column.field)');
 		});
 	});
 });

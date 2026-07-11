@@ -804,7 +804,7 @@ describe('RenderEngine', () => {
 		renderer.mount(container);
 
 		store.selectCell({ rowId: 'row-1', colField: 'status' });
-		store.engine.stateManager.setState({ activeEdit: { rowId: 'row-1', colField: 'status' } });
+		store.startEditing('row-1', 'status');
 		renderer.fullPaint();
 
 		const cell = container.querySelector('.og-cell[data-col-field="status"]') as HTMLDivElement;

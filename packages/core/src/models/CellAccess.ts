@@ -2,7 +2,7 @@ import type { InternalGridState } from '../state/GridState.js';
 import type { CellAccessRuntime } from '../engine/runtimePorts.js';
 import type { GridCellAccess } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
-import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
+import { doesCanonicalCellPointerMatchColumn } from '../interaction/cellPointer.js';
 import { readInteractionState } from '../interaction/interactionState.js';
 import type { RowNode } from '../rowNode.js';
 import type { RowLoadState } from '../rowModel.js';
@@ -90,7 +90,7 @@ export class CellAccessModel<TRowData = unknown> {
 		const publicNode = this.createPublicRowNode(rowId, rowIndex, node);
 		const focusedCell = interaction.focus.cell;
 		const selectedBounds = interaction.cellSelection.selection.bounds;
-		const isFocused = doesCellPointerMatchColumn(focusedCell, rowId, column);
+		const isFocused = doesCanonicalCellPointerMatchColumn(focusedCell, rowId, column);
 		const isRowFocused = focusedCell?.rowId === rowId;
 		const isSelected =
 			!!selectedBounds &&
@@ -99,7 +99,7 @@ export class CellAccessModel<TRowData = unknown> {
 			colIndex >= selectedBounds.minCol &&
 			colIndex <= selectedBounds.maxCol;
 		const isRowSelected = this.runtime.isRowSelected(rowIndex);
-		const isEditing = doesCellPointerMatchColumn(interaction.activeEdit.active, rowId, column);
+		const isEditing = doesCanonicalCellPointerMatchColumn(interaction.activeEdit.active, rowId, column);
 		const isLoading = this.runtime.isRowLoading(rowId) || !!column.loading;
 
 		return {

@@ -263,6 +263,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 				selectRows: (rowIds, options) =>
 					options?.mode === 'replace' ? this.engine.replaceRowIds(rowIds, 'api') : this.engine.selectRowIds(rowIds, 'api'),
 				deselectRows: (rowIds) => this.engine.deselectRowIds(rowIds, 'api'),
+				copySelectedRange: () => this.engine.copySelectedRange(),
+				pasteFromClipboard: () => this.engine.pasteFromClipboard(),
+				scrollToCell: (rowId, colField) => this.hostFacade.scrollCellIntoView(rowId, colField),
+				scrollToRow: (rowId) => this.hostFacade.scrollRowIntoView(rowId),
 				startEditing: (rowId, colFieldOrInstanceId, source) => this.engine.startEdit(rowId, colFieldOrInstanceId, source),
 				updateEditDraft: (rowId, colFieldOrInstanceId, value) => this.engine.updateEditDraft(rowId, colFieldOrInstanceId, value),
 				stopEditing: (cancel) => this.engine.stopEdit(cancel),
@@ -458,8 +462,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public autoSizeAllColumns = (options?: AutoSizeAllColumnsOptions): void => this.engine.autoSizeAllColumns(options);
 	public getColumnDistinctValues = (colField: string): (string | number | null)[] => this.engine.getColumnDistinctValues(colField);
 	public getColumnDistinctValueSummary = (colField: string) => this.engine.getColumnDistinctValueSummary(colField);
-	public copySelectedRange = (): Promise<void> => this.engine.copySelectedRange();
-	public pasteFromClipboard = (): Promise<void> => this.engine.pasteFromClipboard();
+	public copySelectedRange = (): Promise<void> => this.interactionController.copySelectedRange();
+	public pasteFromClipboard = (): Promise<void> => this.interactionController.pasteFromClipboard();
 	public copyRange = (minRow: number, maxRow: number, minCol: number, maxCol: number): Promise<void> =>
 		this.engine.copyRange(minRow, maxRow, minCol, maxCol);
 	public setColumnVisible = (colField: string, visible: boolean): void => this.setColumnsVisible([colField], visible);
@@ -1328,19 +1332,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getContainerElement = (): HTMLElement | null => this.hostFacade.getContainerElement();
 	public getContainer = (): HTMLElement | null => this.hostFacade.getContainer();
 	public scrollToCell = (rowId: string, colField: string, options?: ScrollToCellOptions): void => {
-		this.hostFacade.scrollCellIntoView(rowId, colField);
-		if (options?.select || options?.edit) {
-			this.selectCell({ rowId, colField });
-		}
-		if (options?.edit) {
-			this.startEditing(rowId, colField);
-		}
+		this.interactionController.scrollToCell(rowId, colField, options);
 	};
 	public scrollToRow = (rowId: string, options?: ScrollToRowOptions): void => {
-		this.hostFacade.scrollRowIntoView(rowId);
-		if (options?.select) {
-			this.selectRows([rowId]);
-		}
+		this.interactionController.scrollToRow(rowId, options);
 	};
 	public getInsightDiagnostics = (): Record<string, unknown> => this.hostFacade.getInsightDiagnostics();
 

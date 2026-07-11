@@ -1,5 +1,5 @@
 import type { CompiledGridPlan } from '../columnDef.js';
-import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
+import type { ActiveEditState, CanonicalGridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
 import type { InternalGridState } from '../state/GridState.js';
 
 export interface ScrollRenderContext<TRowData = unknown> {
@@ -22,7 +22,7 @@ export interface ScrollRenderContext<TRowData = unknown> {
 	selectionChangedDuringScroll: boolean;
 	globalChangedDuringScroll: boolean;
 
-	activeEdit: GridCellPointer | null;
+	activeEdit: ActiveEditState | null;
 
 	hasDeferredCellStyleRules: boolean;
 	hasCustomRenderers: boolean;
@@ -32,7 +32,7 @@ export interface ScrollRenderContext<TRowData = unknown> {
 	visibleRowRange: { startIdx: number; endIdx: number };
 	visibleColRange: { startIdx: number; endIdx: number };
 
-	focusedCell: GridCellPointer | null;
+	focusedCell: CanonicalGridCellPointer | null;
 	selectionBounds?: GridCellRangeBounds;
 
 	canUseCachedDisplayValues: boolean;

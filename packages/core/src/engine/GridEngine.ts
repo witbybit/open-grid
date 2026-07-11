@@ -15,7 +15,7 @@ import type {
 	RowSelectionGestureSource,
 	RowSelectionScope,
 } from '../api/GridApi.js';
-import { areCellPointersEqual, findColumnByCellPointer } from '../interaction/cellPointer.js';
+import { areCellPointersEqual, findColumnByCanonicalCellPointer, findColumnByCellPointer } from '../interaction/cellPointer.js';
 import { buildInteractionState } from '../interaction/interactionState.js';
 import { getColumnInstanceIdentity, type ColumnDef, type GridRendererOptions } from '../columnDef.js';
 import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
@@ -1316,10 +1316,11 @@ export class GridEngine<TRowData = unknown> {
 			bounds: this.selection.calculateRangeBounds(
 				committedSelection.range,
 				(id) => this.rowModel?.getVisualIndexByRowId(id) ?? -1,
-				(pointer) =>
-					pointer.columnInstanceId
-						? this.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId)
-						: this.columns.getColumnIndex(pointer.colField)
+				(pointer) => {
+					if (!pointer.columnInstanceId) return -1;
+					const column = findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId });
+					return column ? this.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId) : -1;
+				}
 			),
 		};
 		const events: GridCommitEvent<TRowData>[] = [];
@@ -1330,6 +1331,20 @@ export class GridEngine<TRowData = unknown> {
 			});
 		}
 		const selectionChange = this.selection.describeChange(prevSelection, previewSelection, this.rowModel, this.columns.getDisplayedColumns());
+		const invalidatedCells = selectionChange.invalidatedCells.flatMap((cell) => {
+			const column = findColumnByCellPointer(this.columns.getDisplayedColumns(), cell);
+			const renderColId = column ? getColumnInstanceIdentity(column) : null;
+			return renderColId
+				? [
+						{
+							kind: 'cell' as const,
+							rowId: cell.rowId,
+							colId: renderColId,
+							reason: 'selection' as const,
+						},
+				  ]
+				: [];
+		});
 		events.push({
 			type: GridEventName.selectionChanged,
 			payload: (state) => ({
@@ -1338,12 +1353,7 @@ export class GridEngine<TRowData = unknown> {
 			}),
 		});
 		const invalidations = [
-			...selectionChange.invalidatedCells.map((cell) => ({
-				kind: 'cell' as const,
-				rowId: cell.rowId,
-				colId: cell.columnInstanceId ?? cell.colField,
-				reason: 'selection' as const,
-			})),
+			...invalidatedCells,
 			...selectionChange.invalidatedRows.map((rowId) => ({ kind: 'row' as const, rowId, reason: 'selection' as const })),
 			...(selectionChange.overlayChanged ? ([{ kind: 'overlay' as const, reason: 'selection' as const }] as const) : []),
 			{ kind: 'headers' as const, reason: 'selection' as const },

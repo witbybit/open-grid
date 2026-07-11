@@ -36,7 +36,7 @@ import { getOrCreateCellCtrl, createRowCtrl, type RowCtrl } from './controllers/
 import type { CellCtrl } from './controllers/CellCtrl.js';
 import { CellCtrlStore } from './controllers/CellCtrlStore.js';
 import { resolveCellCtrlPresentationState } from './controllers/resolveCellCtrlPresentationState.js';
-import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
+import { doesCanonicalCellPointerMatchColumn, doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
 import { readInteractionState } from '../interaction/interactionState.js';
 
 const fallbackCellCtrlStores = new WeakMap<object, CellCtrlStore<any>>();
@@ -694,14 +694,14 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 		});
 	const cellKey = createCellInstanceRendererKey(cellSlot.cellInstanceId, getColumnInstanceIdentity(col));
 	const snapshot = getFreshCellSnapshot(deps, node.id, col, ctx);
-	const isFocused = doesCellPointerMatchColumn(ctx.focusedCell, node.id, col);
-	const isEditing = doesCellPointerMatchColumn(ctx.activeEdit, node.id, col);
+	const isFocused = doesCanonicalCellPointerMatchColumn(ctx.focusedCell, node.id, col);
+	const isEditing = doesCanonicalCellPointerMatchColumn(ctx.activeEdit, node.id, col);
 	const cellCtrl = attachCellCtrl(deps, request, isEditing, isFocused);
 	cellCtrl.visualState.selected = isCellSelectedInBounds(ctx.selectionBounds, rowIndex, colIndex);
 
 	// Focus tab-index bookkeeping is independent of which presentation gets resolved below —
 	// it applies whenever this cell is the focused cell, regardless of content.
-	if (doesCellPointerMatchColumn(ctx.focusedCell, node.id, col)) {
+	if (doesCanonicalCellPointerMatchColumn(ctx.focusedCell, node.id, col)) {
 		const programmaticScrollCell = deps.programmaticScrollCell;
 		const isProgrammatic = doesCellPointerMatchColumn(programmaticScrollCell, node.id, col);
 		deps.setDeferredFocusCell(cellSlot.element);

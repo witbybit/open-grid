@@ -56,19 +56,18 @@ export class EditingFeatureController<TRowData = unknown> {
 	}
 
 	private canEditCell(rowId: string, colFieldOrInstanceId: string): boolean {
+		const column = this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId);
+		if (!column) return false;
 		const rowModel = this.getRowModel();
 		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(rowId) : -1;
 		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
-		return canEditCell(visualRow, this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId));
+		return canEditCell(visualRow, column);
 	}
 
 	private doesEditIdentityMatch(activeEdit: ActiveEditState, rowId: string, colFieldOrInstanceId: string): boolean {
 		if (activeEdit.rowId !== rowId) return false;
-		return (
-			activeEdit.columnInstanceId === colFieldOrInstanceId ||
-			activeEdit.colId === colFieldOrInstanceId ||
-			activeEdit.colField === colFieldOrInstanceId
-		);
+		const column = this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId);
+		return !!column && activeEdit.columnInstanceId === column.instanceId;
 	}
 
 	public startEdit(rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {

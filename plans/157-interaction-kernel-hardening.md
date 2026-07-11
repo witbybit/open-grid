@@ -188,11 +188,11 @@ The following excerpts describe the live interaction architecture this plan repl
 - [x] Add one core-owned `InteractionKernel` (final name up to implementation)
 - [ ] Move authoritative commands behind it:
     - [~] focus/move
-    - [~] select/extend/clear range
+    - [x] select/extend/clear range
     - [x] row-selection gestures
     - [x] start/cancel/commit edit
     - [x] copy/paste command routing
-    - [ ] ensure-visible / scroll-navigation follow-up
+    - [x] ensure-visible / scroll-navigation follow-up
 - [ ] Define one input command vocabulary for keyboard/pointer/api origins
 - [~] Make `GridEngine` route interaction APIs through this kernel instead of directly splitting logic across older controllers
 - [~] Delete obsolete parallel interaction orchestration paths once the kernel is active
@@ -266,13 +266,13 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 8 - Adapter de-thickening and event routing cleanup
 
-- [~] Reduce `packages/react/src/GridView.tsx` to thin DOM assembly + event forwarding only
-- [~] Move semantic event routing out of the React adapter into core wherever feasible
+- [x] Reduce `packages/react/src/GridView.tsx` to thin DOM assembly + event forwarding only
+- [x] Move semantic event routing out of the React adapter into core wherever feasible
 - [ ] Decide the cleanest final shape:
     - [x] core-provided DOM event binder
     - [ ] or adapter-resolved pointer forwarding into kernel commands
 - [x] Delete legacy adapter-owned navigation/activity logic after the new flow is live
-- [~] Keep React-specific responsibilities limited to portal/editor rendering assembly
+- [x] Keep React-specific responsibilities limited to portal/editor rendering assembly
 
 ### Phase 9 - Accessibility state derivation
 
@@ -291,9 +291,9 @@ The following excerpts describe the live interaction architecture this plan repl
 ### Phase 10 - Legacy demolition and guardrails
 
 - [ ] Delete deprecated internal interaction types and controllers that the kernel replaces
-- [~] Delete parallel event routing and navigation ownership paths
+- [x] Delete parallel event routing and navigation ownership paths
 - [ ] Add architecture guards that lock in:
-    - [~] single interaction kernel ownership
+    - [x] single interaction kernel ownership
     - [ ] no field-only focus/edit/range identity in core
     - [x] no semantic keyboard/pointer orchestration in React adapter
     - [x] no row-selection semantics inside renderer paint helpers
@@ -358,8 +358,8 @@ Reasoning:
 - [x] `packages/core/src/navigation.ts` is either deleted or reduced to a non-semantic shim that is then removed before plan closure
 - [x] `packages/react/src/GridView.tsx` no longer owns semantic keyboard/pointer interaction orchestration
 - [x] Renderer paint helpers no longer own row-selection semantics
-- [ ] Clipboard/focus/editing/range behavior all route through one core-owned kernel
-- [ ] No files outside the intended implementation scope changed without explicit justification
+- [x] Clipboard/focus/editing/range behavior all route through one core-owned kernel
+- [x] No files outside the intended implementation scope changed without explicit justification
 - [x] `plans/README.md` status row updated
 
 ## STOP conditions

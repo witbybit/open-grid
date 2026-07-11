@@ -1,5 +1,5 @@
 import type { GridCellPointer } from '../api/GridApi.js';
-import type { GridPluginRuntime } from '../api/GridApiSurfaces.js';
+import type { GridPluginRuntime, ScrollToCellOptions, ScrollToRowOptions } from '../api/GridApiSurfaces.js';
 import type { GridSelectionSource, RowSelectionChangeResult, RowSelectionGesture } from '../api/GridApi.js';
 import { areCellPointersEqual, findColumnByCellPointer, findColumnIndexByCellPointer } from './cellPointer.js';
 import { readInteractionState } from './interactionState.js';
@@ -16,6 +16,10 @@ export interface GridInteractionCommandPort {
 	applyRowSelectionGesture(gesture: RowSelectionGesture): RowSelectionChangeResult | null;
 	selectRows(rowIds: string[], options?: { mode?: 'add' | 'replace' }): void;
 	deselectRows(rowIds: string[]): void;
+	copySelectedRange(): Promise<void>;
+	pasteFromClipboard(): Promise<void>;
+	scrollToCell(rowId: string, colField: string): void;
+	scrollToRow(rowId: string): void;
 	startEditing(rowId: string, colFieldOrInstanceId: string, source?: 'keyboard' | 'mouse' | 'api'): void;
 	updateEditDraft(rowId: string, colFieldOrInstanceId: string, value: unknown): void;
 	stopEditing(cancel?: boolean): void;
@@ -57,6 +61,10 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 			applyRowSelectionGesture: (gesture) => this.runtime.applyRowSelectionGesture(gesture),
 			selectRows: (rowIds, rowOptions) => this.runtime.selectRows(rowIds, rowOptions),
 			deselectRows: (rowIds) => this.runtime.deselectRows(rowIds),
+			copySelectedRange: () => this.runtime.copySelectedRange(),
+			pasteFromClipboard: () => this.runtime.pasteFromClipboard(),
+			scrollToCell: (rowId, colField) => this.runtime.scrollToCell(rowId, colField),
+			scrollToRow: (rowId) => this.runtime.scrollToRow(rowId),
 			startEditing: (rowId, colFieldOrInstanceId, source) => this.runtime.startEditing(rowId, colFieldOrInstanceId, source),
 			updateEditDraft: (rowId, colFieldOrInstanceId, value) => this.runtime.updateEditDraft(rowId, colFieldOrInstanceId, value),
 			stopEditing: (cancel) => this.runtime.stopEditing(cancel),
@@ -148,7 +156,9 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	}
 
 	private getEditTargetColumnIdentity(pointer: GridCellPointer): string {
-		return pointer.columnInstanceId ?? pointer.colField;
+		if (pointer.columnInstanceId) return pointer.columnInstanceId;
+		const column = this.resolvePointerColumn(pointer);
+		return column ? getColumnInstanceIdentity(column) : pointer.colField;
 	}
 
 	private isEditingPointer(pointer: GridCellPointer | null, activeEdit: GridCellPointer | null | undefined): boolean {
@@ -254,12 +264,12 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		if (!isEditing) {
 			if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
 				event.preventDefault();
-				void this.runtime.copySelectedRange();
+				void this.commands.copySelectedRange();
 				return;
 			}
 			if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
 				event.preventDefault();
-				void this.runtime.pasteFromClipboard();
+				void this.commands.pasteFromClipboard();
 				return;
 			}
 			let nextRow = row;
@@ -485,6 +495,31 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 
 	public applyRowSelectionGesture(gesture: RowSelectionGesture): RowSelectionChangeResult | null {
 		return this.commands.applyRowSelectionGesture(gesture);
+	}
+
+	public copySelectedRange(): Promise<void> {
+		return this.commands.copySelectedRange();
+	}
+
+	public pasteFromClipboard(): Promise<void> {
+		return this.commands.pasteFromClipboard();
+	}
+
+	public scrollToCell(rowId: string, colField: string, options?: ScrollToCellOptions): void {
+		this.commands.scrollToCell(rowId, colField);
+		if (options?.select || options?.edit) {
+			this.commands.selectCell({ rowId, colField }, 'api');
+		}
+		if (options?.edit) {
+			this.commands.startEditing(rowId, colField, 'api');
+		}
+	}
+
+	public scrollToRow(rowId: string, options?: ScrollToRowOptions): void {
+		this.commands.scrollToRow(rowId);
+		if (options?.select) {
+			this.commands.selectRows([rowId]);
+		}
 	}
 
 	public startEdit(rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {

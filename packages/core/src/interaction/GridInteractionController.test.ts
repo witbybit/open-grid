@@ -111,6 +111,45 @@ describe('GridInteractionController', () => {
 		);
 	});
 
+	it('routes scrollToCell through the interaction kernel and applies optional selection/edit semantics', () => {
+		const runtime = createRuntime({
+			scrollToCell: vi.fn(),
+		});
+		const controller = new GridInteractionController(runtime);
+
+		controller.scrollToCell('r1', 'name', { select: true, edit: true });
+
+		expect(runtime.scrollToCell).toHaveBeenCalledWith('r1', 'name');
+		expect(runtime.selectCell).toHaveBeenCalledWith({ rowId: 'r1', colField: 'name' }, 'api');
+		expect(runtime.startEditing).toHaveBeenCalledWith('r1', 'name', 'api');
+	});
+
+	it('routes scrollToRow through the interaction kernel and applies optional row selection semantics', () => {
+		const runtime = createRuntime({
+			scrollToRow: vi.fn(),
+		});
+		const controller = new GridInteractionController(runtime);
+
+		controller.scrollToRow('r1', { select: true });
+
+		expect(runtime.scrollToRow).toHaveBeenCalledWith('r1');
+		expect(runtime.selectRows).toHaveBeenCalledWith(['r1'], undefined);
+	});
+
+	it('routes copy and paste commands through the interaction kernel command port', async () => {
+		const runtime = createRuntime({
+			copySelectedRange: vi.fn(async () => {}),
+			pasteFromClipboard: vi.fn(async () => {}),
+		});
+		const controller = new GridInteractionController(runtime);
+
+		await controller.copySelectedRange();
+		await controller.pasteFromClipboard();
+
+		expect(runtime.copySelectedRange).toHaveBeenCalledTimes(1);
+		expect(runtime.pasteFromClipboard).toHaveBeenCalledTimes(1);
+	});
+
 	it('navigates across pinned and center displayed columns using displayed order', () => {
 		const displayedColumns = [
 			{ field: 'left', colId: 'left', instanceId: 'left', pinned: 'left' },

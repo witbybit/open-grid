@@ -10,7 +10,7 @@ import type { SelectionModel } from '../models/SelectionModel.js';
 import type { CellNotificationController } from './CellNotificationController.js';
 import type { GridSelectionState } from '../api/GridApi.js';
 import type { GridCellPointer } from '../api/GridApi.js';
-import { areCellPointersEqual, findColumnByCellPointer } from '../interaction/cellPointer.js';
+import { areCellPointersEqual, findColumnByCanonicalCellPointer, findColumnByCellPointer } from '../interaction/cellPointer.js';
 import { buildInteractionState, isInteractionStateCurrent } from '../interaction/interactionState.js';
 import { getColumnInstanceIdentity } from '../columnDef.js';
 
@@ -103,10 +103,11 @@ export class GridProjectionPipeline<TRowData = unknown> {
 			const rangeBounds = this.deps.selection.calculateRangeBounds(
 				currState.selection.range,
 				(id) => this.deps.getRowModel()?.getVisualIndexByRowId(id) ?? -1,
-				(pointer) =>
-					pointer.columnInstanceId
-						? this.deps.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId)
-						: this.deps.columns.getColumnIndex(pointer.colField)
+				(pointer) => {
+					if (!pointer.columnInstanceId) return -1;
+					const column = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId });
+					return column ? this.deps.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId) : -1;
+				}
 			);
 			const nextBounds = this.areRangeBoundsEqual(currState.selection.bounds, rangeBounds) ? currState.selection.bounds : rangeBounds;
 			const selection = this.deps.selection.setSelection({
@@ -183,7 +184,9 @@ export class GridProjectionPipeline<TRowData = unknown> {
 	): void {
 		const notifiedCells = new Set<string>();
 		const notifyCellOnce = (cell: GridCellPointer): void => {
-			const renderColId = cell.columnInstanceId ?? cell.colField;
+			const column = findColumnByCellPointer(this.deps.columns.getDisplayedColumns(), cell);
+			const renderColId = column ? getColumnInstanceIdentity(column) : null;
+			if (!renderColId) return;
 			const key = `${cell.rowId}:${renderColId}`;
 			if (notifiedCells.has(key)) return;
 			notifiedCells.add(key);
@@ -249,11 +252,7 @@ export class GridProjectionPipeline<TRowData = unknown> {
 			if (!column) return null;
 			const columnInstanceId = getColumnInstanceIdentity(column);
 			if (!columnInstanceId || this.deps.columns.getIndexMapper().idToVisualIndex(columnInstanceId) < 0) return null;
-			if (
-				pointer.columnInstanceId === columnInstanceId &&
-				pointer.colField === column.field &&
-				pointer.colId === (column.colId ?? column.field)
-			) {
+			if (pointer.columnInstanceId === columnInstanceId) {
 				return pointer;
 			}
 			return {
@@ -314,11 +313,7 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		if (!column) return null;
 		const columnInstanceId = getColumnInstanceIdentity(column);
 		if (this.deps.columns.getIndexMapper().idToVisualIndex(columnInstanceId) < 0) return null;
-		if (
-			activeEdit.columnInstanceId === columnInstanceId &&
-			activeEdit.colField === column.field &&
-			activeEdit.colId === (column.colId ?? column.field)
-		) {
+		if (activeEdit.columnInstanceId === columnInstanceId) {
 			return activeEdit;
 		}
 		return {

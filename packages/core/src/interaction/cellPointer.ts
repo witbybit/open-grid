@@ -1,4 +1,4 @@
-import type { GridCellPointer } from '../api/GridApi.js';
+import type { CanonicalGridCellPointer, GridCellPointer } from '../api/GridApi.js';
 import { getColumnInstanceIdentity, type ColumnDef, type ColumnInstanceId } from '../columnDef.js';
 
 export function areCellPointersEqual(left: GridCellPointer | null, right: GridCellPointer | null): boolean {
@@ -25,6 +25,37 @@ export function doesCellPointerMatchColumn<TRowData>(
 
 export function getCellPointerColumnKey(pointer: GridCellPointer): string {
 	return pointer.columnInstanceId ?? pointer.colField;
+}
+
+export function areCanonicalCellPointersEqual(
+	left: CanonicalGridCellPointer | null | undefined,
+	right: CanonicalGridCellPointer | null | undefined
+): boolean {
+	if (left === right) return true;
+	if (!left || !right) return false;
+	return left.rowId === right.rowId && left.columnInstanceId === right.columnInstanceId;
+}
+
+export function doesCanonicalCellPointerMatchColumn<TRowData>(
+	pointer: CanonicalGridCellPointer | null | undefined,
+	rowId: string,
+	column: Pick<ColumnDef<TRowData>, 'field'> & { instanceId?: ColumnInstanceId }
+): boolean {
+	return !!pointer && pointer.rowId === rowId && pointer.columnInstanceId === getColumnInstanceIdentity(column);
+}
+
+export function findColumnByCanonicalCellPointer<TRowData>(
+	columns: readonly ColumnDef<TRowData>[],
+	pointer: Pick<CanonicalGridCellPointer, 'columnInstanceId'>
+): ColumnDef<TRowData> | undefined {
+	return columns.find((column) => getColumnInstanceIdentity(column) === pointer.columnInstanceId);
+}
+
+export function findColumnIndexByCanonicalCellPointer<TRowData>(
+	columns: readonly ColumnDef<TRowData>[],
+	pointer: Pick<CanonicalGridCellPointer, 'columnInstanceId'>
+): number {
+	return columns.findIndex((column) => getColumnInstanceIdentity(column) === pointer.columnInstanceId);
 }
 
 export function findColumnByCellPointer<TRowData>(

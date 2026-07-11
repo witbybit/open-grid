@@ -282,7 +282,7 @@ describe('resolveScrollCellPresentation', () => {
 				ctx: {
 					...baseInput().ctx,
 					plan: { columnPlans: [{ isCustom: true, mode: 'custom-dom' }] },
-					focusedCell: { rowId: 'r1', colField: 'name' },
+					focusedCell: { rowId: 'r1', colField: 'name', colId: 'name', columnInstanceId: 'name' },
 				} as any,
 			})
 		);
@@ -299,7 +299,7 @@ describe('resolveScrollCellPresentation', () => {
 				ctx: {
 					...baseInput().ctx,
 					plan: { columnPlans: [{ isCustom: true, mode: 'custom-dom' }] },
-					activeEdit: { rowId: 'r1', colField: 'name' },
+					activeEdit: { rowId: 'r1', colField: 'name', colId: 'name', columnInstanceId: 'name' },
 				} as any,
 			})
 		);

@@ -17,14 +17,14 @@ export function syncRowRendererInteractionAccessibility<TRowData>(input: SyncRow
 	const interaction = readInteractionState(state);
 	const focusedCell = interaction.focus.cell;
 	if (!focusedCell) {
-		syncFocusedCellAccessibilityFromDom(viewportRenderer);
+		viewportRenderer.syncActiveDescendant(null);
 		return;
 	}
 
 	const rowModel = engine.getVisualRowModel();
 	const focusedRowIndex = interaction.focus.rowIndex ?? (rowModel ? rowModel.getVisualIndexByRowId(focusedCell.rowId) : null);
 	if (focusedRowIndex === null || focusedRowIndex === undefined || focusedRowIndex < 0) {
-		syncFocusedCellAccessibilityFromDom(viewportRenderer);
+		viewportRenderer.syncActiveDescendant(null);
 		return;
 	}
 
@@ -34,19 +34,10 @@ export function syncRowRendererInteractionAccessibility<TRowData>(input: SyncRow
 		rowSlot?.cellsByColumnInstanceId.get(focusedCell.columnInstanceId) ?? (columnIndex >= 0 ? rowSlot?.getCellForCol(columnIndex) : undefined);
 	const focusedCellEl = resolveFocusedCellElement(viewportRenderer, focusedCell, cellSlot);
 	if (!focusedCellEl) {
-		syncFocusedCellAccessibilityFromDom(viewportRenderer);
+		viewportRenderer.syncActiveDescendant(null);
 		return;
 	}
 
-	viewportRenderer.syncActiveDescendant(focusedCellEl);
-}
-
-function syncFocusedCellAccessibilityFromDom<TRowData>(viewportRenderer: ViewportRenderer<TRowData>): void {
-	const focusedCellEl = viewportRenderer.rowsContainer?.querySelector<HTMLDivElement>('.og-cell[tabindex="-1"]') ?? null;
-	if (focusedCellEl && !focusedCellEl.id) {
-		const cellSlot = (focusedCellEl as HTMLDivElement & { __cellSlot?: { cellInstanceId?: string } }).__cellSlot;
-		if (cellSlot?.cellInstanceId) focusedCellEl.id = `og-cell-${cellSlot.cellInstanceId}`;
-	}
 	viewportRenderer.syncActiveDescendant(focusedCellEl);
 }
 

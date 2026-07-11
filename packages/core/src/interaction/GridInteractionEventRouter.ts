@@ -161,7 +161,8 @@ export function createGridInteractionEventRouter<TRowData>(deps: GridInteraction
 			if (!target) return;
 
 			if (interaction.isEditingCell(target.pointer)) return;
-			interaction.setCellEditing(target.pointer.rowId, target.pointer.columnInstanceId ?? target.pointer.colField, true, 'mouse');
+			if (!target.pointer.columnInstanceId) return;
+			interaction.setCellEditing(target.pointer.rowId, target.pointer.columnInstanceId, true, 'mouse');
 		},
 
 		handleContainerContextMenu(event) {

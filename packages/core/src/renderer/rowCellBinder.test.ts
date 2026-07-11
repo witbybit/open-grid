@@ -2882,7 +2882,7 @@ describe('bindCellDuringScroll', () => {
 			lane: 'center',
 			ctx: {
 				activeEdit: null,
-				focusedCell: { rowId: 'r1', colField: 'name' },
+				focusedCell: { rowId: 'r1', colField: 'name', colId: 'name', columnInstanceId: 'name' },
 				globalVersion: 4,
 				hasDeferredCellStyleRules: false,
 				isScrolling: true,

@@ -25,9 +25,9 @@ import { compileStyleRules, evaluateCellStyleRules } from '../styling/styleRules
 import type { RenderRuntimeState } from './renderRuntimeState.js';
 import { normalizeCapabilityResult } from '../capabilities/capabilityTypes.js';
 import { collectCellDecorationSnapshotMetadata, createCellDisplaySnapshot, mergeCellSnapshotTitle } from './cellDisplaySnapshot.js';
-import type { GridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
+import type { CanonicalGridCellPointer, GridCellRangeBounds } from '../api/GridApi.js';
 import { getColumnInstanceIdentity, type ColumnDef, type ColumnInstanceId } from '../columnDef.js';
-import { doesCellPointerMatchColumn } from '../interaction/cellPointer.js';
+import { doesCanonicalCellPointerMatchColumn } from '../interaction/cellPointer.js';
 import { readInteractionState } from '../interaction/interactionState.js';
 
 function isCellSelected(rowIndex: number, colIndex: number, selectionBounds: GridCellRangeBounds | null | undefined): boolean {
@@ -43,9 +43,9 @@ function isCellSelected(rowIndex: number, colIndex: number, selectionBounds: Gri
 function isCellFocused<TRowData>(
 	rowId: string,
 	column: Pick<ColumnDef<TRowData>, 'field'> & { instanceId?: ColumnInstanceId },
-	focusedCell: GridCellPointer | null | undefined
+	focusedCell: CanonicalGridCellPointer | null | undefined
 ): boolean {
-	return doesCellPointerMatchColumn(focusedCell, rowId, column);
+	return doesCanonicalCellPointerMatchColumn(focusedCell, rowId, column);
 }
 
 export interface RenderScrollCoordinatorState<TRowData = unknown> {
