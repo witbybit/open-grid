@@ -1584,4 +1584,116 @@ describe('InfiniteRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('rejects hasMore false when totalCount contradicts the loaded infinite range', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let contradictoryTerminalObserved = false;
+		let callCount = 0;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation(() => {
+				callCount++;
+				if (callCount === 1) {
+					return Promise.resolve({
+						rows: [{ id: '1', name: 'Alice v1' }],
+						totalCount: 1,
+					});
+				}
+				return Promise.resolve({
+					rows: [{ id: '1', name: 'Alice v2' }],
+					totalCount: 3,
+					hasMore: false,
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+
+		store.addEventListener(GridEventName.infiniteBlockLoadFailed, (event) => {
+			if (event.payload.message.includes('hasMore false but totalCount 3')) {
+				contradictoryTerminalObserved = true;
+			}
+		});
+
+		controller.ensureRange(0, 0, 'force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(contradictoryTerminalObserved).toBe(true);
+		expect(controller.getRowLoadState(0)).toEqual({
+			kind: 'failed',
+			error: 'Infinite datasource returned hasMore false but totalCount 3 does not match the loaded range ending at 0',
+			retryable: true,
+		});
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('rejects hasMore true when lastRow leaves no rows beyond the loaded infinite range', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let contradictoryHasMoreObserved = false;
+		let callCount = 0;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation(() => {
+				callCount++;
+				if (callCount === 1) {
+					return Promise.resolve({
+						rows: [{ id: '1', name: 'Alice v1' }],
+						totalCount: 1,
+					});
+				}
+				return Promise.resolve({
+					rows: [{ id: '1', name: 'Alice v2' }],
+					lastRow: 1,
+					hasMore: true,
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+
+		store.addEventListener(GridEventName.infiniteBlockLoadFailed, (event) => {
+			if (event.payload.message.includes('hasMore true but lastRow 1')) {
+				contradictoryHasMoreObserved = true;
+			}
+		});
+
+		controller.ensureRange(0, 0, 'force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(contradictoryHasMoreObserved).toBe(true);
+		expect(controller.getRowLoadState(0)).toEqual({
+			kind: 'failed',
+			error: 'Infinite datasource returned hasMore true but lastRow 1 leaves no rows beyond the loaded range ending at 0',
+			retryable: true,
+		});
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+
+		controller.dispose();
+		store.destroy();
+	});
 });

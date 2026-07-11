@@ -40,12 +40,13 @@ function validateInfiniteBlockResponse<TRowData>(
 		throw new Error(`Infinite datasource returned ${rows.length} rows for block size ${blockSize}`);
 	}
 
+	const blockStartRow = options?.blockStartRow ?? 0;
+	const minimumReachableCount = blockStartRow + rows.length;
+
 	if (typeof options?.totalCount === 'number') {
 		if (options.totalCount < 0) {
 			throw new Error(`Infinite datasource returned negative totalCount ${options.totalCount}`);
 		}
-		const blockStartRow = options.blockStartRow ?? 0;
-		const minimumReachableCount = blockStartRow + rows.length;
 		if (options.totalCount < minimumReachableCount) {
 			throw new Error(
 				`Infinite datasource returned totalCount ${options.totalCount}, which is smaller than the loaded range ending at ${minimumReachableCount - 1}`
@@ -56,8 +57,6 @@ function validateInfiniteBlockResponse<TRowData>(
 		if (options.lastRow < 0) {
 			throw new Error(`Infinite datasource returned negative lastRow ${options.lastRow}`);
 		}
-		const blockStartRow = options.blockStartRow ?? 0;
-		const minimumReachableCount = blockStartRow + rows.length;
 		if (options.lastRow < minimumReachableCount) {
 			throw new Error(
 				`Infinite datasource returned lastRow ${options.lastRow}, which is smaller than the loaded range ending at ${minimumReachableCount - 1}`
@@ -72,6 +71,30 @@ function validateInfiniteBlockResponse<TRowData>(
 		throw new Error(
 			`Infinite datasource returned conflicting totalCount ${options.totalCount} and lastRow ${options.lastRow}`
 		);
+	}
+	if (options?.hasMore === false) {
+		if (typeof options.totalCount === 'number' && options.totalCount !== minimumReachableCount) {
+			throw new Error(
+				`Infinite datasource returned hasMore false but totalCount ${options.totalCount} does not match the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
+		if (typeof options.lastRow === 'number' && options.lastRow !== minimumReachableCount) {
+			throw new Error(
+				`Infinite datasource returned hasMore false but lastRow ${options.lastRow} does not match the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
+	}
+	if (options?.hasMore === true) {
+		if (typeof options.totalCount === 'number' && options.totalCount <= minimumReachableCount) {
+			throw new Error(
+				`Infinite datasource returned hasMore true but totalCount ${options.totalCount} leaves no rows beyond the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
+		if (typeof options.lastRow === 'number' && options.lastRow <= minimumReachableCount) {
+			throw new Error(
+				`Infinite datasource returned hasMore true but lastRow ${options.lastRow} leaves no rows beyond the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
 	}
 
 	const seenRowIds = new Set<string>();
