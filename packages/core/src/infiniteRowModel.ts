@@ -195,9 +195,11 @@ class InfiniteBlockCache<TData = unknown> {
 		if (typeof totalCount === 'number') {
 			this.knownRowCount = Math.max(0, totalCount);
 			this.estimatedRowCount = Math.max(this.estimatedRowCount, this.knownRowCount);
+			this.trimCommittedRowsToKnownCount();
 		} else if (returnedRowCount < blockSize) {
 			this.knownRowCount = Math.max(0, block.startRow + returnedRowCount);
 			this.estimatedRowCount = Math.max(this.estimatedRowCount, this.knownRowCount);
+			this.trimCommittedRowsToKnownCount();
 		} else {
 			const provisionalReachableCount = block.startRow + returnedRowCount + blockSize;
 			this.estimatedRowCount = Math.max(this.estimatedRowCount, provisionalReachableCount);
@@ -292,6 +294,22 @@ class InfiniteBlockCache<TData = unknown> {
 
 	private hasCommittedRows(block: InfiniteBlock<TData>): boolean {
 		return block.rows.some((node) => node !== null);
+	}
+
+	private trimCommittedRowsToKnownCount(): void {
+		if (this.knownRowCount === null) return;
+
+		for (const [blockIndex, block] of this.blocks.entries()) {
+			if (block.startRow >= this.knownRowCount) {
+				this.blocks.delete(blockIndex);
+				continue;
+			}
+			if (block.endRow < this.knownRowCount) continue;
+			const firstOutOfRangeIndex = Math.max(0, this.knownRowCount - block.startRow);
+			for (let localIndex = firstOutOfRangeIndex; localIndex < block.rows.length; localIndex++) {
+				block.rows[localIndex] = null;
+			}
+		}
 	}
 
 	private ensureBlock(blockIndex: number, blockSize: number): InfiniteBlock<TData> {

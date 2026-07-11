@@ -1359,4 +1359,61 @@ describe('InfiniteRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('drops committed infinite rows beyond a newly shrunk known row count', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let shrinkKnownCount = false;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (params.startRow === 0) {
+					const totalCount = shrinkKnownCount ? 60 : 100;
+					return Promise.resolve({
+						rows: Array.from({ length: 50 }, (_, index) => ({
+							id: `row-${index}`,
+							name: `Row ${index}`,
+						})),
+						totalCount,
+					});
+				}
+				return Promise.resolve({
+					rows: Array.from({ length: 50 }, (_, index) => ({
+						id: `row-${50 + index}`,
+						name: `Row ${50 + index}`,
+					})),
+					totalCount: 100,
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		controller.ensureRange(50, 50, 'test');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getSelectableDataRowIds('loaded')).toContain('row-80');
+		expect(controller.getVisualRow(80)?.kind).toBe('data');
+
+		shrinkKnownCount = true;
+		controller.ensureRange(0, 0, 'force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getKnownRowCount()).toBe(60);
+		expect(controller.getVisualRowCount()).toBe(60);
+		expect(controller.getSelectableDataRowIds('loaded')).not.toContain('row-80');
+		expect(controller.getVisualRow(80)).toBeNull();
+		expect(controller.getRowLoadState(80)).toEqual({ kind: 'missing' });
+		expect(controller.getSelectableDataRowIds('loaded')).toContain('row-55');
+
+		controller.dispose();
+		store.destroy();
+	});
 });
