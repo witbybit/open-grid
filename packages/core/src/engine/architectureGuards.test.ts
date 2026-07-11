@@ -323,6 +323,8 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridDataIntegrityManager.ts'), 'utf-8');
 		expect(content).toContain("import { readInteractionState } from '../../interaction/interactionState.js';");
 		expect(content).toContain('const editState = readInteractionState(this.deps.ctx.getState()).activeEdit.active;');
+		expect(content).toContain('doesCanonicalCellPointerMatchColumn(editState, rowId, column)');
+		expect(content).not.toContain('doesCellPointerMatchColumn(editState, rowId, column)');
 		expect(content).not.toContain('const editState = this.deps.ctx.getState().activeEdit;');
 	});
 
@@ -331,6 +333,15 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('return doesCanonicalCellPointerMatchColumn(focusedCell, rowId, column);');
 		expect(content).toContain('const isFocused = isCellFocused(rowId, col, focusedCell);');
 		expect(content).not.toContain('return doesCellPointerMatchColumn(focusedCell, rowId, { field: colField });');
+	});
+
+	it('rowRenderMaintenance dirty-cell prioritization matches canonical focus/edit identity by column instance', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderMaintenance.ts'), 'utf-8');
+		expect(content).toContain("import { doesCanonicalCellPointerMatchColumn } from '../interaction/cellPointer.js';");
+		expect(content).toContain('doesCanonicalCellPointerMatchColumn(activeEdit, cs.rowId ?? \'\', { field: cs.colField, instanceId: cs.columnInstanceId as any })');
+		expect(content).toContain('doesCanonicalCellPointerMatchColumn(focusedCell, cs.rowId ?? \'\', { field: cs.colField, instanceId: cs.columnInstanceId as any })');
+		expect(content).not.toContain('doesCellPointerMatchColumn(activeEdit');
+		expect(content).not.toContain('doesCellPointerMatchColumn(focusedCell');
 	});
 
 	it('active edit state is column-instance authoritative inside the kernel', () => {

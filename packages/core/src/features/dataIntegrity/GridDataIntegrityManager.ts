@@ -41,7 +41,7 @@ import { DiffIntegrityModule } from './modules/DiffIntegrityModule.js';
 import { readInteractionState } from '../../interaction/interactionState.js';
 import { LiveStreamIntegrityModule } from './modules/LiveStreamIntegrityModule.js';
 import { ConflictIntegrityModule } from './modules/ConflictIntegrityModule.js';
-import { doesCellPointerMatchColumn } from '../../interaction/cellPointer.js';
+import { doesCanonicalCellPointerMatchColumn } from '../../interaction/cellPointer.js';
 
 let _publishedIssueSeq = 0;
 function nextPublishedIssueId(): string {
@@ -585,7 +585,7 @@ export class GridDataIntegrityManager<TRowData> implements GridInsightLayer {
 			editState &&
 			this.deps.ctx.columns
 				.getDisplayedColumns()
-				.some((column) => column.field === colField && doesCellPointerMatchColumn(editState, rowId, column))
+				.some((column) => column.field === colField && doesCanonicalCellPointerMatchColumn(editState, rowId, column))
 		) {
 			return true;
 		}
