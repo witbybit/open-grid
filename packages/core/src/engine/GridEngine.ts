@@ -2,6 +2,7 @@ import { canEditCell, isDataCellSelectable } from '../visualRow.js';
 import { GridEventName } from '../api/GridEvents.js';
 import type { GridEventListener, GridEventPayloadMap } from '../api/GridEvents.js';
 import type {
+	CanonicalGridCellPointer,
 	CellSubscription,
 	GridCellPointer,
 	GridCellRange,
@@ -15,7 +16,7 @@ import type {
 	RowSelectionGestureSource,
 	RowSelectionScope,
 } from '../api/GridApi.js';
-import { areCellPointersEqual, findColumnByCanonicalCellPointer, findColumnByCellPointer } from '../interaction/cellPointer.js';
+import { areCanonicalCellPointersEqual, findColumnByCanonicalCellPointer, findColumnByCellPointer } from '../interaction/cellPointer.js';
 import { buildInteractionState } from '../interaction/interactionState.js';
 import { getColumnInstanceIdentity, type ColumnDef, type GridRendererOptions } from '../columnDef.js';
 import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
@@ -1306,8 +1307,8 @@ export class GridEngine<TRowData = unknown> {
 
 	private applySelectionRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'program'): void => {
 		const prevSelection = this.stateManager.getState().selection;
-		const resolvedStart = this.resolveCellPointer(start);
-		const resolvedEnd = this.resolveCellPointer(end);
+		const resolvedStart = this.resolveCanonicalCellPointer(start);
+		const resolvedEnd = this.resolveCanonicalCellPointer(end);
 		const validStart = this.isDataCellSelectable(resolvedStart) ? resolvedStart : null;
 		const validEnd = this.isDataCellSelectable(resolvedEnd) ? resolvedEnd : null;
 		const committedSelection = this.selection.createSelectionRange(validStart, validEnd, source);
@@ -1324,7 +1325,7 @@ export class GridEngine<TRowData = unknown> {
 			),
 		};
 		const events: GridCommitEvent<TRowData>[] = [];
-		if (!areCellPointersEqual(prevSelection.focus, previewSelection.focus)) {
+		if (!areCanonicalCellPointersEqual(this.resolveCanonicalCellPointer(prevSelection.focus), this.resolveCanonicalCellPointer(previewSelection.focus))) {
 			events.push({
 				type: GridEventName.focusChanged,
 				payload: (state) => ({ focus: state.selection.focus, selection: state.selection }),
@@ -1374,17 +1375,27 @@ export class GridEngine<TRowData = unknown> {
 		return canEditCell(visualRow, this.columns.getColumnDef(colField));
 	}
 
-	private isDataCellSelectable(pointer: GridCellPointer | null): pointer is GridCellPointer {
+	private isDataCellSelectable(pointer: CanonicalGridCellPointer | null): pointer is CanonicalGridCellPointer {
 		if (!pointer) return false;
 		const rowModel = this.getRowModel();
 		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(pointer.rowId) : -1;
 		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
-		return isDataCellSelectable(visualRow, findColumnByCellPointer(this.columns.getDisplayedColumns(), pointer));
+		return isDataCellSelectable(
+			visualRow,
+			findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId })
+		);
 	}
 
 	private resolveCellPointer(pointer: GridCellPointer | null): GridCellPointer | null {
+		return this.resolveCanonicalCellPointer(pointer);
+	}
+
+	private resolveCanonicalCellPointer(
+		pointer: GridCellPointer | null,
+		columns: readonly ColumnDef<TRowData>[] = this.columns.getDisplayedColumns()
+	): CanonicalGridCellPointer | null {
 		if (!pointer) return null;
-		const column = findColumnByCellPointer(this.columns.getDisplayedColumns(), pointer);
+		const column = findColumnByCellPointer(columns, pointer);
 		if (!column) return null;
 		return {
 			rowId: pointer.rowId,
@@ -1399,14 +1410,7 @@ export class GridEngine<TRowData = unknown> {
 		columns: readonly ColumnDef<TRowData>[]
 	): import('../api/GridApi.js').ActiveEditState | null {
 		if (!activeEdit) return null;
-		const column = findColumnByCellPointer(columns, activeEdit);
-		if (!column) return null;
-		const pointer = {
-			rowId: activeEdit.rowId,
-			colField: column.field,
-			colId: column.colId ?? column.field,
-			columnInstanceId: getColumnInstanceIdentity(column),
-		};
+		const pointer = this.resolveCanonicalCellPointer(activeEdit, columns);
 		if (!pointer?.columnInstanceId || !pointer.colId) return null;
 		return {
 			...activeEdit,
