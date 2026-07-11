@@ -116,9 +116,7 @@ export class GridProjectionPipeline<TRowData = unknown> {
 				(id) => this.deps.getRowModel()?.getVisualIndexByRowId(id) ?? -1,
 				(pointer) => {
 					if (!pointer.columnInstanceId) return -1;
-					const column = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), {
-						columnInstanceId: pointer.columnInstanceId,
-					});
+					const column = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId });
 					return column ? this.deps.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId) : -1;
 				}
 			);

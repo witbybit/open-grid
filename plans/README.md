@@ -152,6 +152,7 @@
 | 153 | [Feather Scroll Snapshot Program](./153-feather-scroll-snapshot-program.md) | TODO | working tree |
 | 156 | [Row Model Completion + Public RowNode Facade](./156-row-model-completion-and-public-row-node-facade.md) | TODO | working tree |
 | 157 | [Interaction Kernel Hardening](./157-interaction-kernel-hardening.md) | DONE | working tree |
+| 158 | [Server-Backed Row Model Correctness + Real SSRM Replacement](./158-server-backed-row-model-correctness-and-ssrm-replacement.md) | TODO | working tree |
 
 ## Execution order
 
