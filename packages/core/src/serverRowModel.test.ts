@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { GridEventName, GridStore } from './store.js';
 import { InfiniteRowModelController, type InfiniteDatasource } from './infiniteRowModel.js';
+import { ServerPageRowModelController } from './serverPageRowModel.js';
 
 interface TestRow {
 	id: string;
@@ -382,6 +383,177 @@ describe('InfiniteRowModelController', () => {
 
 		// Since velocity is extremely high (> 1.5 px/ms), fetches should be suppressed to prevent network storm
 		expect(mockDatasource.getRows).not.toHaveBeenCalled();
+	});
+
+	it('refetches infinite rows on sort changes and publishes the returned order', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const getRows = vi.fn().mockImplementation((params: { sortModel: Array<{ colId: string; sort: string }> | null }) => {
+			if (params.sortModel?.[0]?.sort === 'desc') {
+				return Promise.resolve({
+					rows: [
+						{ id: '2', name: 'Zulu' },
+						{ id: '1', name: 'Alpha' },
+					],
+					totalCount: 2,
+				});
+			}
+			return Promise.resolve({
+				rows: [
+					{ id: '1', name: 'Alpha' },
+					{ id: '2', name: 'Zulu' },
+				],
+				totalCount: 2,
+			});
+		});
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: { getRows },
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alpha');
+
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getRows.mock.calls.at(-1)?.[0].sortModel).toEqual([{ colId: 'name', sort: 'desc' }]);
+		expect(getRowNode(controller, 0)?.data.name).toBe('Zulu');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('refetches infinite rows on filter changes and publishes the filtered result', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const getRows = vi.fn().mockImplementation((params: { filterModel: Record<string, unknown> | null }) => {
+			if (params.filterModel?.name) {
+				return Promise.resolve({
+					rows: [{ id: '2', name: 'Beta' }],
+					totalCount: 1,
+				});
+			}
+			return Promise.resolve({
+				rows: [
+					{ id: '1', name: 'Alpha' },
+					{ id: '2', name: 'Beta' },
+				],
+				totalCount: 2,
+			});
+		});
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: { getRows },
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getVisualRowCount()).toBe(2);
+
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'et' } });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getRows.mock.calls.at(-1)?.[0].filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'et' } });
+		expect(controller.getVisualRowCount()).toBe(1);
+		expect(getRowNode(controller, 0)?.data.name).toBe('Beta');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('refetches server-page rows on sort changes and publishes the returned order', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const getPage = vi.fn().mockImplementation((params: { sortModel: Array<{ colId: string; sort: string }> | null }) => {
+			if (params.sortModel?.[0]?.sort === 'desc') {
+				return Promise.resolve({
+					rows: [
+						{ id: '2', name: 'Zulu' },
+						{ id: '1', name: 'Alpha' },
+					],
+					totalRowCount: 2,
+				});
+			}
+			return Promise.resolve({
+				rows: [
+					{ id: '1', name: 'Alpha' },
+					{ id: '2', name: 'Zulu' },
+				],
+				totalRowCount: 2,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getPage.mock.calls.at(-1)?.[0].sortModel).toBeNull();
+
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getPage.mock.calls.at(-1)?.[0].sortModel).toEqual([{ colId: 'name', sort: 'desc' }]);
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Zulu');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('refetches server-page rows on filter changes and publishes the filtered result', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const getPage = vi.fn().mockImplementation((params: { filterModel: Record<string, unknown> | null }) => {
+			if (params.filterModel?.name) {
+				return Promise.resolve({
+					rows: [{ id: '2', name: 'Beta' }],
+					totalRowCount: 1,
+				});
+			}
+			return Promise.resolve({
+				rows: [
+					{ id: '1', name: 'Alpha' },
+					{ id: '2', name: 'Beta' },
+				],
+				totalRowCount: 2,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getVisualRowCount()).toBe(2);
+
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'et' } });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getPage.mock.calls.at(-1)?.[0].filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'et' } });
+		expect(controller.getVisualRowCount()).toBe(1);
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Beta');
+
+		controller.dispose();
+		store.destroy();
 	});
 
 	it('should transition loading state from true to false and respect loadingSkeletonCount', async () => {
