@@ -126,6 +126,7 @@ class InfiniteBlockCache<TData = unknown> {
 
 	public beginLoad(blockIndex: number, blockSize: number, requestId: number, queryVersion: number): InfiniteBlock<TData> {
 		const block = this.ensureBlock(blockIndex, blockSize);
+		const hasCommittedRows = this.hasCommittedRows(block);
 		if (block.status === 'loaded' || block.status === 'failed') {
 			block.status = 'stale';
 		}
@@ -134,7 +135,9 @@ class InfiniteBlockCache<TData = unknown> {
 		block.requestId = requestId;
 		block.queryVersion = queryVersion;
 		block.loadedAt = null;
-		block.rows = Array.from({ length: block.rows.length }, () => null);
+		if (!hasCommittedRows) {
+			block.rows = Array.from({ length: block.rows.length }, () => null);
+		}
 		block.lastAccessedAt = InfiniteBlockCache.now();
 		return block;
 	}
@@ -167,11 +170,14 @@ class InfiniteBlockCache<TData = unknown> {
 
 	public markFailed(blockIndex: number, blockSize: number, requestId: number, queryVersion: number, error: string): InfiniteBlock<TData> {
 		const block = this.ensureBlock(blockIndex, blockSize);
+		const hasCommittedRows = this.hasCommittedRows(block);
 		block.status = 'failed';
 		block.error = error;
 		block.requestId = requestId;
 		block.queryVersion = queryVersion;
-		block.rows = Array.from({ length: block.rows.length }, () => null);
+		if (!hasCommittedRows) {
+			block.rows = Array.from({ length: block.rows.length }, () => null);
+		}
 		block.loadedAt = null;
 		block.lastAccessedAt = InfiniteBlockCache.now();
 		return block;
@@ -214,12 +220,18 @@ class InfiniteBlockCache<TData = unknown> {
 		const nodes: RowNode<TData>[] = [];
 		const orderedBlocks = Array.from(this.blocks.values()).sort((a, b) => a.blockIndex - b.blockIndex);
 		for (const block of orderedBlocks) {
-			if (block.status !== 'loaded') continue;
+			if (!this.hasCommittedRows(block)) continue;
 			for (const node of block.rows) {
 				if (node) nodes.push(node);
 			}
 		}
 		return nodes;
+	}
+
+	public getCommittedRow(index: number, blockSize: number): RowNode<TData> | null {
+		const block = this.getBlockForRow(index, blockSize);
+		if (!block) return null;
+		return block.rows[index - block.startRow] ?? null;
 	}
 
 	public resolveRowLoadState(index: number, blockSize: number): RowLoadState {
@@ -239,6 +251,10 @@ class InfiniteBlockCache<TData = unknown> {
 			case 'loaded':
 				return block.rows[localIndex] ? { kind: 'loaded', rowId: block.rows[localIndex]!.id } : { kind: 'missing' };
 		}
+	}
+
+	private hasCommittedRows(block: InfiniteBlock<TData>): boolean {
+		return block.rows.some((node) => node !== null);
 	}
 
 	private ensureBlock(blockIndex: number, blockSize: number): InfiniteBlock<TData> {
@@ -317,6 +333,16 @@ export class InfiniteRowModelController<TData = unknown>
 	}
 
 	public getVisualRow = (rowIndex: number): VisualRow<TData> | null => {
+		const committedNode = this.blockCache.getCommittedRow(rowIndex, this.blockSize);
+		if (committedNode) {
+			return {
+				kind: 'data',
+				id: toDataVisualRowId(committedNode.id),
+				rowId: committedNode.id,
+				node: committedNode,
+				depth: 0,
+			};
+		}
 		const state = this.getRowLoadState(rowIndex);
 		if (state.kind === 'loaded') {
 			const block = this.blockCache.getBlockForRow(rowIndex, this.blockSize);
@@ -682,7 +708,7 @@ export class InfiniteRowModelController<TData = unknown>
 		const rowCount = this.blockCache.getVisualRowCount();
 		for (let index = 0; index < rowCount; index++) {
 			const block = this.blockCache.getBlockForRow(index, this.blockSize);
-			if (!block || block.status !== 'loaded') continue;
+			if (!block) continue;
 			const node = block.rows[index - block.startRow];
 			if (node?.id === rowId) return index;
 		}

@@ -930,4 +930,53 @@ describe('InfiniteRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('retains committed infinite rows while a loaded block refreshes and if that refresh fails', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let rejectRefresh!: (error: unknown) => void;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (vi.mocked(mockDatasource.getRows).mock.calls.length === 1) {
+					return Promise.resolve({
+						rows: [{ id: '1', name: 'Alice v1' }],
+						totalCount: 1,
+					});
+				}
+				return new Promise((_, reject) => {
+					rejectRefresh = reject;
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+
+		controller.ensureRange(0, 0, 'force-reload');
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loading', reason: 'infinite-block' });
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+
+		rejectRefresh!(new Error('refresh failed'));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'failed', error: 'refresh failed', retryable: true });
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+		expect(controller.getVisualIndexByRowId('1')).toBe(0);
+
+		controller.dispose();
+		store.destroy();
+	});
 });
