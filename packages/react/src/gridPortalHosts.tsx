@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, memo, createElement, type ComponentType } from 'react';
 import {
 	ColumnDef,
-	doesCellPointerMatchColumn,
+	doesCanonicalCellPointerMatchColumn,
 	GridApi,
 	VisualRow,
 	type ActiveEditState,
@@ -71,7 +71,7 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, colId, col
 		}, [api])
 	);
 	const validationError =
-		activeEditState != null && doesCellPointerMatchColumn(activeEditState, rowId, col) ? (activeEditState.validationError ?? null) : null;
+		activeEditState != null && doesCanonicalCellPointerMatchColumn(activeEditState, rowId, col) ? (activeEditState.validationError ?? null) : null;
 
 	const handleCommit = useCallback(
 		(finalValue?: unknown) => {

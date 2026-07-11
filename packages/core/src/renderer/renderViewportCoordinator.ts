@@ -1,7 +1,7 @@
 import { computeScrollTarget } from './scrollIntoView.js';
 import { computeGridLayoutPlan, type GridLayoutPlan } from './layoutPlan.js';
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { GridCellPointer } from '../api/GridApi.js';
+import type { CanonicalGridCellPointer, GridCellPointer } from '../api/GridApi.js';
 import { getColumnInstanceIdentity } from '../columnDef.js';
 import { findColumnByCellPointer } from '../interaction/cellPointer.js';
 import type { RenderRuntimeStats } from './renderTelemetry.js';
@@ -43,6 +43,7 @@ export class RenderViewportCoordinator<TRowData = unknown> {
 
 	public scrollCellPointerIntoView(pointer: GridCellPointer): void {
 		const resolvedPointer = this.resolveProgrammaticScrollPointer(pointer);
+		if (!resolvedPointer) return;
 		this.deps.rowRenderer.programmaticScrollCell = resolvedPointer;
 		const scrollViewport = this.deps.viewportRenderer.scrollViewport;
 		if (!scrollViewport) return;
@@ -51,9 +52,7 @@ export class RenderViewportCoordinator<TRowData = unknown> {
 		if (!rowModel) return;
 
 		const rowIndex = rowModel.getVisualIndexByRowId(resolvedPointer.rowId);
-		const colIndex = resolvedPointer.columnInstanceId
-			? this.deps.engine.columns.getIndexMapper().idToVisualIndex(resolvedPointer.columnInstanceId)
-			: this.deps.engine.columns.getColumnIndex(resolvedPointer.colField);
+		const colIndex = this.deps.engine.columns.getIndexMapper().idToVisualIndex(resolvedPointer.columnInstanceId);
 		if (rowIndex === null || rowIndex === -1 || colIndex === -1) return;
 
 		const layoutPlan = this.deps.viewportRenderer.getLayoutPlan() ?? this.syncLayoutPlan();
@@ -87,9 +86,9 @@ export class RenderViewportCoordinator<TRowData = unknown> {
 		}
 	}
 
-	private resolveProgrammaticScrollPointer(pointer: GridCellPointer): GridCellPointer {
+	private resolveProgrammaticScrollPointer(pointer: GridCellPointer): CanonicalGridCellPointer | null {
 		const column = findColumnByCellPointer(this.deps.engine.columns.getDisplayedColumns(), pointer);
-		if (!column) return pointer;
+		if (!column) return null;
 		return {
 			rowId: pointer.rowId,
 			colField: column.field,
