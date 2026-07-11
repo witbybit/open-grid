@@ -30,6 +30,25 @@ function toErrorMessage(error: unknown): string {
 	return 'Unknown infinite block load failure';
 }
 
+function validateInfiniteBlockResponse<TRowData>(
+	rows: readonly TRowData[],
+	blockSize: number,
+	getRowId: (row: TRowData) => string
+): void {
+	if (rows.length > blockSize) {
+		throw new Error(`Infinite datasource returned ${rows.length} rows for block size ${blockSize}`);
+	}
+
+	const seenRowIds = new Set<string>();
+	for (const row of rows) {
+		const rowId = getRowId(row);
+		if (seenRowIds.has(rowId)) {
+			throw new Error(`Infinite datasource returned duplicate row id "${rowId}" within one block`);
+		}
+		seenRowIds.add(rowId);
+	}
+}
+
 export interface InfiniteGetRowsParams {
 	readonly startRow: number;
 	readonly endRow: number;
@@ -577,6 +596,7 @@ export class InfiniteRowModelController<TData = unknown>
 			});
 
 			if (!this.isRequestTokenCurrent(requestToken)) return;
+			validateInfiniteBlockResponse(response.rows, this.blockSize, (row) => this.runtime.getRowId(row as TData));
 
 			const blockRows = Array.from({ length: this.blockSize }, () => null as RowNode<TData> | null);
 			response.rows.forEach((row, idx) => {

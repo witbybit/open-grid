@@ -1073,4 +1073,121 @@ describe('InfiniteRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('rejects an oversized infinite block response without partially mutating the committed rows', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let callCount = 0;
+		let rejectResponseObserved = false;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation(() => {
+				callCount++;
+				if (callCount === 1) {
+					return Promise.resolve({
+						rows: [{ id: '1', name: 'Alice v1' }],
+						totalCount: 1,
+					});
+				}
+				return Promise.resolve({
+					rows: [
+						{ id: '1', name: 'Alice v2' },
+						{ id: '2', name: 'Bob' },
+					],
+						totalCount: 2,
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 1,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+
+		store.addEventListener(GridEventName.infiniteBlockLoadFailed, (event) => {
+			if (event.payload.message.includes('returned 2 rows')) {
+				rejectResponseObserved = true;
+			}
+		});
+
+		controller.ensureRange(0, 0, 'force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(rejectResponseObserved).toBe(true);
+		expect(controller.getRowLoadState(0)).toEqual({
+			kind: 'failed',
+			error: 'Infinite datasource returned 2 rows for block size 1',
+			retryable: true,
+		});
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+		expect(store.getRawRowById('2')).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('rejects duplicate row ids in an infinite block response without partially mutating the committed rows', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let callCount = 0;
+		let duplicateResponseObserved = false;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation(() => {
+				callCount++;
+				if (callCount === 1) {
+					return Promise.resolve({
+						rows: [{ id: '1', name: 'Alice v1' }],
+						totalCount: 1,
+					});
+				}
+				return Promise.resolve({
+					rows: [
+						{ id: '1', name: 'Alice v2' },
+						{ id: '1', name: 'Alice duplicate' },
+					],
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 2,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+
+		store.addEventListener(GridEventName.infiniteBlockLoadFailed, (event) => {
+			if (event.payload.message.includes('duplicate row id')) {
+				duplicateResponseObserved = true;
+			}
+		});
+
+		controller.ensureRange(0, 0, 'force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(duplicateResponseObserved).toBe(true);
+		expect(controller.getRowLoadState(0)).toEqual({
+			kind: 'failed',
+			error: 'Infinite datasource returned duplicate row id "1" within one block',
+			retryable: true,
+		});
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+		expect(controller.getVisualIndexByRowId('1')).toBe(0);
+
+		controller.dispose();
+		store.destroy();
+	});
 });
