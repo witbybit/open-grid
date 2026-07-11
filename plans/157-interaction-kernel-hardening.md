@@ -180,7 +180,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] `columnInstanceId`
     - [x] stable displayed `colField` / `colId` as derived metadata only
 - [~] Replace internal field-based focus/edit/range identity
-- [ ] Keep public API compatibility only at the public boundary if required; no field-based identity inside core state after this phase
+- [~] Keep public API compatibility only at the public boundary if required; no field-based identity inside core state after this phase
 - [x] Add architecture guards prohibiting new field-only interaction identity in core interaction state
 
 ### Phase 2 - Single interaction kernel surface
@@ -245,7 +245,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] restore focus
 - [x] Keep committed writes on the existing canonical write path
 - [x] Reject edits honestly for loading/failed/placeholder rows and unsupported row-model states
-- [ ] Remove remaining adapter-owned semantic edit decisions
+- [x] Remove remaining adapter-owned semantic edit decisions
 
 ### Phase 6 - Row selection and range selection convergence
 
@@ -294,7 +294,7 @@ The following excerpts describe the live interaction architecture this plan repl
 - [x] Delete parallel event routing and navigation ownership paths
 - [ ] Add architecture guards that lock in:
     - [x] single interaction kernel ownership
-    - [ ] no field-only focus/edit/range identity in core
+    - [~] no field-only focus/edit/range identity in core
     - [x] no semantic keyboard/pointer orchestration in React adapter
     - [x] no row-selection semantics inside renderer paint helpers
 - [ ] Add adversarial regression coverage for virtualization, duplicate fields, and async row-model interaction
@@ -354,7 +354,7 @@ Reasoning:
 - [x] `corepack pnpm --filter @open-grid/core test` exits 0
 - [x] `corepack pnpm --filter @open-grid/react test` exits 0
 - [x] `corepack pnpm --filter @open-grid/core exec vitest run src/engine/architectureGuards.test.ts` exits 0
-- [ ] Core interaction state no longer uses field-only identity for focus/edit/range
+- [~] Core interaction state no longer uses field-only identity for focus/edit/range
 - [x] `packages/core/src/navigation.ts` is either deleted or reduced to a non-semantic shim that is then removed before plan closure
 - [x] `packages/react/src/GridView.tsx` no longer owns semantic keyboard/pointer interaction orchestration
 - [x] Renderer paint helpers no longer own row-selection semantics

@@ -70,7 +70,7 @@ export function createGridStateSnapshot<TRowData>(state: InternalGridState<TRowD
 		sortModel: cloneSortModel(state.sortModel),
 		filterModel: cloneFilterModel(state.filterModel),
 		queryModel: cloneQueryModel(state.queryModel ?? null),
-		selection: cloneSelection(interaction.cellSelection.publicSelection),
+		selection: cloneSelection(state.selection),
 		selectedRowIds: Object.freeze(interaction.rowSelection.selectedRowIds.slice()),
 		activeEdit: cloneActiveEdit(interaction.activeEdit.active),
 		loading: state.loading,

@@ -57,7 +57,46 @@ describe('resolveRowPresentation', () => {
 	});
 
 	it('adds og-row-selected/og-row-focused for the focused row', () => {
-		const result = resolveRowPresentation(makeDeps(), baseInput({ state: { selection: { focus: { rowId: 'r1' }, bounds: null } } as any }));
+		const focusedCell = { rowId: 'r1', colField: 'name', colId: 'name', columnInstanceId: 'name' };
+		const result = resolveRowPresentation(
+			makeDeps(),
+			baseInput({
+				state: {
+					selection: {
+						focus: focusedCell,
+						anchor: focusedCell,
+						range: null,
+						bounds: null,
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 1,
+					},
+					activeEdit: null,
+					selectedRowIds: [],
+					interaction: {
+						focus: {
+							cell: focusedCell,
+							rowIndex: 5,
+							origin: 'keyboard',
+							version: 1,
+						},
+						cellSelection: {
+							selection: {
+								focus: focusedCell,
+								anchor: focusedCell,
+								range: null,
+								bounds: null,
+								source: 'keyboard',
+								focusOrigin: 'keyboard',
+								version: 1,
+							},
+						},
+						activeEdit: { active: null },
+						rowSelection: { selectedRowIds: [] },
+					},
+				} as any,
+			})
+		);
 		expect(result.className).toContain('og-row-selected');
 		expect(result.className).toContain('og-row-focused');
 	});

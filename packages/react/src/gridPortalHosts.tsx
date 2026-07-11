@@ -3,7 +3,6 @@ import {
 	ColumnDef,
 	doesCellPointerMatchColumn,
 	GridApi,
-	GridEventName,
 	VisualRow,
 	type ActiveEditState,
 	type CellRendererPhase,
@@ -36,26 +35,9 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, colId, col
 	localValueRef.current = localValue;
 	const editColumnKey = columnInstanceId ?? colId ?? colField;
 
-	const isCommittedRef = useRef(false);
-
 	useEffect(() => {
-		isCommittedRef.current = false;
 		setLocalValue(value);
 	}, [value]);
-
-	useEffect(() => {
-		const unsubscribe = api.addEventListener(GridEventName.editStopped, (event) => {
-			if (event.payload.rowId === rowId && event.payload.colField === colField) {
-				if (!event.payload.cancel && !isCommittedRef.current) {
-					// External stop (e.g. navigation) without a prior commitEdit — run the full
-					// commit path (validation + valueSetter) rather than bypassing with setCellValue.
-					isCommittedRef.current = true;
-					void api.commitEdit(rowId, editColumnKey, localValueRef.current);
-				}
-			}
-		});
-		return () => unsubscribe();
-	}, [api, rowId, colField, editColumnKey]);
 
 	// activeEdit subscription lives here — only this mounted instance subscribes, not every cell
 	// Memoize the getSnapshot function to cache the activeEdit state and avoid infinite loops
@@ -93,7 +75,6 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, colId, col
 
 	const handleCommit = useCallback(
 		(finalValue?: unknown) => {
-			isCommittedRef.current = true;
 			const isEvent = finalValue && typeof finalValue === 'object' && ('nativeEvent' in finalValue || 'target' in finalValue);
 			const valToCommit = finalValue !== undefined && !isEvent ? finalValue : localValueRef.current;
 			void api.commitEdit(rowId, editColumnKey, valToCommit);

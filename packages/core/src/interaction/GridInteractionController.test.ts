@@ -419,6 +419,43 @@ describe('GridInteractionController', () => {
 		expect(runtime.stopEditing).toHaveBeenCalledWith(true);
 	});
 
+	it('commits the active draft through the kernel when stopEdit is called without cancellation', async () => {
+		const commitEdit = vi.fn(async () => true);
+		const runtime = createRuntime({
+			commitEdit,
+			getStateSnapshot: () =>
+				({
+					selection: {
+						focus: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+						anchor: null,
+						range: null,
+						bounds: null,
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 1,
+					},
+					activeEdit: {
+						rowId: 'r1',
+						colField: 'name',
+						colId: 'name-a',
+						columnInstanceId: 'name-a',
+						draftValue: 'Draft A',
+					},
+					columns: [
+						{ field: 'name', colId: 'name-a', instanceId: 'name-a' },
+						{ field: 'name', colId: 'name-b', instanceId: 'name-b' },
+					],
+				}) as GridStateSnapshot<TestRow>,
+		});
+		const controller = new GridInteractionController(runtime);
+
+		controller.stopEdit(false);
+		await flushAsyncWork();
+
+		expect(commitEdit).toHaveBeenCalledWith('r1', 'name-a', 'Draft A');
+		expect(runtime.stopEditing).not.toHaveBeenCalledWith(false);
+	});
+
 	it('moves edit selection only after a successful commit result', async () => {
 		const commitEdit = vi.fn(async () => true);
 		const runtime = createRuntime({

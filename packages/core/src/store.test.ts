@@ -151,7 +151,6 @@ describe('GridStore generic row-store functionality', () => {
 		expect(state.interaction?.focus.rowIndex).toBe(0);
 		expect(state.interaction?.focus.origin).toBe('keyboard');
 		expect(state.interaction?.focus.version).toBe(state.selection.version ?? 0);
-		expect(state.interaction?.cellSelection.publicSelection).toBe(state.selection);
 		expect(state.interaction?.cellSelection.selection.focus).toEqual(state.selection.focus);
 		expect(state.interaction?.activeEdit.active).toBe(state.activeEdit);
 		expect(state.interaction?.rowSelection.selectedRowIds).toBe(state.selectedRowIds);
@@ -1537,7 +1536,7 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
-	it('should support stopEditing and setCellValue commits and cancellations', () => {
+	it('should route stopEditing through kernel-owned cancel/commit semantics', async () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
@@ -1546,29 +1545,16 @@ describe('GridStore generic row-store functionality', () => {
 			columns: store.getState().columns,
 		});
 
-		// 1. Enter edit state
-		store.engine.stateManager.setState({
-			activeEdit: {
-				rowId: '1',
-				colField: 'name',
-			},
-		});
-
-		// Cancel edit (just call stopEditing without setCellValue)
-		store.stopEditing();
+		store.startEditing('1', 'name', 'keyboard');
+		store.updateEditDraft('1', 'name', 'Cancelled Keyboard');
+		store.stopEditing(true);
 		expect(store.getState().activeEdit).toBeNull();
 		expect(store.getCellValue('1', 'name')).toBe('Keyboard');
 
-		// 2. Commit edit (set value then call stopEditing)
-		store.engine.stateManager.setState({
-			activeEdit: {
-				rowId: '1',
-				colField: 'name',
-			},
-		});
-
-		store.setCellValue('1', 'name', 'Premium Keyboard');
-		store.stopEditing();
+		store.startEditing('1', 'name', 'keyboard');
+		store.updateEditDraft('1', 'name', 'Premium Keyboard');
+		store.stopEditing(false);
+		await Promise.resolve();
 		expect(store.getState().activeEdit).toBeNull();
 		expect(store.getCellValue('1', 'name')).toBe('Premium Keyboard');
 

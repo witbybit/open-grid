@@ -36,7 +36,6 @@ export interface CanonicalGridSelectionState {
 
 export interface GridCellSelectionDomainState {
 	selection: CanonicalGridSelectionState;
-	publicSelection: GridSelectionState;
 }
 
 export interface GridRowSelectionState {
@@ -115,7 +114,6 @@ export function buildInteractionState(
 		},
 		cellSelection: {
 			selection: asCanonicalSelectionState(selection),
-			publicSelection: selection,
 		},
 		rowSelection: {
 			selectedRowIds: input.selectedRowIds,
@@ -149,7 +147,6 @@ export function isInteractionStateCurrent<TRowData>(state: InteractionStateReada
 			: null
 		: interaction.focus.rowIndex;
 	return (
-		interaction.cellSelection.publicSelection === selection &&
 		interaction.activeEdit.active === state.activeEdit &&
 		interaction.rowSelection.selectedRowIds === state.selectedRowIds &&
 		interaction.focus.cell === focus &&

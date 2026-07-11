@@ -295,6 +295,13 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('this.hostFacade.scrollRowIntoView(rowId);');
 	});
 
+	it('React portal hosts do not own external-stop commit semantics once stopEditing routes through the kernel', () => {
+		const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalHosts.tsx'), 'utf-8');
+		expect(content).not.toContain('GridEventName.editStopped');
+		expect(content).not.toContain("api.addEventListener(GridEventName.editStopped");
+		expect(content).not.toContain('void api.commitEdit(rowId, editColumnKey, localValueRef.current);');
+	});
+
 	it('portal mount prioritization derives focus/edit priority from interaction state instead of raw state slices', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'portalMountManager.ts'), 'utf-8');
 		expect(content).toContain("import { readInteractionState } from '../interaction/interactionState.js';");
@@ -350,7 +357,7 @@ describe('Architecture guardrails', () => {
 		expect(interactionStateContent).toContain('rowIndex: number | null;');
 		expect(interactionStateContent).toContain('export interface CanonicalGridSelectionState {');
 		expect(interactionStateContent).toContain('selection: CanonicalGridSelectionState;');
-		expect(interactionStateContent).toContain('publicSelection: GridSelectionState;');
+		expect(interactionStateContent).not.toContain('publicSelection: GridSelectionState;');
 		expect(interactionStateContent).toContain('function asCanonicalCellPointer(');
 	});
 
@@ -2818,6 +2825,13 @@ describe('Architecture guardrails', () => {
 			expect(content).not.toContain('pointer.colId === (column.colId ?? column.field)');
 			expect(content).not.toContain('activeEdit.colField === column.field');
 			expect(content).not.toContain('activeEdit.colId === (column.colId ?? column.field)');
+		});
+
+		it('renderer interaction consumers do not fall back to public selection focus once core focus is canonical', () => {
+			const rowPresentationContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowPresentationResolver.ts'), 'utf-8');
+			const selectionPaintContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'selectionPaintManager.ts'), 'utf-8');
+			expect(rowPresentationContent).not.toContain('interaction.cellSelection.publicSelection.focus');
+			expect(selectionPaintContent).not.toContain('cellSelection.publicSelection.focus');
 		});
 	});
 });

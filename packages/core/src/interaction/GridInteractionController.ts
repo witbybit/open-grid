@@ -1,7 +1,7 @@
-import type { GridCellPointer } from '../api/GridApi.js';
+import type { CanonicalGridCellPointer, GridCellPointer } from '../api/GridApi.js';
 import type { GridPluginRuntime, ScrollToCellOptions, ScrollToRowOptions } from '../api/GridApiSurfaces.js';
 import type { GridSelectionSource, RowSelectionChangeResult, RowSelectionGesture } from '../api/GridApi.js';
-import { areCellPointersEqual, findColumnByCellPointer, findColumnIndexByCellPointer } from './cellPointer.js';
+import { areCanonicalCellPointersEqual, areCellPointersEqual, findColumnByCellPointer, findColumnIndexByCellPointer } from './cellPointer.js';
 import { readInteractionState } from './interactionState.js';
 import { getColumnInstanceIdentity, type ColumnDef } from '../columnDef.js';
 
@@ -161,8 +161,26 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		return column ? getColumnInstanceIdentity(column) : pointer.colField;
 	}
 
+	private canonicalizePointer(pointer: GridCellPointer | null | undefined): CanonicalGridCellPointer | null {
+		if (!pointer) return null;
+		if (pointer.columnInstanceId && pointer.colId) {
+			return pointer as CanonicalGridCellPointer;
+		}
+		const column = this.resolvePointerColumn(pointer);
+		if (!column) return null;
+		const columnInstanceId = getColumnInstanceIdentity(column);
+		return {
+			rowId: pointer.rowId,
+			colField: column.field,
+			colId: column.colId ?? column.field,
+			columnInstanceId,
+		};
+	}
+
 	private isEditingPointer(pointer: GridCellPointer | null, activeEdit: GridCellPointer | null | undefined): boolean {
-		return !!pointer && areCellPointersEqual(pointer, activeEdit ?? null);
+		const canonicalPointer = this.canonicalizePointer(pointer);
+		const canonicalActiveEdit = this.canonicalizePointer(activeEdit ?? null);
+		return areCanonicalCellPointersEqual(canonicalPointer, canonicalActiveEdit);
 	}
 
 	private getSelectionAnchor(): GridCellPointer | null {
@@ -351,17 +369,17 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 					}
 					return;
 			}
-			if (handled) {
-				event.preventDefault();
-				const targetPointer = this.getPointerFromCoords(nextRow, nextCol);
-				if (!targetPointer) return;
-				if (event.shiftKey) {
-					const start = this.getSelectionAnchor() ?? active;
-					if (!areCellPointersEqual(start, active)) {
-						this.commands.selectRange(start, active, 'keyboard');
-					}
-					this.extendSelection(targetPointer, 'keyboard');
-				} else {
+		if (handled) {
+			event.preventDefault();
+			const targetPointer = this.getPointerFromCoords(nextRow, nextCol);
+			if (!targetPointer) return;
+			if (event.shiftKey) {
+				const start = this.getSelectionAnchor() ?? active;
+				if (!areCanonicalCellPointersEqual(this.canonicalizePointer(start), this.canonicalizePointer(active))) {
+					this.commands.selectRange(start, active, 'keyboard');
+				}
+				this.extendSelection(targetPointer, 'keyboard');
+			} else {
 					this.commands.selectCell(targetPointer, 'keyboard');
 					if (this.options.arrowKeyNavigationEdit) {
 						this.startEdit(targetPointer.rowId, this.getEditTargetColumnIdentity(targetPointer), 'keyboard');
@@ -427,7 +445,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		const target = this.getPointerFromCoords(row, col);
 		if (!target) return;
 		this.commands.selectCell(target, 'keyboard');
-		if (startEditing && !areCellPointersEqual(target, active)) {
+		if (startEditing && !areCanonicalCellPointersEqual(this.canonicalizePointer(target), this.canonicalizePointer(active))) {
 			this.startEdit(target.rowId, this.getEditTargetColumnIdentity(target), 'keyboard');
 		}
 	}
@@ -451,7 +469,11 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		const state = this.runtime.getStateSnapshot();
 		const interaction = readInteractionState(state);
 		const prevFocus = interaction.focus.cell;
-		if (prevFocus && !areCellPointersEqual(prevFocus, pointer) && this.isEditingPointer(prevFocus, interaction.activeEdit.active)) {
+		if (
+			prevFocus &&
+			!areCanonicalCellPointersEqual(prevFocus, this.canonicalizePointer(pointer)) &&
+			this.isEditingPointer(prevFocus, interaction.activeEdit.active)
+		) {
 			this.commitEdit();
 		}
 		this.isSelecting = true;
@@ -463,7 +485,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		if (trigger !== 'singleClick') return;
 		const state = this.runtime.getStateSnapshot();
 		const range = readInteractionState(state).cellSelection.selection.range;
-		const isSingleCell = !range || areCellPointersEqual(range.start, range.end);
+		const isSingleCell = !range || areCanonicalCellPointersEqual(range.start, range.end);
 		if (isSingleCell) this.startEdit(pointer.rowId, this.getEditTargetColumnIdentity(pointer), 'mouse');
 	};
 
@@ -531,6 +553,13 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	}
 
 	public stopEdit(cancel = false): void {
+		if (!cancel) {
+			const activeEdit = readInteractionState(this.runtime.getStateSnapshot()).activeEdit.active;
+			if (activeEdit) {
+				void this.commands.commitEdit(activeEdit.rowId, activeEdit.columnInstanceId, activeEdit.draftValue);
+				return;
+			}
+		}
 		this.commands.stopEditing(cancel);
 	}
 
