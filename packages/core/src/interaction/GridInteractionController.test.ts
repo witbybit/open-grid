@@ -573,6 +573,151 @@ describe('GridInteractionController', () => {
 		expect(runtime.startEditing).toHaveBeenCalledWith('r1', 'name-a', 'mouse');
 	});
 
+	it('ctrl+End respects estimated row-model counts by clamping to the last represented data row', () => {
+		const displayedColumns = [{ field: 'name', colId: 'name-a', instanceId: 'name-a' }] as any[];
+		const runtime = createRuntime({
+			getDisplayedColumns: () => displayedColumns as any,
+			getStateSnapshot: () =>
+				({
+					selection: {
+						focus: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+						anchor: null,
+						range: null,
+						bounds: null,
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 1,
+					},
+					columns: displayedColumns,
+				}) as GridStateSnapshot<TestRow>,
+			getVisualRow: (index: number) =>
+				[
+					{ kind: 'data', rowId: 'r1', id: 'r1', node: { id: 'r1', data: { id: 'r1', name: 'A' } } },
+					{ kind: 'loading', id: 'loading-1', rowIndex: 1 },
+					{ kind: 'placeholder', id: 'placeholder-2', rowIndex: 2, reason: 'waiting' },
+					{ kind: 'data', rowId: 'r2', id: 'r2', node: { id: 'r2', data: { id: 'r2', name: 'B' } } },
+					{ kind: 'failed', id: 'failed-4', rowIndex: 4, error: 'boom', retryable: true },
+					{ kind: 'data', rowId: 'r3', id: 'r3', node: { id: 'r3', data: { id: 'r3', name: 'C' } } },
+				][index] as any,
+			getVisualRowCount: () => 6,
+			getVisualIndexByRowId: (rowId: string) => ({ r1: 0, r2: 3, r3: 5 }[rowId] ?? null),
+			getRowModel: () =>
+				({
+					getVisualRowCount: () => 6,
+					getVisualRow: (index: number) =>
+						[
+							{ kind: 'data', rowId: 'r1' },
+							{ kind: 'loading', id: 'loading-1', rowIndex: 1 },
+							{ kind: 'placeholder', id: 'placeholder-2', rowIndex: 2, reason: 'waiting' },
+							{ kind: 'data', rowId: 'r2' },
+							{ kind: 'failed', id: 'failed-4', rowIndex: 4, error: 'boom', retryable: true },
+							{ kind: 'data', rowId: 'r3' },
+						][index] as any,
+					getVisualIndexByRowId: (rowId: string) => ({ r1: 0, r2: 3, r3: 5 }[rowId] ?? -1),
+					getRowCountKind: () => 'estimated',
+				}) as any,
+			getCellAccessByPointer: (pointer: GridCellPointer) => {
+				const rowIndex = ({ r1: 0, r2: 3, r3: 5 }[pointer.rowId] ?? -1) as number;
+				if (rowIndex < 0) return null;
+				return {
+					rowId: pointer.rowId,
+					rowIndex,
+					row: { id: pointer.rowId, name: pointer.rowId },
+					node: null,
+					colField: 'name',
+					colIndex: 0,
+					column: displayedColumns[0],
+					value: pointer.rowId,
+					rawValue: pointer.rowId,
+					isFocused: false,
+					isRowFocused: false,
+					isSelected: false,
+					isRowSelected: false,
+					isEditing: false,
+					isLoading: false,
+				} as any;
+			},
+		});
+		const controller = new GridInteractionController(runtime);
+
+		controller.handleKeyDown({
+			key: 'End',
+			ctrlKey: true,
+			metaKey: false,
+			altKey: false,
+			shiftKey: false,
+			preventDefault: vi.fn(),
+		} as unknown as KeyboardEvent);
+
+		expect(runtime.selectCell).toHaveBeenCalledWith(
+			expect.objectContaining<GridCellPointer>({
+				rowId: 'r3',
+				colField: 'name',
+				colId: 'name-a',
+				columnInstanceId: 'name-a',
+			}),
+			'keyboard'
+		);
+	});
+
+	it('ctrl+End keeps navigation honest for unknown row counts by staying within represented rows', () => {
+		const displayedColumns = [{ field: 'name', colId: 'name-a', instanceId: 'name-a' }] as any[];
+		const runtime = createRuntime({
+			getDisplayedColumns: () => displayedColumns as any,
+			getStateSnapshot: () =>
+				({
+					selection: {
+						focus: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+						anchor: null,
+						range: null,
+						bounds: null,
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 1,
+					},
+					columns: displayedColumns,
+				}) as GridStateSnapshot<TestRow>,
+			getVisualRow: (index: number) =>
+				[
+					{ kind: 'data', rowId: 'r1', id: 'r1', node: { id: 'r1', data: { id: 'r1', name: 'A' } } },
+					{ kind: 'loading', id: 'loading-1', rowIndex: 1 },
+				][index] as any,
+			getVisualRowCount: () => 2,
+			getVisualIndexByRowId: (rowId: string) => (rowId === 'r1' ? 0 : null),
+			getRowModel: () =>
+				({
+					getVisualRowCount: () => 2,
+					getVisualRow: (index: number) =>
+						[
+							{ kind: 'data', rowId: 'r1' },
+							{ kind: 'loading', id: 'loading-1', rowIndex: 1 },
+						][index] as any,
+					getVisualIndexByRowId: (rowId: string) => (rowId === 'r1' ? 0 : -1),
+					getRowCountKind: () => 'unknown',
+				}) as any,
+		});
+		const controller = new GridInteractionController(runtime);
+
+		controller.handleKeyDown({
+			key: 'End',
+			ctrlKey: true,
+			metaKey: false,
+			altKey: false,
+			shiftKey: false,
+			preventDefault: vi.fn(),
+		} as unknown as KeyboardEvent);
+
+		expect(runtime.selectCell).toHaveBeenCalledWith(
+			expect.objectContaining<GridCellPointer>({
+				rowId: 'r1',
+				colField: 'name',
+				colId: 'name-a',
+				columnInstanceId: 'name-a',
+			}),
+			'keyboard'
+		);
+	});
+
 	it('extends from the authoritative selection anchor instead of a controller-local shadow anchor', () => {
 		const runtime = createRuntime({
 			getStateSnapshot: () =>

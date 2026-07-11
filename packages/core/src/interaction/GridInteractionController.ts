@@ -40,17 +40,8 @@ export type GridInteractionInputCommand =
 
 export interface GridInteractionHandle {
 	dispatchInput(command: GridInteractionInputCommand): void;
-	handleKeyDown(event: KeyboardEvent): void;
-	handleMouseDown(pointer: GridCellPointer, event: MouseEvent): void;
-	handleClick(pointer: GridCellPointer, event: MouseEvent): void;
-	handleMouseEnter(pointer: GridCellPointer): void;
-	handleMouseUp(): void;
 	isEditingCell(pointer: GridCellPointer): boolean;
-	setCellEditing(rowId: string, colField: string, isEditing: boolean, source?: 'keyboard' | 'mouse' | 'api'): void;
-	handleRowCheckboxClick(rowId: string, checked: boolean, event: MouseEvent): void;
-	handleDataRowClick(pointer: GridCellPointer, event: MouseEvent): void;
 	isRowSelectionIgnoredTarget(el: Element | null): boolean;
-	handleViewportMouseDown(event: MouseEvent): void;
 	updateOptions(options: GridNavigationOptions): void;
 	dispose(): void;
 }

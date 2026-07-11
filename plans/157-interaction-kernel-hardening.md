@@ -207,7 +207,7 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] `colField` / `colId` as derived metadata
     - [x] focus origin
     - [x] version
-- [ ] Make focus restoration virtualization-safe and controller-safe
+- [x] Make focus restoration virtualization-safe and controller-safe
 - [x] Ensure focus clears or remaps honestly when row/column identity disappears
 - [x] Remove renderer-time field-to-instance recovery shims once focus state is instance-aware
 
@@ -220,8 +220,8 @@ The following excerpts describe the live interaction architecture this plan repl
     - [x] hidden columns
     - [x] duplicate-field columns via `columnInstanceId`
     - [x] loading/failed/placeholder rows
-    - [ ] row-model unknown/estimated counts
-    - [ ] editable-only navigation mode if still supported
+    - [x] row-model unknown/estimated counts
+    - [x] editable-only navigation mode is not supported in the current kernel surface, so no parallel mode was preserved
 - [x] Replace fixed `PageUp` / `PageDown` heuristics with viewport-aware navigation
 - [~] Keep keyboard behavior test-driven during demolition so there is no regression in current capabilities
 
