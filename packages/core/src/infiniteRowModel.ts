@@ -130,8 +130,15 @@ export interface InfiniteGetRowsParams {
 	readonly queryModel: unknown;
 }
 
+export interface InfiniteGetRowsResult<TRowData = unknown> {
+	rows: TRowData[];
+	totalCount?: number;
+	lastRow?: number;
+	hasMore?: boolean;
+}
+
 export interface InfiniteDatasource<TRowData = unknown> {
-	getRows(params: InfiniteGetRowsParams): Promise<{ rows: TRowData[]; totalCount?: number; lastRow?: number; hasMore?: boolean }>;
+	getRows(params: InfiniteGetRowsParams): Promise<InfiniteGetRowsResult<TRowData>>;
 }
 
 export interface InfiniteRowModelOptions<TData = unknown> {

@@ -36,7 +36,7 @@ export type {
 	CapabilityDiagnostics,
 } from './capabilities/capabilityTypes.js';
 export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from './capabilities/capabilityTypes.js';
-export type { InfiniteDatasource, InfiniteGetRowsParams, InfiniteRowModelOptions } from './infiniteRowModel.js';
+export type { InfiniteDatasource, InfiniteGetRowsParams, InfiniteGetRowsResult, InfiniteRowModelOptions } from './infiniteRowModel.js';
 export type {
 	ServerDatasource,
 	ServerGetPageParams,
