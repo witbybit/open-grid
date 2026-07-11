@@ -1190,4 +1190,59 @@ describe('InfiniteRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('rejects a row id that is already committed in a different infinite block', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let duplicateAcrossBlocksObserved = false;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (params.startRow === 0) {
+					return Promise.resolve({
+						rows: [{ id: '1', name: 'Alice v1' }],
+						totalCount: 100,
+					});
+				}
+				return Promise.resolve({
+					rows: [{ id: '1', name: 'Alice duplicated elsewhere' }],
+					totalCount: 100,
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+
+		store.addEventListener(GridEventName.infiniteBlockLoadFailed, (event) => {
+			if (event.payload.message.includes('already committed at visual index 0')) {
+				duplicateAcrossBlocksObserved = true;
+			}
+		});
+
+		controller.ensureRange(50, 50, 'test');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(duplicateAcrossBlocksObserved).toBe(true);
+		expect(controller.getRowLoadState(50)).toEqual({
+			kind: 'failed',
+			error: 'Infinite datasource returned row id "1" for visual index 50, but that row id is already committed at visual index 0',
+			retryable: true,
+		});
+		expect(controller.getVisualRow(50)?.kind).toBe('failed');
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+		expect(controller.getVisualIndexByRowId('1')).toBe(0);
+
+		controller.dispose();
+		store.destroy();
+	});
 });

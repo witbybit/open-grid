@@ -597,6 +597,7 @@ export class InfiniteRowModelController<TData = unknown>
 
 			if (!this.isRequestTokenCurrent(requestToken)) return;
 			validateInfiniteBlockResponse(response.rows, this.blockSize, (row) => this.runtime.getRowId(row as TData));
+			this.validateInfiniteBlockPlacement(response.rows, block.startRow, block.endRow);
 
 			const blockRows = Array.from({ length: this.blockSize }, () => null as RowNode<TData> | null);
 			response.rows.forEach((row, idx) => {
@@ -741,6 +742,23 @@ export class InfiniteRowModelController<TData = unknown>
 
 	private isRetryReason(reason?: string): boolean {
 		return reason === 'row-node-retry-load' || reason === 'retry' || reason === 'force-reload';
+	}
+
+	private validateInfiniteBlockPlacement(rows: readonly TData[], blockStartRow: number, blockEndRow: number): void {
+		rows.forEach((row, index) => {
+			const rowId = this.runtime.getRowId(row);
+			const existingVisualIndex = this.rowIdToVisualIndex.get(rowId);
+			const nextVisualIndex = blockStartRow + index;
+			if (
+				existingVisualIndex !== undefined &&
+				existingVisualIndex !== nextVisualIndex &&
+				(existingVisualIndex < blockStartRow || existingVisualIndex > blockEndRow)
+			) {
+				throw new Error(
+					`Infinite datasource returned row id "${rowId}" for visual index ${nextVisualIndex}, but that row id is already committed at visual index ${existingVisualIndex}`
+				);
+			}
+		});
 	}
 
 	private publishBlockRefresh(
