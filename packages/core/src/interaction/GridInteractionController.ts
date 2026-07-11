@@ -124,7 +124,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		return findColumnByCellPointer(this.runtime.getDisplayedColumns(), pointer);
 	}
 
-	private getPointerFromCoords(rowIdx: number, colIdx: number): GridCellPointer | null {
+	private getPointerFromCoords(rowIdx: number, colIdx: number): CanonicalGridCellPointer | null {
 		const visualRow = this.runtime.getVisualRow(rowIdx);
 		const col = this.getDisplayedColumnAtIndex(colIdx);
 		if (!visualRow || !col || visualRow.kind !== 'data') return null;
@@ -218,7 +218,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		return areCanonicalCellPointersEqual(canonicalPointer, canonicalActiveEdit);
 	}
 
-	private getSelectionAnchor(): GridCellPointer | null {
+	private getSelectionAnchor(): CanonicalGridCellPointer | null {
 		const selection = readInteractionState(this.runtime.getStateSnapshot()).cellSelection.selection;
 		return selection.anchor ?? selection.focus ?? null;
 	}
@@ -538,16 +538,18 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	}
 
 	public selectCell(pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void {
-		this.commands.selectCell(pointer, source);
+		this.commands.selectCell(this.canonicalizePointer(pointer), source);
 	}
 
 	public selectRange(start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'api'): void {
-		this.commands.selectRange(start, end, source);
+		this.commands.selectRange(this.canonicalizePointer(start), this.canonicalizePointer(end), source);
 	}
 
 	public extendSelection(end: GridCellPointer, source: GridSelectionSource = 'api'): void {
+		const canonicalEnd = this.canonicalizePointer(end);
+		if (!canonicalEnd) return;
 		const selection = readInteractionState(this.runtime.getStateSnapshot()).cellSelection.selection;
-		this.commands.selectRange(selection.anchor ?? selection.focus ?? end, end, source);
+		this.commands.selectRange(selection.anchor ?? selection.focus ?? canonicalEnd, canonicalEnd, source);
 	}
 
 	public applyRowSelectionGesture(gesture: RowSelectionGesture): RowSelectionChangeResult | null {

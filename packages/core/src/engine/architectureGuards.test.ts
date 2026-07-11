@@ -2875,6 +2875,15 @@ describe('Architecture guardrails', () => {
 			expect(content).not.toContain('doesCellPointerMatchColumn(interaction.activeEdit.active, rowId, column)');
 		});
 
+		it('SelectionModel creates new selection state from canonical pointers instead of broad field-only pointers', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'models', 'SelectionModel.ts'), 'utf-8');
+			expect(content).toContain('public createCellSelection(pointer: CanonicalGridCellPointer | null, source: GridSelectionSource = \'program\'): GridSelectionState {');
+			expect(content).toContain('start: CanonicalGridCellPointer | null,');
+			expect(content).toContain('end: CanonicalGridCellPointer | null,');
+			expect(content).toContain('anchor: CanonicalGridCellPointer | null,');
+			expect(content).toContain('end: CanonicalGridCellPointer,');
+		});
+
 		it('renderer interaction consumers do not fall back to public selection focus once core focus is canonical', () => {
 			const rowPresentationContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowPresentationResolver.ts'), 'utf-8');
 			const selectionPaintContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'selectionPaintManager.ts'), 'utf-8');
