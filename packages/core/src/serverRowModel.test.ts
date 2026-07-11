@@ -1245,4 +1245,118 @@ describe('InfiniteRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('rejects a negative infinite totalCount without partially mutating the committed rows', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let invalidTotalObserved = false;
+		let callCount = 0;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation(() => {
+				callCount++;
+				if (callCount === 1) {
+					return Promise.resolve({
+						rows: [{ id: '1', name: 'Alice v1' }],
+						totalCount: 1,
+					});
+				}
+				return Promise.resolve({
+					rows: [{ id: '1', name: 'Alice v2' }],
+					totalCount: -1,
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+
+		store.addEventListener(GridEventName.infiniteBlockLoadFailed, (event) => {
+			if (event.payload.message.includes('negative totalCount -1')) {
+				invalidTotalObserved = true;
+			}
+		});
+
+		controller.ensureRange(0, 0, 'force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(invalidTotalObserved).toBe(true);
+		expect(controller.getRowLoadState(0)).toEqual({
+			kind: 'failed',
+			error: 'Infinite datasource returned negative totalCount -1',
+			retryable: true,
+		});
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+		expect(controller.getKnownRowCount()).toBe(1);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('rejects an infinite totalCount that is smaller than the loaded range', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let impossibleTotalObserved = false;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (params.startRow === 0) {
+					return Promise.resolve({
+						rows: Array.from({ length: 50 }, (_, index) => ({
+							id: `row-${index}`,
+							name: `Row ${index}`,
+						})),
+						totalCount: 100,
+					});
+				}
+				return Promise.resolve({
+					rows: [{ id: 'row-50', name: 'Row 50' }],
+					totalCount: 10,
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(getRowNode(controller, 0)?.data.name).toBe('Row 0');
+
+		store.addEventListener(GridEventName.infiniteBlockLoadFailed, (event) => {
+			if (event.payload.message.includes('smaller than the loaded range ending at 50')) {
+				impossibleTotalObserved = true;
+			}
+		});
+
+		controller.ensureRange(50, 50, 'test');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(impossibleTotalObserved).toBe(true);
+		expect(controller.getRowLoadState(50)).toEqual({
+			kind: 'failed',
+			error: 'Infinite datasource returned totalCount 10, which is smaller than the loaded range ending at 50',
+			retryable: true,
+		});
+		expect(controller.getVisualRow(50)?.kind).toBe('failed');
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Row 0');
+		expect(controller.getKnownRowCount()).toBe(100);
+
+		controller.dispose();
+		store.destroy();
+	});
 });

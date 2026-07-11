@@ -33,10 +33,24 @@ function toErrorMessage(error: unknown): string {
 function validateInfiniteBlockResponse<TRowData>(
 	rows: readonly TRowData[],
 	blockSize: number,
-	getRowId: (row: TRowData) => string
+	getRowId: (row: TRowData) => string,
+	options?: { totalCount?: number; blockStartRow?: number }
 ): void {
 	if (rows.length > blockSize) {
 		throw new Error(`Infinite datasource returned ${rows.length} rows for block size ${blockSize}`);
+	}
+
+	if (typeof options?.totalCount === 'number') {
+		if (options.totalCount < 0) {
+			throw new Error(`Infinite datasource returned negative totalCount ${options.totalCount}`);
+		}
+		const blockStartRow = options.blockStartRow ?? 0;
+		const minimumReachableCount = blockStartRow + rows.length;
+		if (options.totalCount < minimumReachableCount) {
+			throw new Error(
+				`Infinite datasource returned totalCount ${options.totalCount}, which is smaller than the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
 	}
 
 	const seenRowIds = new Set<string>();
@@ -596,7 +610,10 @@ export class InfiniteRowModelController<TData = unknown>
 			});
 
 			if (!this.isRequestTokenCurrent(requestToken)) return;
-			validateInfiniteBlockResponse(response.rows, this.blockSize, (row) => this.runtime.getRowId(row as TData));
+			validateInfiniteBlockResponse(response.rows, this.blockSize, (row) => this.runtime.getRowId(row as TData), {
+				totalCount: response.totalCount,
+				blockStartRow: startRow,
+			});
 			this.validateInfiniteBlockPlacement(response.rows, block.startRow, block.endRow);
 
 			const blockRows = Array.from({ length: this.blockSize }, () => null as RowNode<TData> | null);
