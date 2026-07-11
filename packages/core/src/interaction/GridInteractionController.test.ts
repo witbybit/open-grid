@@ -111,6 +111,41 @@ describe('GridInteractionController', () => {
 		);
 	});
 
+	it('prefers explicit duplicate-column pointer identity over a broader cell-access fallback', () => {
+		const runtime = createRuntime({
+			getCellAccessByPointer: (pointer: GridCellPointer) => ({
+				rowId: pointer.rowId,
+				rowIndex: 0,
+				row: { id: 'r1', name: 'A' },
+				node: null,
+				colField: 'name',
+				colIndex: 0,
+				column: { field: 'name', colId: 'name-a', instanceId: 'name-a' },
+				value: 'A',
+				rawValue: 'A',
+				isFocused: false,
+				isRowFocused: false,
+				isSelected: false,
+				isRowSelected: false,
+				isEditing: false,
+				isLoading: false,
+			}) as any,
+		});
+		const controller = new GridInteractionController(runtime);
+
+		controller.selectCell({ rowId: 'r1', colField: 'name', colId: 'name-b' }, 'api');
+
+		expect(runtime.selectCell).toHaveBeenCalledWith(
+			expect.objectContaining<GridCellPointer>({
+				rowId: 'r1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: 'name-b',
+			}),
+			'api'
+		);
+	});
+
 	it('routes scrollToCell through the interaction kernel and applies optional selection/edit semantics', () => {
 		const runtime = createRuntime({
 			scrollToCell: vi.fn(),
