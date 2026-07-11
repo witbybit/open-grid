@@ -298,6 +298,100 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('keeps infinite scrolling reachable beyond block zero when totalCount is unknown and a block is full', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) =>
+				Promise.resolve({
+					rows: Array.from({ length: params.endRow - params.startRow }, (_, index) => ({
+						id: `row-${params.startRow + index}`,
+						name: `Row ${params.startRow + index}`,
+					})),
+				})
+			),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getKnownRowCount()).toBeNull();
+		expect(controller.getRowCountKind()).toBe('estimated');
+		expect(controller.getVisualRowCount()).toBe(100);
+		expect(controller.getRowLoadState(50)).toEqual({ kind: 'loading', reason: 'infinite-block' });
+
+		vi.mocked(mockDatasource.getRows).mockClear();
+		controller.ensureRange(50, 50, 'test');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(mockDatasource.getRows).toHaveBeenCalledWith(
+			expect.objectContaining({
+				startRow: 50,
+				endRow: 100,
+			})
+		);
+		expect(controller.getVisualRow(50)?.kind).toBe('data');
+		expect(getRowNode(controller, 50)?.data.name).toBe('Row 50');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('treats a short infinite block without totalCount as the terminal known row count', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (params.startRow === 0) {
+					return Promise.resolve({
+						rows: Array.from({ length: 50 }, (_, index) => ({
+							id: `row-${index}`,
+							name: `Row ${index}`,
+						})),
+					});
+				}
+				return Promise.resolve({
+					rows: Array.from({ length: 20 }, (_, index) => ({
+						id: `row-${50 + index}`,
+						name: `Row ${50 + index}`,
+					})),
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		controller.ensureRange(50, 50, 'test');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getKnownRowCount()).toBe(70);
+		expect(controller.getRowCountKind()).toBe('known');
+		expect(controller.getVisualRowCount()).toBe(70);
+		expect(controller.getVisualRow(69)?.kind).toBe('data');
+		expect(getRowNode(controller, 69)?.data.name).toBe('Row 69');
+		expect(controller.getRowLoadState(70)).toEqual({ kind: 'missing' });
+		expect(controller.getVisualRow(70)).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('should pre-fetch blocks ahead of time based on scroll velocity', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,

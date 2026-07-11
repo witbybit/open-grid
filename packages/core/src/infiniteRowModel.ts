@@ -162,8 +162,12 @@ class InfiniteBlockCache<TData = unknown> {
 		if (typeof totalCount === 'number') {
 			this.knownRowCount = Math.max(0, totalCount);
 			this.estimatedRowCount = Math.max(this.estimatedRowCount, this.knownRowCount);
+		} else if (returnedRowCount < blockSize) {
+			this.knownRowCount = Math.max(0, block.startRow + returnedRowCount);
+			this.estimatedRowCount = Math.max(this.estimatedRowCount, this.knownRowCount);
 		} else {
-			this.estimatedRowCount = Math.max(this.estimatedRowCount, block.startRow + returnedRowCount);
+			const provisionalReachableCount = block.startRow + returnedRowCount + blockSize;
+			this.estimatedRowCount = Math.max(this.estimatedRowCount, provisionalReachableCount);
 		}
 		return block;
 	}
