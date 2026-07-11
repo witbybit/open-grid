@@ -514,6 +514,68 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('publishes a core refresh invalidation when a server-page response resolves', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const applyRefreshInvalidation = vi.spyOn(store.engine, 'applyRowModelRefreshInvalidation');
+		let resolvePageTwo!: (value: { rows: TestRow[]; totalRowCount: number }) => void;
+		const getPage = vi.fn().mockImplementation((params: { page: number }) => {
+			if (params.page === 0) {
+				return Promise.resolve({
+					rows: [
+						{ id: '1', name: 'Alpha' },
+						{ id: '2', name: 'Beta' },
+					],
+					totalRowCount: 4,
+				});
+			}
+			return new Promise((resolve) => {
+				resolvePageTwo = resolve as typeof resolvePageTwo;
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 2 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		applyRefreshInvalidation.mockClear();
+
+		controller.goToPage(1);
+		expect(controller.getVisualRow(0)?.kind).toBe('loading');
+
+		resolvePageTwo({
+			rows: [
+				{ id: '3', name: 'Gamma' },
+				{ id: '4', name: 'Delta' },
+			],
+			totalRowCount: 4,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(applyRefreshInvalidation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changed: true,
+				previousRowCount: 2,
+				nextRowCount: 2,
+				changedStartIndex: 0,
+				changedEndIndex: 1,
+			}),
+			expect.objectContaining({
+				invalidationReason: 'viewport',
+				requestRenderReason: 'rows:server-page-loaded',
+			})
+		);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('refetches server-page rows on filter changes and publishes the filtered result', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
@@ -551,6 +613,62 @@ describe('InfiniteRowModelController', () => {
 		expect(controller.getVisualRowCount()).toBe(1);
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Beta');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('publishes a core refresh invalidation when a server-page response fails', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const applyRefreshInvalidation = vi.spyOn(store.engine, 'applyRowModelRefreshInvalidation');
+		let rejectPageTwo!: (error: unknown) => void;
+		const getPage = vi.fn().mockImplementation((params: { page: number }) => {
+			if (params.page === 0) {
+				return Promise.resolve({
+					rows: [
+						{ id: '1', name: 'Alpha' },
+						{ id: '2', name: 'Beta' },
+					],
+					totalRowCount: 4,
+				});
+			}
+			return new Promise((_, reject) => {
+				rejectPageTwo = reject as typeof rejectPageTwo;
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 2 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		applyRefreshInvalidation.mockClear();
+
+		controller.goToPage(1);
+		expect(controller.getVisualRow(0)?.kind).toBe('loading');
+
+		rejectPageTwo(new Error('page failed'));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(0)?.kind).toBe('failed');
+		expect(applyRefreshInvalidation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changed: true,
+				previousRowCount: 2,
+				nextRowCount: 0,
+				changedStartIndex: 0,
+				changedEndIndex: 1,
+			}),
+			expect.objectContaining({
+				invalidationReason: 'viewport',
+				requestRenderReason: 'rows:server-page-load-failed',
+			})
+		);
 
 		controller.dispose();
 		store.destroy();

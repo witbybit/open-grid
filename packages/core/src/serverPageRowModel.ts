@@ -403,6 +403,7 @@ export class ServerPageRowModelController<TData = unknown>
 			});
 
 			if (!this.isRequestTokenCurrent(requestToken)) return;
+			const previousRowCount = this.getVisualRowCount();
 
 			this.loading = false;
 			this.error = null;
@@ -432,6 +433,7 @@ export class ServerPageRowModelController<TData = unknown>
 			this.hasResolvedPage = true;
 			// Clamp currentPage if it's now out of range (e.g. after pageSize change)
 			this.currentPage = Math.min(this.currentPage, this.pageCount - 1);
+			this.publishPageRefresh(previousRowCount, 'rows:server-page-loaded');
 
 			this.runtime.clearFormulas();
 			this.runtime.setLoadingState(false);
@@ -453,9 +455,11 @@ export class ServerPageRowModelController<TData = unknown>
 			});
 		} catch (error) {
 			if (!this.isRequestTokenCurrent(requestToken)) return;
+			const previousRowCount = this.getVisualRowCount();
 
 			this.loading = false;
 			this.error = toErrorMessage(error);
+			this.publishPageRefresh(previousRowCount, 'rows:server-page-load-failed');
 			this.runtime.setLoadingState(false);
 			this.runtime.dispatchServerPageLoadFailed({
 				page,
@@ -519,6 +523,28 @@ export class ServerPageRowModelController<TData = unknown>
 		this.queryVersion++;
 		this.currentPage = 0;
 		this.fetchPage({ preserveVisibleRows: false });
+	}
+
+	private publishPageRefresh(
+		previousRowCount: number,
+		requestRenderReason: 'rows:server-page-loaded' | 'rows:server-page-load-failed'
+	): void {
+		const nextRowCount = this.getVisualRowCount();
+		const changedEndIndex = Math.max(previousRowCount, nextRowCount, 1) - 1;
+		this.runtime.applyRefreshInvalidation(
+			{
+				changed: true,
+				reason: 'refresh',
+				previousRowCount,
+				nextRowCount,
+				changedStartIndex: 0,
+				changedEndIndex,
+			},
+			{
+				invalidationReason: 'viewport',
+				requestRenderReason,
+			}
+		);
 	}
 
 	private isRetryReason(reason?: string): boolean {
