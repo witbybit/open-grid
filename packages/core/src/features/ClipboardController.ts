@@ -1,11 +1,11 @@
 import type { ColumnDef } from '../columnDef.js';
 import { getColumnInstanceIdentity } from '../columnDef.js';
-import type { GridWriteResult } from '../api/GridApi.js';
+import type { CanonicalGridCellPointer, GridWriteResult } from '../api/GridApi.js';
 import type { VisualRow } from '../visualRow.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import { GridEventName } from '../api/GridEvents.js';
-import { findColumnByCellPointer, findColumnIndexByCellPointer } from '../interaction/cellPointer.js';
+import { findColumnByCanonicalCellPointer, findColumnIndexByCanonicalCellPointer } from '../interaction/cellPointer.js';
 import { readInteractionState } from '../interaction/interactionState.js';
 import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
@@ -57,15 +57,12 @@ export class ClipboardController<TRowData = unknown> {
 		};
 	}
 
-	private resolveColumnFromPointer(pointer: { colField: string; colId?: string; columnInstanceId?: string }, state: InternalGridState<TRowData>) {
-		return findColumnByCellPointer(this.c.getDisplayedColumns(), pointer) as ColumnDef<TRowData> | undefined;
+	private resolveColumnFromPointer(pointer: CanonicalGridCellPointer, state: InternalGridState<TRowData>) {
+		return findColumnByCanonicalCellPointer(this.c.getDisplayedColumns(), pointer) as ColumnDef<TRowData> | undefined;
 	}
 
-	private getColumnIndexFromPointer(
-		pointer: { colField: string; colId?: string; columnInstanceId?: string },
-		state: InternalGridState<TRowData>
-	): number {
-		return findColumnIndexByCellPointer(this.c.getDisplayedColumns(), pointer);
+	private getColumnIndexFromPointer(pointer: CanonicalGridCellPointer, state: InternalGridState<TRowData>): number {
+		return findColumnIndexByCanonicalCellPointer(this.c.getDisplayedColumns(), pointer);
 	}
 
 	private getDisplayedColumnAtIndex(index: number): ColumnDef<TRowData> | undefined {
