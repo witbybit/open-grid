@@ -43,6 +43,17 @@ export class GridProjectionPipeline<TRowData = unknown> {
 
 	private pendingStructuralBoundsUpdate = false;
 
+	private resolvePointerColumn(pointer: GridCellPointer | null | undefined) {
+		if (!pointer) return undefined;
+		if (pointer.columnInstanceId) {
+			const canonicalColumn = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), {
+				columnInstanceId: pointer.columnInstanceId,
+			});
+			if (canonicalColumn) return canonicalColumn;
+		}
+		return findColumnByCellPointer(this.deps.columns.getDisplayedColumns(), pointer);
+	}
+
 	public run({ phase }: GridProjectionRunInput<TRowData>): void {
 		let currState = phase.getState();
 		const updatedSet = new Set(phase.getChangedKeys());
@@ -185,7 +196,7 @@ export class GridProjectionPipeline<TRowData = unknown> {
 	): void {
 		const notifiedCells = new Set<string>();
 		const notifyCellOnce = (cell: GridCellPointer): void => {
-			const column = findColumnByCellPointer(this.deps.columns.getDisplayedColumns(), cell);
+			const column = this.resolvePointerColumn(cell);
 			const renderColId = column ? getColumnInstanceIdentity(column) : null;
 			if (!renderColId) return;
 			const key = `${cell.rowId}:${renderColId}`;
@@ -249,7 +260,7 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		const enrichPointer = (pointer: GridCellPointer | null): CanonicalGridCellPointer | null => {
 			if (!pointer) return null;
 			if (rowModel.getVisualIndexByRowId(pointer.rowId) < 0) return null;
-			const column = findColumnByCellPointer(this.deps.columns.getDisplayedColumns(), pointer);
+			const column = this.resolvePointerColumn(pointer);
 			if (!column) return null;
 			const columnInstanceId = getColumnInstanceIdentity(column);
 			if (!columnInstanceId || this.deps.columns.getIndexMapper().idToVisualIndex(columnInstanceId) < 0) return null;
@@ -307,7 +318,7 @@ export class GridProjectionPipeline<TRowData = unknown> {
 	): InternalGridState<TRowData>['activeEdit'] {
 		if (!activeEdit) return activeEdit;
 		if (rowModel.getVisualIndexByRowId(activeEdit.rowId) < 0) return null;
-		const column = findColumnByCellPointer(this.deps.columns.getDisplayedColumns(), activeEdit);
+		const column = this.resolvePointerColumn(activeEdit);
 		if (!column) return null;
 		const columnInstanceId = getColumnInstanceIdentity(column);
 		if (this.deps.columns.getIndexMapper().idToVisualIndex(columnInstanceId) < 0) return null;
