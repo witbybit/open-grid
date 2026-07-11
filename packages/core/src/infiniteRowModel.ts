@@ -79,6 +79,7 @@ export interface InfiniteDatasource<TRowData = unknown> {
 
 export interface InfiniteRowModelOptions<TData = unknown> {
 	blockSize?: number;
+	maxBlocksInCache?: number;
 	datasource: InfiniteDatasource<TData>;
 	columns: Array<ColumnDef<TData>>;
 	getRowId?: (row: TData) => string;
@@ -238,6 +239,22 @@ class InfiniteBlockCache<TData = unknown> {
 		return count;
 	}
 
+	public evictOverflow(maxBlocksInCache: number, protectedBlockIndexes: ReadonlySet<number>): boolean {
+		if (maxBlocksInCache < 1 || this.blocks.size <= maxBlocksInCache) return false;
+
+		let changed = false;
+		const candidates = Array.from(this.blocks.values())
+			.filter((block) => block.status !== 'loading' && !protectedBlockIndexes.has(block.blockIndex))
+			.sort((left, right) => left.lastAccessedAt - right.lastAccessedAt);
+
+		for (const candidate of candidates) {
+			if (this.blocks.size <= maxBlocksInCache) break;
+			changed = this.blocks.delete(candidate.blockIndex) || changed;
+		}
+
+		return changed;
+	}
+
 	public getKnownRowCount(): number | null {
 		return this.knownRowCount;
 	}
@@ -334,6 +351,7 @@ export class InfiniteRowModelController<TData = unknown>
 	private readonly runtime: InfiniteRowModelRuntime<TData>;
 	private datasource: InfiniteDatasource<TData>;
 	private blockSize: number;
+	private readonly maxBlocksInCache: number | null;
 	private nodeMap = new Map<string, RowNode<TData>>();
 	private visualRowIdToIndex = new Map<string, number>();
 	private rowIdToVisualIndex = new Map<string, number>();
@@ -344,11 +362,13 @@ export class InfiniteRowModelController<TData = unknown>
 	private queryVersion = 0;
 	private nextRequestId = 1;
 	private pendingVisibleLoad: { startRow: number; endRow: number } | null = null;
+	private latestVisibleBlocks = new Set<number>();
 
 	constructor(runtime: InfiniteRowModelRuntime<TData>, options: InfiniteRowModelOptions<TData>) {
 		this.runtime = runtime;
 		this.datasource = options.datasource;
 		this.blockSize = options.blockSize ?? 100;
+		this.maxBlocksInCache = options.maxBlocksInCache ?? null;
 
 		this.runtime.initializeModel({
 			columns: options.columns,
@@ -379,6 +399,7 @@ export class InfiniteRowModelController<TData = unknown>
 		this.bumpDatasourceGeneration();
 		this.blockCache.reset();
 		this.pendingVisibleLoad = null;
+		this.latestVisibleBlocks.clear();
 		this.unsubscribers.forEach((unsubscribe) => unsubscribe());
 		this.unsubscribers = [];
 	}
@@ -460,24 +481,26 @@ export class InfiniteRowModelController<TData = unknown>
 		for (let blockIdx = minBlock; blockIdx <= maxBlock; blockIdx++) {
 			visibleBlocks.add(blockIdx);
 		}
+		this.latestVisibleBlocks = new Set(visibleBlocks);
 
 		const velocity = this.runtime.getScrollVelocity();
 		const vy = velocity.vy;
 		const totalBlocks = Math.ceil(this.getVisualRowCount() / this.blockSize);
+		const requestedBlocks = new Set(visibleBlocks);
 
 		if (vy > 0.1) {
 			const ahead1 = maxBlock + 1;
 			const ahead2 = maxBlock + 2;
-			if (ahead1 < totalBlocks) visibleBlocks.add(ahead1);
-			if (ahead2 < totalBlocks) visibleBlocks.add(ahead2);
+			if (ahead1 < totalBlocks) requestedBlocks.add(ahead1);
+			if (ahead2 < totalBlocks) requestedBlocks.add(ahead2);
 		} else if (vy < -0.1) {
 			const ahead1 = minBlock - 1;
 			const ahead2 = minBlock - 2;
-			if (ahead1 >= 0) visibleBlocks.add(ahead1);
-			if (ahead2 >= 0) visibleBlocks.add(ahead2);
+			if (ahead1 >= 0) requestedBlocks.add(ahead1);
+			if (ahead2 >= 0) requestedBlocks.add(ahead2);
 		}
 
-		visibleBlocks.forEach((blockIdx) => {
+		requestedBlocks.forEach((blockIdx) => {
 			if (!forceReload && (this.blockCache.isBlockLoaded(blockIdx) || this.blockCache.isBlockLoading(blockIdx))) {
 				return;
 			}
@@ -657,6 +680,7 @@ export class InfiniteRowModelController<TData = unknown>
 				response.rows.length,
 				response.totalCount
 			);
+			this.evictOverflowBlocks();
 			this.rebuildBlockDerivedIndexes();
 			this.publishBlockRefresh(block, previousRowCount, 'rows:infinite-block-loaded');
 
@@ -675,6 +699,7 @@ export class InfiniteRowModelController<TData = unknown>
 			if (!this.isRequestTokenCurrent(requestToken)) return;
 			const message = toErrorMessage(error);
 			this.blockCache.markFailed(blockIndex, this.blockSize, requestToken.requestId, requestToken.queryVersion, message);
+			this.evictOverflowBlocks();
 			this.rebuildBlockDerivedIndexes();
 			this.publishBlockRefresh(block, previousRowCount, 'rows:infinite-block-load-failed');
 			this.runtime.dispatchInfiniteBlockLoadFailed({
@@ -746,9 +771,15 @@ export class InfiniteRowModelController<TData = unknown>
 		this.visualRowIdToIndex.clear();
 		this.rowIdToVisualIndex.clear();
 		this.pendingVisibleLoad = null;
+		this.latestVisibleBlocks.clear();
 		this.runtime.clearFormulas();
 		this.runtime.setLoadingState(true);
 		this.fetchBlock(0);
+	}
+
+	private evictOverflowBlocks(): void {
+		if (this.maxBlocksInCache === null) return;
+		this.blockCache.evictOverflow(this.maxBlocksInCache, this.latestVisibleBlocks);
 	}
 
 	private rebuildBlockDerivedIndexes(): void {

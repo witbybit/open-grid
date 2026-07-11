@@ -1416,4 +1416,54 @@ describe('InfiniteRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('evicts least recently used non-visible infinite blocks when maxBlocksInCache is reached', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) =>
+				Promise.resolve({
+					rows: Array.from({ length: params.endRow - params.startRow }, (_, index) => ({
+						id: `row-${params.startRow + index}`,
+						name: `Row ${params.startRow + index}`,
+					})),
+					totalCount: 6,
+				})
+			),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 2,
+			maxBlocksInCache: 2,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+
+		controller.ensureRange(2, 2, 'test');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getVisualRow(2)?.kind).toBe('data');
+
+		// Touch block 1 so block 0 becomes the LRU candidate before block 2 is loaded.
+		expect(controller.getVisualRow(2)?.kind).toBe('data');
+
+		controller.ensureRange(4, 4, 'test');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(4)?.kind).toBe('data');
+		expect(controller.getSelectableDataRowIds('loaded')).not.toContain('row-0');
+		expect(controller.getSelectableDataRowIds('loaded')).toContain('row-2');
+		expect(controller.getSelectableDataRowIds('loaded')).toContain('row-4');
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loading', reason: 'infinite-block' });
+		expect(controller.getVisualRow(0)?.kind).toBe('loading');
+		expect(controller.getVisualRow(2)?.kind).toBe('data');
+
+		controller.dispose();
+		store.destroy();
+	});
 });
