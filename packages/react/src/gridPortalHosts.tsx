@@ -71,7 +71,9 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, colId, col
 		}, [api])
 	);
 	const validationError =
-		activeEditState != null && doesCanonicalCellPointerMatchColumn(activeEditState, rowId, col) ? (activeEditState.validationError ?? null) : null;
+		activeEditState != null && doesCanonicalCellPointerMatchColumn(activeEditState, rowId, col)
+			? (activeEditState.validationError ?? null)
+			: null;
 
 	const handleCommit = useCallback(
 		(finalValue?: unknown) => {

@@ -58,6 +58,21 @@ export function findColumnIndexByCanonicalCellPointer<TRowData>(
 	return columns.findIndex((column) => getColumnInstanceIdentity(column) === pointer.columnInstanceId);
 }
 
+export function resolveCanonicalCellPointer<TRowData>(
+	columns: readonly ColumnDef<TRowData>[],
+	pointer: GridCellPointer | null | undefined
+): CanonicalGridCellPointer | null {
+	if (!pointer) return null;
+	const column = findColumnByCellPointer(columns, pointer);
+	if (!column) return null;
+	return {
+		rowId: pointer.rowId,
+		colField: column.field,
+		colId: column.colId ?? column.field,
+		columnInstanceId: getColumnInstanceIdentity(column),
+	};
+}
+
 export function findColumnByCellPointer<TRowData>(
 	columns: readonly ColumnDef<TRowData>[],
 	pointer: { colField: string; colId?: string; columnInstanceId?: ColumnInstanceId | string }

@@ -151,7 +151,7 @@
 | 152 | [Make Customization Powerful Without Letting Consumers Break the Core](./152-extension-surface-and-enterprise-customization-contract.md) | TODO | c4f9506e |
 | 153 | [Feather Scroll Snapshot Program](./153-feather-scroll-snapshot-program.md) | TODO | working tree |
 | 156 | [Row Model Completion + Public RowNode Facade](./156-row-model-completion-and-public-row-node-facade.md) | TODO | working tree |
-| 157 | [Interaction Kernel Hardening](./157-interaction-kernel-hardening.md) | IN PROGRESS | 07d21e2b |
+| 157 | [Interaction Kernel Hardening](./157-interaction-kernel-hardening.md) | DONE | working tree |
 
 ## Execution order
 

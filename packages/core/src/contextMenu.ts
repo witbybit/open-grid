@@ -1,17 +1,17 @@
-import type { CanonicalGridCellPointer, GridApi, GridCellPointer, GridPlugin, GridPluginRuntime, GridSelectionState } from './api/GridApi.js';
+import type { CanonicalGridCellPointer, GridApi, GridCellPointer, GridPlugin, GridPluginRuntime } from './api/GridApi.js';
 import { exportToCsv } from './export/csvExport.js';
 import { attachRovingMenuKeyboard } from './menuKeyboardNav.js';
 import { isFilterableColumn, buildFilterByValue, applyFilterToModel } from './filterOperations.js';
-import { findColumnByCellPointer, findColumnIndexByCellPointer } from './interaction/cellPointer.js';
-import { getColumnInstanceIdentity, type ColumnDef } from './columnDef.js';
-import { readInteractionState } from './interaction/interactionState.js';
+import { findColumnIndexByCanonicalCellPointer, resolveCanonicalCellPointer } from './interaction/cellPointer.js';
+import type { ColumnDef } from './columnDef.js';
+import { readInteractionState, type CanonicalGridSelectionState } from './interaction/interactionState.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
 	rowId: string;
 	colField: string;
-	pointer: GridCellPointer;
+	pointer: CanonicalGridCellPointer;
 	api: GridApi<TRowData>;
-	selection: GridSelectionState;
+	selection: CanonicalGridSelectionState;
 }
 
 export interface GridContextMenuItem<TRowData = unknown> {
@@ -70,14 +70,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	}
 
 	private resolveCanonicalPointer(pointer: GridCellPointer, columns: readonly ColumnDef<TRowData>[]): CanonicalGridCellPointer | null {
-		const column = findColumnByCellPointer(columns, pointer);
-		if (!column) return null;
-		return {
-			rowId: pointer.rowId,
-			colField: column.field,
-			colId: column.colId ?? column.field,
-			columnInstanceId: getColumnInstanceIdentity(column),
-		};
+		return resolveCanonicalCellPointer(columns, pointer);
 	}
 
 	public showPointer(pointer: GridCellPointer, clientX: number, clientY: number): void {
@@ -87,7 +80,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		const canonicalPointer = this.resolveCanonicalPointer(pointer, state.columns);
 		if (!canonicalPointer) return;
 		const selection = readInteractionState(state).cellSelection.selection;
-		const explicitColIdx = findColumnIndexByCellPointer(state.columns, canonicalPointer);
+		const explicitColIdx = findColumnIndexByCanonicalCellPointer(state.columns, canonicalPointer);
 		const access = this.runtime.getCellAccessByPointer(canonicalPointer);
 		let inSelection = false;
 		if (selection.bounds) {

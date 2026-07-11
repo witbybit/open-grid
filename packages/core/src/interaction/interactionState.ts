@@ -50,7 +50,10 @@ export interface GridInteractionState {
 	rowSelection: GridRowSelectionState;
 }
 
-type InteractionStateReadable<TRowData> = Pick<InternalGridState<TRowData>, 'selection' | 'activeEdit' | 'interaction'> & {
+type InteractionStateReadable<TRowData> = {
+	selection: GridSelectionState | CanonicalGridSelectionState;
+	activeEdit: ActiveEditState | null;
+	interaction?: GridInteractionState;
 	selectedRowIds: readonly string[];
 };
 
@@ -63,7 +66,9 @@ function asCanonicalCellPointer(pointer: GridCellPointer | null | undefined): Ca
 	return pointer as CanonicalGridCellPointer;
 }
 
-function normalizeSelectionState(selection: GridSelectionState | undefined): GridSelectionState {
+function normalizeSelectionState(
+	selection: GridSelectionState | CanonicalGridSelectionState | undefined
+): GridSelectionState | CanonicalGridSelectionState {
 	return (
 		selection ?? {
 			focus: null,
@@ -96,7 +101,7 @@ function asCanonicalSelectionState(selection: GridSelectionState): CanonicalGrid
 
 export function buildInteractionState(
 	input: {
-		selection?: GridSelectionState;
+		selection?: GridSelectionState | CanonicalGridSelectionState;
 		activeEdit: ActiveEditState | null;
 		selectedRowIds: readonly string[];
 	} & InteractionStateBuildOptions

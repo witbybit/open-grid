@@ -38,12 +38,10 @@ import { CellCtrlStore } from './controllers/CellCtrlStore.js';
 import { resolveCellCtrlPresentationState } from './controllers/resolveCellCtrlPresentationState.js';
 import { doesCanonicalCellPointerMatchColumn } from '../interaction/cellPointer.js';
 import { readInteractionState } from '../interaction/interactionState.js';
+import type { ProgrammaticScrollTarget } from './programmaticScrollTarget.js';
+import { getProgrammaticScrollCellPointer } from './programmaticScrollTarget.js';
 
 const fallbackCellCtrlStores = new WeakMap<object, CellCtrlStore<any>>();
-
-function asCanonicalCellPointer(pointer: GridCellPointer | null): CanonicalGridCellPointer | null {
-	return pointer?.columnInstanceId && pointer.colId ? (pointer as CanonicalGridCellPointer) : null;
-}
 
 function subtractNormalizedClassName(fullClassName: string, baseClassName: string): string {
 	const fullTokens = fullClassName.trim().split(/\s+/).filter(Boolean);
@@ -91,7 +89,7 @@ export interface RowCellBinderDeps<TRowData = unknown> {
 	getViewportContainer: () => HTMLElement | null | undefined;
 	getIsScrolling: () => boolean;
 	getIsScrollFrameActive: () => boolean;
-	programmaticScrollCell: GridCellPointer | null;
+	programmaticScrollCell: ProgrammaticScrollTarget | null;
 	clearProgrammaticScrollCell: () => void;
 	setDeferredFocusCell: (cell: HTMLDivElement) => void;
 	applyFocus: (cell: HTMLDivElement) => void;
@@ -706,8 +704,8 @@ export function bindCellDuringScroll<TRowData>(deps: RowCellBinderDeps<TRowData>
 	// Focus tab-index bookkeeping is independent of which presentation gets resolved below —
 	// it applies whenever this cell is the focused cell, regardless of content.
 	if (doesCanonicalCellPointerMatchColumn(ctx.focusedCell, node.id, col)) {
-		const programmaticScrollCell = deps.programmaticScrollCell;
-		const isProgrammatic = doesCanonicalCellPointerMatchColumn(asCanonicalCellPointer(programmaticScrollCell), node.id, col);
+		const programmaticScrollCell = getProgrammaticScrollCellPointer(deps.programmaticScrollCell);
+		const isProgrammatic = doesCanonicalCellPointerMatchColumn(programmaticScrollCell, node.id, col);
 		deps.setDeferredFocusCell(cellSlot.element);
 		if (isProgrammatic) deps.clearProgrammaticScrollCell();
 	}

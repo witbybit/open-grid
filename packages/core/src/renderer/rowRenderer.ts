@@ -5,7 +5,6 @@ import type { CellRenderer } from './cellRenderer.js';
 import type { InvalidationFrame } from './invalidationManager.js';
 import { SelectionPaintManager } from './selectionPaintManager.js';
 import { type ColumnDef, type GridCellClassParams } from '../columnDef.js';
-import type { GridCellPointer } from '../api/GridApi.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { RowSlot } from './rowSlot.js';
@@ -33,6 +32,7 @@ import { ViewportPlanner, type ViewportPlan } from './viewportPlanner.js';
 import { LiveFrameBudget } from './liveFrameBudget.js';
 import { readInteractionState } from '../interaction/interactionState.js';
 import { syncRowRendererInteractionAccessibility } from './rowRendererAccessibility.js';
+import type { ProgrammaticScrollTarget } from './programmaticScrollTarget.js';
 
 export class RowRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -83,7 +83,7 @@ export class RowRenderer<TRowData = unknown> {
 		this.selectionPaint.hoveredRowIndex = v;
 	}
 	public deferredFocusCell: HTMLDivElement | null = null;
-	public programmaticScrollCell: GridCellPointer | null = null;
+	public programmaticScrollCell: ProgrammaticScrollTarget | null = null;
 	public renderStats: any = null;
 
 	public currentScrollCellsPatched = 0;

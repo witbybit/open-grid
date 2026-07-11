@@ -9,10 +9,9 @@ import type { ViewportModel } from '../models/ViewportModel.js';
 import type { SelectionModel } from '../models/SelectionModel.js';
 import type { CellNotificationController } from './CellNotificationController.js';
 import type { CanonicalGridCellPointer } from '../api/GridApi.js';
-import type { GridSelectionState } from '../api/GridApi.js';
 import type { GridCellPointer } from '../api/GridApi.js';
 import { areCanonicalCellPointersEqual, findColumnByCanonicalCellPointer, findColumnByCellPointer } from '../interaction/cellPointer.js';
-import { buildInteractionState, isInteractionStateCurrent } from '../interaction/interactionState.js';
+import { buildInteractionState, isInteractionStateCurrent, type CanonicalGridSelectionState } from '../interaction/interactionState.js';
 import { getColumnInstanceIdentity } from '../columnDef.js';
 
 interface RangeBounds {
@@ -117,7 +116,9 @@ export class GridProjectionPipeline<TRowData = unknown> {
 				(id) => this.deps.getRowModel()?.getVisualIndexByRowId(id) ?? -1,
 				(pointer) => {
 					if (!pointer.columnInstanceId) return -1;
-					const column = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId });
+					const column = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), {
+						columnInstanceId: pointer.columnInstanceId,
+					});
 					return column ? this.deps.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId) : -1;
 				}
 			);
@@ -256,7 +257,7 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		}
 	}
 
-	private normalizeSelectionState(selection: GridSelectionState, rowModel: RowModel<TRowData>): GridSelectionState {
+	private normalizeSelectionState(selection: CanonicalGridSelectionState, rowModel: RowModel<TRowData>): CanonicalGridSelectionState {
 		const enrichPointer = (pointer: GridCellPointer | null): CanonicalGridCellPointer | null => {
 			if (!pointer) return null;
 			if (rowModel.getVisualIndexByRowId(pointer.rowId) < 0) return null;

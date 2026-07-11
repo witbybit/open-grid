@@ -1,20 +1,20 @@
 import type {
 	CanonicalGridCellPointer,
+	GridCellRangeBounds,
 	GridCellRange,
 	GridCellPointer,
 	GridSelectionSource,
-	GridSelectionState,
 	SelectionChangeResult,
 } from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import { getColumnInstanceIdentity } from '../columnDef.js';
 import { getCellPointerColumnKey } from '../interaction/cellPointer.js';
+import type { CanonicalGridSelectionState } from '../interaction/interactionState.js';
 import type { RowModel } from '../rowModel.js';
-import type { GridCellRangeBounds } from '../state/GridState.js';
 
 export class SelectionModel {
 	private versionCounter = 0;
-	private state: GridSelectionState = {
+	private state: CanonicalGridSelectionState = {
 		focus: null,
 		anchor: null,
 		range: null,
@@ -26,11 +26,11 @@ export class SelectionModel {
 
 	public init(): void {}
 
-	public getState(): GridSelectionState {
+	public getState(): CanonicalGridSelectionState {
 		return this.state;
 	}
 
-	public setSelection(selection: Partial<GridSelectionState>): GridSelectionState {
+	public setSelection(selection: Partial<CanonicalGridSelectionState>): CanonicalGridSelectionState {
 		const next = {
 			...this.state,
 			...selection,
@@ -64,7 +64,7 @@ export class SelectionModel {
 		return this.state;
 	}
 
-	public createCellSelection(pointer: CanonicalGridCellPointer | null, source: GridSelectionSource = 'program'): GridSelectionState {
+	public createCellSelection(pointer: CanonicalGridCellPointer | null, source: GridSelectionSource = 'program'): CanonicalGridSelectionState {
 		const version = ++this.versionCounter;
 		return {
 			focus: pointer,
@@ -81,7 +81,7 @@ export class SelectionModel {
 		start: CanonicalGridCellPointer | null,
 		end: CanonicalGridCellPointer | null,
 		source: GridSelectionSource = 'program'
-	): GridSelectionState {
+	): CanonicalGridSelectionState {
 		const focus = end;
 		const anchor = start;
 		const range = start !== null && end !== null ? { start, end } : null;
@@ -101,7 +101,7 @@ export class SelectionModel {
 		anchor: CanonicalGridCellPointer | null,
 		end: CanonicalGridCellPointer,
 		source: GridSelectionSource = 'program'
-	): GridSelectionState {
+	): CanonicalGridSelectionState {
 		const start = anchor ?? this.state.anchor ?? this.state.focus ?? end;
 		return this.createSelectionRange(start as CanonicalGridCellPointer | null, end, source);
 	}
@@ -220,8 +220,8 @@ export class SelectionModel {
 	}
 
 	public describeChange<TRowData>(
-		prevSelection: GridSelectionState,
-		nextSelection: GridSelectionState,
+		prevSelection: CanonicalGridSelectionState,
+		nextSelection: CanonicalGridSelectionState,
 		rowModel: RowModel<TRowData> | null,
 		columns: ColumnDef<TRowData>[]
 	): SelectionChangeResult {

@@ -16,7 +16,12 @@ import type {
 	RowSelectionGestureSource,
 	RowSelectionScope,
 } from '../api/GridApi.js';
-import { areCanonicalCellPointersEqual, findColumnByCanonicalCellPointer, findColumnByCellPointer } from '../interaction/cellPointer.js';
+import {
+	areCanonicalCellPointersEqual,
+	findColumnByCanonicalCellPointer,
+	findColumnByCellPointer,
+	resolveCanonicalCellPointer,
+} from '../interaction/cellPointer.js';
 import { buildInteractionState } from '../interaction/interactionState.js';
 import { getColumnInstanceIdentity, type ColumnDef, type GridRendererOptions } from '../columnDef.js';
 import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
@@ -78,6 +83,7 @@ import type { GridMutationRejection } from './GridDomainMutation.js';
 import type { GridCommitResult as InternalGridCommitResult } from './GridChangeApplier.js';
 import { GridDomainSubscriptionHub } from './GridDomainSubscriptionHub.js';
 import { GridEngineRenderBridge } from './GridEngineRenderBridge.js';
+import { normalizeInitialActiveEdit, normalizeInitialSelection } from './normalizeInitialInteractionState.js';
 import { CellDisplaySnapshotStore, type CellDisplaySnapshot } from '../renderer/cellDisplaySnapshot.js';
 import { HtmlScrollSnapshotStore } from '../renderer/htmlScrollSnapshotStore.js';
 import { RowCtrlStore } from '../renderer/controllers/RowCtrlStore.js';
@@ -377,8 +383,17 @@ export class GridEngine<TRowData = unknown> {
 				this.notifyCellChange(rowId, colField, includeRenderInvalidation, renderColId),
 		});
 
-		const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');
-		const initialActiveEdit = this.normalizeInitialActiveEdit(config.activeEdit ?? null, config.columns);
+		const initialSelection = normalizeInitialSelection(
+			config.selection ?? null,
+			config.columns,
+			(pointer, columns) => this.resolveCanonicalCellPointer(pointer, columns),
+			() => this.selection.createCellSelection(null, 'program'),
+			(pointer, source) => this.selection.createCellSelection(pointer, source),
+			(start, end, source) => this.selection.createSelectionRange(start, end, source)
+		);
+		const initialActiveEdit = normalizeInitialActiveEdit(config.activeEdit ?? null, config.columns, (pointer, columns) =>
+			this.resolveCanonicalCellPointer(pointer, columns)
+		);
 
 		// Set initial state
 		const initialState: InternalGridState<TRowData> = {
@@ -1323,13 +1338,20 @@ export class GridEngine<TRowData = unknown> {
 				(id) => this.rowModel?.getVisualIndexByRowId(id) ?? -1,
 				(pointer) => {
 					if (!pointer.columnInstanceId) return -1;
-					const column = findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId });
+					const column = findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), {
+						columnInstanceId: pointer.columnInstanceId,
+					});
 					return column ? this.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId) : -1;
 				}
 			),
 		};
 		const events: GridCommitEvent<TRowData>[] = [];
-		if (!areCanonicalCellPointersEqual(this.resolveCanonicalCellPointer(prevSelection.focus), this.resolveCanonicalCellPointer(previewSelection.focus))) {
+		if (
+			!areCanonicalCellPointersEqual(
+				this.resolveCanonicalCellPointer(prevSelection.focus),
+				this.resolveCanonicalCellPointer(previewSelection.focus)
+			)
+		) {
 			events.push({
 				type: GridEventName.focusChanged,
 				payload: (state) => ({ focus: state.selection.focus, selection: state.selection }),
@@ -1398,31 +1420,7 @@ export class GridEngine<TRowData = unknown> {
 		pointer: GridCellPointer | null,
 		columns: readonly ColumnDef<TRowData>[] = this.columns.getDisplayedColumns()
 	): CanonicalGridCellPointer | null {
-		if (!pointer) return null;
-		const column = findColumnByCellPointer(columns, pointer);
-		if (!column) return null;
-		return {
-			rowId: pointer.rowId,
-			colField: column.field,
-			colId: column.colId ?? column.field,
-			columnInstanceId: getColumnInstanceIdentity(column),
-		};
-	}
-
-	private normalizeInitialActiveEdit(
-		activeEdit: GridCellPointer | import('../api/GridApi.js').ActiveEditState | null,
-		columns: readonly ColumnDef<TRowData>[]
-	): import('../api/GridApi.js').ActiveEditState | null {
-		if (!activeEdit) return null;
-		const pointer = this.resolveCanonicalCellPointer(activeEdit, columns);
-		if (!pointer?.columnInstanceId || !pointer.colId) return null;
-		return {
-			...activeEdit,
-			rowId: pointer.rowId,
-			colField: pointer.colField,
-			colId: pointer.colId,
-			columnInstanceId: pointer.columnInstanceId,
-		};
+		return resolveCanonicalCellPointer(columns, pointer);
 	}
 
 	public setColumns(columns: ColumnDef<TRowData>[], undoable = false): void {

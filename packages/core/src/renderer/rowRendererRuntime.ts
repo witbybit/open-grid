@@ -1,6 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
-import type { GridCellPointer } from '../api/GridApi.js';
 import type { GridCellClassParams } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
 import type { CellRenderer } from './cellRenderer.js';
@@ -34,6 +33,7 @@ import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { reportRendererFault } from './rendererFaults.js';
 import type { ViewportPlan } from './viewportPlanner.js';
 import type { LiveFrameBudget } from './liveFrameBudget.js';
+import type { ProgrammaticScrollTarget } from './programmaticScrollTarget.js';
 
 export interface RowRendererRuntimeArgs<TRowData = unknown> {
 	engine: GridEngine<TRowData>;
@@ -61,7 +61,7 @@ export interface RowRendererRuntimeArgs<TRowData = unknown> {
 	isScrolling: boolean;
 	isScrollFrameActive: boolean;
 	renderStats: any;
-	programmaticScrollCell: GridCellPointer | null;
+	programmaticScrollCell: ProgrammaticScrollTarget | null;
 	clearProgrammaticScrollCell: () => void;
 	setDeferredFocusCell: (cell: HTMLDivElement) => void;
 	incrementStyleHookCallsDuringScroll: () => void;
@@ -80,7 +80,7 @@ export interface RowRendererRuntimeStateHost<TRowData = unknown> {
 	dirtyRowsAfterScroll: Set<number>;
 	dirtyBuckets: [HTMLDivElement[], HTMLDivElement[], HTMLDivElement[], HTMLDivElement[]];
 	activeRows: Map<number, RowSlot<TRowData>>;
-	programmaticScrollCell: GridCellPointer | null;
+	programmaticScrollCell: ProgrammaticScrollTarget | null;
 	deferredFocusCell: HTMLDivElement | null;
 	runtimeState: RenderRuntimeState;
 	renderStats: any;

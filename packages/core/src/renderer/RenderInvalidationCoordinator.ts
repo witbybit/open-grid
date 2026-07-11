@@ -1,5 +1,5 @@
 import { GridEventName } from '../api/GridEvents.js';
-import type { GridCellPointer } from '../api/GridApi.js';
+import type { CanonicalGridCellPointer } from '../api/GridApi.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import { readInteractionState } from '../interaction/interactionState.js';
 import type { FrameCoordinator } from './frameCoordinator.js';
@@ -16,7 +16,7 @@ export interface RenderInvalidationCoordinatorDeps<TRowData = unknown> {
 	frameCoordinator: FrameCoordinator;
 	runtimeState: RenderRuntimeState;
 	syncLayoutPlan: () => void;
-	scrollCellIntoView: (pointer: GridCellPointer) => void;
+	scrollCellIntoView: (pointer: CanonicalGridCellPointer) => void;
 	resetScroll: () => void;
 	updateCachedGeometryBounds: () => void;
 	markFlushPendingAfterScroll: () => void;

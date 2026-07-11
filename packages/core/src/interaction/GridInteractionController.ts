@@ -1,7 +1,7 @@
 import type { CanonicalGridCellPointer, GridCellPointer } from '../api/GridApi.js';
 import type { GridPluginRuntime, ScrollToCellOptions, ScrollToRowOptions } from '../api/GridApiSurfaces.js';
 import type { GridSelectionSource, RowSelectionChangeResult, RowSelectionGesture } from '../api/GridApi.js';
-import { areCanonicalCellPointersEqual, areCellPointersEqual, findColumnByCellPointer, findColumnIndexByCellPointer } from './cellPointer.js';
+import { areCanonicalCellPointersEqual, findColumnByCellPointer, findColumnIndexByCellPointer, resolveCanonicalCellPointer } from './cellPointer.js';
 import { readInteractionState } from './interactionState.js';
 import { getColumnInstanceIdentity, type ColumnDef } from '../columnDef.js';
 
@@ -202,19 +202,10 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	}
 
 	private canonicalizePointer(pointer: GridCellPointer | null | undefined): CanonicalGridCellPointer | null {
-		if (!pointer) return null;
-		if (pointer.columnInstanceId && pointer.colId) {
+		if (pointer?.columnInstanceId && pointer.colId) {
 			return pointer as CanonicalGridCellPointer;
 		}
-		const column = this.resolvePointerColumn(pointer);
-		if (!column) return null;
-		const columnInstanceId = getColumnInstanceIdentity(column);
-		return {
-			rowId: pointer.rowId,
-			colField: column.field,
-			colId: column.colId ?? column.field,
-			columnInstanceId,
-		};
+		return resolveCanonicalCellPointer(this.runtime.getDisplayedColumns(), pointer ?? null);
 	}
 
 	private isEditingPointer(pointer: GridCellPointer | null, activeEdit: GridCellPointer | null | undefined): boolean {

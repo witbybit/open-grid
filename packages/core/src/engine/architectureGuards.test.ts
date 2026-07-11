@@ -222,7 +222,7 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBinder.ts'), 'utf-8');
 		expect(content).toContain('export function bindCellFull');
 		expect(content).toContain('export function bindCellDuringScroll');
-		expect(content).toContain('const programmaticScrollCell = deps.programmaticScrollCell;');
+		expect(content).toContain('const programmaticScrollCell = getProgrammaticScrollCellPointer(deps.programmaticScrollCell);');
 	});
 
 	it('rowCellBindingLanes routes live cell binding through rowCellBinder', () => {
@@ -2880,7 +2880,9 @@ describe('Architecture guardrails', () => {
 
 		it('SelectionModel creates new selection state from canonical pointers instead of broad field-only pointers', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', 'models', 'SelectionModel.ts'), 'utf-8');
-			expect(content).toContain('public createCellSelection(pointer: CanonicalGridCellPointer | null, source: GridSelectionSource = \'program\'): GridSelectionState {');
+			expect(content).toContain(
+				"public createCellSelection(pointer: CanonicalGridCellPointer | null, source: GridSelectionSource = 'program'): CanonicalGridSelectionState {"
+			);
 			expect(content).toContain('start: CanonicalGridCellPointer | null,');
 			expect(content).toContain('end: CanonicalGridCellPointer | null,');
 			expect(content).toContain('anchor: CanonicalGridCellPointer | null,');
@@ -2892,6 +2894,72 @@ describe('Architecture guardrails', () => {
 			const selectionPaintContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'selectionPaintManager.ts'), 'utf-8');
 			expect(rowPresentationContent).not.toContain('interaction.cellSelection.publicSelection.focus');
 			expect(selectionPaintContent).not.toContain('cellSelection.publicSelection.focus');
+		});
+
+		it('broad pointer compatibility is funneled through the shared canonical resolver instead of ad hoc reconstruction', () => {
+			const cellPointerContent = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'cellPointer.ts'), 'utf-8');
+			const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			const interactionContent = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionController.ts'), 'utf-8');
+			const contextMenuContent = readFileSync(resolve(CORE_ROOT, 'src', 'contextMenu.ts'), 'utf-8');
+			const viewportContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderViewportCoordinator.ts'), 'utf-8');
+
+			expect(cellPointerContent).toContain('export function resolveCanonicalCellPointer');
+			expect(engineContent).toContain('return resolveCanonicalCellPointer(columns, pointer);');
+			expect(interactionContent).toContain('return resolveCanonicalCellPointer(this.runtime.getDisplayedColumns(), pointer ?? null);');
+			expect(contextMenuContent).toContain('return resolveCanonicalCellPointer(columns, pointer);');
+			expect(viewportContent).toContain('return resolveCanonicalCellPointer(this.deps.engine.columns.getDisplayedColumns(), pointer);');
+		});
+
+		it('public state snapshots derive selection and active-edit from interaction state', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'createGridStateSnapshot.ts'), 'utf-8');
+			expect(content).toContain('const interaction = readInteractionState(state);');
+			expect(content).toContain('selection: cloneSelection(interaction.cellSelection.selection),');
+			expect(content).toContain('activeEdit: cloneActiveEdit(interaction.activeEdit.active),');
+			expect(content).not.toContain('selection: cloneSelection(state.selection),');
+			expect(content).not.toContain('activeEdit: cloneActiveEdit(state.activeEdit),');
+		});
+
+		it('GridEngine canonicalizes initial selection before seeding internal state', () => {
+			const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			const helperContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'normalizeInitialInteractionState.ts'), 'utf-8');
+			expect(engineContent).toContain('const initialSelection = normalizeInitialSelection(');
+			expect(engineContent).toContain('const initialActiveEdit = normalizeInitialActiveEdit(');
+			expect(helperContent).toContain('export function normalizeInitialSelection');
+			expect(helperContent).toContain('const focus = resolveCanonicalCellPointer(selection.focus, columns);');
+			expect(helperContent).toContain('export function normalizeInitialActiveEdit');
+			expect(engineContent).not.toContain("const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');");
+		});
+
+		it('internal grid state stores canonical selection identity rather than broad public selection pointers', () => {
+			const stateContent = readFileSync(resolve(CORE_ROOT, 'src', 'state', 'GridState.ts'), 'utf-8');
+			expect(stateContent).toContain(
+				"import type { CanonicalGridSelectionState, GridInteractionState } from '../interaction/interactionState.js';"
+			);
+			expect(stateContent).toContain('selection: CanonicalGridSelectionState;');
+			expect(stateContent).not.toContain('selection: GridSelectionState;');
+		});
+
+		it('broad pointer fallback helpers are only used at explicit public-boundary compatibility seams', () => {
+			const srcDir = resolve(CORE_ROOT, 'src');
+			const files = collectSourceFiles(srcDir);
+			const users = files
+				.filter((file) => !file.endsWith('architectureGuards.test.ts'))
+				.filter((file) => {
+					const content = readFileSync(file, 'utf-8');
+					return (
+						content.includes('findColumnByCellPointer(') ||
+						content.includes('findColumnIndexByCellPointer(') ||
+						content.includes('doesCellPointerMatchColumn(')
+					);
+				})
+				.map((file) => path.relative(srcDir, file).replaceAll('\\', '/'))
+				.sort();
+			expect(users).toEqual([
+				'engine/GridEngine.ts',
+				'engine/GridProjectionPipeline.ts',
+				'interaction/GridInteractionController.ts',
+				'interaction/cellPointer.ts',
+			]);
 		});
 	});
 });
