@@ -1318,7 +1318,9 @@ export class GridEngine<TRowData = unknown> {
 				(id) => this.rowModel?.getVisualIndexByRowId(id) ?? -1,
 				(pointer) => {
 					if (!pointer.columnInstanceId) return -1;
-					const column = findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId });
+					const column = findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), {
+						columnInstanceId: pointer.columnInstanceId,
+					});
 					return column ? this.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId) : -1;
 				}
 			),
@@ -1342,7 +1344,7 @@ export class GridEngine<TRowData = unknown> {
 							colId: renderColId,
 							reason: 'selection' as const,
 						},
-				  ]
+					]
 				: [];
 		});
 		events.push({

@@ -404,17 +404,17 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 					}
 					return;
 			}
-		if (handled) {
-			event.preventDefault();
-			const targetPointer = this.getPointerFromCoords(nextRow, nextCol);
-			if (!targetPointer) return;
-			if (event.shiftKey) {
-				const start = this.getSelectionAnchor() ?? active;
-				if (!areCanonicalCellPointersEqual(this.canonicalizePointer(start), this.canonicalizePointer(active))) {
-					this.commands.selectRange(start, active, 'keyboard');
-				}
-				this.extendSelection(targetPointer, 'keyboard');
-			} else {
+			if (handled) {
+				event.preventDefault();
+				const targetPointer = this.getPointerFromCoords(nextRow, nextCol);
+				if (!targetPointer) return;
+				if (event.shiftKey) {
+					const start = this.getSelectionAnchor() ?? active;
+					if (!areCanonicalCellPointersEqual(this.canonicalizePointer(start), this.canonicalizePointer(active))) {
+						this.commands.selectRange(start, active, 'keyboard');
+					}
+					this.extendSelection(targetPointer, 'keyboard');
+				} else {
 					this.commands.selectCell(targetPointer, 'keyboard');
 					if (this.options.arrowKeyNavigationEdit) {
 						this.startEdit(targetPointer.rowId, this.getEditTargetColumnIdentity(targetPointer), 'keyboard');

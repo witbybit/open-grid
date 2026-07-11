@@ -88,7 +88,6 @@ describe('Public/internal boundary', () => {
 				'countQueryNodes',
 				'createClientGrid',
 				'createEmptyQueryModel',
-				'createGridInteractionEventRouter',
 				'createInfiniteGrid',
 				'createLocalStorageAdapter',
 				'createLocalStorageWorkspaceAdapter',

@@ -8,9 +8,10 @@ import type { GeometryModel } from '../models/GeometryModel.js';
 import type { ViewportModel } from '../models/ViewportModel.js';
 import type { SelectionModel } from '../models/SelectionModel.js';
 import type { CellNotificationController } from './CellNotificationController.js';
+import type { CanonicalGridCellPointer } from '../api/GridApi.js';
 import type { GridSelectionState } from '../api/GridApi.js';
 import type { GridCellPointer } from '../api/GridApi.js';
-import { areCellPointersEqual, findColumnByCanonicalCellPointer, findColumnByCellPointer } from '../interaction/cellPointer.js';
+import { areCanonicalCellPointersEqual, findColumnByCanonicalCellPointer, findColumnByCellPointer } from '../interaction/cellPointer.js';
 import { buildInteractionState, isInteractionStateCurrent } from '../interaction/interactionState.js';
 import { getColumnInstanceIdentity } from '../columnDef.js';
 
@@ -105,7 +106,9 @@ export class GridProjectionPipeline<TRowData = unknown> {
 				(id) => this.deps.getRowModel()?.getVisualIndexByRowId(id) ?? -1,
 				(pointer) => {
 					if (!pointer.columnInstanceId) return -1;
-					const column = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId });
+					const column = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), {
+						columnInstanceId: pointer.columnInstanceId,
+					});
 					return column ? this.deps.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId) : -1;
 				}
 			);
@@ -245,20 +248,17 @@ export class GridProjectionPipeline<TRowData = unknown> {
 	}
 
 	private normalizeSelectionState(selection: GridSelectionState, rowModel: RowModel<TRowData>): GridSelectionState {
-		const enrichPointer = (pointer: GridCellPointer | null): GridCellPointer | null => {
+		const enrichPointer = (pointer: GridCellPointer | null): CanonicalGridCellPointer | null => {
 			if (!pointer) return null;
 			if (rowModel.getVisualIndexByRowId(pointer.rowId) < 0) return null;
 			const column = findColumnByCellPointer(this.deps.columns.getDisplayedColumns(), pointer);
 			if (!column) return null;
 			const columnInstanceId = getColumnInstanceIdentity(column);
 			if (!columnInstanceId || this.deps.columns.getIndexMapper().idToVisualIndex(columnInstanceId) < 0) return null;
-			if (pointer.columnInstanceId === columnInstanceId) {
-				return pointer;
-			}
 			return {
 				rowId: pointer.rowId,
 				colField: column.field,
-				colId: column.colId ?? column.field,
+				colId: pointer.colId ?? column.colId ?? column.field,
 				columnInstanceId,
 			};
 		};
@@ -283,10 +283,10 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		const rangeEnd = enrichPointer(selection.range?.end ?? null);
 
 		if (
-			areCellPointersEqual(focus, selection.focus) &&
-			areCellPointersEqual(anchor, selection.anchor) &&
-			areCellPointersEqual(rangeStart, selection.range?.start ?? null) &&
-			areCellPointersEqual(rangeEnd, selection.range?.end ?? null)
+			areCanonicalCellPointersEqual(focus, selection.focus as CanonicalGridCellPointer | null) &&
+			areCanonicalCellPointersEqual(anchor, selection.anchor as CanonicalGridCellPointer | null) &&
+			areCanonicalCellPointersEqual(rangeStart, (selection.range?.start ?? null) as CanonicalGridCellPointer | null) &&
+			areCanonicalCellPointersEqual(rangeEnd, (selection.range?.end ?? null) as CanonicalGridCellPointer | null)
 		) {
 			return selection;
 		}

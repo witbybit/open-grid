@@ -290,7 +290,7 @@ The following excerpts describe the live interaction architecture this plan repl
 
 ### Phase 10 - Legacy demolition and guardrails
 
-- [ ] Delete deprecated internal interaction types and controllers that the kernel replaces
+- [~] Delete deprecated internal interaction types and controllers that the kernel replaces
 - [x] Delete parallel event routing and navigation ownership paths
 - [ ] Add architecture guards that lock in:
     - [x] single interaction kernel ownership
@@ -305,7 +305,7 @@ The following excerpts describe the live interaction architecture this plan repl
 - [x] Start with identity cutover before behavior migration
 - [x] Do not preserve two navigation/interaction stacks in parallel
 - [x] Build and run focused interaction tests after each phase
-- [ ] Remove deprecated code as soon as the replacement path is verified, not in a later “cleanup maybe” pass
+- [~] Remove deprecated code as soon as the replacement path is verified, not in a later “cleanup maybe” pass
 
 ## Suggested implementation order
 

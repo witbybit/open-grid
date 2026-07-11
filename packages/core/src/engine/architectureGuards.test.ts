@@ -298,7 +298,7 @@ describe('Architecture guardrails', () => {
 	it('React portal hosts do not own external-stop commit semantics once stopEditing routes through the kernel', () => {
 		const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalHosts.tsx'), 'utf-8');
 		expect(content).not.toContain('GridEventName.editStopped');
-		expect(content).not.toContain("api.addEventListener(GridEventName.editStopped");
+		expect(content).not.toContain('api.addEventListener(GridEventName.editStopped');
 		expect(content).not.toContain('void api.commitEdit(rowId, editColumnKey, localValueRef.current);');
 	});
 
@@ -314,7 +314,7 @@ describe('Architecture guardrails', () => {
 
 	it('interaction event router asks the interaction controller about edit state instead of peeking at public snapshot activeEdit', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionEventRouter.ts'), 'utf-8');
-		expect(content).toContain('interaction.dispatchInput({ kind: \'key-down\', event });');
+		expect(content).toContain("interaction.dispatchInput({ kind: 'key-down', event });");
 		expect(content).toContain("deps.getInteraction()?.dispatchInput({ kind: 'mouse-up' });");
 		expect(content).toContain("interaction.dispatchInput({ kind: 'mouse-down-cell', pointer: target.pointer, event });");
 		expect(content).toContain("interaction.dispatchInput({ kind: 'cell-enter', pointer: target.pointer });");
@@ -324,7 +324,7 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('interaction.handleMouseDown(target.pointer, event);');
 		expect(content).not.toContain('interaction.handleMouseEnter(target.pointer);');
 		expect(content).not.toContain('interaction.handleClick(target.pointer, event);');
-		expect(content).not.toContain('interaction.setCellEditing(target.pointer.rowId, target.pointer.columnInstanceId, true, \'mouse\');');
+		expect(content).not.toContain("interaction.setCellEditing(target.pointer.rowId, target.pointer.columnInstanceId, true, 'mouse');");
 		expect(content).toContain('if (interaction.isEditingCell(target.pointer)) return;');
 		expect(content).not.toContain('getStateSnapshot().activeEdit');
 		expect(content).not.toContain('state.activeEdit');
@@ -349,8 +349,12 @@ describe('Architecture guardrails', () => {
 	it('rowRenderMaintenance dirty-cell prioritization matches canonical focus/edit identity by column instance', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderMaintenance.ts'), 'utf-8');
 		expect(content).toContain("import { doesCanonicalCellPointerMatchColumn } from '../interaction/cellPointer.js';");
-		expect(content).toContain('doesCanonicalCellPointerMatchColumn(activeEdit, cs.rowId ?? \'\', { field: cs.colField, instanceId: cs.columnInstanceId as any })');
-		expect(content).toContain('doesCanonicalCellPointerMatchColumn(focusedCell, cs.rowId ?? \'\', { field: cs.colField, instanceId: cs.columnInstanceId as any })');
+		expect(content).toContain(
+			"doesCanonicalCellPointerMatchColumn(activeEdit, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })"
+		);
+		expect(content).toContain(
+			"doesCanonicalCellPointerMatchColumn(focusedCell, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })"
+		);
 		expect(content).not.toContain('doesCellPointerMatchColumn(activeEdit');
 		expect(content).not.toContain('doesCellPointerMatchColumn(focusedCell');
 	});
@@ -2837,7 +2841,9 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain('const committedSelection = this.selection.createSelectionRange(validStart, validEnd, source);');
 			expect(content).toContain('bounds: this.selection.calculateRangeBounds(');
 			expect(content).toContain('if (!pointer.columnInstanceId) return -1;');
-			expect(content).toContain('findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId })');
+			expect(content).toContain(
+				'findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId })'
+			);
 			expect(content).not.toContain('this.columns.getColumnIndex(pointer.colField)');
 			expect(content).toContain('payload: (state) => ({ focus: state.selection.focus, selection: state.selection })');
 			expect(content).toContain('selection: state.selection,');
@@ -2851,11 +2857,22 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain(
 				'findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId })'
 			);
+			expect(content).toContain('const enrichPointer = (pointer: GridCellPointer | null): CanonicalGridCellPointer | null => {');
+			expect(content).toContain('areCanonicalCellPointersEqual(focus, selection.focus as CanonicalGridCellPointer | null)');
 			expect(content).not.toContain('this.deps.columns.getColumnIndex(pointer.colField)');
 			expect(content).not.toContain('pointer.colField === column.field');
 			expect(content).not.toContain('pointer.colId === (column.colId ?? column.field)');
 			expect(content).not.toContain('activeEdit.colField === column.field');
 			expect(content).not.toContain('activeEdit.colId === (column.colId ?? column.field)');
+		});
+
+		it('store cell state editing flags derive from canonical interaction edit identity', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+			expect(content).toContain("import { doesCanonicalCellPointerMatchColumn } from './interaction/cellPointer.js';");
+			expect(content).toContain(
+				'const isEditing = column ? doesCanonicalCellPointerMatchColumn(interaction.activeEdit.active, rowId, column) : false;'
+			);
+			expect(content).not.toContain('doesCellPointerMatchColumn(interaction.activeEdit.active, rowId, column)');
 		});
 
 		it('renderer interaction consumers do not fall back to public selection focus once core focus is canonical', () => {

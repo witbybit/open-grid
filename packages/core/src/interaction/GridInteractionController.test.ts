@@ -600,7 +600,7 @@ describe('GridInteractionController', () => {
 					{ kind: 'data', rowId: 'r3', id: 'r3', node: { id: 'r3', data: { id: 'r3', name: 'C' } } },
 				][index] as any,
 			getVisualRowCount: () => 6,
-			getVisualIndexByRowId: (rowId: string) => ({ r1: 0, r2: 3, r3: 5 }[rowId] ?? null),
+			getVisualIndexByRowId: (rowId: string) => ({ r1: 0, r2: 3, r3: 5 })[rowId] ?? null,
 			getRowModel: () =>
 				({
 					getVisualRowCount: () => 6,
@@ -613,7 +613,7 @@ describe('GridInteractionController', () => {
 							{ kind: 'failed', id: 'failed-4', rowIndex: 4, error: 'boom', retryable: true },
 							{ kind: 'data', rowId: 'r3' },
 						][index] as any,
-					getVisualIndexByRowId: (rowId: string) => ({ r1: 0, r2: 3, r3: 5 }[rowId] ?? -1),
+					getVisualIndexByRowId: (rowId: string) => ({ r1: 0, r2: 3, r3: 5 })[rowId] ?? -1,
 					getRowCountKind: () => 'estimated',
 				}) as any,
 			getCellAccessByPointer: (pointer: GridCellPointer) => {

@@ -249,9 +249,15 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 			}
 		).__cellSlot;
 		if (!cs || cs.rowIndex < 0 || !cs.colField) return 0;
-		if (activeEdit && doesCanonicalCellPointerMatchColumn(activeEdit, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any }))
+		if (
+			activeEdit &&
+			doesCanonicalCellPointerMatchColumn(activeEdit, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })
+		)
 			return 6;
-		if (focusedCell && doesCanonicalCellPointerMatchColumn(focusedCell, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any }))
+		if (
+			focusedCell &&
+			doesCanonicalCellPointerMatchColumn(focusedCell, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })
+		)
 			return 5;
 
 		const isRowVisible = cs.rowIndex >= rowRange.startIdx && cs.rowIndex <= rowRange.endIdx;
