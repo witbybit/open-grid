@@ -16,6 +16,7 @@ export interface GridFocusState {
 }
 
 export interface GridEditState {
+	kind: 'idle' | 'editing-cell';
 	active: ActiveEditState | null;
 }
 
@@ -110,6 +111,7 @@ export function buildInteractionState(
 			version: selection.version ?? 0,
 		},
 		activeEdit: {
+			kind: input.activeEdit ? 'editing-cell' : 'idle',
 			active: input.activeEdit,
 		},
 		cellSelection: {
@@ -147,6 +149,7 @@ export function isInteractionStateCurrent<TRowData>(state: InteractionStateReada
 			: null
 		: interaction.focus.rowIndex;
 	return (
+		interaction.activeEdit.kind === (state.activeEdit ? 'editing-cell' : 'idle') &&
 		interaction.activeEdit.active === state.activeEdit &&
 		interaction.rowSelection.selectedRowIds === state.selectedRowIds &&
 		interaction.focus.cell === focus &&

@@ -381,6 +381,7 @@ describe('Architecture guardrails', () => {
 		expect(apiContent).toContain('export type CanonicalGridCellPointer = GridCellPointer & {');
 		expect(interactionStateContent).toContain('cell: CanonicalGridCellPointer | null;');
 		expect(interactionStateContent).toContain('rowIndex: number | null;');
+		expect(interactionStateContent).toContain("kind: 'idle' | 'editing-cell';");
 		expect(interactionStateContent).toContain('export interface CanonicalGridSelectionState {');
 		expect(interactionStateContent).toContain('selection: CanonicalGridSelectionState;');
 		expect(interactionStateContent).not.toContain('publicSelection: GridSelectionState;');

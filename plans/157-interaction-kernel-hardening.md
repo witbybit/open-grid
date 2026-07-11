@@ -229,7 +229,7 @@ The following excerpts describe the live interaction architecture this plan repl
 
 - [~] Replace shallow `EditModel` pointer storage with an explicit lifecycle state machine
 - [ ] Track:
-    - [~] idle vs editing
+    - [x] idle vs editing
     - [x] `rowId`
     - [x] `columnInstanceId`
     - [x] `startedBy`

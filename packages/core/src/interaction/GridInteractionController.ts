@@ -119,9 +119,11 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	}
 
 	private resolvePointerColumn(pointer: GridCellPointer): ColumnDef<TRowData> | undefined {
+		const explicitColumn = findColumnByCellPointer(this.runtime.getDisplayedColumns(), pointer);
+		if (explicitColumn && (pointer.columnInstanceId || pointer.colId)) return explicitColumn;
 		const access = this.runtime.getCellAccessByPointer(pointer);
 		if (access) return access.column;
-		return findColumnByCellPointer(this.runtime.getDisplayedColumns(), pointer);
+		return explicitColumn;
 	}
 
 	private getPointerFromCoords(rowIdx: number, colIdx: number): CanonicalGridCellPointer | null {
@@ -139,10 +141,13 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 
 	private getCoordsFromPointer(pointer: GridCellPointer | null): { rowIdx: number; colIdx: number } | null {
 		if (!pointer) return null;
-		const access = this.runtime.getCellAccessByPointer(pointer);
-		if (access) return { rowIdx: access.rowIndex, colIdx: access.colIndex };
 		const rowIdx = this.runtime.getVisualIndexByRowId(pointer.rowId) ?? -1;
 		const colIdx = findColumnIndexByCellPointer(this.runtime.getDisplayedColumns(), pointer);
+		if (rowIdx !== -1 && colIdx !== -1 && (pointer.columnInstanceId || pointer.colId)) {
+			return { rowIdx, colIdx };
+		}
+		const access = this.runtime.getCellAccessByPointer(pointer);
+		if (access) return { rowIdx: access.rowIndex, colIdx: access.colIndex };
 		if (rowIdx === -1 || colIdx === -1) return null;
 		return { rowIdx, colIdx };
 	}
