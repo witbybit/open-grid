@@ -45,6 +45,20 @@ export type {
 	ServerPageState,
 	ServerPageRowModelOptions,
 } from './serverPageRowModel.js';
+export type {
+	ServerSideBlockSnapshot,
+	ServerSideBlockState,
+	ServerSideDatasource,
+	ServerSideGetRowsRequest,
+	ServerSideGetRowsResult,
+	ServerSideGroupMetadata,
+	ServerSideRefreshOptions,
+	ServerSideRoute,
+	ServerSideRowGroupColumn,
+	ServerSideRowModelOptions,
+	ServerSideStoreSnapshot,
+	ServerSideValueColumn,
+} from './serverSideRowModel.js';
 export type { RowModelType } from './state/GridState.js';
 export type { GridRowNode, GridRowNodeValidationState, RowNodeSelectionOptions } from './publicRowNode.js';
 export type { GridRowDataRef } from './publicRowRef.js';

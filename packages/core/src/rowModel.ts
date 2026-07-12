@@ -167,7 +167,7 @@ export class UnsupportedRowModelOperationError extends Error {
 // ── Row model contract types ──────────────────────────────────────────────────
 // Defined here to avoid a circular import with store.ts. store.ts re-exports these.
 
-export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit' | 'row-order';
+export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit' | 'row-order' | 'refresh';
 
 /**
  * The renderer-facing read contract for the row model.
