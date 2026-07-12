@@ -40,6 +40,7 @@ export type { InfiniteDatasource, InfiniteGetRowsParams, InfiniteGetRowsResult, 
 export type {
 	ServerDatasource,
 	ServerGetPageParams,
+	ServerGetPageResult,
 	ServerPaginationOptions,
 	ServerPageState,
 	ServerPageRowModelOptions,

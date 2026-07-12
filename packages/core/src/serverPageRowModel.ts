@@ -29,6 +29,22 @@ function toErrorMessage(error: unknown): string {
 	return 'Unknown server page load failure';
 }
 
+function validateServerPageResponse<TRowData>(
+	response: ServerGetPageResult<TRowData>,
+	options: { page: number; pageSize: number }
+): void {
+	if (response.totalRowCount < 0) {
+		throw new Error(`Server datasource returned negative totalRowCount ${response.totalRowCount}`);
+	}
+	const pageStart = options.page * options.pageSize;
+	const minimumReachableCount = pageStart + response.rows.length;
+	if (response.totalRowCount < minimumReachableCount) {
+		throw new Error(
+			`Server datasource returned totalRowCount ${response.totalRowCount}, which is smaller than the loaded page range ending at ${minimumReachableCount - 1}`
+		);
+	}
+}
+
 export interface ServerGetPageParams {
 	readonly page: number;
 	readonly pageSize: number;
@@ -45,7 +61,7 @@ export interface ServerGetPageResult<TRowData> {
 }
 
 export interface ServerDatasource<TRowData = unknown> {
-	getPage(params: ServerGetPageParams, context: { signal?: AbortSignal }): Promise<{ rows: TRowData[]; totalRowCount: number }>;
+	getPage(params: ServerGetPageParams, context: { signal?: AbortSignal }): Promise<ServerGetPageResult<TRowData>>;
 }
 
 export interface ServerPaginationOptions {
@@ -408,6 +424,7 @@ export class ServerPageRowModelController<TData = unknown>
 			}, { signal: abortController.signal });
 
 			if (!this.isRequestTokenCurrent(requestToken)) return;
+			validateServerPageResponse(response, { page, pageSize });
 			const previousRowCount = this.getVisualRowCount();
 
 			this.loading = false;

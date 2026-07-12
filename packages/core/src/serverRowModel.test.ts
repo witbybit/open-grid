@@ -791,6 +791,125 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('rejects a negative server-page totalRowCount and keeps committed rows during reloadPage', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let callCount = 0;
+		let negativeCountObserved = false;
+		const getPage = vi.fn().mockImplementation(() => {
+			callCount++;
+			if (callCount === 1) {
+				return Promise.resolve({
+					rows: [{ id: '1', name: 'Alpha v1' }],
+					totalRowCount: 1,
+				});
+			}
+			return Promise.resolve({
+				rows: [{ id: '1', name: 'Alpha v2' }],
+				totalRowCount: -1,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+
+		store.addEventListener(GridEventName.serverPageLoadFailed, (event) => {
+			if (event.payload.message.includes('negative totalRowCount -1')) {
+				negativeCountObserved = true;
+			}
+		});
+
+		controller.reloadPage('force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(negativeCountObserved).toBe(true);
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Alpha v1');
+		expect(controller.getPageState().totalRowCount).toBe(1);
+		expect(controller.getPageState().error).toBe('Server datasource returned negative totalRowCount -1');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('rejects a server-page totalRowCount smaller than the loaded page range and keeps committed rows during reloadPage', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let impossibleCountObserved = false;
+		let pageOneCallCount = 0;
+		const getPage = vi.fn().mockImplementation((params: { page: number }) => {
+			if (params.page === 0) {
+				return Promise.resolve({
+					rows: [
+						{ id: '1', name: 'Alpha' },
+						{ id: '2', name: 'Beta' },
+					],
+					totalRowCount: 4,
+				});
+			}
+			pageOneCallCount++;
+			if (pageOneCallCount === 1) {
+				return Promise.resolve({
+					rows: [
+						{ id: '3', name: 'Gamma' },
+						{ id: '4', name: 'Delta' },
+					],
+					totalRowCount: 4,
+				});
+			}
+			return Promise.resolve({
+				rows: [
+					{ id: '3', name: 'Gamma' },
+					{ id: '4', name: 'Delta' },
+				],
+				totalRowCount: 3,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 2 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		controller.goToPage(1);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+
+		store.addEventListener(GridEventName.serverPageLoadFailed, (event) => {
+			if (event.payload.message.includes('smaller than the loaded page range ending at 3')) {
+				impossibleCountObserved = true;
+			}
+		});
+
+		controller.reloadPage('force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(impossibleCountObserved).toBe(true);
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Gamma');
+		expect(controller.getPageState().totalRowCount).toBe(4);
+		expect(controller.getPageState().error).toBe(
+			'Server datasource returned totalRowCount 3, which is smaller than the loaded page range ending at 3'
+		);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('publishes a core refresh invalidation when a server-page response fails', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
