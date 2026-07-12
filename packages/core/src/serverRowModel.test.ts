@@ -22,10 +22,10 @@ describe('InfiniteRowModelController', () => {
 
 		const mockDatasource: InfiniteDatasource<TestRow> = {
 			getRows: vi.fn().mockResolvedValue({
-				rows: [
-					{ id: '1', name: 'Alice' },
-					{ id: '2', name: 'Bob' },
-				],
+				rows: Array.from({ length: 50 }, (_, index) => ({
+					id: String(index + 1),
+					name: index === 0 ? 'Alice' : index === 1 ? 'Bob' : `Row ${index + 1}`,
+				})),
 				totalCount: 100,
 			}),
 		};
@@ -60,10 +60,10 @@ describe('InfiniteRowModelController', () => {
 
 		const mockDatasource: InfiniteDatasource<TestRow> = {
 			getRows: vi.fn().mockResolvedValue({
-				rows: [
-					{ id: '1', name: 'Alice' },
-					{ id: '2', name: 'Bob' },
-				],
+				rows: Array.from({ length: 50 }, (_, index) => ({
+					id: String(index + 1),
+					name: index === 0 ? 'Alice' : index === 1 ? 'Bob' : `Row ${index + 1}`,
+				})),
 				totalCount: 100,
 			}),
 		};
@@ -97,10 +97,10 @@ describe('InfiniteRowModelController', () => {
 			getRows: vi.fn().mockImplementation((params) => {
 				if (params.startRow === 0) {
 					return Promise.resolve({
-						rows: [
-							{ id: '1', name: 'Alice' },
-							{ id: '2', name: 'Bob' },
-						],
+						rows: Array.from({ length: 50 }, (_, index) => ({
+							id: String(index + 1),
+							name: index === 0 ? 'Alice' : index === 1 ? 'Bob' : `Row ${index + 1}`,
+						})),
 						totalCount: 100,
 					});
 				}
@@ -138,11 +138,11 @@ describe('InfiniteRowModelController', () => {
 		expect(controller.getRowLoadState(50)).toEqual({ kind: 'failed', error: 'block failed', retryable: true });
 		expect(controller.isRowFailed(50)).toBe(true);
 		expect(controller.getRangeLoadState(49, 51)).toEqual({
-			loaded: 0,
+			loaded: 1,
 			loading: 0,
 			failed: 2,
 			placeholder: 0,
-			missing: 1,
+			missing: 0,
 		});
 	});
 
@@ -239,13 +239,19 @@ describe('InfiniteRowModelController', () => {
 		controller.ensureRange(0, 0, 'retry');
 
 		resolveSecond({
-			rows: [{ id: '2', name: 'New Block Winner' }],
+			rows: Array.from({ length: 4 }, (_, index) => ({
+				id: String(index + 2),
+				name: index === 0 ? 'New Block Winner' : `Fresh Row ${index + 2}`,
+			})),
 			totalCount: 4,
 		});
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		resolveFirst({
-			rows: [{ id: '1', name: 'Stale Block Loser' }],
+			rows: Array.from({ length: 4 }, (_, index) => ({
+				id: String(index + 1),
+				name: index === 0 ? 'Stale Block Loser' : `Stale Row ${index + 1}`,
+			})),
 			totalCount: 4,
 		});
 		await new Promise((resolve) => setTimeout(resolve, 0));
@@ -258,20 +264,42 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
-	it('does not treat a partially populated block as fully loaded', async () => {
+	it('rejects a short non-terminal infinite block response instead of committing blank gaps', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name' }],
 		});
 
+		let impossibleShortBlockObserved = false;
+		let callCount = 0;
+		store.addEventListener(GridEventName.infiniteBlockLoadFailed, (event) => {
+			if (event.payload.message.includes('but totalCount 4 still requires rows within that block')) {
+				impossibleShortBlockObserved = true;
+			}
+		});
+
 		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
 			datasource: {
-				getRows: vi.fn().mockResolvedValue({
-					rows: [
-						{ id: '1', name: 'Alice' },
-						{ id: '2', name: 'Bob' },
-					],
-					totalCount: 4,
+				getRows: vi.fn().mockImplementation(() => {
+					callCount++;
+					if (callCount === 1) {
+						return Promise.resolve({
+							rows: [
+								{ id: '1', name: 'Alice v1' },
+								{ id: '2', name: 'Bob v1' },
+								{ id: '3', name: 'Carol v1' },
+								{ id: '4', name: 'Dylan v1' },
+							],
+							totalCount: 4,
+						});
+					}
+					return Promise.resolve({
+						rows: [
+							{ id: '1', name: 'Alice v2' },
+							{ id: '2', name: 'Bob v2' },
+						],
+						totalCount: 4,
+					});
 				}),
 			},
 			blockSize: 4,
@@ -279,20 +307,29 @@ describe('InfiniteRowModelController', () => {
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+
+		controller.ensureRange(0, 0, 'force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(controller.getVisualRowCount()).toBe(4);
-		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
-		expect(controller.getRowLoadState(1)).toEqual({ kind: 'loaded', rowId: '2' });
-		expect(controller.getRowLoadState(2)).toEqual({ kind: 'missing' });
-		expect(controller.getRowLoadState(3)).toEqual({ kind: 'missing' });
+		expect(impossibleShortBlockObserved).toBe(true);
+		expect(controller.getRowLoadState(0)).toEqual({
+			kind: 'failed',
+			error: 'Infinite datasource returned 2 rows for block 0-3 but totalCount 4 still requires rows within that block',
+			retryable: true,
+		});
 		expect(controller.isRangeLoaded(0, 3)).toBe(false);
 		expect(controller.getRangeLoadState(0, 3)).toEqual({
-			loaded: 2,
+			loaded: 0,
 			loading: 0,
-			failed: 0,
+			failed: 4,
 			placeholder: 0,
-			missing: 2,
+			missing: 0,
 		});
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
+		expect(getRowNode(controller, 2)?.data.name).toBe('Carol v1');
 
 		controller.dispose();
 		store.destroy();
@@ -978,10 +1015,10 @@ describe('InfiniteRowModelController', () => {
 				return new Promise((resolve) => {
 					setTimeout(() => {
 						resolve({
-							rows: [
-								{ id: '1', name: 'Alice' },
-								{ id: '2', name: 'Bob' },
-							],
+							rows: Array.from({ length: 50 }, (_, index) => ({
+								id: String(index + 1),
+								name: index === 0 ? 'Alice' : index === 1 ? 'Bob' : `Row ${index + 1}`,
+							})),
 							totalCount: 100,
 						});
 					}, 20);
@@ -1263,7 +1300,10 @@ describe('InfiniteRowModelController', () => {
 			getRows: vi.fn().mockImplementation((params) => {
 				if (params.startRow === 0) {
 					return Promise.resolve({
-						rows: [{ id: '1', name: 'Alice' }],
+						rows: Array.from({ length: 50 }, (_, index) => ({
+							id: String(index + 1),
+							name: index === 0 ? 'Alice' : `Row ${index + 1}`,
+						})),
 						totalCount: 100,
 					});
 				}
@@ -1481,12 +1521,18 @@ describe('InfiniteRowModelController', () => {
 			getRows: vi.fn().mockImplementation((params) => {
 				if (params.startRow === 0) {
 					return Promise.resolve({
-						rows: [{ id: '1', name: 'Alice v1' }],
+						rows: Array.from({ length: 50 }, (_, index) => ({
+							id: index === 0 ? '1' : `row-${index}`,
+							name: index === 0 ? 'Alice v1' : `Row ${index}`,
+						})),
 						totalCount: 100,
 					});
 				}
 				return Promise.resolve({
-					rows: [{ id: '1', name: 'Alice duplicated elsewhere' }],
+					rows: Array.from({ length: 50 }, (_, index) => ({
+						id: index === 0 ? '1' : `row-${50 + index}`,
+						name: index === 0 ? 'Alice duplicated elsewhere' : `Row ${50 + index}`,
+					})),
 					totalCount: 100,
 				});
 			}),
@@ -1824,7 +1870,7 @@ describe('InfiniteRowModelController', () => {
 			getRows: vi.fn().mockImplementation((params) => {
 				if (params.startRow === 0) {
 					return Promise.resolve({
-						rows: Array.from({ length: 20 }, (_, index) => ({
+						rows: Array.from({ length: 50 }, (_, index) => ({
 							id: `row-${index}`,
 							name: `Row ${index}`,
 						})),
@@ -1848,9 +1894,8 @@ describe('InfiniteRowModelController', () => {
 
 		expect(controller.getKnownRowCount()).toBeNull();
 		expect(controller.getRowCountKind()).toBe('estimated');
-		expect(controller.getVisualRowCount()).toBe(70);
-		expect(controller.getVisualRow(19)?.kind).toBe('data');
-		expect(controller.getRowLoadState(20)).toEqual({ kind: 'missing' });
+		expect(controller.getVisualRowCount()).toBe(100);
+		expect(controller.getVisualRow(49)?.kind).toBe('data');
 		expect(controller.getRowLoadState(50)).toEqual({ kind: 'loading', reason: 'infinite-block' });
 
 		controller.ensureRange(50, 50, 'test');

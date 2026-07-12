@@ -96,6 +96,23 @@ function validateInfiniteBlockResponse<TRowData>(
 			);
 		}
 	}
+	if (rows.length < blockSize) {
+		if (typeof options?.totalCount === 'number' && options.totalCount > minimumReachableCount) {
+			throw new Error(
+				`Infinite datasource returned ${rows.length} rows for block ${blockStartRow}-${blockStartRow + blockSize - 1} but totalCount ${options.totalCount} still requires rows within that block`
+			);
+		}
+		if (typeof options?.lastRow === 'number' && options.lastRow > minimumReachableCount) {
+			throw new Error(
+				`Infinite datasource returned ${rows.length} rows for block ${blockStartRow}-${blockStartRow + blockSize - 1} but lastRow ${options.lastRow} still requires rows within that block`
+			);
+		}
+		if (options?.hasMore === true) {
+			throw new Error(
+				`Infinite datasource returned ${rows.length} rows for block ${blockStartRow}-${blockStartRow + blockSize - 1} but hasMore true still requires rows within that block`
+			);
+		}
+	}
 
 	const seenRowIds = new Set<string>();
 	for (const row of rows) {

@@ -179,10 +179,11 @@ describe('Row model capabilities', () => {
 			rowSelection: { mode: 'multiple', selectAllScope: 'page' },
 			datasource: {
 				getRows: vi.fn().mockResolvedValue({
-					rows: [
-						{ id: '1', name: 'Alpha', amount: 1 },
-						{ id: '2', name: 'Beta', amount: 2 },
-					],
+					rows: Array.from({ length: 20 }, (_, index) => ({
+						id: String(index + 1),
+						name: index === 0 ? 'Alpha' : index === 1 ? 'Beta' : `Row ${index + 1}`,
+						amount: index + 1,
+					})),
 					totalCount: 20,
 				}),
 			},
@@ -191,11 +192,11 @@ describe('Row model capabilities', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		api.selectAllRows({ scope: 'page' });
-		expect(api.rows().getCheckedIds()).toEqual(['1', '2']);
+		expect(api.rows().getCheckedIds()).toEqual(Array.from({ length: 20 }, (_, index) => String(index + 1)));
 
 		api.clearRowSelection();
 		api.selectAllRows({ scope: 'loaded' });
-		expect(api.rows().getCheckedIds()).toEqual(['1', '2']);
+		expect(api.rows().getCheckedIds()).toEqual(Array.from({ length: 20 }, (_, index) => String(index + 1)));
 
 		api.clearRowSelection();
 		api.selectAllRows({ scope: 'all' });
