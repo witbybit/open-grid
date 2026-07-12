@@ -942,8 +942,7 @@ describe('InfiniteRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		vi.mocked(getPage).mockClear();
 
-		const writeResult = controller.writeCellValueStructurally('2', 'name', 'Removed From Filter');
-		expect(writeResult.changedFieldsByRow?.get('2')).toEqual(new Set(['name']));
+		expect(store.setCellValue('2', 'name', 'Removed From Filter').status).toBe('applied');
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(getPage).toHaveBeenCalledTimes(1);
