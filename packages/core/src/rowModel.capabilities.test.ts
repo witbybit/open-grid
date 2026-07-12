@@ -14,6 +14,7 @@ import { createClientGrid, createInfiniteGrid, createServerPageGrid } from './cr
 import { UnsupportedRowModelOperationError } from './rowModel.js';
 import { InfiniteRowModelController, type InfiniteDatasource } from './infiniteRowModel.js';
 import { ServerPageRowModelController, type ServerDatasource } from './serverPageRowModel.js';
+import type { ServerSideDatasource } from './serverSideRowModel.js';
 import type { ColumnDef } from './columnDef.js';
 
 // ── Shared types ──────────────────────────────────────────────────────────────
@@ -299,6 +300,31 @@ describe('Unsupported row model operations — client grid', () => {
 		api.destroy();
 	});
 
+	it('setServerSideDatasource throws', () => {
+		const api = createClientGrid({ rows: [], columns: COLUMNS, getRowId: (r) => r.id });
+		const ds: ServerSideDatasource<TestRow> = { getRows: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) };
+		expect(() => api.setServerSideDatasource(ds)).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
+	it('refreshServerSide throws', () => {
+		const api = createClientGrid({ rows: [], columns: COLUMNS, getRowId: (r) => r.id });
+		expect(() => api.refreshServerSide()).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
+	it('purgeServerSide throws', () => {
+		const api = createClientGrid({ rows: [], columns: COLUMNS, getRowId: (r) => r.id });
+		expect(() => api.purgeServerSide()).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
+	it('getServerSideStoreState throws', () => {
+		const api = createClientGrid({ rows: [], columns: COLUMNS, getRowId: (r) => r.id });
+		expect(() => api.getServerSideStoreState()).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
 	it('setRows on client succeeds (baseline)', () => {
 		const api = createClientGrid({ rows: [], columns: COLUMNS, getRowId: (r) => r.id });
 		expect(() => api.setRows([{ id: '1', name: 'Alice', amount: 1 }])).not.toThrow();
@@ -335,6 +361,47 @@ describe('Unsupported row model operations — infinite grid', () => {
 		});
 		const ds: ServerDatasource<TestRow> = { getPage: vi.fn().mockResolvedValue({ rows: [], totalRowCount: 0 }) };
 		expect(() => api.setServerPageDatasource(ds)).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
+	it('setServerSideDatasource throws', () => {
+		const api = createInfiniteGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			datasource: { getRows: vi.fn().mockResolvedValue({ rows: [], totalCount: 0 }) },
+		});
+		const ds: ServerSideDatasource<TestRow> = { getRows: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) };
+		expect(() => api.setServerSideDatasource(ds)).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
+	it('refreshServerSide throws', () => {
+		const api = createInfiniteGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			datasource: { getRows: vi.fn().mockResolvedValue({ rows: [], totalCount: 0 }) },
+		});
+		expect(() => api.refreshServerSide()).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
+	it('purgeServerSide throws', () => {
+		const api = createInfiniteGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			datasource: { getRows: vi.fn().mockResolvedValue({ rows: [], totalCount: 0 }) },
+		});
+		expect(() => api.purgeServerSide()).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
+	it('getServerSideStoreState throws', () => {
+		const api = createInfiniteGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			datasource: { getRows: vi.fn().mockResolvedValue({ rows: [], totalCount: 0 }) },
+		});
+		expect(() => api.getServerSideStoreState()).toThrowError(UnsupportedRowModelOperationError);
 		api.destroy();
 	});
 
@@ -380,6 +447,51 @@ describe('Unsupported row model operations — server grid', () => {
 		});
 		const ds: InfiniteDatasource<TestRow> = { getRows: vi.fn().mockResolvedValue({ rows: [], totalCount: 0 }) };
 		expect(() => api.setInfiniteDatasource(ds)).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
+	it('setServerSideDatasource throws', () => {
+		const api = createServerPageGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			datasource: { getPage: vi.fn().mockResolvedValue({ rows: [], totalRowCount: 0 }) },
+			pagination: { pageSize: 10 },
+		});
+		const ds: ServerSideDatasource<TestRow> = { getRows: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) };
+		expect(() => api.setServerSideDatasource(ds)).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
+	it('refreshServerSide throws', () => {
+		const api = createServerPageGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			datasource: { getPage: vi.fn().mockResolvedValue({ rows: [], totalRowCount: 0 }) },
+			pagination: { pageSize: 10 },
+		});
+		expect(() => api.refreshServerSide()).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
+	it('purgeServerSide throws', () => {
+		const api = createServerPageGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			datasource: { getPage: vi.fn().mockResolvedValue({ rows: [], totalRowCount: 0 }) },
+			pagination: { pageSize: 10 },
+		});
+		expect(() => api.purgeServerSide()).toThrowError(UnsupportedRowModelOperationError);
+		api.destroy();
+	});
+
+	it('getServerSideStoreState throws', () => {
+		const api = createServerPageGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			datasource: { getPage: vi.fn().mockResolvedValue({ rows: [], totalRowCount: 0 }) },
+			pagination: { pageSize: 10 },
+		});
+		expect(() => api.getServerSideStoreState()).toThrowError(UnsupportedRowModelOperationError);
 		api.destroy();
 	});
 
@@ -455,6 +567,27 @@ describe('UnsupportedRowModelOperationError shape', () => {
 			caught = e;
 		}
 		expect(caught).toBeInstanceOf(Error);
+		api.destroy();
+	});
+
+	it('setServerSideDatasource error names SSRM support honestly', () => {
+		const api = createServerPageGrid({
+			columns: COLUMNS,
+			getRowId: (r) => r.id,
+			datasource: { getPage: vi.fn().mockResolvedValue({ rows: [], totalRowCount: 0 }) },
+			pagination: { pageSize: 10 },
+		});
+		let caught: unknown;
+		try {
+			api.setServerSideDatasource({ getRows: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) });
+		} catch (e) {
+			caught = e;
+		}
+		expect(caught).toBeInstanceOf(UnsupportedRowModelOperationError);
+		const err = caught as UnsupportedRowModelOperationError;
+		expect(err.operation).toBe('setServerSideDatasource');
+		expect(err.rowModelType).toBe('server');
+		expect(err.supportedRowModels).toEqual(['server (SSRM)']);
 		api.destroy();
 	});
 });

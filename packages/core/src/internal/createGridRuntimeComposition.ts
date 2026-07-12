@@ -7,6 +7,7 @@ import type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from '..
 import { GridEventName } from '../api/GridEvents.js';
 import type { InfiniteDatasource } from '../infiniteRowModel.js';
 import type { ServerDatasource } from '../serverPageRowModel.js';
+import type { ServerSideDatasource, ServerSideRefreshOptions } from '../serverSideRowModel.js';
 import type { ThemeTokens } from '../renderer/themes.js';
 import type {
 	GridApi,
@@ -75,12 +76,16 @@ export function createGridRuntimeComposition<TRowData>({
 		purgeCache: () => runtime.purgeCache(),
 		setInfiniteDatasource: (datasource: InfiniteDatasource<TRowData>, blockSize?: number) => runtime.setInfiniteDatasource(datasource, blockSize),
 		setServerPageDatasource: (datasource: ServerDatasource<TRowData>) => runtime.setServerPageDatasource(datasource),
+		setServerSideDatasource: (datasource: ServerSideDatasource<TRowData>) => runtime.setServerSideDatasource(datasource),
 		goToServerPage: (page: number) => runtime.goToServerPage(page),
 		nextServerPage: () => runtime.nextServerPage(),
 		previousServerPage: () => runtime.previousServerPage(),
 		setServerPageSize: (pageSize: number) => runtime.setServerPageSize(pageSize),
 		refreshServerPage: (reason?: string) => runtime.refreshServerPage(reason),
 		getServerPageState: () => runtime.getServerPageState(),
+		refreshServerSide: (options?: ServerSideRefreshOptions) => runtime.refreshServerSide(options),
+		purgeServerSide: (options?: Omit<ServerSideRefreshOptions, 'purge'>) => runtime.purgeServerSide(options),
+		getServerSideStoreState: () => runtime.getServerSideStoreState(),
 		getCellValue: (rowId: string, colField: string) => runtime.getCellValue(rowId, colField),
 		getFormula: (rowId: string, colField: string) => runtime.getFormula(rowId, colField),
 		hasFormula: (rowId: string, colField: string) => runtime.hasFormula(rowId, colField),

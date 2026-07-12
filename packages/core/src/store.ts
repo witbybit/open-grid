@@ -26,6 +26,7 @@ import type { GridDomainVersions } from './state/GridDomainVersions.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
 import type { InfiniteDatasource } from './infiniteRowModel.js';
 import type { ServerDatasource, ServerPageState } from './serverPageRowModel.js';
+import type { ServerSideDatasource, ServerSideRefreshOptions, ServerSideStoreSnapshot } from './serverSideRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
 import type { ClientRowModelRuntime, InfiniteRowModelRuntime, ServerPageRowModelRuntime } from './engine/runtimePorts.js';
@@ -1132,6 +1133,14 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.assertServerPageRowModel('setServerPageDatasource').setDatasource(datasource);
 	};
 
+	public setServerSideDatasource = (_datasource: ServerSideDatasource<TRowData>): void => {
+		throw new UnsupportedRowModelOperationError({
+			operation: 'setServerSideDatasource',
+			rowModelType: this.getRowModelType(),
+			supportedRowModels: ['server (SSRM)'],
+		});
+	};
+
 	public goToServerPage = (page: number): void => {
 		this.assertServerPageRowModel('goToServerPage').goToPage(page);
 	};
@@ -1146,6 +1155,30 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getServerPageState = (): ServerPageState | null => {
 		return this.getServerPageControllableRowModel()?.getPageState() ?? null;
+	};
+
+	public refreshServerSide = (_options?: ServerSideRefreshOptions): void => {
+		throw new UnsupportedRowModelOperationError({
+			operation: 'refreshServerSide',
+			rowModelType: this.getRowModelType(),
+			supportedRowModels: ['server (SSRM)'],
+		});
+	};
+
+	public purgeServerSide = (_options?: Omit<ServerSideRefreshOptions, 'purge'>): void => {
+		throw new UnsupportedRowModelOperationError({
+			operation: 'purgeServerSide',
+			rowModelType: this.getRowModelType(),
+			supportedRowModels: ['server (SSRM)'],
+		});
+	};
+
+	public getServerSideStoreState = (): readonly ServerSideStoreSnapshot[] => {
+		throw new UnsupportedRowModelOperationError({
+			operation: 'getServerSideStoreState',
+			rowModelType: this.getRowModelType(),
+			supportedRowModels: ['server (SSRM)'],
+		});
 	};
 
 	public nextServerPage = (): void => {
