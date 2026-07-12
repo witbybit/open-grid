@@ -1324,6 +1324,65 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('rejects an oversized server-page response and keeps committed rows during reloadPage', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let oversizedPageObserved = false;
+		let callCount = 0;
+		const getPage = vi.fn().mockImplementation(() => {
+			callCount++;
+			if (callCount === 1) {
+				return Promise.resolve({
+					rows: [
+						{ id: '1', name: 'Alpha v1' },
+						{ id: '2', name: 'Beta v1' },
+					],
+					totalRowCount: 2,
+				});
+			}
+			return Promise.resolve({
+				rows: [
+					{ id: '1', name: 'Alpha v2' },
+					{ id: '2', name: 'Beta v2' },
+					{ id: '3', name: 'Gamma v2' },
+				],
+				totalRowCount: 3,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 2 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+
+		store.addEventListener(GridEventName.serverPageLoadFailed, (event) => {
+			if (event.payload.message.includes('returned 3 rows for page size 2')) {
+				oversizedPageObserved = true;
+			}
+		});
+
+		controller.reloadPage('force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(oversizedPageObserved).toBe(true);
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Alpha v1');
+		expect(controller.getVisualRow(1)?.kind).toBe('data');
+		expect(controller.getVisualRow(1)?.kind === 'data' ? controller.getVisualRow(1)?.node.data.name : null).toBe('Beta v1');
+		expect(controller.getPageState().totalRowCount).toBe(2);
+		expect(controller.getPageState().error).toBe('Server datasource returned 3 rows for page size 2');
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('publishes a core refresh invalidation when a server-page response fails', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,

@@ -35,6 +35,9 @@ function validateServerPageResponse<TRowData>(
 	response: ServerGetPageResult<TRowData>,
 	options: { page: number; pageSize: number; getRowId: (row: TRowData) => string }
 ): void {
+	if (response.rows.length > options.pageSize) {
+		throw new Error(`Server datasource returned ${response.rows.length} rows for page size ${options.pageSize}`);
+	}
 	if (response.totalRowCount < 0) {
 		throw new Error(`Server datasource returned negative totalRowCount ${response.totalRowCount}`);
 	}
