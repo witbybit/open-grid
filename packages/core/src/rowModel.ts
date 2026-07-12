@@ -7,6 +7,7 @@ import { getFieldRoot } from './ids.js';
 import { createGridRowDataRef } from './publicRowRef.js';
 import { RowNode } from './rowNode.js';
 import type { InternalRowNodeTransaction } from './rowTransactions.js';
+import type { AsyncRowModelRequestIdentity } from './asyncRowModelRequestIdentity.js';
 import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
 import { RowDependencyRegistry, classifyMutation, type RowMutationImpact } from './rows/rowMutationClassifier.js';
 import type { PageWindow } from './rows/pageModel.js';
@@ -68,11 +69,8 @@ export interface RowModelQueryState {
 	readonly queryVersion: number;
 }
 
-export interface RowModelRequestToken {
+export interface RowModelRequestToken extends AsyncRowModelRequestIdentity {
 	readonly kind: 'infinite-block' | 'server-page';
-	readonly datasourceGeneration: number;
-	readonly queryVersion: number;
-	readonly requestId: number;
 	readonly startRow?: number;
 	readonly endRow?: number;
 	readonly blockIndex?: number;

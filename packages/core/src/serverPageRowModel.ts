@@ -23,6 +23,7 @@ import { RowNode } from './rowNode.js';
 import { toDataVisualRowId, toFailedVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
 import { createAsyncRowModelQuerySnapshot } from './asyncRowModelQuerySnapshot.js';
+import { createServerPageScopeId } from './asyncRowModelRequestIdentity.js';
 
 function toErrorMessage(error: unknown): string {
 	if (error instanceof Error && error.message) return error.message;
@@ -526,6 +527,7 @@ export class ServerPageRowModelController<TData = unknown>
 			datasourceGeneration: queryState.datasourceGeneration,
 			queryVersion: queryState.queryVersion,
 			requestId,
+			scopeId: createServerPageScopeId(),
 			page,
 			pageSize,
 		};
@@ -537,6 +539,7 @@ export class ServerPageRowModelController<TData = unknown>
 		return (
 			token.datasourceGeneration === this.datasourceGeneration &&
 			token.queryVersion === this.queryVersion &&
+			token.scopeId === createServerPageScopeId() &&
 			token.requestId === this.activePageRequestId &&
 			token.page === this.currentPage &&
 			token.pageSize === this.pageSize

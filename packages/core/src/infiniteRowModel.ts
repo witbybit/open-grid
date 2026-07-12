@@ -24,6 +24,7 @@ import { RowNode } from './rowNode.js';
 import { toDataVisualRowId, toFailedVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
 import { createAsyncRowModelQuerySnapshot } from './asyncRowModelQuerySnapshot.js';
+import { createInfiniteBlockScopeId } from './asyncRowModelRequestIdentity.js';
 
 function toErrorMessage(error: unknown): string {
 	if (error instanceof Error && error.message) return error.message;
@@ -841,6 +842,7 @@ export class InfiniteRowModelController<TData = unknown>
 			datasourceGeneration: queryState.datasourceGeneration,
 			queryVersion: queryState.queryVersion,
 			requestId,
+			scopeId: createInfiniteBlockScopeId(blockIndex),
 			blockIndex,
 			startRow,
 			endRow,
@@ -855,6 +857,7 @@ export class InfiniteRowModelController<TData = unknown>
 		return (
 			token.datasourceGeneration === this.datasourceGeneration &&
 			token.queryVersion === this.queryVersion &&
+			token.scopeId === createInfiniteBlockScopeId(block.blockIndex) &&
 			token.requestId === block.requestId &&
 			token.queryVersion === block.queryVersion
 		);
