@@ -389,6 +389,13 @@ export class ServerPageRowModelController<TData = unknown>
 
 		node.setData(updatedRow);
 
+		const state = this.runtime.getState();
+		const affectsServerOrder =
+			(state.sortModel?.some((s) => s.colId === colField) ?? false) || (state.filterModel != null && colField in state.filterModel);
+		if (affectsServerOrder) {
+			this.reloadPage('row-write-server-refresh');
+		}
+
 		const changedFieldsByRow = new Map<string, Set<string>>();
 		changedFieldsByRow.set(rowId, new Set([colField]));
 		return { updatedNodes: [node], changedFieldsByRow, visualChange: 'none' };

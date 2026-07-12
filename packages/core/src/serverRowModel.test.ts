@@ -857,6 +857,102 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('reloads the server-page datasource after editing a field that participates in server sort', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let callCount = 0;
+		const getPage = vi.fn().mockImplementation(() => {
+			callCount++;
+			if (callCount <= 2) {
+				return Promise.resolve({
+					rows: [{ id: '1', name: 'Alpha' }],
+					totalRowCount: 1,
+				});
+			}
+			return Promise.resolve({
+				rows: [{ id: '1', name: 'Zulu' }],
+				totalRowCount: 1,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		vi.mocked(getPage).mockClear();
+
+		const node = store.getRowNode('1');
+		expect(node?.setData({ id: '1', name: 'Locally Edited' }).status).toBe('applied');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getPage).toHaveBeenCalledTimes(1);
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Zulu');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('reloads the server-page datasource after editing a field that participates in server filter', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let callCount = 0;
+		const getPage = vi.fn().mockImplementation(() => {
+			callCount++;
+			if (callCount === 1) {
+				return Promise.resolve({
+					rows: [
+						{ id: '1', name: 'Alpha' },
+						{ id: '2', name: 'Beta' },
+					],
+					totalRowCount: 2,
+				});
+			}
+			if (callCount === 2) {
+				return Promise.resolve({
+					rows: [{ id: '2', name: 'Beta' }],
+					totalRowCount: 1,
+				});
+			}
+			return Promise.resolve({
+				rows: [],
+				totalRowCount: 0,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'et' } });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		vi.mocked(getPage).mockClear();
+
+		const writeResult = controller.writeCellValueStructurally('2', 'name', 'Removed From Filter');
+		expect(writeResult.changedFieldsByRow?.get('2')).toEqual(new Set(['name']));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getPage).toHaveBeenCalledTimes(1);
+		expect(controller.getVisualRowCount()).toBe(0);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('publishes a core refresh invalidation when a server-page response resolves', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,

@@ -14,7 +14,8 @@
 - **Risk**: CRITICAL
 - **Depends on**: `plans/156-row-model-completion-and-public-row-node-facade.md`, `plans/157-interaction-kernel-hardening.md`
 - **Category**: architecture, correctness, row models
-- **Planned at**: working tree, 2026-07-11
+- **Planned at**: working tree, 2026-07-12
+- **Source directive**: shared guideline from the Plans 156/157 follow-up demolition brief
 
 ## Why this matters
 
