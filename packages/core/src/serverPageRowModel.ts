@@ -45,7 +45,7 @@ export interface ServerGetPageResult<TRowData> {
 }
 
 export interface ServerDatasource<TRowData = unknown> {
-	getPage(params: ServerGetPageParams): Promise<{ rows: TRowData[]; totalRowCount: number }>;
+	getPage(params: ServerGetPageParams, context: { signal?: AbortSignal }): Promise<{ rows: TRowData[]; totalRowCount: number }>;
 }
 
 export interface ServerPaginationOptions {
@@ -115,6 +115,7 @@ export class ServerPageRowModelController<TData = unknown>
 	private queryVersion = 0;
 	private nextRequestId = 1;
 	private activePageRequestId = 0;
+	private activeAbortController: AbortController | null = null;
 
 	private currentPage: number;
 	private pageSize: number;
@@ -197,6 +198,7 @@ export class ServerPageRowModelController<TData = unknown>
 	public dispose(): void {
 		this.disposed = true;
 		this.bumpDatasourceGeneration();
+		this.abortActivePageRequest();
 		this.unsubscribers.forEach((u) => u());
 		this.unsubscribers = [];
 	}
@@ -368,11 +370,14 @@ export class ServerPageRowModelController<TData = unknown>
 
 	private fetchPage = async (options?: { preserveVisibleRows?: boolean }): Promise<void> => {
 		if (this.disposed) return;
+		this.abortActivePageRequest();
 
 		const page = this.currentPage;
 		const pageSize = this.pageSize;
 		const preserveVisibleRows = options?.preserveVisibleRows ?? false;
 		const requestToken = this.createPageRequestToken(page, pageSize);
+		const abortController = new AbortController();
+		this.activeAbortController = abortController;
 
 		this.loading = true;
 		this.error = null;
@@ -400,7 +405,7 @@ export class ServerPageRowModelController<TData = unknown>
 				filterModel: state.filterModel,
 				quickFilterModel: state.quickFilterModel,
 				queryModel: state.queryModel,
-			});
+			}, { signal: abortController.signal });
 
 			if (!this.isRequestTokenCurrent(requestToken)) return;
 			const previousRowCount = this.getVisualRowCount();
@@ -474,6 +479,10 @@ export class ServerPageRowModelController<TData = unknown>
 				loading: false,
 				error: this.error,
 			});
+		} finally {
+			if (this.activeAbortController === abortController) {
+				this.activeAbortController = null;
+			}
 		}
 	};
 
@@ -549,5 +558,11 @@ export class ServerPageRowModelController<TData = unknown>
 
 	private isRetryReason(reason?: string): boolean {
 		return reason === 'row-node-retry-load' || reason === 'retry' || reason === 'force-reload';
+	}
+
+	private abortActivePageRequest(): void {
+		if (!this.activeAbortController) return;
+		this.activeAbortController.abort();
+		this.activeAbortController = null;
 	}
 }

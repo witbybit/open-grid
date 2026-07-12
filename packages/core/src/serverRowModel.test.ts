@@ -719,6 +719,78 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('passes an AbortSignal to the server-page datasource and aborts stale requests on query reset', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let initialSignal: AbortSignal | undefined;
+		let resolveReplacement!: (value: { rows: TestRow[]; totalRowCount: number }) => void;
+		let callCount = 0;
+		const getPage = vi.fn().mockImplementation((_params, context) => {
+			callCount++;
+			if (callCount === 1) {
+				initialSignal = context.signal;
+				return new Promise(() => undefined);
+			}
+			return new Promise((resolve) => {
+				resolveReplacement = resolve as typeof resolveReplacement;
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		expect(initialSignal).toBeDefined();
+		expect(initialSignal?.aborted).toBe(false);
+
+		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
+		expect(initialSignal?.aborted).toBe(true);
+
+		resolveReplacement({
+			rows: [{ id: '2', name: 'Sorted Page Winner' }],
+			totalRowCount: 1,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Sorted Page Winner');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('aborts in-flight server-page datasource requests on dispose', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let signal: AbortSignal | undefined;
+		const getPage = vi.fn().mockImplementation((_params, context) => {
+			signal = context.signal;
+			return new Promise(() => undefined);
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		expect(signal).toBeDefined();
+		expect(signal?.aborted).toBe(false);
+
+		controller.dispose();
+
+		expect(signal?.aborted).toBe(true);
+		store.destroy();
+	});
+
 	it('publishes a core refresh invalidation when a server-page response fails', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
