@@ -3255,6 +3255,47 @@ describe('GridStore undo and redo functionality', () => {
 		store.destroy();
 	});
 
+	it('publishes server-side store state through the engine without reusing the server-page slot', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		store.engine.setServerSideState({
+			loading: true,
+			error: null,
+			storeStates: [
+				{
+					storeId: 'root',
+					route: [],
+					level: 0,
+					rowCountState: { kind: 'unknown' },
+					blockCount: 0,
+					loadingBlockCount: 1,
+					failedBlockCount: 0,
+					childStoreCount: 0,
+				},
+			],
+		});
+
+		expect(store.getState().serverSide).toEqual({
+			loading: true,
+			error: null,
+			storeStates: [
+				{
+					storeId: 'root',
+					route: [],
+					level: 0,
+					rowCountState: { kind: 'unknown' },
+					blockCount: 0,
+					loadingBlockCount: 1,
+					failedBlockCount: 0,
+					childStoreCount: 0,
+				},
+			],
+		});
+		expect(store.getState().serverPage).toBeUndefined();
+	});
+
 	it('avoids redundant state updates and geometry version increments on setRowHeights and setDefaultRowHeight', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],

@@ -1,6 +1,7 @@
 import type { FilterModel, QuickFilterModel, SortDirection, SortModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
+import type { ServerSideStoreSnapshot } from '../serverSideRowModel.js';
 import type { ColumnDef, GridStyleRule, GridRendererOptions } from '../columnDef.js';
 import type { CanonicalGridSelectionState, GridInteractionState } from '../interaction/interactionState.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
@@ -155,6 +156,12 @@ export interface GridUIState {
 		totalRowCount: number;
 		loading: boolean;
 		error: string | null;
+	};
+	/** Reserved for the real server-side row model (SSRM). */
+	serverSide?: {
+		loading: boolean;
+		error: string | null;
+		storeStates: readonly ServerSideStoreSnapshot[];
 	};
 }
 

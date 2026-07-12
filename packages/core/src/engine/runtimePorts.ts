@@ -125,6 +125,7 @@ export interface ServerPageRowModelRuntime<TRowData = unknown> extends RowModelR
 	dispatchServerPageLoaded: (payload: GridEventPayloadMap<TRowData>[GridEventName.serverPageLoaded]) => void;
 	dispatchServerPageLoadFailed: (payload: GridEventPayloadMap<TRowData>[GridEventName.serverPageLoadFailed]) => void;
 	setServerPageState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverPage']>) => void;
+	setServerSideState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverSide']>) => void;
 }
 
 export interface RowModelRuntimeEngineBridge<TRowData = unknown> {
@@ -154,6 +155,7 @@ export interface RowModelRuntimeEngineBridge<TRowData = unknown> {
 	setRowModelLoadingState: (loading: boolean) => void;
 	setServerPaginationState: (payload: GridEventPayloadMap<TRowData>[GridEventName.paginationChanged]) => void;
 	setServerPageState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverPage']>) => void;
+	setServerSideState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverSide']>) => void;
 }
 
 export interface RowModelRuntimeStoreBridge<TRowData = unknown> {

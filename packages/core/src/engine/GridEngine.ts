@@ -806,6 +806,14 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
+	public setServerSideState(state: NonNullable<InternalGridState<TRowData>['serverSide']>): void {
+		this.changeApplier.apply({
+			reason: 'rows:set-server-side',
+			state: { serverSide: state },
+			requestRender: false,
+		});
+	}
+
 	public setVisibleRanges(
 		visibleRowRange: InternalGridState<TRowData>['visibleRowRange'],
 		visibleColRange: InternalGridState<TRowData>['visibleColRange']
