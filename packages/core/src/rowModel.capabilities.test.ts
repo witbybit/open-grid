@@ -1128,7 +1128,10 @@ describe('Fast scroll deferred block loading', () => {
 		// Next loadVisibleBlocks call flushes the pending deferred range
 		ctrl.loadVisibleBlocks(20, 29);
 		await new Promise((res) => setTimeout(res, 0));
-		expect(getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 20, endRow: 30 }));
+		expect(getRows).toHaveBeenCalledWith(
+			expect.objectContaining({ startRow: 20, endRow: 30 }),
+			expect.objectContaining({ signal: expect.any(Object) })
+		);
 
 		ctrl.dispose();
 	});

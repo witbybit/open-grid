@@ -138,7 +138,7 @@ export interface InfiniteGetRowsResult<TRowData = unknown> {
 }
 
 export interface InfiniteDatasource<TRowData = unknown> {
-	getRows(params: InfiniteGetRowsParams): Promise<InfiniteGetRowsResult<TRowData>>;
+	getRows(params: InfiniteGetRowsParams, context: { signal?: AbortSignal }): Promise<InfiniteGetRowsResult<TRowData>>;
 }
 
 export interface InfiniteRowModelOptions<TData = unknown> {
@@ -421,6 +421,7 @@ export class InfiniteRowModelController<TData = unknown>
 	private visualRowIdToIndex = new Map<string, number>();
 	private rowIdToVisualIndex = new Map<string, number>();
 	private readonly blockCache = new InfiniteBlockCache<TData>();
+	private readonly activeAbortControllers = new Map<number, AbortController>();
 	private unsubscribers: Array<() => void> = [];
 	private disposed = false;
 	private datasourceGeneration = 0;
@@ -462,6 +463,7 @@ export class InfiniteRowModelController<TData = unknown>
 	public dispose(): void {
 		this.disposed = true;
 		this.bumpDatasourceGeneration();
+		this.abortAllInflightRequests();
 		this.blockCache.reset();
 		this.pendingVisibleLoad = null;
 		this.latestVisibleBlocks.clear();
@@ -693,9 +695,15 @@ export class InfiniteRowModelController<TData = unknown>
 		if (this.disposed) return;
 		const requestId = this.nextRequestId++;
 		const queryState = this.getQueryState();
+		const existingBlock = this.blockCache.getBlock(blockIndex);
+		if (existingBlock?.status === 'loading') {
+			this.abortRequest(existingBlock.requestId);
+		}
 		const block = this.blockCache.beginLoad(blockIndex, this.blockSize, requestId, queryState.queryVersion);
 		const requestStartedAt = InfiniteBlockCache.now();
 		const previousRowCount = this.blockCache.getVisualRowCount();
+		const abortController = new AbortController();
+		this.activeAbortControllers.set(requestId, abortController);
 
 		if (blockIndex === 0) this.runtime.setLoadingState(true);
 
@@ -713,7 +721,7 @@ export class InfiniteRowModelController<TData = unknown>
 				filterModel: state.filterModel,
 				quickFilterModel: state.quickFilterModel,
 				queryModel: state.queryModel,
-			});
+			}, { signal: abortController.signal });
 
 			if (!this.isRequestTokenCurrent(requestToken)) return;
 			validateInfiniteBlockResponse(response.rows, this.blockSize, (row) => this.runtime.getRowId(row as TData), {
@@ -786,6 +794,8 @@ export class InfiniteRowModelController<TData = unknown>
 			});
 			this.runtime.reportBlockLoadFailure(blockIndex, error);
 			this.runtime.setLoadingState(this.blockCache.getLoadingBlockCount() > 0);
+		} finally {
+			this.activeAbortControllers.delete(requestId);
 		}
 	};
 
@@ -842,6 +852,7 @@ export class InfiniteRowModelController<TData = unknown>
 
 	private resetCacheAndRefetch(): void {
 		if (this.disposed) return;
+		this.abortAllInflightRequests();
 		this.blockCache.reset();
 		this.nodeMap.clear();
 		this.visualRowIdToIndex.clear();
@@ -856,6 +867,19 @@ export class InfiniteRowModelController<TData = unknown>
 	private evictOverflowBlocks(): void {
 		if (this.maxBlocksInCache === null) return;
 		this.blockCache.evictOverflow(this.maxBlocksInCache, this.latestVisibleBlocks);
+	}
+
+	private abortRequest(requestId: number): void {
+		const controller = this.activeAbortControllers.get(requestId);
+		if (!controller) return;
+		controller.abort();
+		this.activeAbortControllers.delete(requestId);
+	}
+
+	private abortAllInflightRequests(): void {
+		for (const requestId of this.activeAbortControllers.keys()) {
+			this.abortRequest(requestId);
+		}
 	}
 
 	private rebuildBlockDerivedIndexes(): void {

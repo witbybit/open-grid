@@ -336,7 +336,8 @@ describe('InfiniteRowModelController', () => {
 			expect.objectContaining({
 				startRow: 50,
 				endRow: 100,
-			})
+			}),
+			expect.objectContaining({ signal: expect.any(Object) })
 		);
 		expect(controller.getVisualRow(50)?.kind).toBe('data');
 		expect(getRowNode(controller, 50)?.data.name).toBe('Row 50');
@@ -432,8 +433,14 @@ describe('InfiniteRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		// Since we are scrolling down, block 1 (indices 100-199) and block 2 (indices 200-299) should be fetched ahead of time
-		expect(mockDatasource.getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 100, endRow: 200 }));
-		expect(mockDatasource.getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 200, endRow: 300 }));
+		expect(mockDatasource.getRows).toHaveBeenCalledWith(
+			expect.objectContaining({ startRow: 100, endRow: 200 }),
+			expect.objectContaining({ signal: expect.any(Object) })
+		);
+		expect(mockDatasource.getRows).toHaveBeenCalledWith(
+			expect.objectContaining({ startRow: 200, endRow: 300 }),
+			expect.objectContaining({ signal: expect.any(Object) })
+		);
 	});
 
 	it('should suppress pre-fetching blocks during extremely high scroll velocity', async () => {
@@ -809,6 +816,81 @@ describe('InfiniteRowModelController', () => {
 		expect(controller.getVisualRowCount()).toBe(100);
 	});
 
+	it('passes an AbortSignal to the infinite datasource and aborts stale requests on query reset', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let initialSignal: AbortSignal | undefined;
+		let resolveReplacement!: (value: { rows: TestRow[]; totalCount: number }) => void;
+		let callCount = 0;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((_params, context) => {
+				callCount++;
+				if (callCount === 1) {
+					initialSignal = context.signal;
+					return new Promise(() => undefined);
+				}
+				return new Promise((resolve) => {
+					resolveReplacement = resolve as typeof resolveReplacement;
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		expect(initialSignal).toBeDefined();
+		expect(initialSignal?.aborted).toBe(false);
+
+		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
+		expect(initialSignal?.aborted).toBe(true);
+
+		resolveReplacement({
+			rows: [{ id: '2', name: 'Sorted Winner' }],
+			totalCount: 1,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getRowNode(controller, 0)?.data.name).toBe('Sorted Winner');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('aborts in-flight infinite datasource requests on dispose', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let signal: AbortSignal | undefined;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((_params, context) => {
+				signal = context.signal;
+				return new Promise(() => undefined);
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 50,
+			columns: store.getState().columns,
+		});
+
+		expect(signal).toBeDefined();
+		expect(signal?.aborted).toBe(false);
+
+		controller.dispose();
+
+		expect(signal?.aborted).toBe(true);
+		store.destroy();
+	});
+
 	it('should not synchronously set state and increment globalVersion when fetching subsequent blocks (blockIndex > 0)', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
@@ -917,7 +999,10 @@ describe('InfiniteRowModelController', () => {
 		controller.setDatasource(secondDatasource, 25);
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		expect(secondDatasource.getRows).toHaveBeenCalledWith(expect.objectContaining({ startRow: 0, endRow: 25 }));
+		expect(secondDatasource.getRows).toHaveBeenCalledWith(
+			expect.objectContaining({ startRow: 0, endRow: 25 }),
+			expect.objectContaining({ signal: expect.any(Object) })
+		);
 		expect(controller.getVisualIndexById('1')).toBe(-1);
 		expect(getRowNode(controller, 0)?.data.name).toBe('Bob');
 	});
@@ -1016,7 +1101,10 @@ describe('InfiniteRowModelController', () => {
 		expect(controller.getKnownRowCount()).toBeNull();
 		expect(controller.getRowCountKind()).toBe('unknown');
 		expect(controller.getRowLoadState(50)).toEqual({ kind: 'missing' });
-		expect(mockDatasource.getRows).toHaveBeenLastCalledWith(expect.objectContaining({ startRow: 0, endRow: 50 }));
+		expect(mockDatasource.getRows).toHaveBeenLastCalledWith(
+			expect.objectContaining({ startRow: 0, endRow: 50 }),
+			expect.objectContaining({ signal: expect.any(Object) })
+		);
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(controller.getKnownRowCount()).toBe(100);
