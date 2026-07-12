@@ -48,6 +48,11 @@ function validateServerPageResponse<TRowData>(
 			`Server datasource returned totalRowCount ${response.totalRowCount}, which is smaller than the loaded page range ending at ${minimumReachableCount - 1}`
 		);
 	}
+	if (response.rows.length < options.pageSize && response.totalRowCount > minimumReachableCount) {
+		throw new Error(
+			`Server datasource returned ${response.rows.length} rows for page ${options.page} with page size ${options.pageSize}, but totalRowCount ${response.totalRowCount} still requires rows within that page`
+		);
+	}
 	const seenRowIds = new Set<string>();
 	for (const row of response.rows) {
 		const rowId = options.getRowId(row);

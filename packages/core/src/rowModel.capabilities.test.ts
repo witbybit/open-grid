@@ -215,10 +215,11 @@ describe('Row model capabilities', () => {
 			rowSelection: { mode: 'multiple', selectAllScope: 'page' },
 			datasource: {
 				getPage: vi.fn().mockResolvedValue({
-					rows: [
-						{ id: '1', name: 'Alpha', amount: 1 },
-						{ id: '2', name: 'Beta', amount: 2 },
-					],
+					rows: Array.from({ length: 10 }, (_, index) => ({
+						id: String(index + 1),
+						name: index === 0 ? 'Alpha' : index === 1 ? 'Beta' : `Row ${index + 1}`,
+						amount: index + 1,
+					})),
 					totalRowCount: 20,
 				}),
 			},
@@ -228,11 +229,11 @@ describe('Row model capabilities', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		api.selectAllRows({ scope: 'page' });
-		expect(api.rows().getCheckedIds()).toEqual(['1', '2']);
+		expect(api.rows().getCheckedIds()).toEqual(Array.from({ length: 10 }, (_, index) => String(index + 1)));
 
 		api.clearRowSelection();
 		api.selectAllRows({ scope: 'loaded' });
-		expect(api.rows().getCheckedIds()).toEqual(['1', '2']);
+		expect(api.rows().getCheckedIds()).toEqual(Array.from({ length: 10 }, (_, index) => String(index + 1)));
 
 		api.clearRowSelection();
 		api.selectAllRows({ scope: 'all' });
@@ -517,7 +518,16 @@ describe('Server page loading state publication', () => {
 		let callCount = 0;
 		const getPage = vi.fn(() => {
 			callCount++;
-			if (callCount === 1) return Promise.resolve({ rows: [{ id: '1', name: 'A', amount: 0 }], totalRowCount: 10 });
+			if (callCount === 1) {
+				return Promise.resolve({
+					rows: Array.from({ length: 5 }, (_, index) => ({
+						id: String(index + 1),
+						name: index === 0 ? 'A' : `Row ${index + 1}`,
+						amount: index,
+					})),
+					totalRowCount: 10,
+				});
+			}
 			return new Promise<{ rows: TestRow[]; totalRowCount: number }>((res) => {
 				resolveSecond = res;
 			});
@@ -538,7 +548,14 @@ describe('Server page loading state publication', () => {
 		// loading must be true before the second fetch completes
 		expect(store.getServerPageState()!.loading).toBe(true);
 
-		resolveSecond!({ rows: [{ id: '2', name: 'B', amount: 0 }], totalRowCount: 10 });
+		resolveSecond!({
+			rows: Array.from({ length: 5 }, (_, index) => ({
+				id: String(index + 6),
+				name: index === 0 ? 'B' : `Page Two ${index + 6}`,
+				amount: index,
+			})),
+			totalRowCount: 10,
+		});
 		await new Promise((res) => setTimeout(res, 0));
 		expect(store.getServerPageState()!.loading).toBe(false);
 
@@ -552,10 +569,11 @@ describe('Server page loading state publication', () => {
 			callCount++;
 			if (callCount === 1) {
 				return Promise.resolve({
-					rows: [
-						{ id: '1', name: 'Alice', amount: 100 },
-						{ id: '2', name: 'Bob', amount: 200 },
-					],
+					rows: Array.from({ length: 5 }, (_, index) => ({
+						id: String(index + 1),
+						name: index === 0 ? 'Alice' : index === 1 ? 'Bob' : `Row ${index + 1}`,
+						amount: (index + 1) * 100,
+					})),
 					totalRowCount: 10,
 				});
 			}
@@ -589,7 +607,11 @@ describe('Server page loading state publication', () => {
 		);
 
 		resolveSecond!({
-			rows: [{ id: '6', name: 'Page Two', amount: 600 }],
+			rows: Array.from({ length: 5 }, (_, index) => ({
+				id: String(index + 6),
+				name: index === 0 ? 'Page Two' : `Page Two ${index + 6}`,
+				amount: (index + 6) * 100,
+			})),
 			totalRowCount: 10,
 		});
 		await new Promise((res) => setTimeout(res, 0));
@@ -608,7 +630,11 @@ describe('Server page loading state publication', () => {
 			callCount++;
 			if (callCount === 1) {
 				return Promise.resolve({
-					rows: [{ id: '1', name: 'Alice', amount: 100 }],
+					rows: Array.from({ length: 5 }, (_, index) => ({
+						id: String(index + 1),
+						name: index === 0 ? 'Alice' : `Row ${index + 1}`,
+						amount: (index + 1) * 100,
+					})),
 					totalRowCount: 10,
 				});
 			}
@@ -626,8 +652,8 @@ describe('Server page loading state publication', () => {
 
 		await new Promise((res) => setTimeout(res, 0));
 
-		expect(ctrl.getKnownRowCount()).toBe(1);
-		expect(ctrl.getEstimatedRowCount()).toBe(1);
+		expect(ctrl.getKnownRowCount()).toBe(5);
+		expect(ctrl.getEstimatedRowCount()).toBe(5);
 		expect(ctrl.getRowCountKind()).toBe('known');
 		expect(ctrl.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(ctrl.isRangeLoaded(0, 0)).toBe(true);
@@ -683,13 +709,21 @@ describe('Server page loading state publication', () => {
 		ctrl.reloadPage('retry');
 
 		resolveSecond!({
-			rows: [{ id: '2', name: 'New Page Winner', amount: 200 }],
+			rows: Array.from({ length: 5 }, (_, index) => ({
+				id: String(index + 6),
+				name: index === 0 ? 'New Page Winner' : `Fresh Page ${index + 6}`,
+				amount: (index + 6) * 100,
+			})),
 			totalRowCount: 5,
 		});
 		await new Promise((res) => setTimeout(res, 0));
 
 		resolveFirst!({
-			rows: [{ id: '1', name: 'Stale Page Loser', amount: 100 }],
+			rows: Array.from({ length: 5 }, (_, index) => ({
+				id: String(index + 1),
+				name: index === 0 ? 'Stale Page Loser' : `Stale Page ${index + 1}`,
+				amount: (index + 1) * 100,
+			})),
 			totalRowCount: 5,
 		});
 		await new Promise((res) => setTimeout(res, 0));
@@ -703,7 +737,11 @@ describe('Server page loading state publication', () => {
 
 	it('server-page ensureRange does not reload the current loaded page on viewport-render checks', async () => {
 		const getPage = vi.fn().mockResolvedValue({
-			rows: [{ id: '1', name: 'Alice', amount: 100 }],
+			rows: Array.from({ length: 5 }, (_, index) => ({
+				id: String(index + 1),
+				name: index === 0 ? 'Alice' : `Row ${index + 1}`,
+				amount: (index + 1) * 100,
+			})),
 			totalRowCount: 5,
 		});
 
@@ -733,10 +771,11 @@ describe('Server page loading state publication', () => {
 			callCount++;
 			if (callCount === 1) {
 				return Promise.resolve({
-					rows: [
-						{ id: '1', name: 'Alice', amount: 100 },
-						{ id: '2', name: 'Bob', amount: 200 },
-					],
+					rows: Array.from({ length: 5 }, (_, index) => ({
+						id: String(index + 1),
+						name: index === 0 ? 'Alice' : index === 1 ? 'Bob' : `Row ${index + 1}`,
+						amount: (index + 1) * 100,
+					})),
 					totalRowCount: 10,
 				});
 			}
@@ -769,7 +808,11 @@ describe('Server page loading state publication', () => {
 		expect(store.getState().activeEdit).toBeNull();
 
 		resolveSecond!({
-			rows: [{ id: '6', name: 'Page Two', amount: 600 }],
+			rows: Array.from({ length: 5 }, (_, index) => ({
+				id: String(index + 6),
+				name: index === 0 ? 'Page Two' : `Page Two ${index + 6}`,
+				amount: (index + 6) * 100,
+			})),
 			totalRowCount: 10,
 		});
 		await new Promise((res) => setTimeout(res, 0));
@@ -784,10 +827,11 @@ describe('Server page loading state publication', () => {
 			callCount++;
 			if (callCount === 1) {
 				return Promise.resolve({
-					rows: [
-						{ id: '1', name: 'Alice', amount: 100 },
-						{ id: '2', name: 'Bob', amount: 200 },
-					],
+					rows: Array.from({ length: 5 }, (_, index) => ({
+						id: String(index + 1),
+						name: index === 0 ? 'Alice' : index === 1 ? 'Bob' : `Row ${index + 1}`,
+						amount: (index + 1) * 100,
+					})),
 					totalRowCount: 10,
 				});
 			}
@@ -813,7 +857,11 @@ describe('Server page loading state publication', () => {
 		expect(store.getState().selectedRowIds).toEqual([]);
 
 		resolveSecond!({
-			rows: [{ id: '6', name: 'Page Two', amount: 600 }],
+			rows: Array.from({ length: 5 }, (_, index) => ({
+				id: String(index + 6),
+				name: index === 0 ? 'Page Two' : `Page Two ${index + 6}`,
+				amount: (index + 6) * 100,
+			})),
 			totalRowCount: 10,
 		});
 		await new Promise((res) => setTimeout(res, 0));
@@ -828,7 +876,11 @@ describe('Server page loading state publication', () => {
 			callCount++;
 			if (callCount === 1) {
 				return Promise.resolve({
-					rows: [{ id: '1', name: 'Alice', amount: 100 }],
+					rows: Array.from({ length: 5 }, (_, index) => ({
+						id: String(index + 1),
+						name: index === 0 ? 'Alice' : `Row ${index + 1}`,
+						amount: (index + 1) * 100,
+					})),
 					totalRowCount: 10,
 				});
 			}
@@ -865,7 +917,11 @@ describe('Server page loading state publication', () => {
 		});
 
 		resolveSecond!({
-			rows: [{ id: '6', name: 'Page Two', amount: 600 }],
+			rows: Array.from({ length: 5 }, (_, index) => ({
+				id: String(index + 6),
+				name: index === 0 ? 'Page Two' : `Page Two ${index + 6}`,
+				amount: (index + 6) * 100,
+			})),
 			totalRowCount: 10,
 		});
 		await new Promise((res) => setTimeout(res, 0));
