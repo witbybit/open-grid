@@ -22,6 +22,7 @@ import type { RowSelectionScope } from './api/GridApi.js';
 import { RowNode } from './rowNode.js';
 import { toDataVisualRowId, toFailedVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
+import { createAsyncRowModelQuerySnapshot } from './asyncRowModelQuerySnapshot.js';
 
 function toErrorMessage(error: unknown): string {
 	if (error instanceof Error && error.message) return error.message;
@@ -412,15 +413,16 @@ export class ServerPageRowModelController<TData = unknown>
 		this.runtime.dispatchServerPageLoadingStarted({ page, pageSize });
 
 		const state = this.runtime.getState();
+		const querySnapshot = createAsyncRowModelQuerySnapshot(state);
 
 		try {
 			const response = await this.datasource.getPage({
 				page,
 				pageSize,
-				sortModel: state.sortModel,
-				filterModel: state.filterModel,
-				quickFilterModel: state.quickFilterModel,
-				queryModel: state.queryModel,
+				sortModel: querySnapshot.sortModel,
+				filterModel: querySnapshot.filterModel,
+				quickFilterModel: querySnapshot.quickFilterModel,
+				queryModel: querySnapshot.queryModel,
 			}, { signal: abortController.signal });
 
 			if (!this.isRequestTokenCurrent(requestToken)) return;

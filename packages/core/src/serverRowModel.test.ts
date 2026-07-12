@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { GridEventName, GridStore } from './store.js';
 import { InfiniteRowModelController, type InfiniteDatasource } from './infiniteRowModel.js';
 import { ServerPageRowModelController } from './serverPageRowModel.js';
+import type { GridQueryModel } from './query/GridQueryModel.js';
 
 interface TestRow {
 	id: string;
@@ -607,6 +608,74 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('passes immutable query snapshots to the infinite datasource', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const queryModel: GridQueryModel = {
+			version: 1,
+			root: {
+				kind: 'group',
+				id: 'root',
+				operator: 'and',
+				children: [{ kind: 'condition', id: 'c1', columnId: 'name', operator: 'contains', value: 'alp' }],
+			},
+		};
+		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'alp' } });
+		store.setQuickFilter('alp', ['name']);
+		store.setQueryModel(queryModel);
+
+		const getRows = vi.fn().mockImplementation((params) => {
+			const liveState = store.getState();
+			expect(params.sortModel).toEqual(liveState.sortModel);
+			expect(params.filterModel).toEqual(liveState.filterModel);
+			expect(params.quickFilterModel).toEqual(liveState.quickFilterModel);
+			expect(params.queryModel).toEqual(liveState.queryModel);
+			expect(params.sortModel).not.toBe(liveState.sortModel);
+			expect(params.filterModel).not.toBe(liveState.filterModel);
+			expect(params.quickFilterModel).not.toBe(liveState.quickFilterModel);
+			expect(params.queryModel).not.toBe(liveState.queryModel);
+			expect(Object.isFrozen(params.sortModel)).toBe(true);
+			expect(Object.isFrozen(params.filterModel)).toBe(true);
+			expect(Object.isFrozen(params.quickFilterModel)).toBe(true);
+			expect(Object.isFrozen(params.queryModel)).toBe(true);
+			expect(() => {
+				((params.sortModel as Array<{ sort: string }>)[0]!).sort = 'desc';
+			}).toThrow();
+			expect(() => {
+				(params.filterModel as Record<string, { value: string }>).name.value = 'mutated';
+			}).toThrow();
+			expect(() => {
+				(params.quickFilterModel as { text: string }).text = 'mutated';
+			}).toThrow();
+			expect(() => {
+				(((params.queryModel as GridQueryModel).root.children as Array<{ value?: unknown }>)[0]!).value = 'mutated';
+			}).toThrow();
+			return Promise.resolve({
+				rows: [{ id: '1', name: 'Alpha' }],
+				totalCount: 1,
+			});
+		});
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: { getRows },
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(store.getState().sortModel).toEqual([{ colId: 'name', sort: 'asc' }]);
+		expect(store.getState().filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'alp' } });
+		expect(store.getState().quickFilterModel).toEqual({ text: 'alp', columnIds: ['name'] });
+		expect(store.getState().queryModel).toEqual(queryModel);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('refetches server-page rows on sort changes and publishes the returned order', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
@@ -751,6 +820,74 @@ describe('InfiniteRowModelController', () => {
 		expect(controller.getVisualRowCount()).toBe(1);
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Beta');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('passes immutable query snapshots to the server-page datasource', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const queryModel: GridQueryModel = {
+			version: 1,
+			root: {
+				kind: 'group',
+				id: 'root',
+				operator: 'and',
+				children: [{ kind: 'condition', id: 'c1', columnId: 'name', operator: 'contains', value: 'bet' }],
+			},
+		};
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'bet' } });
+		store.setQuickFilter('bet', ['name']);
+		store.setQueryModel(queryModel);
+
+		const getPage = vi.fn().mockImplementation((params) => {
+			const liveState = store.getState();
+			expect(params.sortModel).toEqual(liveState.sortModel);
+			expect(params.filterModel).toEqual(liveState.filterModel);
+			expect(params.quickFilterModel).toEqual(liveState.quickFilterModel);
+			expect(params.queryModel).toEqual(liveState.queryModel);
+			expect(params.sortModel).not.toBe(liveState.sortModel);
+			expect(params.filterModel).not.toBe(liveState.filterModel);
+			expect(params.quickFilterModel).not.toBe(liveState.quickFilterModel);
+			expect(params.queryModel).not.toBe(liveState.queryModel);
+			expect(Object.isFrozen(params.sortModel)).toBe(true);
+			expect(Object.isFrozen(params.filterModel)).toBe(true);
+			expect(Object.isFrozen(params.quickFilterModel)).toBe(true);
+			expect(Object.isFrozen(params.queryModel)).toBe(true);
+			expect(() => {
+				((params.sortModel as Array<{ sort: string }>)[0]!).sort = 'asc';
+			}).toThrow();
+			expect(() => {
+				(params.filterModel as Record<string, { value: string }>).name.value = 'mutated';
+			}).toThrow();
+			expect(() => {
+				(params.quickFilterModel as { text: string }).text = 'mutated';
+			}).toThrow();
+			expect(() => {
+				(((params.queryModel as GridQueryModel).root.children as Array<{ value?: unknown }>)[0]!).value = 'mutated';
+			}).toThrow();
+			return Promise.resolve({
+				rows: [{ id: '2', name: 'Beta' }],
+				totalRowCount: 1,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(store.getState().sortModel).toEqual([{ colId: 'name', sort: 'desc' }]);
+		expect(store.getState().filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'bet' } });
+		expect(store.getState().quickFilterModel).toEqual({ text: 'bet', columnIds: ['name'] });
+		expect(store.getState().queryModel).toEqual(queryModel);
 
 		controller.dispose();
 		store.destroy();
