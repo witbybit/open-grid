@@ -1174,11 +1174,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public getServerSideStoreState = (): readonly ServerSideStoreSnapshot[] => {
-		throw new UnsupportedRowModelOperationError({
-			operation: 'getServerSideStoreState',
-			rowModelType: this.getRowModelType(),
-			supportedRowModels: ['server (SSRM)'],
-		});
+		return this.getState().serverSide?.storeStates ?? [];
 	};
 
 	public nextServerPage = (): void => {

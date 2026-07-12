@@ -319,9 +319,9 @@ describe('Unsupported row model operations — client grid', () => {
 		api.destroy();
 	});
 
-	it('getServerSideStoreState throws', () => {
+	it('getServerSideStoreState returns an empty SSRM snapshot list', () => {
 		const api = createClientGrid({ rows: [], columns: COLUMNS, getRowId: (r) => r.id });
-		expect(() => api.getServerSideStoreState()).toThrowError(UnsupportedRowModelOperationError);
+		expect(api.getServerSideStoreState()).toEqual([]);
 		api.destroy();
 	});
 
@@ -395,13 +395,13 @@ describe('Unsupported row model operations — infinite grid', () => {
 		api.destroy();
 	});
 
-	it('getServerSideStoreState throws', () => {
+	it('getServerSideStoreState returns an empty SSRM snapshot list', () => {
 		const api = createInfiniteGrid({
 			columns: COLUMNS,
 			getRowId: (r) => r.id,
 			datasource: { getRows: vi.fn().mockResolvedValue({ rows: [], totalCount: 0 }) },
 		});
-		expect(() => api.getServerSideStoreState()).toThrowError(UnsupportedRowModelOperationError);
+		expect(api.getServerSideStoreState()).toEqual([]);
 		api.destroy();
 	});
 
@@ -484,14 +484,14 @@ describe('Unsupported row model operations — server grid', () => {
 		api.destroy();
 	});
 
-	it('getServerSideStoreState throws', () => {
+	it('getServerSideStoreState returns an empty SSRM snapshot list before SSRM is wired', () => {
 		const api = createServerPageGrid({
 			columns: COLUMNS,
 			getRowId: (r) => r.id,
 			datasource: { getPage: vi.fn().mockResolvedValue({ rows: [], totalRowCount: 0 }) },
 			pagination: { pageSize: 10 },
 		});
-		expect(() => api.getServerSideStoreState()).toThrowError(UnsupportedRowModelOperationError);
+		expect(api.getServerSideStoreState()).toEqual([]);
 		api.destroy();
 	});
 

@@ -3294,6 +3294,18 @@ describe('GridStore undo and redo functionality', () => {
 			],
 		});
 		expect(store.getState().serverPage).toBeUndefined();
+		expect(store.getServerSideStoreState()).toEqual([
+			{
+				storeId: 'root',
+				route: [],
+				level: 0,
+				rowCountState: { kind: 'unknown' },
+				blockCount: 0,
+				loadingBlockCount: 1,
+				failedBlockCount: 0,
+				childStoreCount: 0,
+			},
+		]);
 	});
 
 	it('avoids redundant state updates and geometry version increments on setRowHeights and setDefaultRowHeight', () => {
