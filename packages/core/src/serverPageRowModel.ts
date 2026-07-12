@@ -449,6 +449,7 @@ export class ServerPageRowModelController<TData = unknown>
 				getRowId: (row) => this.runtime.getRowId(row as TData),
 			});
 			const previousRowCount = this.getVisualRowCount();
+			const previousNodesById = new Map(this.nodeMap);
 
 			this.loading = false;
 			this.error = null;
@@ -459,7 +460,11 @@ export class ServerPageRowModelController<TData = unknown>
 			response.rows.forEach((row, idx) => {
 				const typedRow = row as TData;
 				const id = this.runtime.getRowId(typedRow);
-				const node = new RowNode<TData>(id, typedRow);
+				const existing = previousNodesById.get(id);
+				const node = existing ?? new RowNode<TData>(id, typedRow);
+				if (existing) {
+					existing.setData(typedRow);
+				}
 				this.activeNodes[idx] = node;
 				this.visualRows[idx] = {
 					kind: 'data',

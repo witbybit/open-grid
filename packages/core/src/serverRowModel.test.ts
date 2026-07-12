@@ -812,6 +812,51 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('retains server-page RowNode identity when the same row id is reloaded', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let callCount = 0;
+		const getPage = vi.fn().mockImplementation(() => {
+			callCount++;
+			if (callCount === 1) {
+				return Promise.resolve({
+					rows: [{ id: '1', name: 'Alpha v1' }],
+					totalRowCount: 1,
+				});
+			}
+			return Promise.resolve({
+				rows: [{ id: '1', name: 'Alpha v2' }],
+				totalRowCount: 1,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const originalNode = controller.getRowNodeById('1');
+		expect(originalNode).not.toBeNull();
+		expect(originalNode?.data.name).toBe('Alpha v1');
+
+		controller.reloadPage('force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const reloadedNode = controller.getRowNodeById('1');
+		expect(reloadedNode).toBe(originalNode);
+		expect(reloadedNode?.data.name).toBe('Alpha v2');
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node : null).toBe(originalNode);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('publishes a core refresh invalidation when a server-page response resolves', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
