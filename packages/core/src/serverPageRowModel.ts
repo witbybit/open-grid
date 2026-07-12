@@ -33,7 +33,7 @@ function toErrorMessage(error: unknown): string {
 
 function validateServerPageResponse<TRowData>(
 	response: ServerGetPageResult<TRowData>,
-	options: { page: number; pageSize: number }
+	options: { page: number; pageSize: number; getRowId: (row: TRowData) => string }
 ): void {
 	if (response.totalRowCount < 0) {
 		throw new Error(`Server datasource returned negative totalRowCount ${response.totalRowCount}`);
@@ -44,6 +44,14 @@ function validateServerPageResponse<TRowData>(
 		throw new Error(
 			`Server datasource returned totalRowCount ${response.totalRowCount}, which is smaller than the loaded page range ending at ${minimumReachableCount - 1}`
 		);
+	}
+	const seenRowIds = new Set<string>();
+	for (const row of response.rows) {
+		const rowId = options.getRowId(row);
+		if (seenRowIds.has(rowId)) {
+			throw new Error(`Server datasource returned duplicate row id "${rowId}" within one page`);
+		}
+		seenRowIds.add(rowId);
 	}
 }
 
@@ -427,7 +435,11 @@ export class ServerPageRowModelController<TData = unknown>
 			}, { signal: abortController.signal });
 
 			if (!this.isRequestTokenCurrent(requestToken)) return;
-			validateServerPageResponse(response, { page, pageSize });
+			validateServerPageResponse(response, {
+				page,
+				pageSize,
+				getRowId: (row) => this.runtime.getRowId(row as TData),
+			});
 			const previousRowCount = this.getVisualRowCount();
 
 			this.loading = false;

@@ -1266,6 +1266,64 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('rejects duplicate server-page row ids and keeps committed rows during reloadPage', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let duplicateRowObserved = false;
+		let callCount = 0;
+		const getPage = vi.fn().mockImplementation(() => {
+			callCount++;
+			if (callCount === 1) {
+				return Promise.resolve({
+					rows: [
+						{ id: '1', name: 'Alpha v1' },
+						{ id: '2', name: 'Beta v1' },
+					],
+					totalRowCount: 2,
+				});
+			}
+			return Promise.resolve({
+				rows: [
+					{ id: '1', name: 'Alpha v2' },
+					{ id: '1', name: 'Alpha duplicated' },
+				],
+				totalRowCount: 2,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+
+		store.addEventListener(GridEventName.serverPageLoadFailed, (event) => {
+			if (event.payload.message.includes('duplicate row id "1"')) {
+				duplicateRowObserved = true;
+			}
+		});
+
+		controller.reloadPage('force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(duplicateRowObserved).toBe(true);
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Alpha v1');
+		expect(controller.getVisualRow(1)?.kind).toBe('data');
+		expect(controller.getVisualRow(1)?.kind === 'data' ? controller.getVisualRow(1)?.node.data.name : null).toBe('Beta v1');
+		expect(controller.getPageState().totalRowCount).toBe(2);
+		expect(controller.getPageState().error).toBe('Server datasource returned duplicate row id "1" within one page');
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('publishes a core refresh invalidation when a server-page response fails', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
