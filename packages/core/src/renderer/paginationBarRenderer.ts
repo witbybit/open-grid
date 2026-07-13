@@ -39,6 +39,7 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		// before this bar mounts and catches the event) — subscribe to both directly.
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('serverPagination', rerender));
 		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('serverPage', rerender));
+		this.unsubscribers.push(this.engine.stateManager.subscribeToKey('serverSide', rerender));
 	}
 
 	public unmount(): void {
@@ -68,6 +69,13 @@ export class PaginationBarRenderer<TRowData = unknown> {
 		const serverPage = state.serverPage;
 		if (serverPage) {
 			return { page: serverPage.page, pageSize: serverPage.pageSize, totalRows: serverPage.totalRowCount, pageCount: serverPage.pageCount };
+		}
+		const rootServerStore = state.serverSide?.storeStates.find((store) => store.level === 0 && store.route.length === 0);
+		if (rootServerStore) {
+			const totalRows = rootServerStore.rowCountState.kind === 'unknown' ? 0 : rootServerStore.rowCountState.count;
+			const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
+			const page = Math.min(Math.max(0, state.pagination?.page ?? 0), pageCount - 1);
+			return { page, pageSize, totalRows, pageCount };
 		}
 		// Infinite row model: block loading reports totals via serverPagination state.
 		const serverPg = state.serverPagination;

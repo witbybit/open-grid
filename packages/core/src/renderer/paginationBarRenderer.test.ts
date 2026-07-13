@@ -2,8 +2,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PaginationBarRenderer } from './paginationBarRenderer.js';
 
-function fakeEngine(opts: { totalRows: number; pageSize: number; page?: number }) {
-	const state: any = { pagination: { pageSize: opts.pageSize, page: opts.page ?? 0 } };
+function fakeEngine(opts: { totalRows: number; pageSize: number; page?: number; serverSide?: unknown }) {
+	const state: any = { pagination: { pageSize: opts.pageSize, page: opts.page ?? 0 }, serverSide: opts.serverSide };
 	const dispatch = vi.fn();
 	const listeners = new Map<string, Array<() => void>>();
 	const setPaginationPage = vi.fn((page: number, metrics?: { pageCount: number; totalRows: number }) => {
@@ -89,6 +89,35 @@ describe('PaginationBarRenderer', () => {
 		// 50 rows / 100 per page = 1 page; page 5 clamps to page 1 of 1.
 		expect(bar.querySelector('.og-pagination-page-info')?.textContent).toBe('Page 1 of 1');
 		expect(bar.querySelector('.og-pagination-summary')?.textContent).toBe('1–50 of 50');
+		r.unmount();
+	});
+	it('derives pagination summary from SSRM root-store state when serverSide is populated', () => {
+		const bar = document.createElement('div');
+		const { engine } = fakeEngine({
+			totalRows: 0,
+			pageSize: 25,
+			page: 1,
+			serverSide: {
+				loading: false,
+				error: null,
+				storeStates: [
+					{
+						storeId: 'root',
+						route: [],
+						level: 0,
+						rowCountState: { kind: 'known', count: 60 },
+						blockCount: 1,
+						loadingBlockCount: 0,
+						failedBlockCount: 0,
+						childStoreCount: 0,
+					},
+				],
+			},
+		});
+		const r = new PaginationBarRenderer(engine);
+		r.mount(bar);
+		expect(bar.querySelector('.og-pagination-summary')?.textContent).toBe('26–50 of 60');
+		expect(bar.querySelector('.og-pagination-page-info')?.textContent).toBe('Page 2 of 3');
 		r.unmount();
 	});
 });
