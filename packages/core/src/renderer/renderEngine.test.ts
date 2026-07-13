@@ -7,6 +7,7 @@ import { createMinimalRowModel } from '../testUtils/createMinimalRowModel.js';
 import { RecordingGridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { RenderEngine } from './renderEngine.js';
 import { InfiniteRowModelController } from '../infiniteRowModel.js';
+import { ServerPageRowModelController } from '../serverPageRowModel.js';
 
 /**
  * Count the row-slot DOM children of the rows container, excluding the `.og-layer-exiting`
@@ -1480,6 +1481,150 @@ describe('RenderEngine', () => {
 		expect(afterViewport.viewportPaints - afterData.viewportPaints).toBe(1);
 		expect(afterViewport.headerPaints - afterData.headerPaints).toBe(0);
 		expect(afterViewport.overlayPaints - afterData.overlayPaints).toBe(1);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('repaints visible infinite rows after an async sort response without an incidental scroll', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			columns: store.getState().columns,
+			blockSize: 10,
+			datasource: {
+				getRows: async ({ sortModel }) => {
+					if ((sortModel as Array<{ colId: string; sort: string }> | null)?.[0]?.sort === 'desc') {
+						return {
+							rows: [
+								{ id: '2', name: 'Zulu' },
+								{ id: '1', name: 'Alpha' },
+							],
+							totalCount: 2,
+						};
+					}
+					return {
+						rows: [
+							{ id: '1', name: 'Alpha' },
+							{ id: '2', name: 'Zulu' },
+						],
+						totalCount: 2,
+					};
+				},
+			},
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		await vi.waitFor(() => {
+			expect(container.querySelector('[data-row-index="0"] .og-cell[data-col-field="name"]')?.textContent).toBe('Alpha');
+		});
+
+		renderer.resetRenderStats();
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+
+		await vi.waitFor(() => {
+			expect(container.querySelector('[data-row-index="0"] .og-cell[data-col-field="name"]')?.textContent).toBe('Zulu');
+		});
+
+		const stats = renderer.getRenderStats();
+		expect(stats.scrollFrames).toBe(0);
+		expect(stats.viewportPaints).toBeGreaterThan(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('repaints visible server-page rows after an async sort response without an incidental scroll', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			columns: store.getState().columns,
+			pagination: { pageSize: 10 },
+			datasource: {
+				getPage: async ({ sortModel }) => {
+					if ((sortModel as Array<{ colId: string; sort: string }> | null)?.[0]?.sort === 'desc') {
+						return {
+							rows: [
+								{ id: '2', name: 'Zulu' },
+								{ id: '1', name: 'Alpha' },
+							],
+							totalRowCount: 2,
+						};
+					}
+					return {
+						rows: [
+							{ id: '1', name: 'Alpha' },
+							{ id: '2', name: 'Zulu' },
+						],
+						totalRowCount: 2,
+					};
+				},
+			},
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		await vi.waitFor(() => {
+			expect(container.querySelector('[data-row-index="0"] .og-cell[data-col-field="name"]')?.textContent).toBe('Alpha');
+		});
+
+		renderer.resetRenderStats();
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+
+		await vi.waitFor(() => {
+			expect(container.querySelector('[data-row-index="0"] .og-cell[data-col-field="name"]')?.textContent).toBe('Zulu');
+		});
+
+		const stats = renderer.getRenderStats();
+		expect(stats.scrollFrames).toBe(0);
+		expect(stats.viewportPaints).toBeGreaterThan(0);
 
 		renderer.unmount();
 		controller.dispose();
