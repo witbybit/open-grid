@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientRowModelController } from '../rowModel.js';
+import { InfiniteRowModelController } from '../infiniteRowModel.js';
 import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
 import { RenderRuntimeState } from './renderRuntimeState.js';
@@ -703,5 +704,56 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(stats.compiledPlanVersion).toBe(initialPlan.version);
 
 		cleanupGrid(grid);
+	});
+
+	it('queues a scroll-idle viewport flush when an async row model hits the same-window fast-scroll bailout', async () => {
+		const store = new GridStore<RuntimePerfRow>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			rowOverscanPx: 400,
+			getRowId: (row) => row.id,
+		});
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			blockSize: 50,
+			columns: store.getState().columns,
+			datasource: {
+				getRows: async ({ startRow, endRow }) => ({
+					rows: Array.from({ length: endRow - startRow }, (_, index) => ({
+						id: `row-${startRow + index}`,
+						name: `Row ${startRow + index}`,
+						status: 'Active',
+					})),
+					totalCount: 1000,
+				}),
+			},
+		});
+		const container = createContainer();
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const scrollViewport = renderer.viewportRenderer.scrollViewport!;
+		vi.spyOn(store.engine.viewport, 'isScrollingFast', 'get').mockReturnValue(true);
+		store.engine.viewport.setScrollPosition(100, 0);
+		Object.defineProperty(scrollViewport, 'scrollTop', { value: 100, writable: true, configurable: true });
+		Object.defineProperty(scrollViewport, 'scrollLeft', { value: 0, writable: true, configurable: true });
+
+		(renderer as any).rowRenderer.currentWindow = { ...computeRenderWindow(store.engine) };
+		renderer.resetRenderStats();
+		store.engine.invalidation.consume();
+
+		(renderer as any).flushScrollFrame();
+
+		expect(renderer.getRenderStats().sameWindowBailouts).toBe(1);
+		expect(((renderer as any).scrollCoordinator as any).state.flushPendingAfterScroll).toBe(true);
+		const frame = store.engine.invalidation.consume();
+		expect(frame.viewport).toBe(true);
+		expect(frame.reasons).toContain('scroll-idle');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
 	});
 });

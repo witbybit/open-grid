@@ -160,6 +160,11 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			sameRenderedWindow(this.deps.rowRenderer.currentWindow, nextWindow) &&
 			sameVisibleContentWindow(this.deps.rowRenderer.currentWindow, nextWindow)
 		) {
+			const rowModel = this.deps.engine.getRowModel();
+			if (rowModel && rowModel.getCapabilities().fullDataset === false && this.deps.engine.viewport.isScrollingFast) {
+				this.state.flushPendingAfterScroll = true;
+				this.deps.engine.invalidation.invalidateViewport('scroll-idle');
+			}
 			this.deps.renderStats.scrollFrames++;
 			this.deps.renderStats.sameWindowBailouts = (this.deps.renderStats.sameWindowBailouts || 0) + 1;
 			// Phase is already scroll-frame (set by FrameCoordinator before calling this callback).
