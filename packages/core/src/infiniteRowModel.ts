@@ -163,6 +163,8 @@ export interface InfiniteDatasource<TRowData = unknown> {
 export interface InfiniteRowModelOptions<TData = unknown> {
 	blockSize?: number;
 	maxBlocksInCache?: number;
+	maxConcurrentRequests?: number;
+	prefetchBlockCount?: number;
 	datasource: InfiniteDatasource<TData>;
 	columns: Array<ColumnDef<TData>>;
 	getRowId?: (row: TData) => string;
@@ -193,6 +195,13 @@ const INFINITE_CAPABILITIES: RowModelCapabilities = {
 };
 
 type InfiniteBlockStatus = 'empty' | 'loading' | 'loaded' | 'failed' | 'stale';
+
+interface QueuedInfiniteBlockLoad {
+	blockIndex: number;
+	priority: number;
+	sequence: number;
+	forceReload: boolean;
+}
 
 class InfiniteBlock<TData = unknown> {
 	public readonly blockIndex: number;
@@ -440,16 +449,20 @@ export class InfiniteRowModelController<TData = unknown>
 	private datasource: InfiniteDatasource<TData>;
 	private blockSize: number;
 	private readonly maxBlocksInCache: number | null;
+	private readonly maxConcurrentRequests: number;
+	private readonly prefetchBlockCount: number;
 	private nodeMap = new Map<string, RowNode<TData>>();
 	private visualRowIdToIndex = new Map<string, number>();
 	private rowIdToVisualIndex = new Map<string, number>();
 	private readonly blockCache = new InfiniteBlockCache<TData>();
 	private readonly activeAbortControllers = new Map<number, AbortController>();
+	private readonly pendingBlockLoads = new Map<number, QueuedInfiniteBlockLoad>();
 	private unsubscribers: Array<() => void> = [];
 	private disposed = false;
 	private datasourceGeneration = 0;
 	private queryVersion = 0;
 	private nextRequestId = 1;
+	private nextQueueSequence = 1;
 	private pendingVisibleLoad: { startRow: number; endRow: number } | null = null;
 	private latestVisibleBlocks = new Set<number>();
 
@@ -458,6 +471,11 @@ export class InfiniteRowModelController<TData = unknown>
 		this.datasource = options.datasource;
 		this.blockSize = options.blockSize ?? 100;
 		this.maxBlocksInCache = options.maxBlocksInCache ?? null;
+		this.maxConcurrentRequests =
+			Number.isFinite(options.maxConcurrentRequests) && (options.maxConcurrentRequests ?? 0) > 0
+				? Math.max(1, Math.floor(options.maxConcurrentRequests!))
+				: Number.POSITIVE_INFINITY;
+		this.prefetchBlockCount = Math.max(0, Math.floor(options.prefetchBlockCount ?? 2));
 
 		this.runtime.initializeModel({
 			columns: options.columns,
@@ -473,7 +491,8 @@ export class InfiniteRowModelController<TData = unknown>
 			this.runtime.addEventListener(GridEventName.queryModelChanged, () => this.invalidateQueryCache())
 		);
 
-		this.fetchBlock(0);
+		this.queueBlockLoad(0, 0, false);
+		this.pumpBlockLoadQueue();
 	}
 
 	public setDatasource(datasource: InfiniteDatasource<TData>, blockSize: number = this.blockSize): void {
@@ -488,6 +507,7 @@ export class InfiniteRowModelController<TData = unknown>
 		this.bumpDatasourceGeneration();
 		this.abortAllInflightRequests();
 		this.blockCache.reset();
+		this.pendingBlockLoads.clear();
 		this.pendingVisibleLoad = null;
 		this.latestVisibleBlocks.clear();
 		this.unsubscribers.forEach((unsubscribe) => unsubscribe());
@@ -579,26 +599,42 @@ export class InfiniteRowModelController<TData = unknown>
 		const totalBlocks = Math.ceil(this.getVisualRowCount() / this.blockSize);
 		const requestedBlocks = new Set(visibleBlocks);
 
+		const prefetchBlocks: number[] = [];
 		if (vy > 0.1) {
-			const ahead1 = maxBlock + 1;
-			const ahead2 = maxBlock + 2;
-			if (ahead1 < totalBlocks) requestedBlocks.add(ahead1);
-			if (ahead2 < totalBlocks) requestedBlocks.add(ahead2);
+			for (let offset = 1; offset <= this.prefetchBlockCount; offset++) {
+				const ahead = maxBlock + offset;
+				if (ahead < totalBlocks) prefetchBlocks.push(ahead);
+			}
 		} else if (vy < -0.1) {
-			const ahead1 = minBlock - 1;
-			const ahead2 = minBlock - 2;
-			if (ahead1 >= 0) requestedBlocks.add(ahead1);
-			if (ahead2 >= 0) requestedBlocks.add(ahead2);
+			for (let offset = 1; offset <= this.prefetchBlockCount; offset++) {
+				const ahead = minBlock - offset;
+				if (ahead >= 0) prefetchBlocks.push(ahead);
+			}
 		}
 
-		requestedBlocks.forEach((blockIdx) => {
+		const shouldQueueBlock = (blockIdx: number): boolean => {
 			const block = this.blockCache.getBlock(blockIdx);
 			if (!forceReload && block) {
-				if (block.status === 'loading') return;
-				if (block.status === 'loaded' && !this.blockHasRepresentedGap(block)) return;
+				if (block.status === 'loading') return false;
+				if (block.status === 'loaded' && !this.blockHasRepresentedGap(block)) return false;
 			}
-			this.fetchBlock(blockIdx);
+			return true;
+		};
+
+		const desiredQueuedBlocks = new Set<number>(requestedBlocks);
+		prefetchBlocks.forEach((blockIdx) => desiredQueuedBlocks.add(blockIdx));
+		this.dropStaleQueuedPrefetchLoads(desiredQueuedBlocks);
+
+		requestedBlocks.forEach((blockIdx) => {
+			if (!shouldQueueBlock(blockIdx)) return;
+			this.queueBlockLoad(blockIdx, 0, forceReload);
 		});
+		prefetchBlocks.forEach((blockIdx) => {
+			if (requestedBlocks.has(blockIdx)) return;
+			if (!shouldQueueBlock(blockIdx)) return;
+			this.queueBlockLoad(blockIdx, 1, forceReload);
+		});
+		this.pumpBlockLoadQueue();
 	}
 
 	public getRowNodeById = (rowId: string): RowNode<TData> | null => {
@@ -823,6 +859,7 @@ export class InfiniteRowModelController<TData = unknown>
 			this.runtime.setLoadingState(this.blockCache.getLoadingBlockCount() > 0);
 		} finally {
 			this.activeAbortControllers.delete(requestId);
+			this.pumpBlockLoadQueue();
 		}
 	};
 
@@ -884,6 +921,7 @@ export class InfiniteRowModelController<TData = unknown>
 		this.abortAllInflightRequests();
 		const previousVisualRowCount = this.blockCache.getVisualRowCount();
 		this.blockCache.reset(previousVisualRowCount);
+		this.pendingBlockLoads.clear();
 		this.nodeMap.clear();
 		this.visualRowIdToIndex.clear();
 		this.rowIdToVisualIndex.clear();
@@ -891,7 +929,8 @@ export class InfiniteRowModelController<TData = unknown>
 		this.latestVisibleBlocks.clear();
 		this.runtime.clearFormulas();
 		this.runtime.setLoadingState(true);
-		this.fetchBlock(0);
+		this.queueBlockLoad(0, 0, false);
+		this.pumpBlockLoadQueue();
 	}
 
 	private evictOverflowBlocks(): void {
@@ -910,6 +949,62 @@ export class InfiniteRowModelController<TData = unknown>
 		for (const requestId of this.activeAbortControllers.keys()) {
 			this.abortRequest(requestId);
 		}
+	}
+
+	private queueBlockLoad(blockIndex: number, priority: number, forceReload: boolean): void {
+		if (this.disposed) return;
+		const existingBlock = this.blockCache.getBlock(blockIndex);
+		if (forceReload && existingBlock?.status === 'loading') {
+			this.abortRequest(existingBlock.requestId);
+		}
+		const existing = this.pendingBlockLoads.get(blockIndex);
+		if (existing) {
+			existing.priority = Math.min(existing.priority, priority);
+			existing.forceReload = existing.forceReload || forceReload;
+			return;
+		}
+		this.pendingBlockLoads.set(blockIndex, {
+			blockIndex,
+			priority,
+			sequence: this.nextQueueSequence++,
+			forceReload,
+		});
+	}
+
+	private pumpBlockLoadQueue(): void {
+		if (this.disposed) return;
+		while (this.activeAbortControllers.size < this.maxConcurrentRequests) {
+			const nextQueued = this.dequeueNextBlockLoad();
+			if (!nextQueued) return;
+			const existingBlock = this.blockCache.getBlock(nextQueued.blockIndex);
+			if (existingBlock?.status === 'loading' && this.activeAbortControllers.has(existingBlock.requestId)) continue;
+			void this.fetchBlock(nextQueued.blockIndex);
+		}
+	}
+
+	private dropStaleQueuedPrefetchLoads(retainedBlockIndexes: ReadonlySet<number>): void {
+		for (const [blockIndex, queued] of this.pendingBlockLoads.entries()) {
+			if (queued.priority > 0 && !retainedBlockIndexes.has(blockIndex)) {
+				this.pendingBlockLoads.delete(blockIndex);
+			}
+		}
+	}
+
+	private dequeueNextBlockLoad(): QueuedInfiniteBlockLoad | null {
+		if (this.pendingBlockLoads.size === 0) return null;
+		let best: QueuedInfiniteBlockLoad | null = null;
+		for (const queued of this.pendingBlockLoads.values()) {
+			if (
+				best === null ||
+				queued.priority < best.priority ||
+				(queued.priority === best.priority && queued.sequence < best.sequence)
+			) {
+				best = queued;
+			}
+		}
+		if (!best) return null;
+		this.pendingBlockLoads.delete(best.blockIndex);
+		return best;
 	}
 
 	private rebuildBlockDerivedIndexes(): void {
