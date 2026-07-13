@@ -1,744 +1,457 @@
-# Plan 158: Server-Backed Row Model Correctness + Real SSRM Replacement
+# Plan 158: Repair server-backed row-model correctness and replace server pages with real SSRM
 
-> **Executor instructions**: Treat this as a P0 correctness and demolition plan, not a demo polish task. Sorting, filtering, loading, cache publication, skipped-row prevention, and blank-row prevention must be fixed in `@open-grid/core`. Demos may be updated only after the core contract is correct and covered by tests.
+> **Executor instructions**: Follow this plan step by step. Run every verification command and confirm the expected result before moving to the next step. If anything in the "STOP conditions" section occurs, stop and report, do not improvise.
 >
-> **Primary execution order**: Fix infinite blank-row / skipped-row correctness first. Only after that is proven with tests should infinite sort/filter publication be repaired in core. Then verify and repair server-backed sort/filter publication in core. Only after the shared async contract and infinite model are stable may the old page-oriented `server` row model be demolished and replaced with the real SSRM.
->
-> **Stop rule**: Do not start unrelated feature work. Do not add compatibility adapters around the current page-oriented `server` row model. Open Grid is alpha; breaking changes are acceptable and preferred when they remove incorrect architecture.
->
-> **Drift check (run first)**: `git diff --stat HEAD -- packages/core/src packages/react/src demo-app src plans`
-> If any in-scope row-model, renderer invalidation, runtime port, Grid API, datasource, or demo seam changed materially while this plan is in progress, reconcile this plan against the live code before implementation. Any mismatch in row-count authority, async publication, request identity, or server row-model ownership is a STOP condition until resolved.
+> **Drift check (run first)**: `git diff --stat 6f594575..HEAD -- packages/core/src/infiniteRowModel.ts packages/core/src/serverPageRowModel.ts packages/core/src/serverRowModel.test.ts packages/core/src/serverRowModel.adversarial.test.ts packages/core/src/createGrid.ts packages/core/src/store.ts packages/core/src/rowModel.ts packages/core/src/api packages/core/src/engine packages/react/src/Grid.tsx demo docs/architecture plans/README.md`
+> If any in-scope file changed since this plan was written, compare the "Current state" excerpts below against live code before proceeding; if they no longer match materially, treat that as a STOP condition.
 
 ## Status
 
-- **Priority**: P0
-- **Effort**: XXL
-- **Risk**: CRITICAL
+- **Priority**: P1
+- **Effort**: L
+- **Risk**: HIGH
 - **Depends on**: `plans/156-row-model-completion-and-public-row-node-facade.md`, `plans/157-interaction-kernel-hardening.md`
-- **Category**: architecture, correctness, row models
-- **Planned at**: working tree, 2026-07-13
-- **Source directive**: shared guideline from `C:\Users\rishi\.codex\attachments\8b4ca4af-1c77-4b98-a525-3eba7fdd303a\pasted-text.txt`
+- **Category**: bug
+- **Planned at**: commit `6f594575`, 2026-07-13
 
 ## Why this matters
 
-Plans 156 and 157 completed enough row-model and interaction infrastructure to expose the next failure clearly: server-backed row models are not yet governed by one authoritative async publication contract. Infinite rows can intermittently disappear, scroll can skip records, and sort/filter changes are not reliably reflected for infinite and server row models.
+Plans 156 and 157 landed enough shared row-model infrastructure to make the remaining server-backed defects visible. The infinite model can still render blank row bands or skip rows under scrolling pressure, and sort/filter changes for infinite and the current `server` model are not yet guaranteed to republish committed async results into visible slots.
 
-The visible bug is blank rows and skipped rows in infinite scrolling. The deeper bug is architectural: async row-model responses can update internal caches without publishing one authoritative row-model transition to the runtime/renderer. Demo-level sorting/filtering cannot fix that. The fix belongs in core and must make server-backed row models deterministic under delayed, reordered, failed, stale, refreshed, filtered, and sorted network responses.
+The current `server` row model is also the wrong architecture: it is page-oriented, exposes page APIs publicly, and cannot be evolved into the final server-side row model without carrying incorrect semantics forward. This plan first fixes the shared async publication contract and infinite correctness in core, then deletes the page-oriented server implementation and replaces `rowModelType: 'server'` with one real hierarchical SSRM.
 
-## North star
+## Current state
 
-Final architecture must obey:
+The following facts are already true in the repo and must anchor the work:
 
-```txt
-client:
-  owns all rows locally
-  sorts/filters/projects locally
+- `packages/core/src/infiniteRowModel.ts` owns the flat remote block model and already contains the new explicit block-state split plus queueing/concurrency settings.
+- `packages/core/src/serverPageRowModel.ts` is still the live implementation behind `rowModelType: 'server'`, and it is explicitly page-based.
+- `packages/core/src/engine/createRowModelRuntimes.ts` still exposes separate infinite and server-page runtime ports and still emits `serverPage*` events.
+- `packages/core/src/createGrid.ts` still constructs `ServerPageRowModelController` via `createServerPageGrid(...)`.
+- `packages/core/src/serverRowModel.test.ts` and `packages/core/src/serverRowModel.adversarial.test.ts` already hold the focused infinite/server-backed correctness regressions.
+- `docs/architecture/plan-158-readiness-audit.md` and `docs/architecture/plan-158-server-page-deletion-manifest.md` already exist and should be treated as required evidence inputs, not rewritten from scratch unless stale.
 
-infinite:
-  owns one flat remote dataset
-  loads bounded blocks by visual index
-  sends sort/filter/query snapshots to datasource
-  never publishes unexplained blank visual rows
+Live code excerpts to confirm before editing:
 
-server:
-  owns a real hierarchical server-side row model
-  root and child stores load blocks by route
-  sends grouping/sort/filter/query snapshots to datasource
-  contains no page-number/page-count semantics
-
-async row-model response:
-  validate response
-  reject stale response
-  build complete next internal state
-  atomically install rows/nodes/indexes/counts/cache
-  publish one row-model transition
-  emit diagnostics and consumer events after publication
-
-renderer:
-  observes row-model publication and load-state transitions
-  does not rely on incidental scroll, timers, diagnostics, or datasource events
-```
-
-## Current failures to prove first
-
-- Infinite row model intermittently renders blank row bands while scrolling through loaded or expected rows.
-- Infinite scrolling skips row indexes, especially around non-zero blocks and terminal-count transitions.
-- Infinite sorting no longer visibly updates row order after datasource responses.
-- Infinite filtering no longer reliably updates visible rows and row count after datasource responses.
-- Current `server` row model sorting/filtering is page-oriented and may not publish correct core invalidations.
-- Current `server` row model is not a real SSRM and must not survive as the final `rowModelType: 'server'` implementation.
-
-## Non-negotiables
-
-- Sorting/filtering behavior for infinite and server-backed models must be implemented in core, not in demos.
-- Events such as block loaded, page loaded, or datasource response are observability events; they are not renderer invalidation.
-- Request tokens are not a cache state machine.
-- Loaded rows must not disappear during refresh unless the caller explicitly performs a hard purge.
-- Invalid responses must never partially mutate row-model state.
-- Stale responses must never mutate committed cache, indexes, counts, selection state, or visible rows.
-- Unknown row count must be first-class and must not trap the model after block zero.
-- Every represented visual index must have a deliberate state: loaded row, loading placeholder, failed placeholder, terminal gap outside known count, or intentionally absent outside model range.
-- No unexplained `null`, empty, or blank visual rows are acceptable.
-- `rowModelType: 'server'` must instantiate only the new SSRM after Stage C.
-- The old page-style server row model must be deleted, not renamed, wrapped, preserved, or adapted.
-
-## Out of scope
-
-- Cosmetic demo redesigns.
-- New grouping, pivot, aggregation UI, or unrelated enterprise features beyond the SSRM foundation required here.
-- Backwards-compatible server-page aliases or migration shims.
-- Timer-based repaint fixes, forced scroll nudges, or renderer hacks that mask row-model publication bugs.
-
-## Required pre-implementation deliverables
-
-Complete these before changing production code:
-
-- [x] Exact failure analysis for infinite block loading and blank-row publication.
-- [x] Exact failure analysis for infinite sorting and filtering.
-- [x] Exact failure analysis for current server sorting/filtering regression.
-- [x] Deletion manifest for the current page-oriented server row model.
-- [x] Shared server-backed infrastructure ownership diagram.
-- [x] Infinite row model ownership diagram.
-- [x] Real SSRM ownership diagram.
-- [x] Public API before/after table.
-- [x] Tests expected to fail before implementation.
-
-Evidence:
-
-- `docs/architecture/plan-158-readiness-audit.md`
-- `docs/architecture/plan-158-server-page-deletion-manifest.md`
-
-## Stage A - Repair the shared async row-model contract
-
-Do this before hardening infinite or replacing server. The shared contract must be reusable by infinite and SSRM without merging their controllers.
-
-### A1 - Failure reproduction tests
-
-Add failing tests that prove the regressions before fixing them:
-
-- [x] Infinite sorting sends the active sort model to the datasource and publishes the sorted response into visible rows.
-- [x] Infinite filtering sends the active filter model to the datasource and publishes the filtered response and row count.
-- [x] Current server sorting/filtering failure is captured as a regression test before demolition.
-- [x] Non-zero infinite block publication invalidates the renderer without incidental scroll.
-- [x] Stale query responses are rejected after sort/filter/query generation changes.
-- [ ] Row-count transitions publish geometry changes for `unknown`, `estimated`, and `known` counts.
-- [ ] Async block response publication updates runtime projection and renderer-visible slots in the same authoritative transition.
-
-Implemented evidence:
-
-- `packages/core/src/serverRowModel.test.ts`
-  - `publishes a core refresh invalidation when a non-zero infinite block resolves`
-  - `refetches infinite rows on sort changes and publishes the returned order`
-  - `publishes infinite sort changes only when the async response commits`
-  - `refetches infinite rows on filter changes and publishes the filtered result`
-  - `publishes infinite filter changes only when the async response commits`
-  - `refetches server-page rows on sort changes and publishes the returned order`
-  - `publishes server-page sort changes only when the async response commits`
-  - `refetches server-page rows on filter changes and publishes the filtered result`
-  - `publishes server-page filter changes only when the async response commits`
-- `packages/core/src/serverRowModel.adversarial.test.ts`
-  - `stale responses and stale failures are ignored after sort/filter/datasource churn`
-  - `stale responses and stale failures are ignored after page/sort/filter/query/datasource churn`
-
-### A2 - Shared request identity
-
-Introduce immutable request identity that every server-backed request carries:
+- `packages/core/src/infiniteRowModel.ts:163-180`
 
 ```ts
-interface AsyncRowModelRequestIdentity {
-  datasourceGeneration: number;
-  queryGeneration: number;
-  requestId: number;
-  scopeId: string;
-}
-```
-
-- [ ] `datasourceGeneration` changes when datasource identity changes.
-- [ ] `queryGeneration` changes when sort/filter/quick-filter/query model changes.
-- [ ] `requestId` is unique within the controller.
-- [ ] `scopeId` identifies the infinite model, root SSRM store, or child SSRM store.
-- [ ] Stale identity rejection happens before validation or mutation.
-
-### A3 - Immutable query snapshots
-
-Capture query state once at request creation:
-
-```ts
-interface AsyncRowModelQuerySnapshot {
-  sortModel: SortModel | null;
-  filterModel: FilterModel | null;
-  quickFilterModel: QuickFilterModel | null;
-  queryModel: QueryModel | null;
-}
-```
-
-SSRM snapshots additionally include route, group keys, row-group columns, value columns, pivot/grouping metadata, and block range. No datasource request may read mutable live grid state after scheduling.
-
-### A4 - Authoritative row-model publication
-
-Add one explicit core operation for async row-model publication:
-
-```ts
-interface RowModelPublication {
-  reason:
-    | 'datasourceChanged'
-    | 'queryChanged'
-    | 'viewportChanged'
-    | 'blockQueued'
-    | 'blockLoaded'
-    | 'blockFailed'
-    | 'blockEvicted'
-    | 'rowCountChanged'
-    | 'refreshStarted'
-    | 'refreshCompleted'
-    | 'purgeCompleted';
-  scopeId: string;
-  affectedRange: { startRow: number; endRow: number } | null;
-  previousRowCount: RowCountState;
-  nextRowCount: RowCountState;
-  structureChanged: boolean;
-  orderChanged: boolean;
-  geometryChanged: boolean;
-  availabilityChanged: boolean;
-  loadStateChanged: boolean;
-  changedRowIds: readonly string[];
-}
-```
-
-- [ ] Infinite and SSRM publish through the same runtime operation.
-- [ ] Publication is emitted after complete internal state install, not during partial mutation.
-- [ ] Runtime invalidation is derived from the publication, not from diagnostics.
-- [ ] Consumer events are emitted after publication.
-- [ ] Renderer tests prove publication alone is sufficient to repaint newly available rows.
-
-### A5 - Shared primitives
-
-Build shared infrastructure that can be reused by infinite and SSRM without collapsing them into one controller:
-
-- [ ] Request identity and stale rejection.
-- [ ] Immutable query snapshots.
-- [ ] Request queue with priority, concurrency, cancellation, and deterministic draining.
-- [ ] Block state machine primitives.
-- [ ] Row-count state and normalization.
-- [ ] Response validation helpers.
-- [ ] Cache eviction policy hooks.
-- [ ] Async publication bridge.
-- [ ] Diagnostic snapshot helpers.
-
-## Stage B - Finish infinite as a production flat block model
-
-Infinite is one flat remotely loaded dataset backed by a bounded block cache. It is not hierarchical and not page-based.
-
-### B1 - Datasource contract
-
-Replace any ambiguous or demo-owned query behavior with a core-owned datasource contract:
-
-```ts
-interface InfiniteGetRowsRequest {
-  startRow: number;
-  endRow: number;
-  sortModel: SortModel | null;
-  filterModel: FilterModel | null;
-  quickFilterModel: QuickFilterModel | null;
-  queryModel: QueryModel | null;
+export interface InfiniteBlockSnapshot {
+  readonly blockIndex: number;
+  readonly startRow: number;
+  readonly endRow: number;
+  readonly state: InfiniteBlockStatus;
+  readonly committedRowCount: number;
+  readonly requestId?: number;
+  readonly queryGeneration: number;
+  readonly lastAccessedAt: number;
+  readonly error?: string;
 }
 
-interface InfiniteGetRowsResult<TRow> {
-  rows: readonly TRow[];
-  rowCount?: number;
-  lastRow?: number;
-  hasMore?: boolean;
-}
-
-interface InfiniteDatasource<TRow> {
-  getRows(
-    request: InfiniteGetRowsRequest,
-    context: { signal?: AbortSignal },
-  ): Promise<InfiniteGetRowsResult<TRow>>;
-}
-```
-
-### B2 - Block state machine
-
-Each block must have an explicit state:
-
-- [ ] `absent`
-- [ ] `queued`
-- [ ] `loadingInitial`
-- [ ] `loaded`
-- [ ] `refreshing`
-- [ ] `failedInitial`
-- [ ] `failedRefresh`
-- [ ] `stale`
-
-Required semantics:
-
-- [ ] Separate committed block data from active request state.
-- [ ] Refresh retains committed rows.
-- [ ] Failed refresh retains committed rows.
-- [ ] Hard purge removes committed rows and exposes loading placeholders.
-- [ ] Stale responses mutate nothing.
-- [ ] No block can remain permanently loading after success, failure, abort, datasource replacement, or query generation change.
-
-### B3 - Row-count authority
-
-Use an explicit row-count state:
-
-```ts
-type RowCountState =
-  | { kind: 'unknown' }
-  | { kind: 'estimated'; count: number }
-  | { kind: 'known'; count: number };
-```
-
-Rules:
-
-- [ ] Full block with no terminal signal means more rows may exist.
-- [ ] Unknown count must expose enough provisional tail for the next block to be requested.
-- [ ] Short block without contradiction establishes final known count.
-- [ ] Explicit `rowCount` or terminal `lastRow` establishes known count.
-- [ ] `hasMore: false` establishes a terminal count from the response range.
-- [ ] Known count never exposes visual rows beyond terminal.
-- [ ] Known shrinking count purges or hides rows beyond the new terminal.
-- [ ] Unknown count must not be trapped after block zero.
-
-### B4 - Viewport and request scheduling
-
-Replace pending viewport range union behavior with authoritative viewport scheduling:
-
-- [ ] Track latest viewport range and scroll direction.
-- [ ] Prioritize blocks intersecting the visible range.
-- [ ] Prefetch a small configurable adjacent range.
-- [ ] Discard or delay distant queued work after rapid scrolling.
-- [ ] Coalesce duplicate block requests.
-- [ ] Respect max concurrency.
-- [ ] Support explicit retry.
-- [ ] Abort stale or distant requests when supported by datasource.
-- [ ] Drain queue deterministically.
-
-### B5 - Bounded cache and indexes
-
-The cache must be bounded and index ownership must be explicit:
-
-- [ ] Support `maxBlocksInCache`.
-- [ ] Use LRU or an equivalent deterministic policy.
-- [ ] Never evict visible blocks.
-- [ ] Eviction removes node/index ownership.
-- [ ] Reload after eviction is deterministic.
-- [ ] Maintain row ID -> node.
-- [ ] Maintain visual index -> row ID.
-- [ ] Maintain row ID -> visual index.
-- [ ] Maintain block -> owned row IDs.
-- [ ] Maintain row ID -> owning block.
-- [ ] Replace quadratic full-index rebuilds with known-position updates.
-- [ ] Detect row ID duplication within a block.
-- [ ] Detect row ID ownership across multiple active visual indexes.
-
-### B6 - Response validation
-
-Validate every response before commit:
-
-- [ ] No negative row count.
-- [ ] No impossible terminal count.
-- [ ] No oversized response.
-- [ ] No duplicate row IDs within a response block.
-- [ ] No row ID assigned to conflicting active visual positions.
-- [ ] Empty responses are deterministic and terminal only when terminal signals require it.
-- [ ] Short responses normalize terminal count consistently.
-- [ ] Invalid responses fail the request and do not partially commit.
-
-### B7 - Loading and diagnostics
-
-Separate loading concepts:
-
-- [ ] `initialModelLoading`
-- [ ] `visibleRangeLoading`
-- [ ] `backgroundPrefetching`
-- [ ] `refreshing`
-- [ ] `visibleRangeFailed`
-
-Add diagnostic snapshots:
-
-```ts
-interface InfiniteBlockSnapshot {
-  blockId: string;
-  startRow: number;
-  endRow: number;
-  state: string;
-  requestId: number | null;
-  rowCount: number;
-  committedRowIds: readonly string[];
-  lastAccessedAt: number;
-}
-```
-
-### B8 - Infinite adversarial tests
-
-Required tests:
-
-- [ ] Rapid distant scrolling does not leave unexplained blanks.
-- [ ] Rapid distant scrolling prioritizes visible blocks.
-- [ ] Concurrency never exceeds configured max.
-- [ ] Refresh retains committed rows.
-- [ ] Failed refresh retains committed rows.
-- [ ] Hard purge removes committed rows and exposes loading placeholders.
-- [ ] Unknown count can request beyond block zero.
-- [ ] Short terminal response establishes known count.
-- [ ] Known count shrink removes out-of-range rows.
-- [ ] Oversized response is rejected without partial commit.
-- [ ] Duplicate row IDs are rejected.
-- [ ] Stale response is rejected.
-- [ ] Failed initial request exposes failed placeholders.
-- [ ] Retry recovers failed initial request.
-- [ ] Eviction removes indexes and reloads deterministically.
-- [ ] No block is permanently loading.
-- [ ] Every represented row index has a deliberate state.
-- [ ] No unexplained `null` or blank row is returned for an in-range visual index.
-- [ ] Sorting and filtering update visible rows through row-model publication without incidental renderer refresh.
-
-## Stage C - Delete server-page and build real SSRM
-
-Do not begin Stage C until Stage A and Stage B pass correctness tests. Stage C must be atomic: old page server code is removed in the same change set that introduces real SSRM.
-
-### C1 - Deletion manifest
-
-Delete or replace all page-oriented server row-model concepts:
-
-- [ ] `ServerPageRowModelController`.
-- [ ] Server page cache/state abstractions.
-- [ ] Explicit page navigation owned by server row model.
-- [ ] Server page, page size, page count state.
-- [ ] Page-specific datasource contracts.
-- [ ] Page-specific runtime events.
-- [ ] Page-specific selectors.
-- [ ] Page-specific public APIs.
-- [ ] Page-specific demos.
-- [ ] Page-specific tests.
-- [ ] Page-specific docs.
-- [ ] Compatibility aliases that preserve page behavior.
-- [ ] Any assumption that `rowModelType: 'server'` means selected-page fetch.
-
-Removed public API examples:
-
-- [ ] `getCurrentServerPage`
-- [ ] `setCurrentServerPage`
-- [ ] `goToServerPage`
-- [ ] `getServerPageCount`
-- [ ] `nextServerPage`
-- [ ] `previousServerPage`
-- [ ] `serverPageChanged`
-- [ ] `serverPageLoaded`
-- [ ] `serverPageSize`
-- [ ] `pageNumber` in datasource requests
-
-### C2 - SSRM ownership model
-
-Target layers:
-
-```txt
-ServerSideRowModel
-  -> StoreManager
-     -> RootStore
-     -> ChildStore(route)
-        -> BlockCache
-           -> Block
-  -> RequestScheduler
-  -> ExpansionController
-  -> Async row-model publication bridge
-```
-
-Responsibilities:
-
-- [ ] `ServerSideRowModel` owns public row-model integration and high-level operations.
-- [ ] `StoreManager` owns store lifecycle, route lookup, and recursive destroy.
-- [ ] `RootStore` owns top-level flat/group rows.
-- [ ] `ChildStore` owns lazy group children by canonical route.
-- [ ] `BlockCache` owns bounded block data per store.
-- [ ] `Block` owns state machine and committed rows.
-- [ ] `RequestScheduler` owns priority/concurrency/cancellation.
-- [ ] `ExpansionController` owns group expansion and child store creation.
-
-### C3 - SSRM datasource contract
-
-Introduce the real SSRM datasource contract:
-
-```ts
-interface ServerSideGetRowsRequest {
-  startRow: number;
-  endRow: number;
-  route: readonly string[];
-  groupKeys: readonly string[];
-  rowGroupColumns: readonly ServerSideRowGroupColumn[];
-  valueColumns: readonly ServerSideValueColumn[];
-  sortModel: SortModel | null;
-  filterModel: FilterModel | null;
-  quickFilterModel: QuickFilterModel | null;
-  queryModel: QueryModel | null;
-}
-
-interface ServerSideGetRowsResult<TRow> {
-  rows: readonly TRow[];
-  rowCount?: number;
-  lastRow?: number;
-  hasMore?: boolean;
-  aggregateData?: Readonly<Record<string, unknown>>;
-  groupMetadata?: readonly ServerSideGroupMetadata[];
-}
-
-interface ServerSideDatasource<TRow> {
-  getRows(
-    request: ServerSideGetRowsRequest,
-    context: { signal?: AbortSignal },
-  ): Promise<ServerSideGetRowsResult<TRow>>;
-}
-```
-
-Do not include page number, page count, selected page, or page-owned row-index semantics.
-
-### C4 - SSRM public API after replacement
-
-Public API should converge to:
-
-```ts
-rowModelType: 'server'
-
-serverSide: {
-  datasource: ServerSideDatasource<TRow>;
+export interface InfiniteRowModelOptions<TData = unknown> {
   blockSize?: number;
   maxBlocksInCache?: number;
   maxConcurrentRequests?: number;
   prefetchBlockCount?: number;
-}
-
-api.setServerSideDatasource(datasource)
-api.refreshServerSide(options)
-api.purgeServerSide(options)
-api.getServerSideStoreState()
 ```
 
-No compatibility overloads for page APIs.
-
-### C5 - SSRM minimum feature set
-
-- [ ] Flat root loading.
-- [ ] Virtual scrolling.
-- [ ] Bounded block cache.
-- [ ] Max concurrency.
-- [ ] Viewport-priority loading.
-- [ ] Server-side sort model propagation.
-- [ ] Server-side filter model propagation.
-- [ ] Server-side quick filter propagation.
-- [ ] Server-side query model propagation.
-- [ ] Refresh without purge.
-- [ ] Hard purge.
-- [ ] Stale response rejection.
-- [ ] Unknown, estimated, and known row counts.
-- [ ] Stable loaded `RowNode` identity.
-- [ ] Route-aware requests.
-- [ ] Lazy child stores.
-- [ ] Child store loading states.
-- [ ] Recursive store destroy.
-- [ ] Partial store refresh.
-- [ ] Store-level failure states.
-- [ ] Group row child-store creation.
-- [ ] Scoped cache eviction.
-- [ ] Aggregate metadata capture.
-- [ ] Store/block diagnostics.
-- [ ] Truthful capabilities for unsupported operations.
-
-### C6 - SSRM node and route identity
-
-- [ ] Routes are immutable and canonical.
-- [ ] Route equality does not depend on object reference.
-- [ ] Group identity is explicit.
-- [ ] Loaded nodes are retained or destroyed deterministically.
-- [ ] Illegal row ID reuse across incompatible routes is detected.
-- [ ] Selection of loaded rows is honest.
-- [ ] Stable selected IDs across eviction are supported only when explicitly configured.
-- [ ] Range selection is limited to loaded visible rows.
-- [ ] No fake select-all-server-rows behavior.
-
-### C7 - SSRM refresh and purge
-
-Add explicit operations:
+- `packages/core/src/infiniteRowModel.ts:209-217`
 
 ```ts
-api.refreshServerSide({ route?: readonly string[]; purge?: false })
-api.purgeServerSide({ route?: readonly string[] })
+type InfiniteBlockStatus =
+  | 'absent'
+  | 'queued'
+  | 'loadingInitial'
+  | 'loaded'
+  | 'refreshing'
+  | 'failedInitial'
+  | 'failedRefresh'
+  | 'stale';
 ```
 
-Semantics:
+- `packages/core/src/infiniteRowModel.ts:273-330`
 
-- [ ] Refresh without purge retains committed rows while refreshing.
-- [ ] Failed refresh retains committed rows.
-- [ ] Purge removes committed rows for the target route and exposes loading state.
-- [ ] Query changes create explicit refresh plans.
-- [ ] No page reset semantics exist.
-
-### C8 - SSRM tests
-
-Required coverage:
-
-- [ ] `rowModelType: 'server'` constructs only SSRM.
-- [ ] Flat root block loads and publishes visible rows.
-- [ ] Non-zero root block publication repaints without scroll.
-- [ ] Server sort model reaches datasource and updates visible rows.
-- [ ] Server filter model reaches datasource and updates visible rows/count.
-- [ ] Quick filter/query model reaches datasource.
-- [ ] Stale root response is rejected.
-- [ ] Stale child-store response is rejected.
-- [ ] Root unknown count can load beyond block zero.
-- [ ] Short root response establishes terminal count.
-- [ ] Root known count shrink removes out-of-range rows.
-- [ ] Root failed initial load exposes failed state.
-- [ ] Root retry recovers.
-- [ ] Refresh retains committed rows.
-- [ ] Failed refresh retains committed rows.
-- [ ] Purge removes committed rows.
-- [ ] Cache eviction does not evict visible root blocks.
-- [ ] Evicted root blocks reload deterministically.
-- [ ] Group row expands and creates child store.
-- [ ] Child store request includes canonical route and group keys.
-- [ ] Child store sort/filter/query snapshot is immutable.
-- [ ] Collapsing group destroys or detaches child store deterministically.
-- [ ] Recursive destroy aborts in-flight child requests.
-- [ ] Child store unknown count can load beyond first block.
-- [ ] Child store terminal count is respected.
-- [ ] Store-level diagnostics report states.
-- [ ] Block-level diagnostics report states.
-- [ ] Duplicate row ID in one store is rejected.
-- [ ] Illegal row ID reuse across incompatible routes is rejected.
-- [ ] Aggregate metadata is captured.
-- [ ] Loaded row selection survives refresh.
-- [ ] Eviction selection behavior matches configured capability.
-- [ ] Range selection only covers loaded visible rows.
-- [ ] Unsupported select-all-server behavior is reported honestly.
-- [ ] Old server page APIs are absent from public types.
-- [ ] Repo search finds no old server-page symbols.
-- [ ] Page-oriented demos/docs/tests are deleted or rewritten for SSRM.
-
-## Ownership diagrams
-
-### Shared server-backed infrastructure
-
-```mermaid
-flowchart TD
-  Query["Immutable query snapshot"]
-  Identity["Request identity"]
-  Queue["Priority request queue"]
-  State["Block state machine"]
-  Validate["Response validation"]
-  Commit["Atomic cache/index/count commit"]
-  Publish["RowModelPublication"]
-  Runtime["Runtime invalidation"]
-  Events["Diagnostics and consumer events"]
-
-  Query --> Identity
-  Identity --> Queue
-  Queue --> State
-  State --> Validate
-  Validate --> Commit
-  Commit --> Publish
-  Publish --> Runtime
-  Publish --> Events
+```ts
+public markQueued(blockIndex: number, blockSize: number): InfiniteBlock<TData> {
+  const block = this.ensureBlock(blockIndex, blockSize);
+  if (!this.hasCommittedRows(block) && block.status !== 'loadingInitial') {
+    block.status = 'queued';
 ```
 
-### Infinite row model
-
-```mermaid
-flowchart TD
-  Viewport["Latest viewport + direction"]
-  Scheduler["Infinite request scheduler"]
-  Cache["Bounded flat block cache"]
-  Count["RowCountState"]
-  Indexes["Visual index and row ID maps"]
-  Publication["RowModelPublication"]
-  Renderer["Renderer slots"]
-
-  Viewport --> Scheduler
-  Scheduler --> Cache
-  Cache --> Indexes
-  Cache --> Count
-  Indexes --> Publication
-  Count --> Publication
-  Publication --> Renderer
+```ts
+public markLoaded(...){
+  ...
+  if (typeof totalCount === 'number') {
+    this.knownRowCount = Math.max(0, totalCount);
+  } else if (returnedRowCount < blockSize && options?.canInferTerminalFromShortBlock !== false) {
+    this.knownRowCount = Math.max(0, block.startRow + returnedRowCount);
+  } else {
+    const provisionalReachableCount = block.startRow + returnedRowCount + blockSize;
+    this.estimatedRowCount = Math.max(this.estimatedRowCount, provisionalReachableCount);
+  }
+}
 ```
 
-### Real SSRM
+- `packages/core/src/infiniteRowModel.ts:495-552`
 
-```mermaid
-flowchart TD
-  SSRM["ServerSideRowModel"]
-  Stores["StoreManager"]
-  Root["RootStore"]
-  Child["ChildStore by route"]
-  Blocks["Store block caches"]
-  Expansion["ExpansionController"]
-  Scheduler["RequestScheduler"]
-  Publication["RowModelPublication"]
-  Renderer["Renderer slots"]
-
-  SSRM --> Stores
-  Stores --> Root
-  Stores --> Child
-  SSRM --> Expansion
-  Root --> Blocks
-  Child --> Blocks
-  Blocks --> Scheduler
-  Blocks --> Publication
-  Publication --> Renderer
+```ts
+export class InfiniteRowModelController<TData = unknown> ... {
+  private readonly maxConcurrentRequests: number;
+  private readonly prefetchBlockCount: number;
+  private readonly blockCache = new InfiniteBlockCache<TData>();
+  private readonly pendingBlockLoads = new Map<number, QueuedInfiniteBlockLoad>();
+  ...
+  this.unsubscribers.push(
+    this.runtime.addEventListener(GridEventName.sortChanged, () => this.invalidateQueryCache()),
+    this.runtime.addEventListener(GridEventName.filterChanged, () => this.invalidateQueryCache()),
+    this.runtime.addEventListener(GridEventName.quickFilterChanged, () => this.invalidateQueryCache()),
+    this.runtime.addEventListener(GridEventName.queryModelChanged, () => this.invalidateQueryCache())
+  );
 ```
 
-## Public API before/after table
+- `packages/core/src/infiniteRowModel.ts:933-935`
 
-| Area | Before | After |
-| --- | --- | --- |
-| Infinite sort/filter | May be demo-owned or not authoritatively published | Core sends immutable query snapshots and publishes row-model transitions |
-| Infinite row count | Implicit/fragile terminal inference | Explicit `RowCountState` with unknown/estimated/known |
-| Infinite blank rows | Possible unexplained `null`/blank slots | Every visual index has a deliberate loaded/loading/failed/terminal state |
-| Server model | Page-oriented `rowModelType: 'server'` | Real SSRM under `rowModelType: 'server'` |
-| Server datasource | Page request/page response concepts | Route/block request with sort/filter/query/group metadata |
-| Server page APIs | `getCurrentServerPage`, `goToServerPage`, page events | Removed |
-| Server refresh | Page reset/refetch semantics | `refreshServerSide` and `purgeServerSide` |
-| Renderer invalidation | May rely on events/incidental updates | Driven by `RowModelPublication` |
+```ts
+public getBlockSnapshots = (): readonly InfiniteBlockSnapshot[] => {
+  return this.blockCache.getSnapshots();
+};
+```
 
-## Verification gates
+- `packages/core/src/serverPageRowModel.ts:66-83`
 
-### After Stage A and B
+```ts
+export interface ServerGetPageParams {
+  readonly page: number;
+  readonly pageSize: number;
+  readonly sortModel: unknown;
+  readonly filterModel: unknown;
+  readonly quickFilterModel: unknown;
+  readonly queryModel: unknown;
+}
 
-- [ ] Run all core tests.
-- [ ] Run React tests.
-- [ ] Run typecheck.
-- [ ] Run build.
-- [ ] Run renderer adversarial tests.
-- [ ] Report request counts during rapid scrolling.
-- [ ] Report observed max concurrency.
-- [ ] Prove no represented infinite index returns unexplained `null`.
-- [ ] Prove infinite sorting/filtering works through core publication, not demo state.
+export interface ServerDatasource<TRowData = unknown> {
+  getPage(params: ServerGetPageParams, context: { signal?: AbortSignal }): Promise<ServerGetPageResult<TRowData>>;
+}
+```
 
-### After Stage C
+- `packages/core/src/serverPageRowModel.ts:90-104`
 
-- [ ] Run full repo tests.
-- [ ] Run SSRM hierarchy tests.
-- [ ] Run stale/reordered/failed response tests for root and child stores.
-- [ ] Search repo for old server-page symbols.
-- [ ] Prove `rowModelType: 'server'` creates only SSRM.
-- [ ] Report removed APIs.
-- [ ] Report changed datasource types.
-- [ ] Report unsupported capabilities honestly exposed by SSRM.
-- [ ] Prove no page implementation survives.
+```ts
+export interface ServerPageState {
+  readonly page: number;
+  readonly pageSize: number;
+  readonly pageCount: number;
+  readonly totalRowCount: number;
+  readonly loading: boolean;
+  readonly error: string | null;
+}
+```
 
-## Completion definition
+- `packages/core/src/serverPageRowModel.ts:130-190`
 
-This plan is complete only when all of the following are true:
+```ts
+export class ServerPageRowModelController<TData = unknown> ... {
+  private currentPage: number;
+  private pageSize: number;
+  private pageCount = 1;
+  private totalRowCount = 0;
+  ...
+  this.unsubscribers.push(
+    this.runtime.addEventListener(GridEventName.sortChanged, () => {
+      this.invalidateQueryAndResetPage();
+    }),
+```
 
-- [ ] `client` remains the local all-rows model.
-- [ ] `infinite` is a production flat remote block model.
-- [ ] `server` is a real hierarchical server-side row model.
-- [ ] There is zero legacy server-page implementation.
-- [ ] There are zero compatibility aliases for old server-page APIs.
-- [ ] Infinite has zero unexplained blank rows under adversarial scrolling.
-- [ ] Infinite sort/filter is deterministic under delayed, reordered, failed, and stale responses.
-- [ ] SSRM sort/filter is deterministic under delayed, reordered, failed, and stale responses.
-- [ ] Async row-model publication is the only renderer invalidation path for committed async row changes.
-- [ ] Demos exercise the core behavior but do not own it.
+- `packages/core/src/engine/createRowModelRuntimes.ts:57-67`
+
+```ts
+setLoadingState: (loading) => store.engine.setRowModelLoadingState(loading),
+dispatchInfiniteBlockLoaded: (payload) => {
+  store.dispatchEvent(GridEventName.infiniteBlockLoaded, payload);
+},
+dispatchInfiniteBlockLoadFailed: (payload) => {
+  store.dispatchEvent(GridEventName.infiniteBlockLoadFailed, payload);
+},
+dispatchPaginationChanged: (payload) => {
+  store.engine.setServerPaginationState(payload);
+  store.dispatchEvent(GridEventName.paginationChanged, payload);
+},
+```
+
+- `packages/core/src/engine/createRowModelRuntimes.ts:79-109`
+
+```ts
+export function createServerPageRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ServerPageRowModelRuntime<TRowData> {
+  return {
+    ...
+    dispatchServerPageLoadingStarted: (payload) => store.dispatchEvent(GridEventName.serverPageLoadingStarted, payload),
+    dispatchServerPageLoaded: (payload) => {
+      store.dispatchEvent(GridEventName.serverPageLoaded, payload);
+      store.dispatchEvent(GridEventName.serverPageChanged, payload);
+    },
+```
+
+- `packages/core/src/createGrid.ts:71-79`
+
+```ts
+/** Options for creating a server-page (explicit page loading) grid. */
+export interface ServerPageGridOptions<TRowData> extends ServerPageRowModelOptions<TRowData> {
+  ...
+}
+```
+
+- `packages/core/src/createGrid.ts:315-355`
+
+```ts
+export function createServerPageGrid<TRowData>(options: ServerPageGridOptions<TRowData>): GridApi<TRowData> {
+  ...
+  const controller = new ServerPageRowModelController<TRowData>(runtime.getServerPageRowModelRuntime(), { ...options, columns: resolvedColumns });
+```
+
+Relevant repo conventions and evidence files:
+
+- Plan files use the handoff template in `C:\Users\rishi\witbybit\open-grid\.agents\skills\improve\references\plan-template.md`.
+- Existing row-model demolition evidence already lives in:
+  - `C:\Users\rishi\witbybit\open-grid\docs\architecture\plan-158-readiness-audit.md`
+  - `C:\Users\rishi\witbybit\open-grid\docs\architecture\plan-158-server-page-deletion-manifest.md`
+- Use `packages/core/src/serverRowModel.test.ts` and `packages/core/src/serverRowModel.adversarial.test.ts` as the primary test homes for infinite/server-backed async correctness.
+
+## Commands you will need
+
+| Purpose | Command | Expected on success |
+| ------- | ------- | ------------------- |
+| Drift check | `git diff --stat 6f594575..HEAD -- packages/core/src/infiniteRowModel.ts packages/core/src/serverPageRowModel.ts packages/core/src/serverRowModel.test.ts packages/core/src/serverRowModel.adversarial.test.ts packages/core/src/createGrid.ts packages/core/src/store.ts packages/core/src/rowModel.ts packages/core/src/api packages/core/src/engine packages/react/src/Grid.tsx demo docs/architecture plans/README.md` | exit 0; inspect output for drift |
+| Core focused tests | `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.test.ts src/serverRowModel.adversarial.test.ts src/renderer/renderEngine.test.ts src/renderer/serverRuntimePerformance.test.ts` | all pass |
+| Core full tests | `corepack pnpm --filter @open-grid/core test` | exit 0; all tests pass |
+| React tests | `corepack pnpm --filter @open-grid/react test` | exit 0; all tests pass |
+| Workspace tests | `corepack pnpm run test` | exit 0; all tests pass |
+| Architecture guards | `corepack pnpm --filter @open-grid/core exec vitest run src/boundary.test.ts src/engine/architectureGuards.test.ts` | all pass |
+| Adversarial suite | `corepack pnpm run test:adversarial` | exit 0; all tests pass |
+| Build | `corepack pnpm run build` | exit 0 |
+| Repo search for removed symbols | `rg -n "ServerPageRowModelController|serverPage|goToServerPage|getCurrentServerPage|serverPageLoaded|serverPageChanged|pageNumber" packages/core/src packages/react/src demo docs -g '!**/node_modules/**'` | no matches outside explicit migration notes, if any |
+
+## Scope
+
+**In scope**:
+
+- `packages/core/src/infiniteRowModel.ts`
+- `packages/core/src/serverPageRowModel.ts` until deleted
+- `packages/core/src/serverRowModel.test.ts`
+- `packages/core/src/serverRowModel.adversarial.test.ts`
+- `packages/core/src/renderer/renderEngine.test.ts`
+- `packages/core/src/renderer/serverRuntimePerformance.test.ts`
+- `packages/core/src/engine/createRowModelRuntimes.ts`
+- `packages/core/src/engine/runtimePorts.ts`
+- `packages/core/src/createGrid.ts`
+- `packages/core/src/store.ts`
+- `packages/core/src/rowModel.ts`
+- `packages/core/src/api/*`
+- `packages/core/src/state/GridState.ts`
+- `packages/core/src/index.ts`
+- `packages/react/src/Grid.tsx`
+- SSRM replacement files created under `packages/core/src/`
+- Demo files that exercise `rowModelType: 'server'`, only after core behavior is correct
+- `docs/architecture/plan-158-readiness-audit.md` and `docs/architecture/plan-158-server-page-deletion-manifest.md` if they need factual refresh
+- `plans/README.md` status row for Plan 158 when the implementation is complete
+
+**Out of scope**:
+
+- Unrelated feature work from other plans
+- Cosmetic demo redesign or UX polish unrelated to correctness
+- Compatibility wrappers such as `serverPage`, `legacyServer`, `pagedServer`, or datasource translation shims
+- Timer-based or forced-render hacks that mask publication bugs
+- New enterprise features beyond the minimum SSRM feature set required here
+
+## Git workflow
+
+- Stay on the current branch unless the operator asks otherwise.
+- Commit by logical phase, not by file dump.
+- Before each commit, run at least `corepack pnpm --filter @open-grid/core test` and ensure it is green.
+- Do not push or open a PR unless the operator instructs it.
+
+## Steps
+
+### Step 1: Lock in the async publication regressions with tests
+
+Use the existing focused suites to prove the failures and pin the expected core behavior before large refactors:
+
+- Add or finish tests in `packages/core/src/serverRowModel.test.ts` for:
+  - infinite blank-row replacement when a non-zero block resolves
+  - infinite sort publication after async commit
+  - infinite filter publication and row-count update after async commit
+  - row-count transitions across unknown, estimated, and known states
+  - deliberate loading/failed placeholders instead of unexplained blanks
+- Add or finish adversarial tests in `packages/core/src/serverRowModel.adversarial.test.ts` for:
+  - stale query responses losing to newer sort/filter/query generations
+  - datasource replacement invalidating old authority
+  - rapid scrolling not requiring incidental renders to repaint committed rows
+- If a renderer-specific reproduction is clearer, add a narrowly focused assertion in `packages/core/src/renderer/renderEngine.test.ts`.
+
+**Verify**: `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.test.ts src/serverRowModel.adversarial.test.ts src/renderer/renderEngine.test.ts` -> all pass
+
+### Step 2: Finish the infinite block model so no represented row can go blank
+
+Work in `packages/core/src/infiniteRowModel.ts` only. Keep infinite flat and remote; do not import grouping/store semantics into it.
+
+Required outcomes:
+
+- Preserve committed rows during refresh and failed refresh.
+- Ensure queued/loading/failed states always map to deliberate visual rows.
+- Keep row-count authority explicit and deterministic.
+- Make request queueing prefer visible blocks, cap concurrency, and discard stale distant work.
+- Ensure eviction removes ownership cleanly and revisit reloads deterministically.
+- Validate responses before commit so invalid payloads never partially mutate rows or indexes.
+- Expose immutable diagnostics through `getBlockSnapshots()` and use them in tests where that improves observability.
+
+Do not move sort/filter logic into demos; the datasource request snapshot and publication path belong in core.
+
+**Verify**: `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.test.ts src/serverRowModel.adversarial.test.ts src/renderer/serverRuntimePerformance.test.ts` -> all pass
+
+### Step 3: Introduce one authoritative async publication path
+
+Refactor the server-backed row-model runtime seam so async responses publish one committed row-model transition after rows, indexes, counts, and cache state are fully installed.
+
+Target areas:
+
+- `packages/core/src/engine/createRowModelRuntimes.ts`
+- `packages/core/src/engine/runtimePorts.ts`
+- `packages/core/src/rowModel.ts`
+- `packages/core/src/store.ts`
+- Any new shared helper file created under `packages/core/src/`
+
+Requirements:
+
+- Distinguish observability events from renderer invalidation.
+- Capture immutable request/query state once per request.
+- Reject stale responses before validation or mutation.
+- Publish committed async changes through one runtime operation instead of scattered direct render nudges.
+- Emit diagnostics and consumer-facing events after publication, not as the trigger for publication.
+
+If a new shared helper is needed, keep it generic enough for infinite and SSRM, but do not collapse the two row models into one giant controller with branching.
+
+**Verify**: `corepack pnpm --filter @open-grid/core test` -> exit 0; all tests pass
+
+### Step 4: Demolish the page-based server row model
+
+Use `docs/architecture/plan-158-server-page-deletion-manifest.md` as the checklist, then delete the old architecture rather than adapting it.
+
+Must remove:
+
+- `ServerPageRowModelController`
+- page-number/page-size/page-count-owned row-model state
+- page datasource contracts
+- `serverPage*` events and selectors
+- page navigation APIs such as `goToServerPage(...)`
+- runtime branches that construct or forward the old implementation
+- page-based docs, tests, demos, and public exports
+
+Update compile-time seams until the repo no longer assumes `rowModelType: 'server'` means selected-page loading.
+
+**Verify**: `rg -n "ServerPageRowModelController|serverPage|goToServerPage|getCurrentServerPage|serverPageLoaded|serverPageChanged|pageNumber" packages/core/src packages/react/src demo docs -g '!**/node_modules/**'` -> no matches outside explicit migration notes, if any
+
+### Step 5: Replace `server` with one real SSRM
+
+Implement the new server-side row model under the existing public type name `server`.
+
+Minimum architecture to introduce:
+
+- one top-level `ServerSideRowModel`
+- one store manager
+- one root store
+- child stores by canonical route
+- per-store bounded block cache and block state
+- store-aware request scheduling and stale rejection
+- route-aware refresh/purge operations
+- immutable store/block diagnostic snapshots
+
+Minimum behavior to ship before closing the plan:
+
+- flat root-store virtual scrolling
+- bounded cache
+- viewport-priority requests with max concurrency
+- server-side sort/filter/quick-filter/query forwarding
+- refresh without purge
+- purge with deliberate loading rows
+- stale response rejection
+- unknown/estimated/known row counts
+- child-store creation on group expansion
+- targeted route refresh and subtree purge
+
+Public API must converge on `rowModelType: 'server'` plus SSRM-focused datasource and refresh APIs. Do not leave deprecated page overloads behind.
+
+**Verify**: `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.test.ts src/serverRowModel.adversarial.test.ts src/rowModel.capabilities.test.ts src/query/queryModel.test.ts src/store.test.ts` -> all pass
+
+### Step 6: Update adapters, docs, demos, and plan index after the core replacement is stable
+
+Only after Steps 1-5 are green:
+
+- update `packages/react/src/Grid.tsx` to remove page-server assumptions
+- update or replace demos that exercise `rowModelType: 'server'`
+- refresh `docs/architecture/plan-158-readiness-audit.md` and `docs/architecture/plan-158-server-page-deletion-manifest.md` only if code drift made them inaccurate
+- update the Plan 158 row in `plans/README.md` when implementation is complete
+
+Keep demo changes minimal and downstream of the core fix.
+
+**Verify**: `corepack pnpm run build` -> exit 0
+
+## Test plan
+
+- Add or complete tests in `packages/core/src/serverRowModel.test.ts` covering:
+  - infinite non-zero block commit replaces loading placeholders immediately
+  - infinite sorting changes visible order only after the async response commits
+  - infinite filtering changes visible rows and row count atomically
+  - infinite refresh retains committed rows
+  - failed refresh retains committed rows
+  - hard purge intentionally removes committed rows
+  - row-count transitions unknown -> estimated -> known and known shrink
+  - no represented in-range visual index resolves to unexplained blank output
+- Add or complete adversarial tests in `packages/core/src/serverRowModel.adversarial.test.ts` covering:
+  - stale query responses
+  - stale datasource responses
+  - rapid distant scrolling
+  - concurrency limit behavior
+  - queue prioritization
+- Add SSRM replacement tests for:
+  - root-store loading and sort/filter/query forwarding
+  - child-store route construction
+  - route-targeted refresh/purge
+  - stale child-store rejection
+  - server-page API/type removal
+- Reuse structural patterns from the existing row-model and adversarial suites rather than inventing a new test harness.
+- Verification:
+  - `corepack pnpm --filter @open-grid/core test` -> all pass
+  - `corepack pnpm --filter @open-grid/react test` -> all pass
+  - `corepack pnpm run test` -> all pass
+
+## Done criteria
+
+All must hold:
+
+- [ ] `corepack pnpm --filter @open-grid/core test` exits 0
+- [ ] `corepack pnpm --filter @open-grid/react test` exits 0
+- [ ] `corepack pnpm run build` exits 0
+- [ ] Infinite scrolling no longer produces unexplained blank or skipped in-range rows under the focused adversarial tests
+- [ ] Infinite sorting and filtering are verified in core tests, not demo-only behavior
+- [ ] `rowModelType: 'server'` instantiates only the new SSRM
+- [ ] No page-oriented server datasource contract remains in public types
+- [ ] No page-oriented server events or public APIs remain
+- [ ] Repo search for `ServerPageRowModelController|serverPage|goToServerPage|getCurrentServerPage|serverPageLoaded|serverPageChanged|pageNumber` finds no live implementation usage
+- [ ] No files outside the in-scope list are modified except for unavoidable compile-fix touch points caused by the server-page demolition
+- [ ] `plans/README.md` status row updated
+
+## STOP conditions
+
+Stop and report back if any of the following happens:
+
+- The excerpts in "Current state" no longer match the live files after the drift check.
+- Infinite blank rows turn out to originate primarily from renderer slot corruption rather than row-model publication or block-state ownership.
+- Removing the page-based server implementation requires a compatibility adapter to keep the repo compiling.
+- The new SSRM would require preserving page-number semantics in public API or datasource types.
+- A verification command fails twice after a reasonable targeted fix attempt.
+- The work cannot stay scoped to core-owned correctness plus the required downstream compile-fix updates.
+
+## Maintenance notes
+
+- The evidence docs for Plan 158 are already present. Prefer updating them surgically if drift appears rather than rewriting them from zero.
+- Reviewers should scrutinize any new shared async helper to ensure it is truly generic infrastructure and not an accidental merged controller for infinite plus SSRM.
+- Future pagination, if reintroduced for server data, must be a presentation layer on top of row-model state rather than the defining architecture of the server row model.
