@@ -93,15 +93,20 @@ renderer:
 
 Complete these before changing production code:
 
-- [ ] Exact failure analysis for infinite block loading and blank-row publication.
-- [ ] Exact failure analysis for infinite sorting and filtering.
-- [ ] Exact failure analysis for current server sorting/filtering regression.
-- [ ] Deletion manifest for the current page-oriented server row model.
-- [ ] Shared server-backed infrastructure ownership diagram.
-- [ ] Infinite row model ownership diagram.
-- [ ] Real SSRM ownership diagram.
-- [ ] Public API before/after table.
-- [ ] Tests expected to fail before implementation.
+- [x] Exact failure analysis for infinite block loading and blank-row publication.
+- [x] Exact failure analysis for infinite sorting and filtering.
+- [x] Exact failure analysis for current server sorting/filtering regression.
+- [x] Deletion manifest for the current page-oriented server row model.
+- [x] Shared server-backed infrastructure ownership diagram.
+- [x] Infinite row model ownership diagram.
+- [x] Real SSRM ownership diagram.
+- [x] Public API before/after table.
+- [x] Tests expected to fail before implementation.
+
+Evidence:
+
+- `docs/architecture/plan-158-readiness-audit.md`
+- `docs/architecture/plan-158-server-page-deletion-manifest.md`
 
 ## Stage A - Repair the shared async row-model contract
 
@@ -111,13 +116,29 @@ Do this before hardening infinite or replacing server. The shared contract must 
 
 Add failing tests that prove the regressions before fixing them:
 
-- [ ] Infinite sorting sends the active sort model to the datasource and publishes the sorted response into visible rows.
-- [ ] Infinite filtering sends the active filter model to the datasource and publishes the filtered response and row count.
-- [ ] Current server sorting/filtering failure is captured as a regression test before demolition.
-- [ ] Non-zero infinite block publication invalidates the renderer without incidental scroll.
-- [ ] Stale query responses are rejected after sort/filter/query generation changes.
+- [x] Infinite sorting sends the active sort model to the datasource and publishes the sorted response into visible rows.
+- [x] Infinite filtering sends the active filter model to the datasource and publishes the filtered response and row count.
+- [x] Current server sorting/filtering failure is captured as a regression test before demolition.
+- [x] Non-zero infinite block publication invalidates the renderer without incidental scroll.
+- [x] Stale query responses are rejected after sort/filter/query generation changes.
 - [ ] Row-count transitions publish geometry changes for `unknown`, `estimated`, and `known` counts.
 - [ ] Async block response publication updates runtime projection and renderer-visible slots in the same authoritative transition.
+
+Implemented evidence:
+
+- `packages/core/src/serverRowModel.test.ts`
+  - `publishes a core refresh invalidation when a non-zero infinite block resolves`
+  - `refetches infinite rows on sort changes and publishes the returned order`
+  - `publishes infinite sort changes only when the async response commits`
+  - `refetches infinite rows on filter changes and publishes the filtered result`
+  - `publishes infinite filter changes only when the async response commits`
+  - `refetches server-page rows on sort changes and publishes the returned order`
+  - `publishes server-page sort changes only when the async response commits`
+  - `refetches server-page rows on filter changes and publishes the filtered result`
+  - `publishes server-page filter changes only when the async response commits`
+- `packages/core/src/serverRowModel.adversarial.test.ts`
+  - `stale responses and stale failures are ignored after sort/filter/datasource churn`
+  - `stale responses and stale failures are ignored after page/sort/filter/query/datasource churn`
 
 ### A2 - Shared request identity
 

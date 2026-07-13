@@ -1,6 +1,6 @@
 # Plan 158 Readiness Audit
 
-Last audited: 2026-07-12
+Last audited: 2026-07-13
 
 This document records the current evidence baseline for Plan 158. It is not a claim that Plan 158 is complete. It exists to satisfy the plan's required pre-implementation deliverables with repository-backed evidence so the remaining demolition and SSRM replacement work can proceed from an explicit shared understanding.
 
@@ -31,22 +31,26 @@ Current evidence that this class of failure exists and is now explicitly protect
 - `packages/core/src/serverRowModel.test.ts`
   - non-zero block publication: `publishes a core refresh invalidation when a non-zero infinite block resolves`
   - blank-gap prevention: `rejects a short non-terminal infinite block response instead of committing blank gaps`
+  - committed-row refresh retention: `retains committed infinite rows while a loaded block refreshes and if that refresh fails`
   - terminal short-block handling: `treats a short infinite block without totalCount as the terminal known row count`
   - oversized response rejection
   - duplicate row-id rejection
   - known-count shrink behavior
   - `hasMore` / `lastRow` terminal semantics
+  - query-reset loading representation: `purgeCache resets failed block state and known row count before refetching`
 - `packages/core/src/infiniteRowModel.ts`
   - validates response shape before commit
   - computes terminal count before install
   - installs block rows into `blockCache`
   - rebuilds derived indexes
   - then publishes `publishBlockRefresh(...)`
+  - preserves prior represented row count across query resets so the viewport exposes deliberate loading rows while the replacement request is pending
 
 Conclusion:
 
 - The blank-row bug was a row-model authority bug, not a demo rendering bug.
 - Infinite correctness depends on response validation plus atomic block/index/count publication.
+- Committed rows must keep authoritative `loaded` ownership during refresh/failure, while purged query resets must still expose deliberate loading rows instead of collapsing the represented range to zero.
 
 ### 2. Infinite sorting and filtering regression
 
@@ -61,7 +65,9 @@ Current evidence:
 
 - `packages/core/src/serverRowModel.test.ts`
   - `refetches infinite rows on sort changes and publishes the returned order`
+  - `publishes infinite sort changes only when the async response commits`
   - `refetches infinite rows on filter changes and publishes the filtered result`
+  - `publishes infinite filter changes only when the async response commits`
   - `refetches infinite rows on query-model changes and publishes the returned rows`
   - `passes an AbortSignal to the infinite datasource and aborts stale requests on query reset`
 - `packages/core/src/serverRowModel.adversarial.test.ts`
@@ -74,6 +80,7 @@ Current evidence:
 Conclusion:
 
 - Infinite sort/filter behavior is core-owned and async-authoritative.
+- Query resets now preserve deliberate loading representation until the winning response publishes, so visible sort/filter changes no longer depend on incidental renderer churn or a zero-row gap.
 - Any remaining visible failure in demos would need to contradict the core publication/test evidence rather than replace it.
 
 ### 3. Current server sorting and filtering regression
@@ -92,7 +99,9 @@ Current evidence:
   - `writeCellValueStructurally(...)` now reloads when an edited field participates in active sort or filter state
 - `packages/core/src/serverRowModel.test.ts`
   - `refetches server-page rows on sort changes and publishes the returned order`
+  - `publishes server-page sort changes only when the async response commits`
   - `refetches server-page rows on filter changes and publishes the filtered result`
+  - `publishes server-page filter changes only when the async response commits`
   - `reloads the server-page datasource after editing a field that participates in server sort`
   - `reloads the server-page datasource after editing a field that participates in server filter`
   - page response validation and failure publication tests
@@ -180,11 +189,15 @@ The following existing tests represent the major regression buckets that Plan 15
 - `publishes a core refresh invalidation when a non-zero infinite block resolves`
 - `rejects a short non-terminal infinite block response instead of committing blank gaps`
 - `refetches infinite rows on sort changes and publishes the returned order`
+- `publishes infinite sort changes only when the async response commits`
 - `refetches infinite rows on filter changes and publishes the filtered result`
+- `publishes infinite filter changes only when the async response commits`
 - `passes an AbortSignal to the infinite datasource and aborts stale requests on query reset`
 - `reloads the server-page datasource after editing a field that participates in server sort`
 - `reloads the server-page datasource after editing a field that participates in server filter`
 - `publishes a core refresh invalidation when a server-page response resolves`
+- `publishes server-page sort changes only when the async response commits`
+- `publishes server-page filter changes only when the async response commits`
 - `stale responses and stale failures are ignored after sort/filter/datasource churn`
 - `stale responses and stale failures are ignored after page/sort/filter/query/datasource churn`
 
@@ -200,3 +213,12 @@ This audit does not prove Plan 158 complete. The largest remaining gaps are:
 - SSRM root/child store ownership does not exist yet
 - the final server-side datasource contract does not exist yet
 - demolition is not complete until repo search no longer finds live server-page implementation seams
+
+## Verification snapshot
+
+- 2026-07-13 committed evidence:
+  - `31882e0e` `Preserve committed infinite row load state`
+  - `93860d93` `Preserve infinite query-reset loading ranges`
+- Full core verification after the latest phase:
+  - `corepack pnpm --filter @open-grid/core test`
+  - `110` files passed, `1943` tests passed
