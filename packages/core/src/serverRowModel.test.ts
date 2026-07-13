@@ -147,6 +147,71 @@ describe('InfiniteRowModelController', () => {
 		});
 	});
 
+	it('exposes deliberate loading rows for queued infinite work before request execution starts', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let callCount = 0;
+		let resolveBlockZero!: (value: { rows: TestRow[]; totalCount: number }) => void;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (params.startRow === 0) {
+					callCount++;
+					if (callCount === 1) {
+						return Promise.resolve({
+							rows: Array.from({ length: 10 }, (_, index) => ({
+								id: `row-${index}`,
+								name: `Row ${index}`,
+							})),
+							totalCount: 20,
+						});
+					}
+					return new Promise((resolve) => {
+						resolveBlockZero = resolve as typeof resolveBlockZero;
+					});
+				}
+				return Promise.resolve({
+					rows: Array.from({ length: 10 }, (_, index) => ({
+						id: `row-${10 + index}`,
+						name: `Row ${10 + index}`,
+					})),
+					totalCount: 20,
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 10,
+			maxConcurrentRequests: 1,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		controller.ensureRange(0, 0, 'force-reload');
+		controller.loadVisibleBlocks(10, 19);
+		expect(controller.getRowLoadState(10)).toEqual({ kind: 'loading', reason: 'infinite-block' });
+		expect(controller.getVisualRow(10)?.kind).toBe('loading');
+
+		resolveBlockZero({
+			rows: Array.from({ length: 10 }, (_, index) => ({
+				id: `row-${index}`,
+				name: `Row ${index}`,
+			})),
+			totalCount: 20,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(10)?.kind).toBe('data');
+		expect(getRowNode(controller, 10)?.data.name).toBe('Row 10');
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('publishes a core refresh invalidation when a non-zero infinite block resolves', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
@@ -260,6 +325,70 @@ describe('InfiniteRowModelController', () => {
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('New Block Winner');
 		expect(store.getRawRowById('1')).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('retries a failed initial infinite block load and replaces failed placeholders with committed rows', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let callCount = 0;
+		let rejectInitial!: (error: unknown) => void;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (params.startRow === 0) {
+					return Promise.resolve({
+						rows: Array.from({ length: 10 }, (_, index) => ({
+							id: `row-${index}`,
+							name: `Row ${index}`,
+						})),
+						totalCount: 20,
+					});
+				}
+				callCount++;
+				if (callCount === 1) {
+					return new Promise((_, reject) => {
+						rejectInitial = reject;
+					});
+				}
+				return Promise.resolve({
+					rows: Array.from({ length: 10 }, (_, index) => ({
+						id: `row-${10 + index}`,
+						name: `Recovered ${10 + index}`,
+					})),
+					totalCount: 20,
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		controller.ensureRange(10, 10, 'test');
+		rejectInitial!(new Error('block 1 failed'));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getRowLoadState(10)).toEqual({
+			kind: 'failed',
+			error: 'block 1 failed',
+			retryable: true,
+		});
+		expect(controller.getVisualRow(10)?.kind).toBe('failed');
+
+		controller.ensureRange(10, 10, 'retry');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getRowLoadState(10)).toEqual({ kind: 'loaded', rowId: 'row-10' });
+		expect(controller.getVisualRow(10)?.kind).toBe('data');
+		expect(getRowNode(controller, 10)?.data.name).toBe('Recovered 10');
 
 		controller.dispose();
 		store.destroy();

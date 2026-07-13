@@ -194,7 +194,15 @@ const INFINITE_CAPABILITIES: RowModelCapabilities = {
 	pageRowSelection: false,
 };
 
-type InfiniteBlockStatus = 'empty' | 'loading' | 'loaded' | 'failed' | 'stale';
+type InfiniteBlockStatus =
+	| 'absent'
+	| 'queued'
+	| 'loadingInitial'
+	| 'loaded'
+	| 'refreshing'
+	| 'failedInitial'
+	| 'failedRefresh'
+	| 'stale';
 
 interface QueuedInfiniteBlockLoad {
 	blockIndex: number;
@@ -207,7 +215,7 @@ class InfiniteBlock<TData = unknown> {
 	public readonly blockIndex: number;
 	public readonly startRow: number;
 	public readonly endRow: number;
-	public status: InfiniteBlockStatus = 'empty';
+	public status: InfiniteBlockStatus = 'absent';
 	public rows: Array<RowNode<TData> | null>;
 	public error: string | null = null;
 	public requestId = 0;
@@ -250,13 +258,24 @@ class InfiniteBlockCache<TData = unknown> {
 		return this.getBlock(Math.floor(rowIndex / blockSize));
 	}
 
+	public markQueued(blockIndex: number, blockSize: number): InfiniteBlock<TData> {
+		const block = this.ensureBlock(blockIndex, blockSize);
+		if (!this.hasCommittedRows(block) && block.status !== 'loadingInitial') {
+			block.status = 'queued';
+			block.error = null;
+			block.loadedAt = null;
+		}
+		block.lastAccessedAt = InfiniteBlockCache.now();
+		return block;
+	}
+
 	public beginLoad(blockIndex: number, blockSize: number, requestId: number, queryVersion: number): InfiniteBlock<TData> {
 		const block = this.ensureBlock(blockIndex, blockSize);
 		const hasCommittedRows = this.hasCommittedRows(block);
-		if (block.status === 'loaded' || block.status === 'failed') {
+		if (block.status === 'loaded' || block.status === 'failedRefresh') {
 			block.status = 'stale';
 		}
-		block.status = 'loading';
+		block.status = hasCommittedRows ? 'refreshing' : 'loadingInitial';
 		block.error = null;
 		block.requestId = requestId;
 		block.queryVersion = queryVersion;
@@ -304,7 +323,7 @@ class InfiniteBlockCache<TData = unknown> {
 	public markFailed(blockIndex: number, blockSize: number, requestId: number, queryVersion: number, error: string): InfiniteBlock<TData> {
 		const block = this.ensureBlock(blockIndex, blockSize);
 		const hasCommittedRows = this.hasCommittedRows(block);
-		block.status = 'failed';
+		block.status = hasCommittedRows ? 'failedRefresh' : 'failedInitial';
 		block.error = error;
 		block.requestId = requestId;
 		block.queryVersion = queryVersion;
@@ -321,13 +340,14 @@ class InfiniteBlockCache<TData = unknown> {
 	}
 
 	public isBlockLoading(blockIndex: number): boolean {
-		return this.blocks.get(blockIndex)?.status === 'loading';
+		const status = this.blocks.get(blockIndex)?.status;
+		return status === 'loadingInitial' || status === 'refreshing';
 	}
 
 	public getLoadingBlockCount(): number {
 		let count = 0;
 		for (const block of this.blocks.values()) {
-			if (block.status === 'loading') count++;
+			if (block.status === 'loadingInitial' || block.status === 'refreshing') count++;
 		}
 		return count;
 	}
@@ -337,7 +357,13 @@ class InfiniteBlockCache<TData = unknown> {
 
 		let changed = false;
 		const candidates = Array.from(this.blocks.values())
-			.filter((block) => block.status !== 'loading' && !protectedBlockIndexes.has(block.blockIndex))
+			.filter(
+				(block) =>
+					block.status !== 'loadingInitial' &&
+					block.status !== 'refreshing' &&
+					block.status !== 'queued' &&
+					!protectedBlockIndexes.has(block.blockIndex)
+			)
 			.sort((left, right) => left.lastAccessedAt - right.lastAccessedAt);
 
 		for (const candidate of candidates) {
@@ -395,11 +421,14 @@ class InfiniteBlockCache<TData = unknown> {
 			return { kind: 'loaded', rowId: committedNode.id };
 		}
 		switch (block.status) {
-			case 'loading':
+			case 'queued':
+			case 'loadingInitial':
+			case 'refreshing':
 			case 'stale':
-			case 'empty':
+			case 'absent':
 				return index < this.getVisualRowCount() ? { kind: 'loading', reason: 'infinite-block' } : { kind: 'missing' };
-			case 'failed':
+			case 'failedInitial':
+			case 'failedRefresh':
 				return { kind: 'failed', error: block.error ?? 'Unknown infinite block load failure', retryable: true };
 			case 'loaded':
 				return index < this.getVisualRowCount() ? { kind: 'loading', reason: 'infinite-block' } : { kind: 'missing' };
@@ -615,7 +644,13 @@ export class InfiniteRowModelController<TData = unknown>
 		const shouldQueueBlock = (blockIdx: number): boolean => {
 			const block = this.blockCache.getBlock(blockIdx);
 			if (!forceReload && block) {
-				if (block.status === 'loading') return false;
+				if (
+					block.status === 'queued' ||
+					block.status === 'loadingInitial' ||
+					block.status === 'refreshing'
+				) {
+					return false;
+				}
 				if (block.status === 'loaded' && !this.blockHasRepresentedGap(block)) return false;
 			}
 			return true;
@@ -623,7 +658,7 @@ export class InfiniteRowModelController<TData = unknown>
 
 		const desiredQueuedBlocks = new Set<number>(requestedBlocks);
 		prefetchBlocks.forEach((blockIdx) => desiredQueuedBlocks.add(blockIdx));
-		this.dropStaleQueuedPrefetchLoads(desiredQueuedBlocks);
+		this.dropStaleQueuedLoads(desiredQueuedBlocks);
 
 		requestedBlocks.forEach((blockIdx) => {
 			if (!shouldQueueBlock(blockIdx)) return;
@@ -963,6 +998,7 @@ export class InfiniteRowModelController<TData = unknown>
 			existing.forceReload = existing.forceReload || forceReload;
 			return;
 		}
+		this.blockCache.markQueued(blockIndex, this.blockSize);
 		this.pendingBlockLoads.set(blockIndex, {
 			blockIndex,
 			priority,
@@ -982,9 +1018,9 @@ export class InfiniteRowModelController<TData = unknown>
 		}
 	}
 
-	private dropStaleQueuedPrefetchLoads(retainedBlockIndexes: ReadonlySet<number>): void {
+	private dropStaleQueuedLoads(retainedBlockIndexes: ReadonlySet<number>): void {
 		for (const [blockIndex, queued] of this.pendingBlockLoads.entries()) {
-			if (queued.priority > 0 && !retainedBlockIndexes.has(blockIndex)) {
+			if (!retainedBlockIndexes.has(blockIndex)) {
 				this.pendingBlockLoads.delete(blockIndex);
 			}
 		}
