@@ -160,6 +160,18 @@ export interface InfiniteDatasource<TRowData = unknown> {
 	getRows(params: InfiniteGetRowsParams, context: { signal?: AbortSignal }): Promise<InfiniteGetRowsResult<TRowData>>;
 }
 
+export interface InfiniteBlockSnapshot {
+	readonly blockIndex: number;
+	readonly startRow: number;
+	readonly endRow: number;
+	readonly state: InfiniteBlockStatus;
+	readonly committedRowCount: number;
+	readonly requestId?: number;
+	readonly queryGeneration: number;
+	readonly lastAccessedAt: number;
+	readonly error?: string;
+}
+
 export interface InfiniteRowModelOptions<TData = unknown> {
 	blockSize?: number;
 	maxBlocksInCache?: number;
@@ -401,6 +413,22 @@ class InfiniteBlockCache<TData = unknown> {
 			}
 		}
 		return nodes;
+	}
+
+	public getSnapshots(): readonly InfiniteBlockSnapshot[] {
+		return Array.from(this.blocks.values())
+			.sort((a, b) => a.blockIndex - b.blockIndex)
+			.map((block) => ({
+				blockIndex: block.blockIndex,
+				startRow: block.startRow,
+				endRow: block.endRow,
+				state: block.status,
+				committedRowCount: block.rows.reduce((count, row) => count + (row ? 1 : 0), 0),
+				requestId: block.requestId > 0 ? block.requestId : undefined,
+				queryGeneration: block.queryVersion,
+				lastAccessedAt: block.lastAccessedAt,
+				error: block.error ?? undefined,
+			}));
 	}
 
 	public getCommittedRow(index: number, blockSize: number): RowNode<TData> | null {
@@ -900,6 +928,10 @@ export class InfiniteRowModelController<TData = unknown>
 
 	public purgeCache = (): void => {
 		this.invalidateQueryCache();
+	};
+
+	public getBlockSnapshots = (): readonly InfiniteBlockSnapshot[] => {
+		return this.blockCache.getSnapshots();
 	};
 
 	public refresh(_reason?: RowRefreshReason): RowModelRefreshResult {

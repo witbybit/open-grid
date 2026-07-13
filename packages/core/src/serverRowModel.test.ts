@@ -192,6 +192,20 @@ describe('InfiniteRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		controller.ensureRange(0, 0, 'force-reload');
 		controller.loadVisibleBlocks(10, 19);
+		expect(controller.getBlockSnapshots()).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					blockIndex: 0,
+					state: 'refreshing',
+					committedRowCount: 10,
+				}),
+				expect.objectContaining({
+					blockIndex: 1,
+					state: 'queued',
+					committedRowCount: 0,
+				}),
+			])
+		);
 		expect(controller.getRowLoadState(10)).toEqual({ kind: 'loading', reason: 'infinite-block' });
 		expect(controller.getVisualRow(10)?.kind).toBe('loading');
 
@@ -376,6 +390,16 @@ describe('InfiniteRowModelController', () => {
 		rejectInitial!(new Error('block 1 failed'));
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
+		expect(controller.getBlockSnapshots()).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					blockIndex: 1,
+					state: 'failedInitial',
+					committedRowCount: 0,
+					error: 'block 1 failed',
+				}),
+			])
+		);
 		expect(controller.getRowLoadState(10)).toEqual({
 			kind: 'failed',
 			error: 'block 1 failed',
@@ -386,6 +410,15 @@ describe('InfiniteRowModelController', () => {
 		controller.ensureRange(10, 10, 'retry');
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
+		expect(controller.getBlockSnapshots()).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					blockIndex: 1,
+					state: 'loaded',
+					committedRowCount: 10,
+				}),
+			])
+		);
 		expect(controller.getRowLoadState(10)).toEqual({ kind: 'loaded', rowId: 'row-10' });
 		expect(controller.getVisualRow(10)?.kind).toBe('data');
 		expect(getRowNode(controller, 10)?.data.name).toBe('Recovered 10');
@@ -2577,6 +2610,13 @@ describe('InfiniteRowModelController', () => {
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
 
 		controller.ensureRange(0, 0, 'force-reload');
+		expect(controller.getBlockSnapshots()).toEqual([
+			expect.objectContaining({
+				blockIndex: 0,
+				state: 'refreshing',
+				committedRowCount: 1,
+			}),
+		]);
 		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
@@ -2584,6 +2624,14 @@ describe('InfiniteRowModelController', () => {
 		rejectRefresh!(new Error('refresh failed'));
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
+		expect(controller.getBlockSnapshots()).toEqual([
+			expect.objectContaining({
+				blockIndex: 0,
+				state: 'failedRefresh',
+				committedRowCount: 1,
+				error: 'refresh failed',
+			}),
+		]);
 		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
