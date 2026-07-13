@@ -389,7 +389,7 @@ class InfiniteBlockCache<TData = unknown> {
 			case 'failed':
 				return { kind: 'failed', error: block.error ?? 'Unknown infinite block load failure', retryable: true };
 			case 'loaded':
-				return block.rows[localIndex] ? { kind: 'loaded', rowId: block.rows[localIndex]!.id } : { kind: 'missing' };
+				return block.rows[localIndex] ? { kind: 'loaded', rowId: block.rows[localIndex]!.id } : index < this.getVisualRowCount() ? { kind: 'loading', reason: 'infinite-block' } : { kind: 'missing' };
 		}
 	}
 
@@ -588,8 +588,10 @@ export class InfiniteRowModelController<TData = unknown>
 		}
 
 		requestedBlocks.forEach((blockIdx) => {
-			if (!forceReload && (this.blockCache.isBlockLoaded(blockIdx) || this.blockCache.isBlockLoading(blockIdx))) {
-				return;
+			const block = this.blockCache.getBlock(blockIdx);
+			if (!forceReload && block) {
+				if (block.status === 'loading') return;
+				if (block.status === 'loaded' && !this.blockHasRepresentedGap(block)) return;
 			}
 			this.fetchBlock(blockIdx);
 		});
@@ -931,6 +933,15 @@ export class InfiniteRowModelController<TData = unknown>
 
 	private isRetryReason(reason?: string): boolean {
 		return reason === 'row-node-retry-load' || reason === 'retry' || reason === 'force-reload';
+	}
+
+	private blockHasRepresentedGap(block: InfiniteBlock<TData>): boolean {
+		const lastRepresentedIndex = Math.min(block.endRow, this.blockCache.getVisualRowCount() - 1);
+		if (lastRepresentedIndex < block.startRow) return false;
+		for (let index = block.startRow; index <= lastRepresentedIndex; index++) {
+			if (!block.rows[index - block.startRow]) return true;
+		}
+		return false;
 	}
 
 	private validateInfiniteBlockPlacement(rows: readonly TData[], blockStartRow: number, blockEndRow: number): void {

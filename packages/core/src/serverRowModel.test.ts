@@ -2425,6 +2425,57 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('treats an in-range gap inside a loaded infinite block as loading and refetches that block', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let callCount = 0;
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation(() => {
+				callCount++;
+				return Promise.resolve({
+					rows: Array.from({ length: 4 }, (_, index) => ({
+						id: `row-${index}`,
+						name: callCount === 1 ? `Row ${index} v1` : `Row ${index} repaired`,
+					})),
+					totalCount: 4,
+				});
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 4,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getVisualRow(1)?.kind).toBe('data');
+
+		const block = ((controller as unknown as { blockCache: { getBlock: (index: number) => { rows: Array<unknown> } | null } }).blockCache.getBlock(0));
+		expect(block).not.toBeNull();
+		block!.rows[1] = null;
+
+		expect(controller.getRowLoadState(1)).toEqual({ kind: 'loading', reason: 'infinite-block' });
+		expect(controller.getVisualRow(1)?.kind).toBe('loading');
+
+		vi.mocked(mockDatasource.getRows).mockClear();
+		controller.ensureRange(0, 3, 'viewport-render');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(mockDatasource.getRows).toHaveBeenCalledWith(
+			expect.objectContaining({ startRow: 0, endRow: 4 }),
+			expect.objectContaining({ signal: expect.any(Object) })
+		);
+		expect(controller.getVisualRow(1)?.kind).toBe('data');
+		expect(getRowNode(controller, 1)?.data.name).toBe('Row 1 repaired');
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('treats hasMore false as a terminal infinite row count without totalCount', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
