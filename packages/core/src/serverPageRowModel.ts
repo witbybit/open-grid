@@ -434,6 +434,7 @@ export class ServerPageRowModelController<TData = unknown>
 			loading: true,
 			error: null,
 		});
+		this.runtime.publishServerSideState(this.getMirroredServerSideState({ loading: true, error: null }));
 		this.runtime.dispatchServerPageLoadingStarted({ page, pageSize });
 
 		const state = this.runtime.getState();
@@ -510,6 +511,7 @@ export class ServerPageRowModelController<TData = unknown>
 				loading: false,
 				error: null,
 			});
+			this.runtime.publishServerSideState(this.getMirroredServerSideState({ loading: false, error: null }));
 		} catch (error) {
 			if (!this.isRequestTokenCurrent(requestToken)) return;
 			const previousRowCount = this.getVisualRowCount();
@@ -531,12 +533,21 @@ export class ServerPageRowModelController<TData = unknown>
 				loading: false,
 				error: this.error,
 			});
+			this.runtime.publishServerSideState(this.getMirroredServerSideState({ loading: false, error: this.error }));
 		} finally {
 			if (this.activeAbortController === abortController) {
 				this.activeAbortController = null;
 			}
 		}
 	};
+
+	private getMirroredServerSideState(input: { loading: boolean; error: string | null }): NonNullable<import('./state/GridState.js').GridUIState['serverSide']> {
+		return {
+			loading: input.loading,
+			error: input.error,
+			storeStates: [],
+		};
+	}
 
 	public refresh(_reason?: RowRefreshReason): RowModelRefreshResult {
 		this.fetchPage({ preserveVisibleRows: true });

@@ -615,6 +615,11 @@ describe('Server page loading state publication', () => {
 		const loadingState = store.getServerPageState();
 		expect(loadingState).not.toBeNull();
 		expect(loadingState!.loading).toBe(true);
+		expect(store.getState().serverSide).toEqual({
+			loading: true,
+			error: null,
+			storeStates: [],
+		});
 
 		resolveGetPage({ rows: [{ id: '1', name: 'Alice', amount: 100 }], totalRowCount: 1 });
 		await new Promise((res) => setTimeout(res, 0));
@@ -623,6 +628,11 @@ describe('Server page loading state publication', () => {
 		expect(completedState!.loading).toBe(false);
 		expect(completedState!.error).toBeNull();
 		expect(completedState!.totalRowCount).toBe(1);
+		expect(store.getState().serverSide).toEqual({
+			loading: false,
+			error: null,
+			storeStates: [],
+		});
 
 		ctrl.dispose();
 	});
@@ -636,12 +646,22 @@ describe('Server page loading state publication', () => {
 		});
 
 		expect(store.getServerPageState()!.loading).toBe(true);
+		expect(store.getState().serverSide).toEqual({
+			loading: true,
+			error: null,
+			storeStates: [],
+		});
 
 		await new Promise((res) => setTimeout(res, 0));
 
 		const failedState = store.getServerPageState();
 		expect(failedState!.loading).toBe(false);
 		expect(failedState!.error).toBe('network failure');
+		expect(store.getState().serverSide).toEqual({
+			loading: false,
+			error: 'network failure',
+			storeStates: [],
+		});
 
 		ctrl.dispose();
 	});
