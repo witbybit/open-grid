@@ -59,6 +59,12 @@ export type {
 	ServerSideStoreSnapshot,
 	ServerSideValueColumn,
 } from './serverSideRowModel.js';
+export {
+	areServerSideRoutesEqual,
+	createServerSideRouteKey,
+	isRootServerSideRoute,
+	normalizeServerSideRoute,
+} from './serverSideRoute.js';
 export type { RowModelType } from './state/GridState.js';
 export type { GridRowNode, GridRowNodeValidationState, RowNodeSelectionOptions } from './publicRowNode.js';
 export type { GridRowDataRef } from './publicRowRef.js';
