@@ -2,6 +2,8 @@
 
 > **Executor instructions**: Treat this as a P0 correctness and demolition plan, not a demo polish task. Sorting, filtering, loading, cache publication, and blank-row prevention must be fixed in `@open-grid/core`. Demos may be updated only after the core contract is correct and covered by tests.
 >
+> **Primary execution order**: Fix infinite blank-row / skipped-row correctness first. Then repair infinite and server-backed sort/filter publication in core. Only after the shared async contract and infinite model are stable may the old page-oriented `server` row model be demolished and replaced with the real SSRM.
+>
 > **Stop rule**: Do not start unrelated feature work. Do not add compatibility adapters around the current page-oriented `server` row model. Open Grid is alpha; breaking changes are acceptable and preferred when they remove incorrect architecture.
 >
 > **Drift check (run first)**: `git diff --stat HEAD -- packages/core/src packages/react/src demo-app src plans`
@@ -14,8 +16,8 @@
 - **Risk**: CRITICAL
 - **Depends on**: `plans/156-row-model-completion-and-public-row-node-facade.md`, `plans/157-interaction-kernel-hardening.md`
 - **Category**: architecture, correctness, row models
-- **Planned at**: working tree, 2026-07-12
-- **Source directive**: shared guideline from the Plans 156/157 follow-up demolition brief
+- **Planned at**: working tree, 2026-07-13
+- **Source directive**: shared guideline from the Plans 156/157 follow-up demolition brief in `pasted-text.txt`
 
 ## Why this matters
 
