@@ -563,6 +563,71 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('publishes infinite sort changes only when the async response commits', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const applyRefreshInvalidation = vi.spyOn(store.engine, 'applyRowModelRefreshInvalidation');
+		let resolveSortedRows!: (value: { rows: TestRow[]; totalCount: number }) => void;
+		const getRows = vi.fn().mockImplementation((params: { sortModel: Array<{ colId: string; sort: string }> | null }) => {
+			if (params.sortModel?.[0]?.sort === 'desc') {
+				return new Promise((resolve) => {
+					resolveSortedRows = resolve as typeof resolveSortedRows;
+				});
+			}
+			return Promise.resolve({
+				rows: [
+					{ id: '1', name: 'Alpha' },
+					{ id: '2', name: 'Zulu' },
+				],
+				totalCount: 2,
+			});
+		});
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: { getRows },
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		applyRefreshInvalidation.mockClear();
+
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+		expect(getRows.mock.calls.at(-1)?.[0].sortModel).toEqual([{ colId: 'name', sort: 'desc' }]);
+		expect(applyRefreshInvalidation).not.toHaveBeenCalled();
+		expect(controller.getVisualRow(0)?.kind).toBe('loading');
+
+		resolveSortedRows({
+			rows: [
+				{ id: '2', name: 'Zulu' },
+				{ id: '1', name: 'Alpha' },
+			],
+			totalCount: 2,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(getRowNode(controller, 0)?.data.name).toBe('Zulu');
+		expect(applyRefreshInvalidation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changed: true,
+				previousRowCount: 2,
+				nextRowCount: 2,
+				changedStartIndex: 0,
+				changedEndIndex: 1,
+			}),
+			expect.objectContaining({
+				invalidationReason: 'viewport',
+				requestRenderReason: 'rows:infinite-block-loaded',
+			})
+		);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('refetches infinite rows on filter changes and publishes the filtered result', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
@@ -599,6 +664,68 @@ describe('InfiniteRowModelController', () => {
 		expect(getRows.mock.calls.at(-1)?.[0].filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'et' } });
 		expect(controller.getVisualRowCount()).toBe(1);
 		expect(getRowNode(controller, 0)?.data.name).toBe('Beta');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('publishes infinite filter changes only when the async response commits', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const applyRefreshInvalidation = vi.spyOn(store.engine, 'applyRowModelRefreshInvalidation');
+		let resolveFilteredRows!: (value: { rows: TestRow[]; totalCount: number }) => void;
+		const getRows = vi.fn().mockImplementation((params: { filterModel: Record<string, unknown> | null }) => {
+			if (params.filterModel?.name) {
+				return new Promise((resolve) => {
+					resolveFilteredRows = resolve as typeof resolveFilteredRows;
+				});
+			}
+			return Promise.resolve({
+				rows: [
+					{ id: '1', name: 'Alpha' },
+					{ id: '2', name: 'Beta' },
+				],
+				totalCount: 2,
+			});
+		});
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: { getRows },
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		applyRefreshInvalidation.mockClear();
+
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'et' } });
+		expect(getRows.mock.calls.at(-1)?.[0].filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'et' } });
+		expect(applyRefreshInvalidation).not.toHaveBeenCalled();
+		expect(controller.getVisualRow(0)?.kind).toBe('loading');
+
+		resolveFilteredRows({
+			rows: [{ id: '2', name: 'Beta' }],
+			totalCount: 1,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRowCount()).toBe(1);
+		expect(getRowNode(controller, 0)?.data.name).toBe('Beta');
+		expect(applyRefreshInvalidation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changed: true,
+				previousRowCount: 2,
+				nextRowCount: 1,
+				changedStartIndex: 0,
+				changedEndIndex: 0,
+			}),
+			expect.objectContaining({
+				invalidationReason: 'viewport',
+				requestRenderReason: 'rows:infinite-block-loaded',
+			})
+		);
 
 		controller.dispose();
 		store.destroy();
@@ -803,6 +930,71 @@ describe('InfiniteRowModelController', () => {
 		expect(getPage.mock.calls.at(-1)?.[0].sortModel).toEqual([{ colId: 'name', sort: 'desc' }]);
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Zulu');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('publishes server-page sort changes only when the async response commits', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const applyRefreshInvalidation = vi.spyOn(store.engine, 'applyRowModelRefreshInvalidation');
+		let resolveSortedPage!: (value: { rows: TestRow[]; totalRowCount: number }) => void;
+		const getPage = vi.fn().mockImplementation((params: { sortModel: Array<{ colId: string; sort: string }> | null }) => {
+			if (params.sortModel?.[0]?.sort === 'desc') {
+				return new Promise((resolve) => {
+					resolveSortedPage = resolve as typeof resolveSortedPage;
+				});
+			}
+			return Promise.resolve({
+				rows: [
+					{ id: '1', name: 'Alpha' },
+					{ id: '2', name: 'Zulu' },
+				],
+				totalRowCount: 2,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		applyRefreshInvalidation.mockClear();
+
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+		expect(getPage.mock.calls.at(-1)?.[0].sortModel).toEqual([{ colId: 'name', sort: 'desc' }]);
+		expect(applyRefreshInvalidation).not.toHaveBeenCalled();
+		expect(controller.getVisualRow(0)?.kind).toBe('loading');
+
+		resolveSortedPage({
+			rows: [
+				{ id: '2', name: 'Zulu' },
+				{ id: '1', name: 'Alpha' },
+			],
+			totalRowCount: 2,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(0)?.kind).toBe('data');
+		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Zulu');
+		expect(applyRefreshInvalidation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changed: true,
+				previousRowCount: 10,
+				nextRowCount: 2,
+				changedStartIndex: 0,
+				changedEndIndex: 9,
+			}),
+			expect.objectContaining({
+				invalidationReason: 'viewport',
+				requestRenderReason: 'rows:server-page-loaded',
+			})
+		);
 
 		controller.dispose();
 		store.destroy();
@@ -1047,6 +1239,68 @@ describe('InfiniteRowModelController', () => {
 		expect(controller.getVisualRowCount()).toBe(1);
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Beta');
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('publishes server-page filter changes only when the async response commits', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+		const applyRefreshInvalidation = vi.spyOn(store.engine, 'applyRowModelRefreshInvalidation');
+		let resolveFilteredPage!: (value: { rows: TestRow[]; totalRowCount: number }) => void;
+		const getPage = vi.fn().mockImplementation((params: { filterModel: Record<string, unknown> | null }) => {
+			if (params.filterModel?.name) {
+				return new Promise((resolve) => {
+					resolveFilteredPage = resolve as typeof resolveFilteredPage;
+				});
+			}
+			return Promise.resolve({
+				rows: [
+					{ id: '1', name: 'Alpha' },
+					{ id: '2', name: 'Beta' },
+				],
+				totalRowCount: 2,
+			});
+		});
+
+		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+			datasource: { getPage },
+			pagination: { pageSize: 10 },
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		applyRefreshInvalidation.mockClear();
+
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'et' } });
+		expect(getPage.mock.calls.at(-1)?.[0].filterModel).toEqual({ name: { type: 'text', operator: 'contains', value: 'et' } });
+		expect(applyRefreshInvalidation).not.toHaveBeenCalled();
+		expect(controller.getVisualRow(0)?.kind).toBe('loading');
+
+		resolveFilteredPage({
+			rows: [{ id: '2', name: 'Beta' }],
+			totalRowCount: 1,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRowCount()).toBe(1);
+		expect(controller.getVisualRow(0)?.kind === 'data' ? controller.getVisualRow(0)?.node.data.name : null).toBe('Beta');
+		expect(applyRefreshInvalidation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changed: true,
+				previousRowCount: 10,
+				nextRowCount: 1,
+				changedStartIndex: 0,
+				changedEndIndex: 9,
+			}),
+			expect.objectContaining({
+				invalidationReason: 'viewport',
+				requestRenderReason: 'rows:server-page-loaded',
+			})
+		);
 
 		controller.dispose();
 		store.destroy();
@@ -1959,8 +2213,8 @@ describe('InfiniteRowModelController', () => {
 		controller.purgeCache();
 
 		expect(controller.getKnownRowCount()).toBeNull();
-		expect(controller.getRowCountKind()).toBe('unknown');
-		expect(controller.getRowLoadState(50)).toEqual({ kind: 'missing' });
+		expect(controller.getRowCountKind()).toBe('estimated');
+		expect(controller.getRowLoadState(50)).toEqual({ kind: 'loading', reason: 'infinite-block' });
 		expect(mockDatasource.getRows).toHaveBeenLastCalledWith(
 			expect.objectContaining({ startRow: 0, endRow: 50 }),
 			expect.objectContaining({ signal: expect.any(Object) })

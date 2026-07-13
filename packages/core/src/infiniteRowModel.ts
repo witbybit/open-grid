@@ -224,10 +224,10 @@ class InfiniteBlockCache<TData = unknown> {
 		return typeof performance !== 'undefined' ? performance.now() : Date.now();
 	}
 
-	public reset(): void {
+	public reset(estimatedRowCount: number = 0): void {
 		this.blocks.clear();
 		this.knownRowCount = null;
-		this.estimatedRowCount = 0;
+		this.estimatedRowCount = Math.max(0, estimatedRowCount);
 	}
 
 	public getBlock(blockIndex: number): InfiniteBlock<TData> | null {
@@ -882,7 +882,8 @@ export class InfiniteRowModelController<TData = unknown>
 	private resetCacheAndRefetch(): void {
 		if (this.disposed) return;
 		this.abortAllInflightRequests();
-		this.blockCache.reset();
+		const previousVisualRowCount = this.blockCache.getVisualRowCount();
+		this.blockCache.reset(previousVisualRowCount);
 		this.nodeMap.clear();
 		this.visualRowIdToIndex.clear();
 		this.rowIdToVisualIndex.clear();
