@@ -3308,6 +3308,68 @@ describe('GridStore undo and redo functionality', () => {
 		]);
 	});
 
+	it('publishServerSideState updates state and emits a server-side state event together', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const listener = vi.fn();
+		store.addEventListener(GridEventName.serverSideStateChanged, listener);
+
+		store.engine.publishServerSideState({
+			loading: false,
+			error: 'boom',
+			storeStates: [
+				{
+					storeId: 'root',
+					route: [],
+					level: 0,
+					rowCountState: { kind: 'known', count: 3 },
+					blockCount: 1,
+					loadingBlockCount: 0,
+					failedBlockCount: 1,
+					childStoreCount: 0,
+				},
+			],
+		});
+
+		expect(store.getState().serverSide).toEqual({
+			loading: false,
+			error: 'boom',
+			storeStates: [
+				{
+					storeId: 'root',
+					route: [],
+					level: 0,
+					rowCountState: { kind: 'known', count: 3 },
+					blockCount: 1,
+					loadingBlockCount: 0,
+					failedBlockCount: 1,
+					childStoreCount: 0,
+				},
+			],
+		});
+		expect(listener).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: {
+					loading: false,
+					error: 'boom',
+					storeStates: [
+						{
+							storeId: 'root',
+							route: [],
+							level: 0,
+							rowCountState: { kind: 'known', count: 3 },
+							blockCount: 1,
+							loadingBlockCount: 0,
+							failedBlockCount: 1,
+							childStoreCount: 0,
+						},
+					],
+				},
+			})
+		);
+	});
+
 	it('avoids redundant state updates and geometry version increments on setRowHeights and setDefaultRowHeight', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],

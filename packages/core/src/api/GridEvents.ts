@@ -52,6 +52,7 @@ export enum GridEventName {
 	serverPageLoaded = 'serverPageLoaded',
 	serverPageLoadFailed = 'serverPageLoadFailed',
 	serverPageChanged = 'serverPageChanged',
+	serverSideStateChanged = 'serverSideStateChanged',
 	showGroupFooterChanged = 'showGroupFooterChanged',
 	sortChanged = 'sortChanged',
 	cellValidationChanged = 'cellValidationChanged',
@@ -142,6 +143,11 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.serverPageLoaded]: { page: number; pageSize: number; pageCount: number; totalRowCount: number };
 	[GridEventName.serverPageLoadFailed]: { page: number; pageSize: number; message: string };
 	[GridEventName.serverPageChanged]: { page: number; pageSize: number; pageCount: number; totalRowCount: number };
+	[GridEventName.serverSideStateChanged]: {
+		loading: boolean;
+		error: string | null;
+		storeStates: readonly import('../serverSideRowModel.js').ServerSideStoreSnapshot[];
+	};
 	[GridEventName.showGroupFooterChanged]: { showGroupFooter: boolean | undefined };
 	[GridEventName.sortChanged]: { sortModel: SortModel | null };
 	[GridEventName.cellValidationChanged]: { rowId: string; colField: string; error: string | null };

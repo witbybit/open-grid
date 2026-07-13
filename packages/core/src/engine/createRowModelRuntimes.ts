@@ -105,6 +105,7 @@ export function createServerPageRowModelRuntime<TRowData>(store: RowModelRuntime
 		dispatchServerPageLoadFailed: (payload) => store.dispatchEvent(GridEventName.serverPageLoadFailed, payload),
 		setServerPageState: (state) => store.engine.setServerPageState(state),
 		setServerSideState: (state) => store.engine.setServerSideState(state),
+		publishServerSideState: (state) => store.engine.publishServerSideState(state),
 		getInstrumentation: () => store.getInstrumentation(),
 	};
 }

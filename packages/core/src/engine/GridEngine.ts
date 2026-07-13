@@ -813,6 +813,10 @@ export class GridEngine<TRowData = unknown> {
 			requestRender: false,
 		});
 	}
+	public publishServerSideState(state: NonNullable<InternalGridState<TRowData>['serverSide']>): void {
+		this.setServerSideState(state);
+		this.eventBus.dispatchEvent(GridEventName.serverSideStateChanged, state);
+	}
 
 	public setVisibleRanges(
 		visibleRowRange: InternalGridState<TRowData>['visibleRowRange'],
