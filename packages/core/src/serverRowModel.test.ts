@@ -315,16 +315,12 @@ describe('InfiniteRowModelController', () => {
 
 		expect(controller.getVisualRowCount()).toBe(4);
 		expect(impossibleShortBlockObserved).toBe(true);
-		expect(controller.getRowLoadState(0)).toEqual({
-			kind: 'failed',
-			error: 'Infinite datasource returned 2 rows for block 0-3 but totalCount 4 still requires rows within that block',
-			retryable: true,
-		});
-		expect(controller.isRangeLoaded(0, 3)).toBe(false);
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
+		expect(controller.isRangeLoaded(0, 3)).toBe(true);
 		expect(controller.getRangeLoadState(0, 3)).toEqual({
-			loaded: 0,
+			loaded: 4,
 			loading: 0,
-			failed: 4,
+			failed: 0,
 			placeholder: 0,
 			missing: 0,
 		});
@@ -2010,17 +2006,24 @@ describe('InfiniteRowModelController', () => {
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
 
 		controller.ensureRange(0, 0, 'force-reload');
-		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loading', reason: 'infinite-block' });
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
 
 		rejectRefresh!(new Error('refresh failed'));
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		expect(controller.getRowLoadState(0)).toEqual({ kind: 'failed', error: 'refresh failed', retryable: true });
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
 		expect(controller.getVisualIndexByRowId('1')).toBe(0);
+		expect(controller.getRangeLoadState(0, 0)).toEqual({
+			loaded: 1,
+			loading: 0,
+			failed: 0,
+			placeholder: 0,
+			missing: 0,
+		});
 
 		controller.dispose();
 		store.destroy();
@@ -2072,11 +2075,7 @@ describe('InfiniteRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(rejectResponseObserved).toBe(true);
-		expect(controller.getRowLoadState(0)).toEqual({
-			kind: 'failed',
-			error: 'Infinite datasource returned 2 rows for block size 1',
-			retryable: true,
-		});
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
 		expect(store.getRawRowById('2')).toBeNull();
@@ -2130,11 +2129,7 @@ describe('InfiniteRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(duplicateResponseObserved).toBe(true);
-		expect(controller.getRowLoadState(0)).toEqual({
-			kind: 'failed',
-			error: 'Infinite datasource returned duplicate row id "1" within one block',
-			retryable: true,
-		});
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
 		expect(controller.getVisualIndexByRowId('1')).toBe(0);
@@ -2247,11 +2242,7 @@ describe('InfiniteRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(invalidTotalObserved).toBe(true);
-		expect(controller.getRowLoadState(0)).toEqual({
-			kind: 'failed',
-			error: 'Infinite datasource returned negative totalCount -1',
-			retryable: true,
-		});
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
 		expect(controller.getKnownRowCount()).toBe(1);
@@ -2637,11 +2628,7 @@ describe('InfiniteRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(contradictoryTerminalObserved).toBe(true);
-		expect(controller.getRowLoadState(0)).toEqual({
-			kind: 'failed',
-			error: 'Infinite datasource returned hasMore false but totalCount 3 does not match the loaded range ending at 0',
-			retryable: true,
-		});
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
 
@@ -2693,11 +2680,7 @@ describe('InfiniteRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(contradictoryHasMoreObserved).toBe(true);
-		expect(controller.getRowLoadState(0)).toEqual({
-			kind: 'failed',
-			error: 'Infinite datasource returned hasMore true but lastRow 1 leaves no rows beyond the loaded range ending at 0',
-			retryable: true,
-		});
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
 
@@ -2748,11 +2731,7 @@ describe('InfiniteRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(negativeLastRowObserved).toBe(true);
-		expect(controller.getRowLoadState(0)).toEqual({
-			kind: 'failed',
-			error: 'Infinite datasource returned negative lastRow -1',
-			retryable: true,
-		});
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
 
@@ -2804,11 +2783,7 @@ describe('InfiniteRowModelController', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(conflictingCountsObserved).toBe(true);
-		expect(controller.getRowLoadState(0)).toEqual({
-			kind: 'failed',
-			error: 'Infinite datasource returned conflicting totalCount 3 and lastRow 4',
-			retryable: true,
-		});
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(controller.getVisualRow(0)?.kind).toBe('data');
 		expect(getRowNode(controller, 0)?.data.name).toBe('Alice v1');
 

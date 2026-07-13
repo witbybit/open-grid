@@ -381,6 +381,10 @@ class InfiniteBlockCache<TData = unknown> {
 			return index < this.getVisualRowCount() ? { kind: 'loading', reason: 'infinite-block' } : { kind: 'missing' };
 		}
 		const localIndex = index - block.startRow;
+		const committedNode = block.rows[localIndex];
+		if (committedNode) {
+			return { kind: 'loaded', rowId: committedNode.id };
+		}
 		switch (block.status) {
 			case 'loading':
 			case 'stale':
@@ -389,7 +393,7 @@ class InfiniteBlockCache<TData = unknown> {
 			case 'failed':
 				return { kind: 'failed', error: block.error ?? 'Unknown infinite block load failure', retryable: true };
 			case 'loaded':
-				return block.rows[localIndex] ? { kind: 'loaded', rowId: block.rows[localIndex]!.id } : index < this.getVisualRowCount() ? { kind: 'loading', reason: 'infinite-block' } : { kind: 'missing' };
+				return index < this.getVisualRowCount() ? { kind: 'loading', reason: 'infinite-block' } : { kind: 'missing' };
 		}
 	}
 

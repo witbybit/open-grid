@@ -1,8 +1,8 @@
 # Plan 158: Server-Backed Row Model Correctness + Real SSRM Replacement
 
-> **Executor instructions**: Treat this as a P0 correctness and demolition plan, not a demo polish task. Sorting, filtering, loading, cache publication, and blank-row prevention must be fixed in `@open-grid/core`. Demos may be updated only after the core contract is correct and covered by tests.
+> **Executor instructions**: Treat this as a P0 correctness and demolition plan, not a demo polish task. Sorting, filtering, loading, cache publication, skipped-row prevention, and blank-row prevention must be fixed in `@open-grid/core`. Demos may be updated only after the core contract is correct and covered by tests.
 >
-> **Primary execution order**: Fix infinite blank-row / skipped-row correctness first. Then repair infinite and server-backed sort/filter publication in core. Only after the shared async contract and infinite model are stable may the old page-oriented `server` row model be demolished and replaced with the real SSRM.
+> **Primary execution order**: Fix infinite blank-row / skipped-row correctness first. Only after that is proven with tests should infinite sort/filter publication be repaired in core. Then verify and repair server-backed sort/filter publication in core. Only after the shared async contract and infinite model are stable may the old page-oriented `server` row model be demolished and replaced with the real SSRM.
 >
 > **Stop rule**: Do not start unrelated feature work. Do not add compatibility adapters around the current page-oriented `server` row model. Open Grid is alpha; breaking changes are acceptable and preferred when they remove incorrect architecture.
 >
@@ -17,13 +17,13 @@
 - **Depends on**: `plans/156-row-model-completion-and-public-row-node-facade.md`, `plans/157-interaction-kernel-hardening.md`
 - **Category**: architecture, correctness, row models
 - **Planned at**: working tree, 2026-07-13
-- **Source directive**: shared guideline from the Plans 156/157 follow-up demolition brief in `pasted-text.txt`
+- **Source directive**: shared guideline from `C:\Users\rishi\.codex\attachments\8b4ca4af-1c77-4b98-a525-3eba7fdd303a\pasted-text.txt`
 
 ## Why this matters
 
 Plans 156 and 157 completed enough row-model and interaction infrastructure to expose the next failure clearly: server-backed row models are not yet governed by one authoritative async publication contract. Infinite rows can intermittently disappear, scroll can skip records, and sort/filter changes are not reliably reflected for infinite and server row models.
 
-The visible bug is blank rows. The deeper bug is architectural: async row-model responses can update internal caches without publishing one authoritative row-model transition to the runtime/renderer. Demo-level sorting/filtering cannot fix that. The fix belongs in core and must make server-backed row models deterministic under delayed, reordered, failed, stale, refreshed, filtered, and sorted network responses.
+The visible bug is blank rows and skipped rows in infinite scrolling. The deeper bug is architectural: async row-model responses can update internal caches without publishing one authoritative row-model transition to the runtime/renderer. Demo-level sorting/filtering cannot fix that. The fix belongs in core and must make server-backed row models deterministic under delayed, reordered, failed, stale, refreshed, filtered, and sorted network responses.
 
 ## North star
 
