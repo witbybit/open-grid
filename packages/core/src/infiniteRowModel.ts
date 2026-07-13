@@ -551,9 +551,10 @@ export class InfiniteRowModelController<TData = unknown>
 			return;
 		}
 
-		// Flush any pending range accumulated during fast scroll.
-		const effectiveStart = this.pendingVisibleLoad ? Math.min(startRow, this.pendingVisibleLoad.startRow) : startRow;
-		const effectiveEnd = this.pendingVisibleLoad ? Math.max(endRow, this.pendingVisibleLoad.endRow) : endRow;
+		// Once scrolling settles, the latest authoritative viewport wins. Older deferred
+		// ranges crossed during fast scroll should not force intervening block loads.
+		const effectiveStart = startRow;
+		const effectiveEnd = endRow;
 		this.pendingVisibleLoad = null;
 
 		const minRow = Math.max(0, effectiveStart);

@@ -1346,10 +1346,10 @@ describe('Fast scroll deferred block loading', () => {
 		ctrl.dispose();
 	});
 
-	it('flush-time range merges with the deferred pending range', async () => {
+	it('flush-time range honors the latest viewport instead of replaying stale deferred ranges', async () => {
 		// pendingVisibleLoad stores only the LAST deferred range (last-write-wins during
-		// fast scroll). At flush time, effectiveRange = union(pending, flushRange), so the
-		// current viewport AND the last deferred position are both covered.
+		// fast scroll), but once scrolling settles we must load the latest authoritative
+		// viewport only. Replaying older deferred ranges can surface skipped/blank bands.
 		const store = new GridStore<TestRow>({ getRowId: (r) => r.id, columns: COLUMNS });
 		const getRows = vi.fn().mockResolvedValue({ rows: [], totalCount: 100 });
 		const ctrl = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
@@ -1377,12 +1377,15 @@ describe('Fast scroll deferred block loading', () => {
 		ctrl.loadVisibleBlocks(30, 39);
 		await new Promise((res) => setTimeout(res, 0));
 
-		// The merged flush must span rows 10–39
-		const requested = getRows.mock.calls.map((c) => c[0] as { startRow: number; endRow: number });
-		const minStart = Math.min(...requested.map((r) => r.startRow));
-		const maxEnd = Math.max(...requested.map((r) => r.endRow));
-		expect(minStart).toBeLessThanOrEqual(10);
-		expect(maxEnd).toBeGreaterThanOrEqual(39);
+		// Only the latest viewport range should be requested.
+		expect(getRows).toHaveBeenCalledWith(
+			expect.objectContaining({ startRow: 30, endRow: 40 }),
+			expect.objectContaining({ signal: expect.any(Object) })
+		);
+		expect(getRows).not.toHaveBeenCalledWith(
+			expect.objectContaining({ startRow: 10, endRow: 20 }),
+			expect.objectContaining({ signal: expect.any(Object) })
+		);
 
 		ctrl.dispose();
 	});
