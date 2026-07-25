@@ -547,6 +547,7 @@ describe('InfiniteRowModelController', () => {
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name' }],
 		});
+		const applyRefreshInvalidation = vi.spyOn(store.engine, 'applyRowModelRefreshInvalidation');
 
 		const mockDatasource: InfiniteDatasource<TestRow> = {
 			getRows: vi.fn().mockImplementation((params) =>
@@ -570,8 +571,22 @@ describe('InfiniteRowModelController', () => {
 		expect(controller.getKnownRowCount()).toBeNull();
 		expect(controller.getRowCountKind()).toBe('estimated');
 		expect(controller.getVisualRowCount()).toBe(100);
+		expect(applyRefreshInvalidation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changed: true,
+				previousRowCount: 0,
+				nextRowCount: 100,
+				changedStartIndex: 0,
+				changedEndIndex: 49,
+			}),
+			expect.objectContaining({
+				invalidationReason: 'viewport',
+				requestRenderReason: 'rows:infinite-block-loaded',
+			})
+		);
 		expect(controller.getRowLoadState(50)).toEqual({ kind: 'loading', reason: 'infinite-block' });
 
+		applyRefreshInvalidation.mockClear();
 		vi.mocked(mockDatasource.getRows).mockClear();
 		controller.ensureRange(50, 50, 'test');
 		await new Promise((resolve) => setTimeout(resolve, 0));
@@ -585,6 +600,20 @@ describe('InfiniteRowModelController', () => {
 		);
 		expect(controller.getVisualRow(50)?.kind).toBe('data');
 		expect(getRowNode(controller, 50)?.data.name).toBe('Row 50');
+		expect(controller.getVisualRowCount()).toBe(150);
+		expect(applyRefreshInvalidation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changed: true,
+				previousRowCount: 100,
+				nextRowCount: 150,
+				changedStartIndex: 50,
+				changedEndIndex: 99,
+			}),
+			expect.objectContaining({
+				invalidationReason: 'viewport',
+				requestRenderReason: 'rows:infinite-block-loaded',
+			})
+		);
 
 		controller.dispose();
 		store.destroy();
@@ -595,6 +624,7 @@ describe('InfiniteRowModelController', () => {
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name' }],
 		});
+		const applyRefreshInvalidation = vi.spyOn(store.engine, 'applyRowModelRefreshInvalidation');
 
 		const mockDatasource: InfiniteDatasource<TestRow> = {
 			getRows: vi.fn().mockImplementation((params) => {
@@ -622,6 +652,7 @@ describe('InfiniteRowModelController', () => {
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
+		applyRefreshInvalidation.mockClear();
 		controller.ensureRange(50, 50, 'test');
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -632,6 +663,19 @@ describe('InfiniteRowModelController', () => {
 		expect(getRowNode(controller, 69)?.data.name).toBe('Row 69');
 		expect(controller.getRowLoadState(70)).toEqual({ kind: 'missing' });
 		expect(controller.getVisualRow(70)).toBeNull();
+		expect(applyRefreshInvalidation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changed: true,
+				previousRowCount: 100,
+				nextRowCount: 70,
+				changedStartIndex: 50,
+				changedEndIndex: 69,
+			}),
+			expect.objectContaining({
+				invalidationReason: 'viewport',
+				requestRenderReason: 'rows:infinite-block-loaded',
+			})
+		);
 
 		controller.dispose();
 		store.destroy();
@@ -2981,6 +3025,7 @@ describe('InfiniteRowModelController', () => {
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name' }],
 		});
+		const applyRefreshInvalidation = vi.spyOn(store.engine, 'applyRowModelRefreshInvalidation');
 
 		let shrinkKnownCount = false;
 		const mockDatasource: InfiniteDatasource<TestRow> = {
@@ -3018,6 +3063,7 @@ describe('InfiniteRowModelController', () => {
 		expect(controller.getSelectableDataRowIds('loaded')).toContain('row-80');
 		expect(controller.getVisualRow(80)?.kind).toBe('data');
 
+		applyRefreshInvalidation.mockClear();
 		shrinkKnownCount = true;
 		controller.ensureRange(0, 0, 'force-reload');
 		await new Promise((resolve) => setTimeout(resolve, 0));
@@ -3028,6 +3074,19 @@ describe('InfiniteRowModelController', () => {
 		expect(controller.getVisualRow(80)).toBeNull();
 		expect(controller.getRowLoadState(80)).toEqual({ kind: 'missing' });
 		expect(controller.getSelectableDataRowIds('loaded')).toContain('row-55');
+		expect(applyRefreshInvalidation).toHaveBeenCalledWith(
+			expect.objectContaining({
+				changed: true,
+				previousRowCount: 100,
+				nextRowCount: 60,
+				changedStartIndex: 0,
+				changedEndIndex: 49,
+			}),
+			expect.objectContaining({
+				invalidationReason: 'viewport',
+				requestRenderReason: 'rows:infinite-block-loaded',
+			})
+		);
 
 		controller.dispose();
 		store.destroy();
