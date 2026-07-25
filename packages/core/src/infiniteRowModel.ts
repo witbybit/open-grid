@@ -270,6 +270,12 @@ class InfiniteBlockCache<TData = unknown> {
 		return this.getBlock(Math.floor(rowIndex / blockSize));
 	}
 
+	public dropQueuedBlock(blockIndex: number): void {
+		const block = this.blocks.get(blockIndex);
+		if (!block || block.status !== 'queued' || this.hasCommittedRows(block)) return;
+		this.blocks.delete(blockIndex);
+	}
+
 	public markQueued(blockIndex: number, blockSize: number): InfiniteBlock<TData> {
 		const block = this.ensureBlock(blockIndex, blockSize);
 		if (!this.hasCommittedRows(block) && block.status !== 'loadingInitial') {
@@ -1054,6 +1060,7 @@ export class InfiniteRowModelController<TData = unknown>
 		for (const [blockIndex, queued] of this.pendingBlockLoads.entries()) {
 			if (!retainedBlockIndexes.has(blockIndex)) {
 				this.pendingBlockLoads.delete(blockIndex);
+				this.blockCache.dropQueuedBlock(queued.blockIndex);
 			}
 		}
 	}

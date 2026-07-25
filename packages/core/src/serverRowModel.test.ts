@@ -1027,6 +1027,108 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('re-requests an infinite block after stale queued prefetch work is dropped', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		let resolveBlock10!: (value: { rows: TestRow[]; totalCount: number }) => void;
+		let resolveBlock20!: (value: { rows: TestRow[]; totalCount: number }) => void;
+		const getRows = vi.fn().mockImplementation((params: { startRow: number; endRow: number }) => {
+			if (params.startRow === 0) {
+				return Promise.resolve({
+					rows: Array.from({ length: 10 }, (_, index) => ({
+						id: `row-${index}`,
+						name: `Row ${index}`,
+					})),
+					totalCount: 100,
+				});
+			}
+			if (params.startRow === 10) {
+				return new Promise((resolve) => {
+					resolveBlock10 = resolve as typeof resolveBlock10;
+				});
+			}
+			if (params.startRow === 20) {
+				return new Promise((resolve) => {
+					resolveBlock20 = resolve as typeof resolveBlock20;
+				});
+			}
+			throw new Error(`Unexpected startRow ${params.startRow}`);
+		});
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: { getRows },
+			blockSize: 10,
+			maxConcurrentRequests: 1,
+			prefetchBlockCount: 1,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		vi.mocked(getRows).mockClear();
+
+		store.engine.viewport.setScrollPosition(100, 0, performance.now() - 100);
+		store.engine.viewport.setScrollPosition(200, 0, performance.now());
+		controller.loadVisibleBlocks(10, 19);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getRows).toHaveBeenCalledTimes(1);
+		expect(getRows).toHaveBeenLastCalledWith(
+			expect.objectContaining({ startRow: 10, endRow: 20 }),
+			expect.objectContaining({ signal: expect.any(Object) })
+		);
+		expect(controller.getBlockSnapshots()).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ blockIndex: 1, state: 'loadingInitial' }),
+				expect.objectContaining({ blockIndex: 2, state: 'queued' }),
+			])
+		);
+
+		controller.loadVisibleBlocks(50, 59);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getBlockSnapshots()).not.toEqual(
+			expect.arrayContaining([expect.objectContaining({ blockIndex: 2, state: 'queued' })])
+		);
+
+		controller.loadVisibleBlocks(20, 29);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(controller.getBlockSnapshots()).toEqual(
+			expect.arrayContaining([expect.objectContaining({ blockIndex: 2, state: 'queued' })])
+		);
+
+		resolveBlock10({
+			rows: Array.from({ length: 10 }, (_, index) => ({
+				id: `row-${10 + index}`,
+				name: `Row ${10 + index}`,
+			})),
+			totalCount: 100,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(getRows).toHaveBeenCalledTimes(2);
+		expect(getRows).toHaveBeenLastCalledWith(
+			expect.objectContaining({ startRow: 20, endRow: 30 }),
+			expect.objectContaining({ signal: expect.any(Object) })
+		);
+
+		resolveBlock20({
+			rows: Array.from({ length: 10 }, (_, index) => ({
+				id: `row-${20 + index}`,
+				name: `Row ${20 + index}`,
+			})),
+			totalCount: 100,
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRow(20)?.kind).toBe('data');
+		expect(getRowNode(controller, 20)?.data.name).toBe('Row 20');
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('refetches infinite rows on sort changes and publishes the returned order', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
