@@ -94,6 +94,19 @@ export interface ServerSideGetRowsResult<TRowData> {
 	readonly groupMetadata?: readonly ServerSideGroupMetadata[];
 }
 
+export interface NormalizedServerSideGetRowsResult<TRowData> {
+	readonly rows: readonly TRowData[];
+	readonly rowCountState: ServerSideRowCountState;
+	readonly aggregateData?: Readonly<Record<string, unknown>>;
+	readonly groupMetadata: readonly ServerSideGroupMetadata[];
+}
+
+export interface NormalizeServerSideGetRowsResultInput<TRowData> {
+	readonly request: Pick<ServerSideGetRowsRequest, 'startRow' | 'endRow'>;
+	readonly result: ServerSideGetRowsResult<TRowData>;
+	readonly getRowId?: (row: TRowData) => string;
+}
+
 export type ServerSideRowCountState =
 	| { readonly kind: 'unknown' }
 	| { readonly kind: 'estimated'; readonly count: number }
@@ -211,6 +224,49 @@ export function resolveServerSideRowCountState(input: ResolveServerSideRowCountS
 	if (input.hasMore === true) return Object.freeze({ kind: 'estimated', count: minimumReachableCount + 1 });
 	if (minimumReachableCount > 0) return Object.freeze({ kind: 'estimated', count: minimumReachableCount });
 	return Object.freeze({ kind: 'unknown' });
+}
+
+export function normalizeServerSideGetRowsResult<TRowData>(
+	input: NormalizeServerSideGetRowsResultInput<TRowData>
+): NormalizedServerSideGetRowsResult<TRowData> {
+	const rows = Object.freeze([...input.result.rows]);
+	const rowCountState = resolveServerSideRowCountState({
+		startRow: input.request.startRow,
+		endRow: input.request.endRow,
+		returnedRowCount: rows.length,
+		rowCount: input.result.rowCount,
+		lastRow: input.result.lastRow,
+		hasMore: input.result.hasMore,
+	});
+
+	if (input.getRowId) {
+		const seenRowIds = new Set<string>();
+		for (const row of rows) {
+			const rowId = input.getRowId(row);
+			if (seenRowIds.has(rowId)) {
+				throw new Error(`Server-side datasource returned duplicate row id "${rowId}" within one block`);
+			}
+			seenRowIds.add(rowId);
+		}
+	}
+
+	const aggregateData =
+		input.result.aggregateData === undefined ? undefined : Object.freeze({ ...input.result.aggregateData });
+	const groupMetadata = Object.freeze(
+		(input.result.groupMetadata ?? []).map((metadata) =>
+			Object.freeze({
+				...metadata,
+				route: normalizeServerSideRoute(metadata.route),
+			})
+		)
+	);
+
+	return Object.freeze({
+		rows,
+		rowCountState,
+		aggregateData,
+		groupMetadata,
+	});
 }
 
 export interface ServerSideDatasource<TRowData = unknown> {

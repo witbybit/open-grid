@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createServerSideGetRowsRequest, resolveServerSideRowCountState } from './serverSideRowModel.js';
+import {
+	createServerSideGetRowsRequest,
+	normalizeServerSideGetRowsResult,
+	resolveServerSideRowCountState,
+} from './serverSideRowModel.js';
 import type { ServerSideRowGroupColumn, ServerSideValueColumn } from './serverSideRowModel.js';
 
 describe('serverSideRowModel request factory', () => {
@@ -153,5 +157,80 @@ describe('serverSideRowModel row-count state', () => {
 		expect(() =>
 			resolveServerSideRowCountState({ startRow: 10, endRow: 20, returnedRowCount: 5, rowCount: 14 })
 		).toThrow('Server-side datasource returned rowCount 14, which is smaller than the loaded range ending at 14');
+	});
+});
+
+describe('serverSideRowModel result normalization', () => {
+	it('normalizes row-count state and clones mutable result containers', () => {
+		const rows = [{ id: 'a' }, { id: 'b' }];
+		const groupMetadata = [
+			{
+				rowId: 'group-emea',
+				route: ['region', 'EMEA'],
+				groupKey: 'EMEA',
+				expandable: true,
+			},
+		];
+		const aggregateData = { amount: 42 };
+
+		const normalized = normalizeServerSideGetRowsResult({
+			request: { startRow: 0, endRow: 10 },
+			result: {
+				rows,
+				hasMore: false,
+				groupMetadata,
+				aggregateData,
+			},
+		});
+
+		rows.push({ id: 'c' });
+		groupMetadata[0] = {
+			rowId: 'group-amer',
+			route: ['region', 'AMER'],
+			groupKey: 'AMER',
+			expandable: true,
+		};
+		aggregateData.amount = 100;
+
+		expect(normalized.rows).toEqual([{ id: 'a' }, { id: 'b' }]);
+		expect(normalized.rowCountState).toEqual({ kind: 'known', count: 2 });
+		expect(normalized.groupMetadata).toEqual([
+			{
+				rowId: 'group-emea',
+				route: ['region', 'EMEA'],
+				groupKey: 'EMEA',
+				expandable: true,
+			},
+		]);
+		expect(normalized.aggregateData).toEqual({ amount: 42 });
+		expect(Object.isFrozen(normalized)).toBe(true);
+		expect(Object.isFrozen(normalized.rows)).toBe(true);
+		expect(Object.isFrozen(normalized.groupMetadata)).toBe(true);
+		expect(Object.isFrozen(normalized.groupMetadata[0])).toBe(true);
+		expect(Object.isFrozen(normalized.groupMetadata[0]?.route)).toBe(true);
+		expect(Object.isFrozen(normalized.aggregateData)).toBe(true);
+	});
+
+	it('rejects duplicate row ids within a normalized block', () => {
+		expect(() =>
+			normalizeServerSideGetRowsResult({
+				request: { startRow: 0, endRow: 10 },
+				result: {
+					rows: [{ id: 'dup' }, { id: 'dup' }],
+				},
+				getRowId: (row) => row.id,
+			})
+		).toThrow('Server-side datasource returned duplicate row id "dup" within one block');
+	});
+
+	it('reuses terminal validation for impossible normalized results', () => {
+		expect(() =>
+			normalizeServerSideGetRowsResult({
+				request: { startRow: 0, endRow: 2 },
+				result: {
+					rows: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+				},
+			})
+		).toThrow('Server-side datasource returned 3 rows for requested range 0-1');
 	});
 });

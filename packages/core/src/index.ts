@@ -47,6 +47,8 @@ export type {
 } from './serverPageRowModel.js';
 export type {
 	CreateServerSideGetRowsRequestInput,
+	NormalizedServerSideGetRowsResult,
+	NormalizeServerSideGetRowsResultInput,
 	ResolveServerSideRowCountStateInput,
 	ServerSideBlockSnapshot,
 	ServerSideBlockState,
@@ -62,7 +64,11 @@ export type {
 	ServerSideStoreSnapshot,
 	ServerSideValueColumn,
 } from './serverSideRowModel.js';
-export { createServerSideGetRowsRequest, resolveServerSideRowCountState } from './serverSideRowModel.js';
+export {
+	createServerSideGetRowsRequest,
+	normalizeServerSideGetRowsResult,
+	resolveServerSideRowCountState,
+} from './serverSideRowModel.js';
 export {
 	areServerSideRoutesEqual,
 	createServerSideRouteKey,

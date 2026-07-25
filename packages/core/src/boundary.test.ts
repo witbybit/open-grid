@@ -122,6 +122,7 @@ describe('Public/internal boundary', () => {
 				'min',
 				'missingRequiredRule',
 				'normalizeCapabilityResult',
+				'normalizeServerSideGetRowsResult',
 				'normalizeServerSideRoute',
 				'number',
 				'oneOf',
