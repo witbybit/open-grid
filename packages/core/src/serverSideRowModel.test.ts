@@ -369,4 +369,46 @@ describe('ServerSideRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('evicts least-recent root blocks when maxBlocksInCache is exceeded without producing blank represented rows', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name' }],
+			getRowId: (row) => row.id,
+		});
+		const getRows = vi.fn(async ({ startRow, endRow }: { startRow: number; endRow: number }) => ({
+			rows: Array.from({ length: endRow - startRow }, (_, offset) => ({
+				id: `row-${startRow + offset}`,
+				name: `Row ${startRow + offset}`,
+			})),
+			rowCount: 15,
+		}));
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
+			columns: store.getState().columns,
+			datasource: { getRows },
+			blockSize: 5,
+			maxBlocksInCache: 2,
+			getRowId: (row) => row.id,
+		});
+
+		await flushAsync();
+		controller.ensureRange(5, 9, 'test-load-second-block');
+		await flushAsync();
+		controller.ensureRange(10, 14, 'test-load-third-block');
+		await flushAsync();
+
+		expect(controller.getBlockSnapshots().map((snapshot) => snapshot.blockIndex)).toEqual([1, 2]);
+		expect(controller.getVisualRowCount()).toBe(15);
+		expect(controller.getVisualRow(0)).toEqual({
+			kind: 'loading',
+			id: 'loading:0',
+			rowIndex: 0,
+			editable: false,
+		});
+		expect(controller.getRowLoadState(0)).toEqual({ kind: 'loading', reason: 'server-side-block' });
+		expect(controller.getVisualRow(10)).toMatchObject({ kind: 'data', rowId: 'row-10' });
+		expect(controller.getRawRowById('row-0')).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
 });

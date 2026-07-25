@@ -375,6 +375,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 	private datasource: ServerSideDatasource<TRowData>;
 	private readonly getRowId: (row: TRowData) => string;
 	private blockSize: number;
+	private readonly maxBlocksInCache: number | null;
 	private disposed = false;
 	private queryGeneration = 0;
 	private requestSequence = 0;
@@ -391,6 +392,8 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 		this.datasource = options.datasource;
 		this.getRowId = options.getRowId ?? runtime.getRowId;
 		this.blockSize = Math.max(1, options.blockSize ?? 100);
+		this.maxBlocksInCache =
+			typeof options.maxBlocksInCache === 'number' && options.maxBlocksInCache > 0 ? Math.floor(options.maxBlocksInCache) : null;
 		this.runtime.initializeModel({ columns: options.columns ? [...options.columns] : undefined, getRowId: options.getRowId });
 		this.runtime.registerRowModel(this);
 		this.unsubscribers.push(
@@ -591,6 +594,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 	private getCommittedNode(index: number): RowNode<TRowData> | null {
 		const block = this.getBlockForRow(index);
 		if (!block || (block.state !== 'loaded' && block.state !== 'refreshing' && block.state !== 'failedRefresh')) return null;
+		block.lastAccessedAt = Date.now();
 		return block.rows[index - block.startRow] ?? null;
 	}
 
@@ -650,6 +654,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 				block.error = undefined;
 				block.abortController = undefined;
 				this.rowCountState = normalized.rowCountState;
+				this.evictBlocksIfNeeded(blockIndex);
 				this.rebuildIndexes();
 				this.publishServerSideState();
 				this.runtime.publishAsyncRowModelUpdate({
@@ -698,6 +703,24 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 				this.rowIdToIndex.set(node.id, visualIndex);
 				this.visualRowIdToIndex.set(toDataVisualRowId(node.id), visualIndex);
 			}
+		}
+	}
+
+	private evictBlocksIfNeeded(protectedBlockIndex: number): void {
+		if (this.maxBlocksInCache === null) return;
+		const evictableStates = new Set<ServerSideBlockState>(['loaded', 'failedInitial', 'failedRefresh']);
+		while (this.blocks.size > this.maxBlocksInCache) {
+			let evictableBlock: ServerSideLoadedBlock<TRowData> | null = null;
+			for (const block of this.blocks.values()) {
+				if (block.blockIndex === protectedBlockIndex) continue;
+				if (!evictableStates.has(block.state)) continue;
+				if (!evictableBlock || block.lastAccessedAt < evictableBlock.lastAccessedAt) {
+					evictableBlock = block;
+				}
+			}
+			if (!evictableBlock) return;
+			evictableBlock.abortController?.abort();
+			this.blocks.delete(evictableBlock.blockIndex);
 		}
 	}
 
