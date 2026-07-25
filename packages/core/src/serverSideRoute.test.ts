@@ -22,7 +22,11 @@ describe('serverSideRoute helpers', () => {
 	it('creates stable route keys for root and child routes', () => {
 		expect(createServerSideRouteKey(undefined)).toBe('');
 		expect(createServerSideRouteKey([])).toBe('');
-		expect(createServerSideRouteKey(['Europe', 'Germany'])).toBe('Europe\u001fGermany');
+		expect(createServerSideRouteKey(['Europe', 'Germany'])).toBe('["Europe","Germany"]');
+	});
+
+	it('does not collide when route segments contain delimiter-like characters', () => {
+		expect(createServerSideRouteKey(['Europe\u001fGermany'])).not.toBe(createServerSideRouteKey(['Europe', 'Germany']));
 	});
 
 	it('compares routes by canonical segment identity rather than array reference', () => {

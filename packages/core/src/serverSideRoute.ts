@@ -16,7 +16,8 @@ export function normalizeServerSideRoute(route?: readonly string[] | null): Serv
  */
 export function createServerSideRouteKey(route?: readonly string[] | null): string {
 	const normalized = normalizeServerSideRoute(route);
-	return normalized.join('\u001f');
+	if (normalized.length === 0) return '';
+	return JSON.stringify(normalized);
 }
 
 export function areServerSideRoutesEqual(a?: readonly string[] | null, b?: readonly string[] | null): boolean {
