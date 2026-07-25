@@ -226,6 +226,54 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('force reload aborts an in-flight initial infinite block load and starts a replacement request', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const signals: AbortSignal[] = [];
+		const getRows = vi.fn().mockImplementation((_params, context: { signal?: AbortSignal }) => {
+			if (context.signal) signals.push(context.signal);
+			return new Promise(() => {
+				/* keep request in-flight until the controller aborts it */
+			});
+		});
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: { getRows },
+			blockSize: 10,
+			columns: store.getState().columns,
+		});
+
+		expect(getRows).toHaveBeenCalledTimes(1);
+		expect(signals[0]?.aborted).toBe(false);
+		expect(controller.getBlockSnapshots()).toEqual([
+			expect.objectContaining({
+				blockIndex: 0,
+				state: 'loadingInitial',
+				requestId: 1,
+			}),
+		]);
+
+		controller.ensureRange(0, 0, 'force-reload');
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(signals[0]?.aborted).toBe(true);
+		expect(getRows).toHaveBeenCalledTimes(2);
+		expect(signals[1]?.aborted).toBe(false);
+		expect(controller.getBlockSnapshots()).toEqual([
+			expect.objectContaining({
+				blockIndex: 0,
+				state: 'loadingInitial',
+				requestId: 2,
+			}),
+		]);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('publishes a core refresh invalidation when a non-zero infinite block resolves', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,

@@ -821,7 +821,7 @@ export class InfiniteRowModelController<TData = unknown>
 		const requestId = this.nextRequestId++;
 		const queryState = this.getQueryState();
 		const existingBlock = this.blockCache.getBlock(blockIndex);
-		if (existingBlock?.status === 'loading') {
+		if (existingBlock && this.blockCache.isBlockLoading(blockIndex)) {
 			this.abortRequest(existingBlock.requestId);
 		}
 		const block = this.blockCache.beginLoad(blockIndex, this.blockSize, requestId, queryState.queryVersion);
@@ -1021,7 +1021,7 @@ export class InfiniteRowModelController<TData = unknown>
 	private queueBlockLoad(blockIndex: number, priority: number, forceReload: boolean): void {
 		if (this.disposed) return;
 		const existingBlock = this.blockCache.getBlock(blockIndex);
-		if (forceReload && existingBlock?.status === 'loading') {
+		if (forceReload && existingBlock && this.blockCache.isBlockLoading(blockIndex)) {
 			this.abortRequest(existingBlock.requestId);
 		}
 		const existing = this.pendingBlockLoads.get(blockIndex);
@@ -1045,7 +1045,7 @@ export class InfiniteRowModelController<TData = unknown>
 			const nextQueued = this.dequeueNextBlockLoad();
 			if (!nextQueued) return;
 			const existingBlock = this.blockCache.getBlock(nextQueued.blockIndex);
-			if (existingBlock?.status === 'loading' && this.activeAbortControllers.has(existingBlock.requestId)) continue;
+			if (existingBlock && this.blockCache.isBlockLoading(nextQueued.blockIndex) && this.activeAbortControllers.has(existingBlock.requestId)) continue;
 			void this.fetchBlock(nextQueued.blockIndex);
 		}
 	}
