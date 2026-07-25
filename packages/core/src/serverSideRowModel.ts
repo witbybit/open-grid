@@ -10,15 +10,17 @@ import type {
 	RowModelCapabilities,
 	RowModelRefreshResult,
 	RowRangeLoadState,
+	RowExpansionCapableModel,
+	RowExpansionStateReadableModel,
 	ServerSideControllableRowModel,
 	SortModel,
 } from './rowModel.js';
 import type { GridQueryModel } from './query/GridQueryModel.js';
 import { GridEventName } from './api/GridEvents.js';
 import { RowNode } from './rowNode.js';
-import { toDataVisualRowId, toFailedVisualRowId, toLoadingVisualRowId } from './rows/visualRowIds.js';
+import { toDataVisualRowId, toFailedVisualRowId, toGroupVisualRowId, toLoadingVisualRowId, type GroupPathItem } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
-import { createServerSideRouteKey, normalizeServerSideRoute } from './serverSideRoute.js';
+import { createServerSideRouteKey, isRootServerSideRoute, normalizeServerSideRoute } from './serverSideRoute.js';
 
 function toErrorMessage(error: unknown): string {
 	if (error instanceof Error && error.message) return error.message;
@@ -359,11 +361,14 @@ const SERVER_SIDE_CAPABILITIES: RowModelCapabilities = {
 };
 
 type ServerSideLoadedBlock<TRowData> = {
+	readonly storeId: string;
+	readonly route: ServerSideRoute;
 	readonly blockIndex: number;
 	readonly startRow: number;
 	readonly endRow: number;
 	state: ServerSideBlockState;
 	rows: readonly RowNode<TRowData>[];
+	groupMetadata?: readonly ServerSideGroupMetadata[];
 	requestId?: number;
 	queryGeneration: number;
 	lastAccessedAt: number;
@@ -371,7 +376,16 @@ type ServerSideLoadedBlock<TRowData> = {
 	abortController?: AbortController;
 };
 
-export class ServerSideRowModelController<TRowData = unknown> implements RowModel<TRowData>, ServerSideControllableRowModel<TRowData> {
+type ServerSideRuntimeStore<TRowData> = {
+	readonly storeId: string;
+	readonly route: ServerSideRoute;
+	rowCountState: ServerSideRowCountState;
+	readonly blocks: Map<number, ServerSideLoadedBlock<TRowData>>;
+};
+
+export class ServerSideRowModelController<TRowData = unknown>
+	implements RowModel<TRowData>, ServerSideControllableRowModel<TRowData>, RowExpansionCapableModel<TRowData>, RowExpansionStateReadableModel
+{
 	private datasource: ServerSideDatasource<TRowData>;
 	private readonly getRowId: (row: TRowData) => string;
 	private blockSize: number;
@@ -383,6 +397,10 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 	private activeRequestCount = 0;
 	private rowCountState: ServerSideRowCountState = Object.freeze({ kind: 'unknown' });
 	private readonly blocks = new Map<number, ServerSideLoadedBlock<TRowData>>();
+	private readonly childStores = new Map<string, ServerSideRuntimeStore<TRowData>>();
+	private readonly groupMetadataByRowId = new Map<string, ServerSideGroupMetadata>();
+	private readonly groupMetadataByGroupId = new Map<string, ServerSideGroupMetadata>();
+	private readonly expandedGroupIds = new Set<string>();
 	private readonly rowIdToIndex = new Map<string, number>();
 	private readonly visualRowIdToIndex = new Map<string, number>();
 	private readonly unsubscribers: Array<() => void> = [];
@@ -417,7 +435,16 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 		for (const block of this.blocks.values()) {
 			block.abortController?.abort();
 		}
+		for (const store of this.childStores.values()) {
+			for (const block of store.blocks.values()) {
+				block.abortController?.abort();
+			}
+		}
 		this.blocks.clear();
+		this.childStores.clear();
+		this.groupMetadataByRowId.clear();
+		this.groupMetadataByGroupId.clear();
+		this.expandedGroupIds.clear();
 		this.rowIdToIndex.clear();
 		this.visualRowIdToIndex.clear();
 		this.unsubscribers.splice(0).forEach((unsubscribe) => unsubscribe());
@@ -432,7 +459,19 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 		this.purgeServerSide();
 	}
 
-	public refreshServerSide(_options?: ServerSideRefreshOptions): void {
+	public refreshServerSide(options?: ServerSideRefreshOptions): void {
+		const route = normalizeServerSideRoute(options?.route);
+		if (!isRootServerSideRoute(route)) {
+			const store = this.getOrCreateChildStore(route);
+			const currentBlocks = [...store.blocks.keys()];
+			for (const blockIndex of currentBlocks) {
+				this.loadChildBlock(store, blockIndex, true);
+			}
+			if (currentBlocks.length === 0) {
+				this.loadChildBlock(store, 0, false);
+			}
+			return;
+		}
 		const currentBlocks = [...this.blocks.keys()];
 		for (const blockIndex of currentBlocks) {
 			this.loadBlock(blockIndex, true);
@@ -442,13 +481,27 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 		}
 	}
 
-	public purgeServerSide(_options?: Omit<ServerSideRefreshOptions, 'purge'>): void {
+	public purgeServerSide(options?: Omit<ServerSideRefreshOptions, 'purge'>): void {
+		const route = normalizeServerSideRoute(options?.route);
+		if (!isRootServerSideRoute(route)) {
+			this.purgeChildStore(route);
+			return;
+		}
 		this.queryGeneration++;
 		this.activeRequestCount = 0;
 		for (const block of this.blocks.values()) {
 			block.abortController?.abort();
 		}
+		for (const store of this.childStores.values()) {
+			for (const block of store.blocks.values()) {
+				block.abortController?.abort();
+			}
+		}
 		this.blocks.clear();
+		this.childStores.clear();
+		this.groupMetadataByRowId.clear();
+		this.groupMetadataByGroupId.clear();
+		this.expandedGroupIds.clear();
 		this.rowIdToIndex.clear();
 		this.visualRowIdToIndex.clear();
 		this.rowCountState = Object.freeze({ kind: 'unknown' });
@@ -457,15 +510,15 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 	}
 
 	public getServerSideStoreState(): readonly ServerSideStoreSnapshot[] {
-		return [this.createRootStoreSnapshot()];
+		return this.createStoreSnapshots();
 	}
 
 	public getBlockSnapshots(): readonly ServerSideBlockSnapshot[] {
-		return [...this.blocks.values()]
-			.sort((a, b) => a.blockIndex - b.blockIndex)
+		return [...this.getAllBlocks()]
+			.sort((a, b) => a.storeId.localeCompare(b.storeId) || a.blockIndex - b.blockIndex)
 			.map((block) =>
 				Object.freeze({
-					storeId: createServerSideRouteKey(),
+					storeId: block.storeId,
 					blockIndex: block.blockIndex,
 					startRow: block.startRow,
 					endRow: block.endRow,
@@ -487,6 +540,32 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 	public getVisualRow(index: number): VisualRow<TRowData> | null {
 		const node = this.getCommittedNode(index);
 		if (node) {
+			const groupMetadata = this.groupMetadataByRowId.get(node.id);
+			if (groupMetadata) {
+				const path = this.toGroupPath(groupMetadata);
+				const groupId = toGroupVisualRowId(path);
+				return {
+					kind: 'group',
+					id: groupId,
+					groupId,
+					field: path[path.length - 1]?.field ?? 'serverSide',
+					key: groupMetadata.groupKey,
+					keyString: groupMetadata.groupKey,
+					path,
+					depth: path.length,
+					expanded: this.expandedGroupIds.has(groupId),
+					childCount:
+						this.getChildStore(groupMetadata.route)?.rowCountState.kind === 'known'
+							? this.getChildStore(groupMetadata.route)!.rowCountState.count
+							: 0,
+					leafCount:
+						this.getChildStore(groupMetadata.route)?.rowCountState.kind === 'known'
+							? this.getChildStore(groupMetadata.route)!.rowCountState.count
+							: 0,
+					selectable: true,
+					editable: false,
+				};
+			}
 			return {
 				kind: 'data',
 				id: toDataVisualRowId(node.id),
@@ -508,6 +587,58 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 			};
 		}
 		return null;
+	}
+
+	public toggleGroupExpanded(groupId: string): RowModelRefreshResult {
+		const metadata = this.groupMetadataByGroupId.get(groupId) ?? this.groupMetadataByRowId.get(groupId);
+		if (!metadata?.expandable) return { changed: false };
+		const actualGroupId = this.groupMetadataByGroupId.has(groupId) ? groupId : toGroupVisualRowId(this.toGroupPath(metadata));
+		const previousRowCount = this.getVisualRowCount();
+		if (this.expandedGroupIds.has(actualGroupId)) {
+			this.expandedGroupIds.delete(actualGroupId);
+			this.publishServerSideState();
+			return { changed: true, reason: 'expansion', previousRowCount, nextRowCount: this.getVisualRowCount(), groupId: actualGroupId };
+		}
+		this.expandedGroupIds.add(actualGroupId);
+		const store = this.getOrCreateChildStore(metadata.route);
+		this.loadChildBlock(store, 0, false);
+		this.publishServerSideState();
+		return { changed: true, reason: 'expansion', previousRowCount, nextRowCount: this.getVisualRowCount(), groupId: actualGroupId };
+	}
+
+	public expandAllGroups(): RowModelRefreshResult {
+		const previousRowCount = this.getVisualRowCount();
+		let changed = false;
+		for (const [groupId, metadata] of this.groupMetadataByGroupId) {
+			if (!metadata.expandable || this.expandedGroupIds.has(groupId)) continue;
+			this.expandedGroupIds.add(groupId);
+			this.loadChildBlock(this.getOrCreateChildStore(metadata.route), 0, false);
+			changed = true;
+		}
+		if (changed) this.publishServerSideState();
+		return { changed, reason: 'expansion', previousRowCount, nextRowCount: this.getVisualRowCount() };
+	}
+
+	public collapseAllGroups(): RowModelRefreshResult {
+		if (this.expandedGroupIds.size === 0) return { changed: false };
+		const previousRowCount = this.getVisualRowCount();
+		this.expandedGroupIds.clear();
+		this.publishServerSideState();
+		return { changed: true, reason: 'expansion', previousRowCount, nextRowCount: this.getVisualRowCount() };
+	}
+
+	public toggleDetailExpanded(_rowId: string): RowModelRefreshResult {
+		return { changed: false };
+	}
+
+	public isGroupExpanded(groupId: string): boolean {
+		const metadata = this.groupMetadataByGroupId.get(groupId) ?? this.groupMetadataByRowId.get(groupId);
+		const actualGroupId = metadata && !this.groupMetadataByGroupId.has(groupId) ? toGroupVisualRowId(this.toGroupPath(metadata)) : groupId;
+		return this.expandedGroupIds.has(actualGroupId);
+	}
+
+	public isDetailExpanded(_rowId: string): boolean {
+		return false;
 	}
 
 	public getVisualRowCount(): number {
@@ -628,6 +759,8 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 		const endRow = startRow + this.blockSize;
 		existing?.abortController?.abort();
 		this.blocks.set(blockIndex, {
+			storeId: createServerSideRouteKey(),
+			route: normalizeServerSideRoute(),
 			blockIndex,
 			startRow,
 			endRow: endRow - 1,
@@ -640,8 +773,12 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 	}
 
 	private startBlockRequest(blockIndex: number): void {
+		this.startStoreBlockRequest(this.getRootStore(), blockIndex);
+	}
+
+	private startStoreBlockRequest(store: ServerSideRuntimeStore<TRowData>, blockIndex: number): void {
 		if (this.disposed) return;
-		const existing = this.blocks.get(blockIndex);
+		const existing = store.blocks.get(blockIndex);
 		const startRow = blockIndex * this.blockSize;
 		const endRow = startRow + this.blockSize;
 		const requestId = ++this.requestSequence;
@@ -649,6 +786,8 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 		const abortController = new AbortController();
 		existing?.abortController?.abort();
 		const block: ServerSideLoadedBlock<TRowData> = {
+			storeId: store.storeId,
+			route: store.route,
 			blockIndex,
 			startRow,
 			endRow: endRow - 1,
@@ -659,7 +798,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 			lastAccessedAt: Date.now(),
 			abortController,
 		};
-		this.blocks.set(blockIndex, block);
+		store.blocks.set(blockIndex, block);
 		this.activeRequestCount++;
 		this.publishServerSideState();
 
@@ -667,7 +806,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 		const request = createServerSideGetRowsRequest({
 			startRow,
 			endRow,
-			route: [],
+			route: store.route,
 			sortModel: state.sortModel,
 			filterModel: state.filterModel,
 			quickFilterModel: state.quickFilterModel,
@@ -688,11 +827,15 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 				});
 				const nodes = normalized.rows.map((row) => new RowNode<TRowData>(this.getRowId(row), row));
 				block.rows = Object.freeze(nodes);
+				block.groupMetadata = normalized.groupMetadata;
 				block.state = 'loaded';
 				block.error = undefined;
 				block.abortController = undefined;
-				this.rowCountState = normalized.rowCountState;
-				this.evictBlocksIfNeeded(blockIndex);
+				store.rowCountState = normalized.rowCountState;
+				if (isRootServerSideRoute(store.route)) {
+					this.rowCountState = normalized.rowCountState;
+				}
+				this.evictBlocksIfNeeded(store, blockIndex);
 				this.rebuildIndexes();
 				this.publishServerSideState();
 				this.runtime.publishAsyncRowModelUpdate({
@@ -743,34 +886,46 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 	private drainQueuedBlocks(): void {
 		if (this.disposed) return;
 		while (this.activeRequestCount < this.maxConcurrentRequests) {
-			const nextQueuedBlock = [...this.blocks.values()]
+			const nextQueuedBlock = [...this.getAllBlocks()]
 				.filter((block) => block.state === 'queued' && block.queryGeneration === this.queryGeneration)
-				.sort((a, b) => b.lastAccessedAt - a.lastAccessedAt || a.blockIndex - b.blockIndex)[0];
+				.sort((a, b) => b.lastAccessedAt - a.lastAccessedAt || a.storeId.localeCompare(b.storeId) || a.blockIndex - b.blockIndex)[0];
 			if (!nextQueuedBlock) return;
-			this.startBlockRequest(nextQueuedBlock.blockIndex);
+			this.startStoreBlockRequest(this.getStoreById(nextQueuedBlock.storeId), nextQueuedBlock.blockIndex);
 		}
 	}
 
 	private rebuildIndexes(): void {
 		this.rowIdToIndex.clear();
 		this.visualRowIdToIndex.clear();
+		this.groupMetadataByRowId.clear();
+		this.groupMetadataByGroupId.clear();
+		for (const block of this.blocks.values()) {
+			for (const metadata of block.groupMetadata ?? []) {
+				this.groupMetadataByRowId.set(metadata.rowId, metadata);
+				this.groupMetadataByGroupId.set(toGroupVisualRowId(this.toGroupPath(metadata)), metadata);
+			}
+		}
 		for (const block of this.blocks.values()) {
 			for (let offset = 0; offset < block.rows.length; offset++) {
 				const visualIndex = block.startRow + offset;
 				const node = block.rows[offset];
 				if (!node) continue;
 				this.rowIdToIndex.set(node.id, visualIndex);
-				this.visualRowIdToIndex.set(toDataVisualRowId(node.id), visualIndex);
+				const groupMetadata = this.groupMetadataByRowId.get(node.id);
+				this.visualRowIdToIndex.set(
+					groupMetadata ? toGroupVisualRowId(this.toGroupPath(groupMetadata)) : toDataVisualRowId(node.id),
+					visualIndex
+				);
 			}
 		}
 	}
 
-	private evictBlocksIfNeeded(protectedBlockIndex: number): void {
+	private evictBlocksIfNeeded(store: ServerSideRuntimeStore<TRowData>, protectedBlockIndex: number): void {
 		if (this.maxBlocksInCache === null) return;
 		const evictableStates = new Set<ServerSideBlockState>(['loaded', 'failedInitial', 'failedRefresh']);
-		while (this.blocks.size > this.maxBlocksInCache) {
+		while (store.blocks.size > this.maxBlocksInCache) {
 			let evictableBlock: ServerSideLoadedBlock<TRowData> | null = null;
-			for (const block of this.blocks.values()) {
+			for (const block of store.blocks.values()) {
 				if (block.blockIndex === protectedBlockIndex) continue;
 				if (!evictableStates.has(block.state)) continue;
 				if (!evictableBlock || block.lastAccessedAt < evictableBlock.lastAccessedAt) {
@@ -779,35 +934,146 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 			}
 			if (!evictableBlock) return;
 			evictableBlock.abortController?.abort();
-			this.blocks.delete(evictableBlock.blockIndex);
+			store.blocks.delete(evictableBlock.blockIndex);
 		}
 	}
 
 	private createRootStoreSnapshot(): ServerSideStoreSnapshot {
+		return this.createStoreSnapshot(this.getRootStore(), this.childStores.size);
+	}
+
+	private createStoreSnapshot(store: ServerSideRuntimeStore<TRowData>, childStoreCount: number): ServerSideStoreSnapshot {
 		let loadingBlockCount = 0;
 		let failedBlockCount = 0;
-		for (const block of this.blocks.values()) {
+		for (const block of store.blocks.values()) {
 			if (block.state === 'loadingInitial' || block.state === 'refreshing' || block.state === 'queued') loadingBlockCount++;
 			if (block.state === 'failedInitial' || block.state === 'failedRefresh') failedBlockCount++;
 		}
 		return Object.freeze({
-			storeId: createServerSideRouteKey(),
-			route: normalizeServerSideRoute(),
-			level: 0,
-			rowCountState: this.rowCountState,
-			blockCount: this.blocks.size,
+			storeId: store.storeId,
+			route: store.route,
+			level: store.route.length,
+			rowCountState: store.rowCountState,
+			blockCount: store.blocks.size,
 			loadingBlockCount,
 			failedBlockCount,
-			childStoreCount: 0,
+			childStoreCount,
 		});
 	}
 
+	private createStoreSnapshots(): readonly ServerSideStoreSnapshot[] {
+		return Object.freeze([
+			this.createRootStoreSnapshot(),
+			...[...this.childStores.values()].sort((a, b) => a.storeId.localeCompare(b.storeId)).map((store) => this.createStoreSnapshot(store, 0)),
+		]);
+	}
+
 	private publishServerSideState(): void {
-		const snapshot = this.createRootStoreSnapshot();
+		const snapshots = this.createStoreSnapshots();
 		this.runtime.publishServerSideState({
-			loading: snapshot.loadingBlockCount > 0,
-			error: [...this.blocks.values()].find((block) => block.error)?.error ?? null,
-			storeStates: [snapshot],
+			loading: snapshots.some((snapshot) => snapshot.loadingBlockCount > 0),
+			error: [...this.getAllBlocks()].find((block) => block.error)?.error ?? null,
+			storeStates: snapshots,
 		});
+	}
+
+	private getRootStore(): ServerSideRuntimeStore<TRowData> {
+		return {
+			storeId: createServerSideRouteKey(),
+			route: normalizeServerSideRoute(),
+			rowCountState: this.rowCountState,
+			blocks: this.blocks,
+		};
+	}
+
+	private getStoreById(storeId: string): ServerSideRuntimeStore<TRowData> {
+		if (storeId === createServerSideRouteKey()) return this.getRootStore();
+		const store = this.childStores.get(storeId);
+		if (!store) throw new Error(`Missing server-side store "${storeId}"`);
+		return store;
+	}
+
+	private getChildStore(route: ServerSideRoute): ServerSideRuntimeStore<TRowData> | null {
+		return this.childStores.get(createServerSideRouteKey(route)) ?? null;
+	}
+
+	private getOrCreateChildStore(route: ServerSideRoute): ServerSideRuntimeStore<TRowData> {
+		const normalized = normalizeServerSideRoute(route);
+		const storeId = createServerSideRouteKey(normalized);
+		const existing = this.childStores.get(storeId);
+		if (existing) return existing;
+		const store: ServerSideRuntimeStore<TRowData> = {
+			storeId,
+			route: normalized,
+			rowCountState: Object.freeze({ kind: 'unknown' }),
+			blocks: new Map(),
+		};
+		this.childStores.set(storeId, store);
+		return store;
+	}
+
+	private loadChildBlock(store: ServerSideRuntimeStore<TRowData>, blockIndex: number, forceReload: boolean): void {
+		const existing = store.blocks.get(blockIndex);
+		if (existing && !forceReload && (existing.state === 'loadingInitial' || existing.state === 'refreshing' || existing.state === 'loaded'))
+			return;
+		if (this.activeRequestCount >= this.maxConcurrentRequests) {
+			this.markQueuedChildBlock(store, blockIndex, existing);
+			return;
+		}
+		this.startStoreBlockRequest(store, blockIndex);
+	}
+
+	private markQueuedChildBlock(
+		store: ServerSideRuntimeStore<TRowData>,
+		blockIndex: number,
+		existing: ServerSideLoadedBlock<TRowData> | undefined
+	): void {
+		const startRow = blockIndex * this.blockSize;
+		const endRow = startRow + this.blockSize;
+		existing?.abortController?.abort();
+		store.blocks.set(blockIndex, {
+			storeId: store.storeId,
+			route: store.route,
+			blockIndex,
+			startRow,
+			endRow: endRow - 1,
+			state: 'queued',
+			rows: existing?.rows ?? [],
+			queryGeneration: this.queryGeneration,
+			lastAccessedAt: Date.now(),
+		});
+		this.publishServerSideState();
+	}
+
+	private purgeChildStore(route: ServerSideRoute): void {
+		const storeId = createServerSideRouteKey(route);
+		const store = this.childStores.get(storeId);
+		if (!store) return;
+		for (const block of store.blocks.values()) {
+			block.abortController?.abort();
+		}
+		this.childStores.delete(storeId);
+		for (const [groupId, metadata] of this.groupMetadataByGroupId) {
+			if (createServerSideRouteKey(metadata.route) === storeId) {
+				this.expandedGroupIds.delete(groupId);
+			}
+		}
+		this.publishServerSideState();
+	}
+
+	private getAllBlocks(): readonly ServerSideLoadedBlock<TRowData>[] {
+		return [this.blocks, ...[...this.childStores.values()].map((store) => store.blocks)].flatMap((blocks) => [...blocks.values()]);
+	}
+
+	private toGroupPath(metadata: ServerSideGroupMetadata): GroupPathItem[] {
+		const route = normalizeServerSideRoute(metadata.route);
+		if (route.length === 0) return [{ field: 'serverSide', key: metadata.groupKey, keyString: metadata.groupKey }];
+		const path: GroupPathItem[] = [];
+		for (let index = 0; index < route.length; index += 2) {
+			const field = route[index] ?? `level-${index}`;
+			const key = route[index + 1] ?? metadata.groupKey;
+			path.push({ field, key, keyString: String(key) });
+		}
+		return path;
 	}
 }

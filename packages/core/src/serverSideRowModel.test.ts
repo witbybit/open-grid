@@ -333,6 +333,144 @@ describe('ServerSideRowModelController', () => {
 		api.destroy();
 	});
 
+	it('creates and loads a child store when an expandable server-side group row is expanded', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name' }],
+			getRowId: (row) => row.id,
+		});
+		const getRows = vi.fn(async (request) => {
+			if (request.route.length === 0) {
+				return {
+					rows: [{ id: 'group-emea', name: 'EMEA' }],
+					rowCount: 1,
+					groupMetadata: [
+						{
+							rowId: 'group-emea',
+							route: ['region', 'EMEA'],
+							groupKey: 'EMEA',
+							expandable: true,
+						},
+					],
+				};
+			}
+			expect(request.route).toEqual(['region', 'EMEA']);
+			expect(request.groupKeys).toEqual(['region', 'EMEA']);
+			return {
+				rows: [
+					{ id: 'emea-1', name: 'Berlin' },
+					{ id: 'emea-2', name: 'Paris' },
+				],
+				rowCount: 2,
+			};
+		});
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
+			columns: store.getState().columns,
+			datasource: { getRows },
+			blockSize: 5,
+			getRowId: (row) => row.id,
+		});
+
+		await flushAsync();
+
+		expect(controller.getVisualRow(0)).toMatchObject({
+			kind: 'group',
+			id: 'group:region=EMEA',
+			groupId: 'group:region=EMEA',
+			keyString: 'EMEA',
+			expanded: false,
+		});
+
+		const refresh = controller.toggleGroupExpanded('group:region=EMEA');
+		expect(refresh).toMatchObject({ changed: true, reason: 'expansion', groupId: 'group:region=EMEA' });
+		expect(controller.isGroupExpanded('group:region=EMEA')).toBe(true);
+		expect(getRows).toHaveBeenCalledTimes(2);
+
+		await flushAsync();
+
+		expect(store.getServerSideStoreState()).toEqual([
+			expect.objectContaining({
+				storeId: '',
+				route: [],
+				rowCountState: { kind: 'known', count: 1 },
+				childStoreCount: 1,
+			}),
+			expect.objectContaining({
+				storeId: '["region","EMEA"]',
+				route: ['region', 'EMEA'],
+				level: 2,
+				rowCountState: { kind: 'known', count: 2 },
+				blockCount: 1,
+			}),
+		]);
+		expect(controller.getBlockSnapshots()).toEqual([
+			expect.objectContaining({ storeId: '', blockIndex: 0, state: 'loaded', committedRowCount: 1 }),
+			expect.objectContaining({ storeId: '["region","EMEA"]', blockIndex: 0, state: 'loaded', committedRowCount: 2 }),
+		]);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('refreshes and purges child stores by route without purging the root store', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name' }],
+			getRowId: (row) => row.id,
+		});
+		const getRows = vi.fn(async (request) => {
+			if (request.route.length === 0) {
+				return {
+					rows: [{ id: 'group-emea', name: 'EMEA' }],
+					rowCount: 1,
+					groupMetadata: [
+						{
+							rowId: 'group-emea',
+							route: ['region', 'EMEA'],
+							groupKey: 'EMEA',
+							expandable: true,
+						},
+					],
+				};
+			}
+			return {
+				rows: [{ id: `child-${getRows.mock.calls.length}`, name: 'Child' }],
+				rowCount: 1,
+			};
+		});
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
+			columns: store.getState().columns,
+			datasource: { getRows },
+			blockSize: 5,
+			getRowId: (row) => row.id,
+		});
+
+		await flushAsync();
+		controller.toggleGroupExpanded('group:region=EMEA');
+		await flushAsync();
+
+		controller.refreshServerSide({ route: ['region', 'EMEA'] });
+		expect(getRows).toHaveBeenLastCalledWith(
+			expect.objectContaining({ route: ['region', 'EMEA'], startRow: 0, endRow: 5 }),
+			expect.objectContaining({ signal: expect.any(AbortSignal) })
+		);
+		expect(controller.getBlockSnapshots().filter((snapshot) => snapshot.storeId === '').length).toBe(1);
+
+		await flushAsync();
+		controller.purgeServerSide({ route: ['region', 'EMEA'] });
+
+		expect(store.getServerSideStoreState()).toEqual([
+			expect.objectContaining({
+				storeId: '',
+				childStoreCount: 0,
+				rowCountState: { kind: 'known', count: 1 },
+			}),
+		]);
+		expect(controller.getBlockSnapshots()).toEqual([expect.objectContaining({ storeId: '', blockIndex: 0, state: 'loaded' })]);
+		expect(controller.isGroupExpanded('group:region=EMEA')).toBe(false);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('rejects stale root-store responses after sort changes and forwards the winning query snapshot', async () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name' }],
