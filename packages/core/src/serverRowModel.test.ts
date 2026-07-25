@@ -475,6 +475,71 @@ describe('InfiniteRowModelController', () => {
 		store.destroy();
 	});
 
+	it('never returns unexplained null visual rows for represented infinite indexes', async () => {
+		const store = new GridStore<TestRow>({
+			getRowId: (row) => row.id,
+			columns: [{ field: 'name', header: 'Name' }],
+		});
+
+		const mockDatasource: InfiniteDatasource<TestRow> = {
+			getRows: vi.fn().mockImplementation((params) => {
+				if (params.startRow === 0) {
+					return Promise.resolve({
+						rows: Array.from({ length: 10 }, (_, index) => ({
+							id: `row-${index}`,
+							name: `Row ${index}`,
+						})),
+						totalCount: 40,
+					});
+				}
+				if (params.startRow === 10) {
+					return Promise.reject(new Error('block 1 failed'));
+				}
+				if (params.startRow === 20) {
+					return new Promise(() => {
+						/* keep block 2 represented but loading */
+					});
+				}
+				throw new Error(`Unexpected request ${params.startRow}-${params.endRow}`);
+			}),
+		};
+
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			datasource: mockDatasource,
+			blockSize: 10,
+			prefetchBlockCount: 0,
+			columns: store.getState().columns,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		controller.loadVisibleBlocks(10, 29);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(controller.getVisualRowCount()).toBe(40);
+		expect(controller.getBlockSnapshots()).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ blockIndex: 0, state: 'loaded', committedRowCount: 10 }),
+				expect.objectContaining({ blockIndex: 1, state: 'failedInitial', committedRowCount: 0 }),
+				expect.objectContaining({ blockIndex: 2, state: 'loadingInitial', committedRowCount: 0 }),
+			])
+		);
+
+		for (let index = 0; index < controller.getVisualRowCount(); index++) {
+			const visualRow = controller.getVisualRow(index);
+			const loadState = controller.getRowLoadState(index);
+			expect(visualRow, `index ${index} should resolve to a deliberate visual row`).not.toBeNull();
+			expect(loadState.kind, `index ${index} should not be terminal missing inside represented range`).not.toBe('missing');
+			if (loadState.kind === 'loaded') expect(visualRow?.kind).toBe('data');
+			if (loadState.kind === 'failed') expect(visualRow?.kind).toBe('failed');
+			if (loadState.kind === 'loading') expect(visualRow?.kind).toBe('loading');
+		}
+		expect(controller.getVisualRow(40)).toBeNull();
+		expect(controller.getRowLoadState(40)).toEqual({ kind: 'missing' });
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('rejects a short non-terminal infinite block response instead of committing blank gaps', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
