@@ -605,8 +605,8 @@ export class ServerPageRowModelController<TData = unknown>
 	): void {
 		const nextRowCount = this.getVisualRowCount();
 		const changedEndIndex = Math.max(previousRowCount, nextRowCount, 1) - 1;
-		this.runtime.applyRefreshInvalidation(
-			{
+		this.runtime.publishAsyncRowModelUpdate({
+			refreshResult: {
 				changed: true,
 				reason: 'refresh',
 				previousRowCount,
@@ -614,11 +614,9 @@ export class ServerPageRowModelController<TData = unknown>
 				changedStartIndex: 0,
 				changedEndIndex,
 			},
-			{
-				invalidationReason: 'viewport',
-				requestRenderReason,
-			}
-		);
+			invalidationReason: 'viewport',
+			requestRenderReason,
+		});
 	}
 
 	private isRetryReason(reason?: string): boolean {
