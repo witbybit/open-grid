@@ -413,6 +413,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 	public dispose(): void {
 		this.disposed = true;
 		this.queryGeneration++;
+		this.activeRequestCount = 0;
 		for (const block of this.blocks.values()) {
 			block.abortController?.abort();
 		}
@@ -443,6 +444,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 
 	public purgeServerSide(_options?: Omit<ServerSideRefreshOptions, 'purge'>): void {
 		this.queryGeneration++;
+		this.activeRequestCount = 0;
 		for (const block of this.blocks.values()) {
 			block.abortController?.abort();
 		}
@@ -676,7 +678,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 			.getRows(request, { signal: abortController.signal })
 			.then((result) => {
 				if (this.disposed || block.requestId !== requestId || block.queryGeneration !== this.queryGeneration) {
-					this.finishBlockRequest();
+					this.finishBlockRequest(queryGeneration);
 					return;
 				}
 				const normalized = normalizeServerSideGetRowsResult({
@@ -706,7 +708,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 					requestRenderReason: 'server-side-block-loaded',
 					includeOverlay: true,
 				});
-				this.finishBlockRequest();
+				this.finishBlockRequest(queryGeneration);
 			})
 			.catch((error) => {
 				if (
@@ -715,7 +717,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 					block.requestId !== requestId ||
 					block.queryGeneration !== this.queryGeneration
 				) {
-					this.finishBlockRequest();
+					this.finishBlockRequest(queryGeneration);
 					return;
 				}
 				block.state = block.rows.length > 0 ? 'failedRefresh' : 'failedInitial';
@@ -728,11 +730,12 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 					requestRenderReason: 'server-side-block-failed',
 					includeOverlay: true,
 				});
-				this.finishBlockRequest();
+				this.finishBlockRequest(queryGeneration);
 			});
 	}
 
-	private finishBlockRequest(): void {
+	private finishBlockRequest(requestGeneration: number): void {
+		if (requestGeneration !== this.queryGeneration) return;
 		this.activeRequestCount = Math.max(0, this.activeRequestCount - 1);
 		this.drainQueuedBlocks();
 	}

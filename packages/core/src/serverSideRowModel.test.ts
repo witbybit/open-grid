@@ -473,4 +473,42 @@ describe('ServerSideRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('releases current-generation request slots when the datasource is replaced', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name' }],
+			getRowId: (row) => row.id,
+		});
+		const oldResponse = deferred<{ rows: TestRow[]; rowCount: number }>();
+		const newResponse = deferred<{ rows: TestRow[]; rowCount: number }>();
+		const oldGetRows = vi.fn(() => oldResponse.promise);
+		const newGetRows = vi.fn(() => newResponse.promise);
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
+			columns: store.getState().columns,
+			datasource: { getRows: oldGetRows },
+			blockSize: 5,
+			maxConcurrentRequests: 1,
+			getRowId: (row) => row.id,
+		});
+
+		expect(oldGetRows).toHaveBeenCalledTimes(1);
+
+		controller.setServerSideDatasource({ getRows: newGetRows });
+
+		expect(newGetRows).toHaveBeenCalledTimes(1);
+
+		oldResponse.resolve({ rows: [{ id: 'old', name: 'Old' }], rowCount: 1 });
+		await flushAsync();
+		expect(controller.getRawRowById('old')).toBeNull();
+		expect(controller.getVisualRow(0)?.kind).toBe('loading');
+
+		newResponse.resolve({ rows: [{ id: 'new', name: 'New' }], rowCount: 1 });
+		await flushAsync();
+
+		expect(controller.getVisualRow(0)).toMatchObject({ kind: 'data', rowId: 'new' });
+		expect(controller.getRawRowById('old')).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
 });
