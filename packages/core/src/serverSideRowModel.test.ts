@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createServerSideGetRowsRequest } from './serverSideRowModel.js';
+import { createServerSideGetRowsRequest, resolveServerSideRowCountState } from './serverSideRowModel.js';
 import type { ServerSideRowGroupColumn, ServerSideValueColumn } from './serverSideRowModel.js';
 
 describe('serverSideRowModel request factory', () => {
@@ -83,5 +83,75 @@ describe('serverSideRowModel request factory', () => {
 		expect(() => createServerSideGetRowsRequest({ startRow: 0, endRow: 10.5 })).toThrow(
 			'Invalid server-side request endRow: 10.5'
 		);
+	});
+});
+
+describe('serverSideRowModel row-count state', () => {
+	it('returns known empty when the datasource returns a zero-row short block', () => {
+		expect(resolveServerSideRowCountState({ startRow: 0, endRow: 100, returnedRowCount: 0 })).toEqual({
+			kind: 'known',
+			count: 0,
+		});
+	});
+
+	it('returns estimated while full blocks imply more rows may exist', () => {
+		expect(resolveServerSideRowCountState({ startRow: 0, endRow: 100, returnedRowCount: 100 })).toEqual({
+			kind: 'estimated',
+			count: 100,
+		});
+		expect(resolveServerSideRowCountState({ startRow: 100, endRow: 200, returnedRowCount: 100, hasMore: true })).toEqual({
+			kind: 'estimated',
+			count: 201,
+		});
+	});
+
+	it('returns known counts from rowCount, lastRow, hasMore false, and short blocks', () => {
+		expect(resolveServerSideRowCountState({ startRow: 0, endRow: 100, returnedRowCount: 100, rowCount: 350 })).toEqual({
+			kind: 'known',
+			count: 350,
+		});
+		expect(resolveServerSideRowCountState({ startRow: 100, endRow: 200, returnedRowCount: 100, lastRow: 225 })).toEqual({
+			kind: 'known',
+			count: 225,
+		});
+		expect(resolveServerSideRowCountState({ startRow: 200, endRow: 300, returnedRowCount: 25, hasMore: false })).toEqual({
+			kind: 'known',
+			count: 225,
+		});
+		expect(resolveServerSideRowCountState({ startRow: 200, endRow: 300, returnedRowCount: 25 })).toEqual({
+			kind: 'known',
+			count: 225,
+		});
+	});
+
+	it('rejects contradictory terminal metadata', () => {
+		expect(() =>
+			resolveServerSideRowCountState({ startRow: 0, endRow: 100, returnedRowCount: 100, rowCount: 150, lastRow: 151 })
+		).toThrow('Server-side datasource returned conflicting rowCount 150 and lastRow 151');
+		expect(() =>
+			resolveServerSideRowCountState({ startRow: 200, endRow: 300, returnedRowCount: 25, hasMore: false, rowCount: 300 })
+		).toThrow(
+			'Server-side datasource returned hasMore false but rowCount 300 does not match the loaded range ending at 224'
+		);
+		expect(() =>
+			resolveServerSideRowCountState({ startRow: 200, endRow: 300, returnedRowCount: 25, hasMore: true })
+		).toThrow(
+			'Server-side datasource returned 25 rows for range 200-299 but hasMore true still requires rows within that range'
+		);
+	});
+
+	it('rejects impossible ranges and counts', () => {
+		expect(() => resolveServerSideRowCountState({ startRow: -1, endRow: 100, returnedRowCount: 10 })).toThrow(
+			'Invalid server-side request startRow: -1'
+		);
+		expect(() => resolveServerSideRowCountState({ startRow: 100, endRow: 99, returnedRowCount: 0 })).toThrow(
+			'Invalid server-side request endRow: 99'
+		);
+		expect(() => resolveServerSideRowCountState({ startRow: 0, endRow: 10, returnedRowCount: 11 })).toThrow(
+			'Server-side datasource returned 11 rows for requested range 0-9'
+		);
+		expect(() =>
+			resolveServerSideRowCountState({ startRow: 10, endRow: 20, returnedRowCount: 5, rowCount: 14 })
+		).toThrow('Server-side datasource returned rowCount 14, which is smaller than the loaded range ending at 14');
 	});
 });

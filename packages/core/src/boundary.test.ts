@@ -129,6 +129,7 @@ describe('Public/internal boundary', () => {
 				'registerGridContextMenu',
 				'required',
 				'resolveColumnFilterDef',
+				'resolveServerSideRowCountState',
 				'summarizeAnalysisState',
 				'themeToCSSVariables',
 				'validateSchemaVersion',

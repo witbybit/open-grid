@@ -94,6 +94,125 @@ export interface ServerSideGetRowsResult<TRowData> {
 	readonly groupMetadata?: readonly ServerSideGroupMetadata[];
 }
 
+export type ServerSideRowCountState =
+	| { readonly kind: 'unknown' }
+	| { readonly kind: 'estimated'; readonly count: number }
+	| { readonly kind: 'known'; readonly count: number };
+
+export interface ResolveServerSideRowCountStateInput {
+	readonly startRow: number;
+	readonly endRow: number;
+	readonly returnedRowCount: number;
+	readonly rowCount?: number;
+	readonly lastRow?: number;
+	readonly hasMore?: boolean;
+}
+
+function assertNonNegativeInteger(value: number, label: string): void {
+	if (!Number.isInteger(value) || value < 0) {
+		throw new Error(`Server-side datasource returned invalid ${label} ${value}`);
+	}
+}
+
+export function resolveServerSideRowCountState(input: ResolveServerSideRowCountStateInput): ServerSideRowCountState {
+	if (!Number.isInteger(input.startRow) || input.startRow < 0) {
+		throw new Error(`Invalid server-side request startRow: ${input.startRow}`);
+	}
+	if (!Number.isInteger(input.endRow) || input.endRow < input.startRow) {
+		throw new Error(`Invalid server-side request endRow: ${input.endRow}`);
+	}
+	if (!Number.isInteger(input.returnedRowCount) || input.returnedRowCount < 0) {
+		throw new Error(`Server-side datasource returned invalid row count ${input.returnedRowCount}`);
+	}
+
+	const requestedRowCount = input.endRow - input.startRow;
+	if (input.returnedRowCount > requestedRowCount) {
+		throw new Error(
+			`Server-side datasource returned ${input.returnedRowCount} rows for requested range ${input.startRow}-${input.endRow - 1}`
+		);
+	}
+
+	const minimumReachableCount = input.startRow + input.returnedRowCount;
+
+	if (typeof input.rowCount === 'number') {
+		assertNonNegativeInteger(input.rowCount, 'rowCount');
+		if (input.rowCount < minimumReachableCount) {
+			throw new Error(
+				`Server-side datasource returned rowCount ${input.rowCount}, which is smaller than the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
+	}
+	if (typeof input.lastRow === 'number') {
+		assertNonNegativeInteger(input.lastRow, 'lastRow');
+		if (input.lastRow < minimumReachableCount) {
+			throw new Error(
+				`Server-side datasource returned lastRow ${input.lastRow}, which is smaller than the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
+	}
+	if (
+		typeof input.rowCount === 'number' &&
+		typeof input.lastRow === 'number' &&
+		input.rowCount !== input.lastRow
+	) {
+		throw new Error(
+			`Server-side datasource returned conflicting rowCount ${input.rowCount} and lastRow ${input.lastRow}`
+		);
+	}
+
+	if (input.hasMore === false) {
+		if (typeof input.rowCount === 'number' && input.rowCount !== minimumReachableCount) {
+			throw new Error(
+				`Server-side datasource returned hasMore false but rowCount ${input.rowCount} does not match the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
+		if (typeof input.lastRow === 'number' && input.lastRow !== minimumReachableCount) {
+			throw new Error(
+				`Server-side datasource returned hasMore false but lastRow ${input.lastRow} does not match the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
+		return Object.freeze({ kind: 'known', count: minimumReachableCount });
+	}
+
+	if (input.hasMore === true) {
+		if (typeof input.rowCount === 'number' && input.rowCount <= minimumReachableCount) {
+			throw new Error(
+				`Server-side datasource returned hasMore true but rowCount ${input.rowCount} leaves no rows beyond the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
+		if (typeof input.lastRow === 'number' && input.lastRow <= minimumReachableCount) {
+			throw new Error(
+				`Server-side datasource returned hasMore true but lastRow ${input.lastRow} leaves no rows beyond the loaded range ending at ${minimumReachableCount - 1}`
+			);
+		}
+	}
+
+	if (input.returnedRowCount < requestedRowCount) {
+		if (typeof input.rowCount === 'number' && input.rowCount > minimumReachableCount) {
+			throw new Error(
+				`Server-side datasource returned ${input.returnedRowCount} rows for range ${input.startRow}-${input.endRow - 1} but rowCount ${input.rowCount} still requires rows within that range`
+			);
+		}
+		if (typeof input.lastRow === 'number' && input.lastRow > minimumReachableCount) {
+			throw new Error(
+				`Server-side datasource returned ${input.returnedRowCount} rows for range ${input.startRow}-${input.endRow - 1} but lastRow ${input.lastRow} still requires rows within that range`
+			);
+		}
+		if (input.hasMore === true) {
+			throw new Error(
+				`Server-side datasource returned ${input.returnedRowCount} rows for range ${input.startRow}-${input.endRow - 1} but hasMore true still requires rows within that range`
+			);
+		}
+		return Object.freeze({ kind: 'known', count: minimumReachableCount });
+	}
+
+	if (typeof input.rowCount === 'number') return Object.freeze({ kind: 'known', count: input.rowCount });
+	if (typeof input.lastRow === 'number') return Object.freeze({ kind: 'known', count: input.lastRow });
+	if (input.hasMore === true) return Object.freeze({ kind: 'estimated', count: minimumReachableCount + 1 });
+	if (minimumReachableCount > 0) return Object.freeze({ kind: 'estimated', count: minimumReachableCount });
+	return Object.freeze({ kind: 'unknown' });
+}
+
 export interface ServerSideDatasource<TRowData = unknown> {
 	getRows(
 		request: ServerSideGetRowsRequest,
@@ -122,10 +241,7 @@ export interface ServerSideStoreSnapshot {
 	readonly storeId: string;
 	readonly route: ServerSideRoute;
 	readonly level: number;
-	readonly rowCountState:
-		| { readonly kind: 'unknown' }
-		| { readonly kind: 'estimated'; readonly count: number }
-		| { readonly kind: 'known'; readonly count: number };
+	readonly rowCountState: ServerSideRowCountState;
 	readonly blockCount: number;
 	readonly loadingBlockCount: number;
 	readonly failedBlockCount: number;
