@@ -2871,9 +2871,8 @@ describe('Architecture guardrails', () => {
 		it('GridProjectionPipeline recomputes selection bounds from canonical column identity instead of field fallback', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridProjectionPipeline.ts'), 'utf-8');
 			expect(content).toContain('if (!pointer.columnInstanceId) return -1;');
-			expect(content).toContain(
-				'findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId })'
-			);
+			expect(content).toContain('const column = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), {');
+			expect(content).toContain('columnInstanceId: pointer.columnInstanceId,');
 			expect(content).toContain('const enrichPointer = (pointer: GridCellPointer | null): CanonicalGridCellPointer | null => {');
 			expect(content).toContain('areCanonicalCellPointersEqual(focus, selection.focus as CanonicalGridCellPointer | null)');
 			expect(content).not.toContain('this.deps.columns.getColumnIndex(pointer.colField)');
