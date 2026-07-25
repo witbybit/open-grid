@@ -1143,8 +1143,8 @@ export class InfiniteRowModelController<TData = unknown>
 	): void {
 		const nextRowCount = this.blockCache.getVisualRowCount();
 		const maxVisibleIndex = nextRowCount > 0 ? nextRowCount - 1 : block.endRow;
-		this.runtime.applyRefreshInvalidation(
-			{
+		this.runtime.publishAsyncRowModelUpdate({
+			refreshResult: {
 				changed: true,
 				reason: 'refresh',
 				previousRowCount,
@@ -1152,10 +1152,8 @@ export class InfiniteRowModelController<TData = unknown>
 				changedStartIndex: block.startRow,
 				changedEndIndex: Math.max(block.startRow, Math.min(block.endRow, maxVisibleIndex)),
 			},
-			{
-				invalidationReason: 'viewport',
-				requestRenderReason,
-			}
-		);
+			invalidationReason: 'viewport',
+			requestRenderReason,
+		});
 	}
 }

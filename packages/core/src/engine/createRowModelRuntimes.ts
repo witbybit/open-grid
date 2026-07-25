@@ -1,5 +1,24 @@
 import { GridEventName } from '../api/GridEvents.js';
-import type { ClientRowModelRuntime, InfiniteRowModelRuntime, RowModelRuntimeStoreBridge, ServerPageRowModelRuntime } from './runtimePorts.js';
+import type {
+	AsyncRowModelPublication,
+	ClientRowModelRuntime,
+	InfiniteRowModelRuntime,
+	RowModelRuntimeStoreBridge,
+	ServerPageRowModelRuntime,
+} from './runtimePorts.js';
+
+function publishAsyncRowModelUpdate<TRowData>(
+	store: RowModelRuntimeStoreBridge<TRowData>,
+	publication: AsyncRowModelPublication
+): void {
+	store.engine.applyRowModelRefreshInvalidation(publication.refreshResult, {
+		invalidationReason: publication.invalidationReason,
+		requestRenderReason: publication.requestRenderReason,
+		includeHeaders: publication.includeHeaders,
+		includeOverlay: publication.includeOverlay,
+		groupId: publication.groupId,
+	});
+}
 
 export function createClientRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ClientRowModelRuntime<TRowData> {
 	return {
@@ -12,6 +31,7 @@ export function createClientRowModelRuntime<TRowData>(store: RowModelRuntimeStor
 		getCellValue: store.getCellValue,
 		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
 		applyRefreshInvalidation: (refreshResult, options) => store.engine.applyRowModelRefreshInvalidation(refreshResult, options),
+		publishAsyncRowModelUpdate: (publication) => publishAsyncRowModelUpdate(store, publication),
 		reportRowPipelineFault: (operation, error, context) =>
 			store.reportRuntimeFault({
 				source: 'row-pipeline',
@@ -43,6 +63,7 @@ export function createInfiniteRowModelRuntime<TRowData>(store: RowModelRuntimeSt
 		getCellValue: store.getCellValue,
 		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
 		applyRefreshInvalidation: (refreshResult, options) => store.engine.applyRowModelRefreshInvalidation(refreshResult, options),
+		publishAsyncRowModelUpdate: (publication) => publishAsyncRowModelUpdate(store, publication),
 		reportRowPipelineFault: (operation, error, context) =>
 			store.reportRuntimeFault({
 				source: 'row-pipeline',
@@ -87,6 +108,7 @@ export function createServerPageRowModelRuntime<TRowData>(store: RowModelRuntime
 		getCellValue: store.getCellValue,
 		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
 		applyRefreshInvalidation: (refreshResult, options) => store.engine.applyRowModelRefreshInvalidation(refreshResult, options),
+		publishAsyncRowModelUpdate: (publication) => publishAsyncRowModelUpdate(store, publication),
 		reportRowPipelineFault: (operation, error, context) =>
 			store.reportRuntimeFault({
 				source: 'row-pipeline',

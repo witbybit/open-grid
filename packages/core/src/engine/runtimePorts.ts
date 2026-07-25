@@ -64,6 +64,15 @@ export interface RowsUpdatedDispatchPayload<TRowData = unknown> {
 	removedNodes?: RowNode<TRowData>[];
 }
 
+export interface AsyncRowModelPublication {
+	refreshResult: RowModelRefreshResult;
+	invalidationReason: GridInvalidationReason;
+	requestRenderReason: string;
+	includeHeaders?: boolean;
+	includeOverlay?: boolean;
+	groupId?: string;
+}
+
 export interface RowModelRuntimeBase<TRowData = unknown> {
 	getState: () => InternalGridState<TRowData>;
 	initializeModel: (model: { columns?: ColumnDef<TRowData>[]; getRowId?: ((row: TRowData) => string) | undefined }) => void;
@@ -86,6 +95,7 @@ export interface RowModelRuntimeBase<TRowData = unknown> {
 			groupId?: string;
 		}
 	) => void;
+	publishAsyncRowModelUpdate: (publication: AsyncRowModelPublication) => void;
 	reportRowPipelineFault: (operation: string, error: unknown, context?: Record<string, unknown>) => RuntimeFault;
 	requestLayoutTransitionCapture?: (reason: LayoutTransitionReason) => void;
 	getInstrumentation: () => GridInstrumentation;
