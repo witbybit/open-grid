@@ -411,4 +411,66 @@ describe('ServerSideRowModelController', () => {
 		controller.dispose();
 		store.destroy();
 	});
+
+	it('queues root block requests when maxConcurrentRequests is reached and drains after settlement', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name' }],
+			getRowId: (row) => row.id,
+		});
+		const first = deferred<{ rows: TestRow[]; rowCount: number }>();
+		const second = deferred<{ rows: TestRow[]; rowCount: number }>();
+		const getRows = vi.fn(({ startRow }: { startRow: number }) => {
+			if (startRow === 0) return first.promise;
+			if (startRow === 5) return second.promise;
+			throw new Error(`Unexpected startRow ${startRow}`);
+		});
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
+			columns: store.getState().columns,
+			datasource: { getRows },
+			blockSize: 5,
+			maxConcurrentRequests: 1,
+			getRowId: (row) => row.id,
+		});
+
+		controller.ensureRange(5, 9, 'test-queue-second-block');
+
+		expect(getRows).toHaveBeenCalledTimes(1);
+		expect(controller.getBlockSnapshots().map((snapshot) => [snapshot.blockIndex, snapshot.state])).toEqual([
+			[0, 'loadingInitial'],
+			[1, 'queued'],
+		]);
+		expect(controller.getVisualRow(5)).toEqual({
+			kind: 'loading',
+			id: 'loading:5',
+			rowIndex: 5,
+			editable: false,
+		});
+
+		first.resolve({
+			rows: Array.from({ length: 5 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			rowCount: 10,
+		});
+		await flushAsync();
+
+		expect(getRows).toHaveBeenCalledTimes(2);
+		expect(controller.getBlockSnapshots().map((snapshot) => [snapshot.blockIndex, snapshot.state])).toEqual([
+			[0, 'loaded'],
+			[1, 'loadingInitial'],
+		]);
+
+		second.resolve({
+			rows: Array.from({ length: 5 }, (_, index) => ({ id: `row-${index + 5}`, name: `Row ${index + 5}` })),
+			rowCount: 10,
+		});
+		await flushAsync();
+
+		expect(controller.getBlockSnapshots().map((snapshot) => [snapshot.blockIndex, snapshot.state])).toEqual([
+			[0, 'loaded'],
+			[1, 'loaded'],
+		]);
+		expect(controller.getVisualRow(5)).toMatchObject({ kind: 'data', rowId: 'row-5' });
+
+		controller.dispose();
+		store.destroy();
+	});
 });

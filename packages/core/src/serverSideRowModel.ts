@@ -376,9 +376,11 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 	private readonly getRowId: (row: TRowData) => string;
 	private blockSize: number;
 	private readonly maxBlocksInCache: number | null;
+	private readonly maxConcurrentRequests: number;
 	private disposed = false;
 	private queryGeneration = 0;
 	private requestSequence = 0;
+	private activeRequestCount = 0;
 	private rowCountState: ServerSideRowCountState = Object.freeze({ kind: 'unknown' });
 	private readonly blocks = new Map<number, ServerSideLoadedBlock<TRowData>>();
 	private readonly rowIdToIndex = new Map<string, number>();
@@ -394,6 +396,8 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 		this.blockSize = Math.max(1, options.blockSize ?? 100);
 		this.maxBlocksInCache =
 			typeof options.maxBlocksInCache === 'number' && options.maxBlocksInCache > 0 ? Math.floor(options.maxBlocksInCache) : null;
+		this.maxConcurrentRequests =
+			typeof options.maxConcurrentRequests === 'number' && options.maxConcurrentRequests > 0 ? Math.floor(options.maxConcurrentRequests) : 2;
 		this.runtime.initializeModel({ columns: options.columns ? [...options.columns] : undefined, getRowId: options.getRowId });
 		this.runtime.registerRowModel(this);
 		this.unsubscribers.push(
@@ -587,6 +591,9 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 		const lastBlock = Math.floor(Math.max(0, endRow) / this.blockSize);
 		for (let blockIndex = firstBlock; blockIndex <= lastBlock; blockIndex++) {
 			const block = this.blocks.get(blockIndex);
+			if (block?.state === 'queued') {
+				block.lastAccessedAt = Date.now();
+			}
 			if (!block || block.state === 'failedInitial') this.loadBlock(blockIndex, false);
 		}
 	}
@@ -607,7 +614,32 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 		const existing = this.blocks.get(blockIndex);
 		if (existing && !forceReload && (existing.state === 'loadingInitial' || existing.state === 'refreshing' || existing.state === 'loaded'))
 			return;
+		if (this.activeRequestCount >= this.maxConcurrentRequests) {
+			this.markQueuedBlock(blockIndex, existing);
+			return;
+		}
+		this.startBlockRequest(blockIndex);
+	}
 
+	private markQueuedBlock(blockIndex: number, existing: ServerSideLoadedBlock<TRowData> | undefined): void {
+		const startRow = blockIndex * this.blockSize;
+		const endRow = startRow + this.blockSize;
+		existing?.abortController?.abort();
+		this.blocks.set(blockIndex, {
+			blockIndex,
+			startRow,
+			endRow: endRow - 1,
+			state: 'queued',
+			rows: existing?.rows ?? [],
+			queryGeneration: this.queryGeneration,
+			lastAccessedAt: Date.now(),
+		});
+		this.publishServerSideState();
+	}
+
+	private startBlockRequest(blockIndex: number): void {
+		if (this.disposed) return;
+		const existing = this.blocks.get(blockIndex);
 		const startRow = blockIndex * this.blockSize;
 		const endRow = startRow + this.blockSize;
 		const requestId = ++this.requestSequence;
@@ -626,6 +658,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 			abortController,
 		};
 		this.blocks.set(blockIndex, block);
+		this.activeRequestCount++;
 		this.publishServerSideState();
 
 		const state = this.runtime.getState();
@@ -642,7 +675,10 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 		void this.datasource
 			.getRows(request, { signal: abortController.signal })
 			.then((result) => {
-				if (this.disposed || block.requestId !== requestId || block.queryGeneration !== this.queryGeneration) return;
+				if (this.disposed || block.requestId !== requestId || block.queryGeneration !== this.queryGeneration) {
+					this.finishBlockRequest();
+					return;
+				}
 				const normalized = normalizeServerSideGetRowsResult({
 					request,
 					result,
@@ -670,6 +706,7 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 					requestRenderReason: 'server-side-block-loaded',
 					includeOverlay: true,
 				});
+				this.finishBlockRequest();
 			})
 			.catch((error) => {
 				if (
@@ -677,8 +714,10 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 					this.disposed ||
 					block.requestId !== requestId ||
 					block.queryGeneration !== this.queryGeneration
-				)
+				) {
+					this.finishBlockRequest();
 					return;
+				}
 				block.state = block.rows.length > 0 ? 'failedRefresh' : 'failedInitial';
 				block.error = toErrorMessage(error);
 				block.abortController = undefined;
@@ -689,7 +728,24 @@ export class ServerSideRowModelController<TRowData = unknown> implements RowMode
 					requestRenderReason: 'server-side-block-failed',
 					includeOverlay: true,
 				});
+				this.finishBlockRequest();
 			});
+	}
+
+	private finishBlockRequest(): void {
+		this.activeRequestCount = Math.max(0, this.activeRequestCount - 1);
+		this.drainQueuedBlocks();
+	}
+
+	private drainQueuedBlocks(): void {
+		if (this.disposed) return;
+		while (this.activeRequestCount < this.maxConcurrentRequests) {
+			const nextQueuedBlock = [...this.blocks.values()]
+				.filter((block) => block.state === 'queued' && block.queryGeneration === this.queryGeneration)
+				.sort((a, b) => b.lastAccessedAt - a.lastAccessedAt || a.blockIndex - b.blockIndex)[0];
+			if (!nextQueuedBlock) return;
+			this.startBlockRequest(nextQueuedBlock.blockIndex);
+		}
 	}
 
 	private rebuildIndexes(): void {
