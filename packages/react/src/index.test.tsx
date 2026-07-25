@@ -1925,7 +1925,7 @@ describe('Grid pagination prop', () => {
 		expect(screen.getByText((content) => content.includes('of 5'))).toBeTruthy();
 	});
 
-	it('paginates server rows and shifts datasource fetches by page automatically', async () => {
+	it('loads server rows through the SSRM datasource contract', async () => {
 		const rows: TestRow[] = [
 			{ id: '1', name: 'Alice' },
 			{ id: '2', name: 'Bob' },
@@ -1933,9 +1933,9 @@ describe('Grid pagination prop', () => {
 			{ id: '4', name: 'Dane' },
 			{ id: '5', name: 'Elle' },
 		];
-		const getPage = vi.fn(async ({ page, pageSize }: { page: number; pageSize: number }) => ({
-			rows: rows.slice(page * pageSize, (page + 1) * pageSize),
-			totalRowCount: rows.length,
+		const getRows = vi.fn(async ({ startRow, endRow }: { startRow: number; endRow: number }) => ({
+			rows: rows.slice(startRow, endRow),
+			rowCount: rows.length,
 		}));
 
 		render(
@@ -1943,24 +1943,25 @@ describe('Grid pagination prop', () => {
 				<Grid
 					rowModelType='server'
 					columns={[{ field: 'name', header: 'Name', width: 120 }]}
-					datasource={{ getPage }}
+					datasource={{ getRows }}
 					getRowId={(row: TestRow) => row.id}
 					enableNavigation={false}
-					pagination={{ pageSize: 2 }}
+					blockSize={2}
 				/>
 			</div>
 		);
 
 		await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
-		expect(getPage.mock.calls.some(([params]) => params.page === 0 && params.pageSize === 2)).toBe(true);
-
-		// Wait until the core bar reflects the server totals (next page available), then page.
-		await waitFor(() => expect((screen.getByLabelText('Next page') as HTMLButtonElement).disabled).toBe(false));
-		fireEvent.click(screen.getByLabelText('Next page'));
-
-		await waitFor(() => expect(getPage.mock.calls.some(([params]) => params.page === 1 && params.pageSize === 2)).toBe(true));
-		await waitFor(() => expect(screen.getByText('Cara')).toBeTruthy());
-		expect(screen.queryByText('Alice')).toBeNull();
+		expect(screen.getByText('Bob')).toBeTruthy();
+		expect(getRows.mock.calls[0][0]).toEqual(
+			expect.objectContaining({
+				startRow: 0,
+				endRow: 2,
+				route: [],
+				sortModel: null,
+				filterModel: null,
+			})
+		);
 	});
 });
 

@@ -55,9 +55,10 @@ import type {
 	SelectAllRowsOptions,
 	RowModelType,
 	InfiniteDatasource,
-	ServerDatasource,
-	ServerPaginationOptions,
-	ServerPageState,
+	ServerSideDatasource,
+	ServerSideGetRowsRequest,
+	ServerSideGetRowsResult,
+	ServerSideStoreSnapshot,
 } from '@open-grid/core';
 import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from '@open-grid/core';
@@ -131,7 +132,7 @@ export type {
 
 export type StyleRule<TRowData = unknown> = GridStyleRule<TRowData>;
 
-export type { RowModelType, InfiniteDatasource, ServerDatasource, ServerPaginationOptions, ServerPageState };
+export type { RowModelType, InfiniteDatasource, ServerSideDatasource, ServerSideGetRowsRequest, ServerSideGetRowsResult, ServerSideStoreSnapshot };
 
 export type {
 	GridQueryModel,

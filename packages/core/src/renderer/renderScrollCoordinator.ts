@@ -29,6 +29,7 @@ import type { CanonicalGridCellPointer, GridCellRangeBounds } from '../api/GridA
 import { getColumnInstanceIdentity, type ColumnDef, type ColumnInstanceId } from '../columnDef.js';
 import { doesCanonicalCellPointerMatchColumn } from '../interaction/cellPointer.js';
 import { readInteractionState } from '../interaction/interactionState.js';
+import { asCapableRowModel } from '../rowModel.js';
 
 function isCellSelected(rowIndex: number, colIndex: number, selectionBounds: GridCellRangeBounds | null | undefined): boolean {
 	return (
@@ -161,7 +162,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			sameVisibleContentWindow(this.deps.rowRenderer.currentWindow, nextWindow)
 		) {
 			const rowModel = this.deps.engine.getRowModel();
-			if (rowModel && rowModel.getCapabilities().fullDataset === false && this.deps.engine.viewport.isScrollingFast) {
+			if (asCapableRowModel(rowModel)?.getCapabilities().fullDataset === false && this.deps.engine.viewport.isScrollingFast) {
 				this.state.flushPendingAfterScroll = true;
 				this.deps.engine.invalidation.invalidateViewport('scroll-idle');
 			}
