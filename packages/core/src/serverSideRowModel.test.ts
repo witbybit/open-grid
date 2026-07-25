@@ -531,6 +531,65 @@ describe('ServerSideRowModelController', () => {
 		store.destroy();
 	});
 
+	it('purges descendant child stores when a parent route is purged', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name' }],
+			getRowId: (row) => row.id,
+		});
+		const getRows = vi.fn(async (request) => {
+			if (request.route.length === 0) {
+				return {
+					rows: [{ id: 'group-emea', name: 'EMEA' }],
+					rowCount: 1,
+					groupMetadata: [
+						{
+							rowId: 'group-emea',
+							route: ['region', 'EMEA'],
+							groupKey: 'EMEA',
+							expandable: true,
+						},
+					],
+				};
+			}
+			return {
+				rows: [{ id: `row-${request.route.join('-')}`, name: request.route.join('/') }],
+				rowCount: 1,
+			};
+		});
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
+			columns: store.getState().columns,
+			datasource: { getRows },
+			blockSize: 5,
+			getRowId: (row) => row.id,
+		});
+
+		await flushAsync();
+		controller.toggleGroupExpanded('group:region=EMEA');
+		controller.refreshServerSide({ route: ['region', 'EMEA', 'country', 'DE'] });
+		await flushAsync();
+
+		expect(store.getServerSideStoreState().map((snapshot) => snapshot.storeId)).toEqual([
+			'',
+			'["region","EMEA","country","DE"]',
+			'["region","EMEA"]',
+		]);
+
+		controller.purgeServerSide({ route: ['region', 'EMEA'] });
+
+		expect(store.getServerSideStoreState()).toEqual([
+			expect.objectContaining({
+				storeId: '',
+				childStoreCount: 0,
+				rowCountState: { kind: 'known', count: 1 },
+			}),
+		]);
+		expect(controller.getBlockSnapshots()).toEqual([expect.objectContaining({ storeId: '', blockIndex: 0, state: 'loaded' })]);
+		expect(controller.isGroupExpanded('group:region=EMEA')).toBe(false);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('rejects stale root-store responses after sort changes and forwards the winning query snapshot', async () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name' }],

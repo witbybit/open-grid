@@ -1052,23 +1052,37 @@ export class ServerSideRowModelController<TRowData = unknown>
 	}
 
 	private purgeChildStore(route: ServerSideRoute): void {
-		const storeId = createServerSideRouteKey(route);
-		const store = this.childStores.get(storeId);
-		if (!store) return;
-		for (const block of store.blocks.values()) {
-			block.abortController?.abort();
+		const normalizedRoute = normalizeServerSideRoute(route);
+		let changed = false;
+		for (const [storeId, store] of this.childStores) {
+			if (!this.isRouteInSubtree(store.route, normalizedRoute)) continue;
+			for (const block of store.blocks.values()) {
+				block.abortController?.abort();
+			}
+			this.childStores.delete(storeId);
+			changed = true;
 		}
-		this.childStores.delete(storeId);
 		for (const [groupId, metadata] of this.groupMetadataByGroupId) {
-			if (createServerSideRouteKey(metadata.route) === storeId) {
+			if (this.isRouteInSubtree(metadata.route, normalizedRoute)) {
 				this.expandedGroupIds.delete(groupId);
+				changed = true;
 			}
 		}
-		this.publishServerSideState();
+		if (changed) this.publishServerSideState();
 	}
 
 	private getAllBlocks(): readonly ServerSideLoadedBlock<TRowData>[] {
 		return [this.blocks, ...[...this.childStores.values()].map((store) => store.blocks)].flatMap((blocks) => [...blocks.values()]);
+	}
+
+	private isRouteInSubtree(candidate: ServerSideRoute, ancestor: ServerSideRoute): boolean {
+		const normalizedCandidate = normalizeServerSideRoute(candidate);
+		const normalizedAncestor = normalizeServerSideRoute(ancestor);
+		if (normalizedCandidate.length < normalizedAncestor.length) return false;
+		for (let index = 0; index < normalizedAncestor.length; index++) {
+			if (normalizedCandidate[index] !== normalizedAncestor[index]) return false;
+		}
+		return true;
 	}
 
 	private toGroupPath(metadata: ServerSideGroupMetadata): GroupPathItem[] {
