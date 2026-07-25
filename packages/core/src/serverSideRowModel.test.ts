@@ -1,10 +1,31 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
 	createServerSideGetRowsRequest,
 	normalizeServerSideGetRowsResult,
 	resolveServerSideRowCountState,
+	ServerSideRowModelController,
 } from './serverSideRowModel.js';
 import type { ServerSideRowGroupColumn, ServerSideValueColumn } from './serverSideRowModel.js';
+import { GridStore } from './store.js';
+
+interface TestRow {
+	id: string;
+	name: string;
+}
+
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	let reject!: (error: unknown) => void;
+	const promise = new Promise<T>((promiseResolve, promiseReject) => {
+		resolve = promiseResolve;
+		reject = promiseReject;
+	});
+	return { promise, resolve, reject };
+}
+
+async function flushAsync(): Promise<void> {
+	await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 describe('serverSideRowModel request factory', () => {
 	it('creates immutable root request defaults', () => {
@@ -75,18 +96,10 @@ describe('serverSideRowModel request factory', () => {
 	});
 
 	it('rejects invalid block ranges', () => {
-		expect(() => createServerSideGetRowsRequest({ startRow: -1, endRow: 10 })).toThrow(
-			'Invalid server-side request startRow: -1'
-		);
-		expect(() => createServerSideGetRowsRequest({ startRow: 10.5, endRow: 20 })).toThrow(
-			'Invalid server-side request startRow: 10.5'
-		);
-		expect(() => createServerSideGetRowsRequest({ startRow: 20, endRow: 10 })).toThrow(
-			'Invalid server-side request endRow: 10'
-		);
-		expect(() => createServerSideGetRowsRequest({ startRow: 0, endRow: 10.5 })).toThrow(
-			'Invalid server-side request endRow: 10.5'
-		);
+		expect(() => createServerSideGetRowsRequest({ startRow: -1, endRow: 10 })).toThrow('Invalid server-side request startRow: -1');
+		expect(() => createServerSideGetRowsRequest({ startRow: 10.5, endRow: 20 })).toThrow('Invalid server-side request startRow: 10.5');
+		expect(() => createServerSideGetRowsRequest({ startRow: 20, endRow: 10 })).toThrow('Invalid server-side request endRow: 10');
+		expect(() => createServerSideGetRowsRequest({ startRow: 0, endRow: 10.5 })).toThrow('Invalid server-side request endRow: 10.5');
 	});
 });
 
@@ -129,17 +142,13 @@ describe('serverSideRowModel row-count state', () => {
 	});
 
 	it('rejects contradictory terminal metadata', () => {
-		expect(() =>
-			resolveServerSideRowCountState({ startRow: 0, endRow: 100, returnedRowCount: 100, rowCount: 150, lastRow: 151 })
-		).toThrow('Server-side datasource returned conflicting rowCount 150 and lastRow 151');
-		expect(() =>
-			resolveServerSideRowCountState({ startRow: 200, endRow: 300, returnedRowCount: 25, hasMore: false, rowCount: 300 })
-		).toThrow(
+		expect(() => resolveServerSideRowCountState({ startRow: 0, endRow: 100, returnedRowCount: 100, rowCount: 150, lastRow: 151 })).toThrow(
+			'Server-side datasource returned conflicting rowCount 150 and lastRow 151'
+		);
+		expect(() => resolveServerSideRowCountState({ startRow: 200, endRow: 300, returnedRowCount: 25, hasMore: false, rowCount: 300 })).toThrow(
 			'Server-side datasource returned hasMore false but rowCount 300 does not match the loaded range ending at 224'
 		);
-		expect(() =>
-			resolveServerSideRowCountState({ startRow: 200, endRow: 300, returnedRowCount: 25, hasMore: true })
-		).toThrow(
+		expect(() => resolveServerSideRowCountState({ startRow: 200, endRow: 300, returnedRowCount: 25, hasMore: true })).toThrow(
 			'Server-side datasource returned 25 rows for range 200-299 but hasMore true still requires rows within that range'
 		);
 	});
@@ -154,9 +163,9 @@ describe('serverSideRowModel row-count state', () => {
 		expect(() => resolveServerSideRowCountState({ startRow: 0, endRow: 10, returnedRowCount: 11 })).toThrow(
 			'Server-side datasource returned 11 rows for requested range 0-9'
 		);
-		expect(() =>
-			resolveServerSideRowCountState({ startRow: 10, endRow: 20, returnedRowCount: 5, rowCount: 14 })
-		).toThrow('Server-side datasource returned rowCount 14, which is smaller than the loaded range ending at 14');
+		expect(() => resolveServerSideRowCountState({ startRow: 10, endRow: 20, returnedRowCount: 5, rowCount: 14 })).toThrow(
+			'Server-side datasource returned rowCount 14, which is smaller than the loaded range ending at 14'
+		);
 	});
 });
 
@@ -232,5 +241,102 @@ describe('serverSideRowModel result normalization', () => {
 				},
 			})
 		).toThrow('Server-side datasource returned 3 rows for requested range 0-1');
+	});
+});
+
+describe('ServerSideRowModelController', () => {
+	it('loads the root store block and publishes committed rows through SSRM state', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name' }],
+			getRowId: (row) => row.id,
+		});
+		const getRows = vi.fn(async () => ({
+			rows: [
+				{ id: 'a', name: 'Alpha' },
+				{ id: 'b', name: 'Beta' },
+			],
+			rowCount: 2,
+		}));
+
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
+			columns: store.getState().columns,
+			datasource: { getRows },
+			blockSize: 5,
+			getRowId: (row) => row.id,
+		});
+
+		expect(getRows).toHaveBeenCalledTimes(1);
+		expect(controller.getVisualRowCount()).toBe(5);
+		expect(controller.getVisualRow(0)?.kind).toBe('loading');
+		expect(store.getState().serverSide?.loading).toBe(true);
+
+		await flushAsync();
+
+		expect(controller.getVisualRowCount()).toBe(2);
+		expect(controller.getRowCountKind()).toBe('known');
+		expect(controller.getVisualRow(0)).toMatchObject({ kind: 'data', rowId: 'a' });
+		expect(controller.getVisualRow(1)).toMatchObject({ kind: 'data', rowId: 'b' });
+		expect(store.getServerSideStoreState()).toEqual([
+			{
+				storeId: '',
+				route: [],
+				level: 0,
+				rowCountState: { kind: 'known', count: 2 },
+				blockCount: 1,
+				loadingBlockCount: 0,
+				failedBlockCount: 0,
+				childStoreCount: 0,
+			},
+		]);
+		expect(controller.getBlockSnapshots()).toEqual([
+			expect.objectContaining({
+				storeId: '',
+				blockIndex: 0,
+				startRow: 0,
+				endRow: 4,
+				state: 'loaded',
+				committedRowCount: 2,
+			}),
+		]);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('rejects stale root-store responses after sort changes and forwards the winning query snapshot', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name' }],
+			getRowId: (row) => row.id,
+		});
+		const first = deferred<{ rows: TestRow[]; rowCount: number }>();
+		const second = deferred<{ rows: TestRow[]; rowCount: number }>();
+		const getRows = vi.fn((request) => {
+			if (getRows.mock.calls.length === 1) return first.promise;
+			expect(request.sortModel).toEqual([{ colId: 'name', sort: 'desc' }]);
+			return second.promise;
+		});
+
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
+			columns: store.getState().columns,
+			datasource: { getRows },
+			blockSize: 5,
+			getRowId: (row) => row.id,
+		});
+
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+		expect(getRows).toHaveBeenCalledTimes(2);
+
+		first.resolve({ rows: [{ id: 'old', name: 'Old' }], rowCount: 1 });
+		await flushAsync();
+		expect(controller.getVisualRow(0)?.kind).toBe('loading');
+
+		second.resolve({ rows: [{ id: 'new', name: 'New' }], rowCount: 1 });
+		await flushAsync();
+
+		expect(controller.getVisualRow(0)).toMatchObject({ kind: 'data', rowId: 'new' });
+		expect(controller.getRawRowById('old')).toBeNull();
+
+		controller.dispose();
+		store.destroy();
 	});
 });
