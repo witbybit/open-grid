@@ -1,6 +1,5 @@
 import { ClientRowModelController, type ClientRowModelOptions } from './rowModel.js';
 import { InfiniteRowModelController, type InfiniteRowModelOptions } from './infiniteRowModel.js';
-import { ServerPageRowModelController, type ServerPageRowModelOptions } from './serverPageRowModel.js';
 import { ServerSideRowModelController, type ServerSideRowModelOptions } from './serverSideRowModel.js';
 import { GridStore as GridRuntime } from './store.js';
 import type { GridApi, RowSelectionMode, RowSelectionOptions } from './api/GridApi.js';
@@ -60,17 +59,6 @@ export interface ClientGridOptions<TRowData> extends ClientRowModelOptions<TRowD
 
 /** Options for creating an infinite (block/range loading) grid. */
 export interface InfiniteGridOptions<TRowData> extends InfiniteRowModelOptions<TRowData> {
-	initialState?: Partial<GridInitialState<TRowData>>;
-	rowSelection?: RowSelectionMode | RowSelectionOptions;
-	persistence?: string | GridPersistenceAdapter;
-	workspace?: GridWorkspaceAdapter;
-	capabilities?: GridCapabilitiesConfig<TRowData>;
-	/** Unified Data Integrity pipeline — validation, quality, diff, live stream, conflict resolution. */
-	dataIntegrity?: GridDataIntegrityConfig<TRowData>;
-}
-
-/** Options for creating a server-page (explicit page loading) grid. */
-export interface ServerPageGridOptions<TRowData> extends ServerPageRowModelOptions<TRowData> {
 	initialState?: Partial<GridInitialState<TRowData>>;
 	rowSelection?: RowSelectionMode | RowSelectionOptions;
 	persistence?: string | GridPersistenceAdapter;
@@ -295,76 +283,6 @@ export function createInfiniteGrid<TRowData>(options: InfiniteGridOptions<TRowDa
 	);
 
 	const controller = new InfiniteRowModelController<TRowData>(runtime.getInfiniteRowModelRuntime(), { ...options, columns: resolvedColumns });
-	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, runtime);
-	const workspaceController = wireGridWorkspace(options, runtime, persistenceController);
-	const api = createGridRuntimeComposition({
-		runtime,
-		destroy: () => {
-			persistenceController?.destroy();
-			workspaceController?.destroy();
-			controller.dispose();
-			runtime.destroy();
-		},
-		persistenceAdapter: adapter,
-		persistenceController,
-		workspaceController,
-	});
-
-	if (loadedPersistedState) {
-		api.applyGridState(loadedPersistedState);
-	}
-	if (asyncLoad) {
-		asyncLoad
-			.then((saved) => {
-				if (saved) api.applyGridState(saved);
-			})
-			.catch(() => {
-				/* load failure — grid stays in default state */
-			});
-	}
-	return api;
-}
-
-export function createServerPageGrid<TRowData>(options: ServerPageGridOptions<TRowData>): GridApi<TRowData> {
-	const { persistence: rawPersistence } = options;
-	const adapter = typeof rawPersistence === 'string' ? createLocalStorageAdapter(rawPersistence) : rawPersistence;
-
-	let mergedInitial: Partial<GridInitialState<TRowData>> = options.initialState ?? {};
-	let loadedPersistedState: PersistedGridState | null = null;
-	let asyncLoad: Promise<PersistedGridState | null> | undefined;
-
-	if (adapter) {
-		const loaded = adapter.load();
-		if (loaded instanceof Promise) {
-			asyncLoad = loaded;
-		} else if (loaded) {
-			loadedPersistedState = loaded;
-		}
-	}
-	const selected = withRowSelectionColumn(options.columns, mergedInitial, options.rowSelection);
-	mergedInitial = selected.initialState;
-
-	let resolvedColumns = mergedInitial.columns ?? selected.columns;
-	if (!mergedInitial.pinnedColumns) {
-		const leftCols = resolvedColumns.filter((c) => c.pinned === 'left');
-		const rightCols = resolvedColumns.filter((c) => c.pinned === 'right');
-		if (leftCols.length > 0 || rightCols.length > 0) {
-			const centerCols = resolvedColumns.filter((c) => !c.pinned);
-			resolvedColumns = [...leftCols, ...centerCols, ...rightCols];
-			mergedInitial = { ...mergedInitial, pinnedColumns: { left: leftCols.length, right: rightCols.length } };
-		}
-	}
-	const runtime = new GridRuntime<TRowData>(
-		{
-			columns: resolvedColumns,
-			getRowId: options.getRowId,
-			columnWidths: buildColumnWidths(resolvedColumns),
-			...mergedInitial,
-		},
-		{ capabilities: options.capabilities, dataIntegrity: options.dataIntegrity }
-	);
-
-	const controller = new ServerPageRowModelController<TRowData>(runtime.getServerPageRowModelRuntime(), { ...options, columns: resolvedColumns });
 	const persistenceController = wireGridPersistence({ ...options, persistence: adapter }, runtime);
 	const workspaceController = wireGridWorkspace(options, runtime, persistenceController);
 	const api = createGridRuntimeComposition({

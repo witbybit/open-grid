@@ -610,14 +610,14 @@ describe('Architecture guardrails', () => {
 		expect(rowModelContent).not.toContain('export interface ServerControllableRowModel<TRowData = unknown>');
 		expect(rowModelContent).not.toContain('export function asServerControllableRowModel<TRowData = unknown>(');
 		expect(storeContent).toContain('private getClientStructuralRowModel(): ClientStructuralRowModel<TRowData> | null');
-		// getServerControllableRowModel is removed — assertInfiniteRowModel / assertServerPageRowModel used instead.
+		// getServerControllableRowModel is removed — assertInfiniteRowModel / assertserverSideRowModel used instead.
 		expect(storeContent).not.toContain('private getServerControllableRowModel():');
 		expect(storeContent).toContain('return asClientStructuralRowModel(this.getRowModel());');
 		expect(storeContent).toContain('return asRowExpansionStateReadableModel(this.getRowModel());');
 		// Capability-checked — no silent optional chaining.
 		expect(storeContent).not.toContain('.getInfiniteControllableRowModel()?.purgeCache()');
 		expect(storeContent).not.toContain('.getInfiniteControllableRowModel()?.setDatasource(');
-		expect(storeContent).not.toContain('.getServerPageControllableRowModel()?.goToPage(');
+		expect(storeContent).not.toContain('.getserverSideControllableRowModel()?.goToPage(');
 		expect(storeContent).not.toContain('this.getRowModel()?.setRows?.(');
 		expect(storeContent).not.toContain('this.getRowModel()?.updateRows?.(');
 		expect(storeContent).not.toContain('this.getRowModel()?.purgeCache?.(');
@@ -640,7 +640,7 @@ describe('Architecture guardrails', () => {
 		expect(rowModelContent).toContain('public reconcileAfterDataWrite(');
 		// Unified cell write interface: all three row model types expose writeCellValueStructurally.
 		const infiniteContent = readFileSync(resolve(CORE_ROOT, 'src', 'infiniteRowModel.ts'), 'utf-8');
-		const serverContent = readFileSync(resolve(CORE_ROOT, 'src', 'serverPageRowModel.ts'), 'utf-8');
+		const serverContent = readFileSync(resolve(CORE_ROOT, 'src', 'serverSideRowModel.ts'), 'utf-8');
 		expect(infiniteContent).toContain('public writeCellValueStructurally =');
 		expect(serverContent).toContain('public writeCellValueStructurally =');
 		// Neither falls back to the old direct-mutate setCellValue path.
@@ -675,11 +675,10 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'paginationBarRenderer.ts'), 'utf-8');
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
 		expect(rowModelContent).toContain('export function asPageWindowCapableRowModel(');
-		// asServerControllableRowModel is removed — asServerPageControllableRowModel is the canonical interface.
-		expect(rowModelContent).not.toContain('export function asServerControllableRowModel<TRowData = unknown>(');
+		expect(rowModelContent).not.toContain('asServerPageControllableRowModel');
 		expect(rowModelContent).toContain('export function asDataRowCountModel(');
 		expect(content).toContain('return asPageWindowCapableRowModel(this.engine.getRowModel());');
-		expect(content).toContain('return asServerPageControllableRowModel(this.engine.getRowModel());');
+		expect(content).not.toContain('asServerPageControllableRowModel');
 		expect(content).not.toContain('rowModel?.getPageWindow?.()');
 		expect(content).not.toContain('rowModel?.goToPage');
 	});
@@ -703,13 +702,12 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('id: `loading:${r}`');
 	});
 
-	it('row-model naming keeps server-page explicit and does not imply full SSRM support', () => {
+	it('row-model naming keeps server-side explicit and maps public server to SSRM', () => {
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
 		const gridStateContent = readFileSync(resolve(CORE_ROOT, 'src', 'state', 'GridState.ts'), 'utf-8');
-		expect(rowModelContent).toContain("export type InternalRowModelKind = 'client' | 'infinite' | 'server-page';");
-		expect(rowModelContent).toContain('full SSRM support when the current async paged model is specifically server-page');
+		expect(rowModelContent).toContain("export type InternalRowModelKind = 'client' | 'infinite' | 'server-side';");
 		expect(gridStateContent).toContain("export type RowModelType = 'client' | 'infinite' | 'server';");
-		expect(gridStateContent).toContain('implementation in core is the server-page row model rather than a full SSRM.');
+		expect(gridStateContent).toContain('server-side row model (SSRM)');
 	});
 
 	it('GridFeatureContext does not expose raw side-effect primitives', () => {
@@ -754,7 +752,7 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('row models do not reach through store.engine', () => {
-		const files = ['rowModel.ts', 'infiniteRowModel.ts', 'serverPageRowModel.ts'];
+		const files = ['rowModel.ts', 'infiniteRowModel.ts', 'serverSideRowModel.ts'];
 		for (const file of files) {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not use store.engine reach-through`).not.toContain('store.engine.');
@@ -762,7 +760,7 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('row models do not depend on the concrete GridStore type', () => {
-		const files = ['rowModel.ts', 'infiniteRowModel.ts', 'serverPageRowModel.ts'];
+		const files = ['rowModel.ts', 'infiniteRowModel.ts', 'serverSideRowModel.ts'];
 		for (const file of files) {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not reference GridStore`).not.toContain('GridStore<');
@@ -781,7 +779,7 @@ describe('Architecture guardrails', () => {
 			'engine/CellNotificationController.ts',
 			'engine/createRowModelRuntimes.ts',
 			'infiniteRowModel.ts',
-			'serverPageRowModel.ts',
+			'serverSideRowModel.ts',
 			'rows/stages/aggregateStage.ts',
 			'renderer/fillDragController.ts',
 			'renderer/headerMenuController.ts',
@@ -797,14 +795,14 @@ describe('Architecture guardrails', () => {
 		const runtimePorts = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'runtimePorts.ts'), 'utf-8');
 		expect(runtimePorts).toContain('export interface ClientRowModelRuntime');
 		expect(runtimePorts).toContain('export interface InfiniteRowModelRuntime');
-		expect(runtimePorts).toContain('export interface ServerPageRowModelRuntime');
+		expect(runtimePorts).toContain('export interface ServerSideRowModelRuntime');
 		// Legacy ServerRowModelRuntime alias must be removed
 		expect(runtimePorts).not.toContain('ServerRowModelRuntime');
 
 		const createGrid = readFileSync(resolve(CORE_ROOT, 'src', 'createGrid.ts'), 'utf-8');
 		expect(createGrid).toContain('runtime.getClientRowModelRuntime()');
 		expect(createGrid).toContain('runtime.getInfiniteRowModelRuntime()');
-		expect(createGrid).toContain('runtime.getServerPageRowModelRuntime()');
+		expect(createGrid).toContain('runtime.getServerSideRowModelRuntime()');
 		// Legacy createServerGrid must be removed
 		expect(createGrid).not.toContain('runtime.getServerRowModelRuntime()');
 		expect(createGrid).not.toContain('createServerGrid');
@@ -816,16 +814,16 @@ describe('Architecture guardrails', () => {
 		const runtimePorts = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'runtimePorts.ts'), 'utf-8');
 		const runtimeFactory = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'createRowModelRuntimes.ts'), 'utf-8');
 		const infiniteContent = readFileSync(resolve(CORE_ROOT, 'src', 'infiniteRowModel.ts'), 'utf-8');
-		const serverPageContent = readFileSync(resolve(CORE_ROOT, 'src', 'serverPageRowModel.ts'), 'utf-8');
+		const serverSideContent = readFileSync(resolve(CORE_ROOT, 'src', 'serverSideRowModel.ts'), 'utf-8');
 
 		expect(runtimePorts).toContain('export interface AsyncRowModelPublication');
 		expect(runtimePorts).toContain('publishAsyncRowModelUpdate: (publication: AsyncRowModelPublication) => void;');
 		expect(runtimeFactory).toContain('function publishAsyncRowModelUpdate<TRowData>');
 		expect(runtimeFactory).toContain('store.engine.applyRowModelRefreshInvalidation(publication.refreshResult');
 		expect(infiniteContent).toContain('this.runtime.publishAsyncRowModelUpdate({');
-		expect(serverPageContent).toContain('this.runtime.publishAsyncRowModelUpdate({');
+		expect(serverSideContent).toContain('this.runtime.publishAsyncRowModelUpdate({');
 		expect(infiniteContent).not.toContain('this.runtime.applyRefreshInvalidation(');
-		expect(serverPageContent).not.toContain('this.runtime.applyRefreshInvalidation(');
+		expect(serverSideContent).not.toContain('this.runtime.applyRefreshInvalidation(');
 	});
 
 	it('navigation and contextMenu plugins do not depend on GridStore downcasts', () => {
@@ -2772,15 +2770,15 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain('export class CapabilityDrivenGridIntegrityRowProvider');
 			expect(content).not.toContain('ClientGridIntegrityRowProvider');
 			expect(content).not.toContain('InfiniteGridIntegrityRowProvider');
-			expect(content).not.toContain('ServerPageGridIntegrityRowProvider');
+			expect(content).not.toContain('serverSideGridIntegrityRowProvider');
 		});
 
 		it('non-client filteredRows and full-dataset scopes are explicitly unsupported instead of silently degraded', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridIntegrityRowProvider.ts'), 'utf-8');
 			expect(content).toContain('Infinite row model cannot authoritatively scan allRows without a serverProvided report.');
 			expect(content).toContain('Infinite row model cannot authoritatively expose filteredRows beyond currently loaded blocks.');
-			expect(content).toContain('Server-page row model cannot authoritatively scan allRows without a serverProvided report.');
-			expect(content).toContain('Server-page row model cannot authoritatively expose filteredRows outside the current page.');
+			expect(content).toContain('server-side row model cannot authoritatively scan allRows without a serverProvided report.');
+			expect(content).toContain('server-side row model cannot authoritatively expose filteredRows outside the loaded server-side stores.');
 		});
 
 		it('GridEngine wires integrity through the unified provider factory and rejects row patches for unavailable rows', () => {
@@ -2790,7 +2788,7 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain("reason: 'row unavailable in current row-model scope'");
 			expect(content).not.toContain('new ClientGridIntegrityRowProvider');
 			expect(content).not.toContain('new InfiniteGridIntegrityRowProvider');
-			expect(content).not.toContain('new ServerPageGridIntegrityRowProvider');
+			expect(content).not.toContain('new serverSideGridIntegrityRowProvider');
 		});
 	});
 

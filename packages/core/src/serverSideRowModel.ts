@@ -1,4 +1,4 @@
-import type { ColumnDef } from './columnDef.js';
+import { type ColumnDef, setValueByPath } from './columnDef.js';
 import type { ServerSideRowModelRuntime } from './engine/runtimePorts.js';
 import type {
 	AggregationDef,
@@ -9,6 +9,7 @@ import type {
 	RowModel,
 	RowModelCapabilities,
 	RowModelRefreshResult,
+	RowModelWriteResult,
 	RowRangeLoadState,
 	RowExpansionCapableModel,
 	RowExpansionStateReadableModel,
@@ -17,6 +18,7 @@ import type {
 } from './rowModel.js';
 import type { GridQueryModel } from './query/GridQueryModel.js';
 import { GridEventName } from './api/GridEvents.js';
+import type { RowSelectionScope } from './api/GridApi.js';
 import { RowNode } from './rowNode.js';
 import { toDataVisualRowId, toFailedVisualRowId, toGroupVisualRowId, toLoadingVisualRowId, type GroupPathItem } from './rows/visualRowIds.js';
 import type { VisualRow } from './visualRow.js';
@@ -554,14 +556,8 @@ export class ServerSideRowModelController<TRowData = unknown>
 					path,
 					depth: path.length,
 					expanded: this.expandedGroupIds.has(groupId),
-					childCount:
-						this.getChildStore(groupMetadata.route)?.rowCountState.kind === 'known'
-							? this.getChildStore(groupMetadata.route)!.rowCountState.count
-							: 0,
-					leafCount:
-						this.getChildStore(groupMetadata.route)?.rowCountState.kind === 'known'
-							? this.getChildStore(groupMetadata.route)!.rowCountState.count
-							: 0,
+					childCount: this.getKnownChildStoreRowCount(groupMetadata.route),
+					leafCount: this.getKnownChildStoreRowCount(groupMetadata.route),
 					selectable: true,
 					editable: false,
 				};
@@ -662,6 +658,49 @@ export class ServerSideRowModelController<TRowData = unknown>
 	public getRawRowById(rowId: string): TRowData | null {
 		return this.getRowNodeById(rowId)?.data ?? null;
 	}
+
+	public getSelectableDataRowIds(scope: RowSelectionScope = 'loaded'): string[] {
+		if (scope === 'all' || scope === 'filtered') return [];
+		return [...this.blocks.values()]
+			.filter((block) => block.state === 'loaded' || block.state === 'refreshing' || block.state === 'failedRefresh')
+			.sort((a, b) => a.blockIndex - b.blockIndex)
+			.flatMap((block) => block.rows.map((node) => node.id));
+	}
+
+	public writeCellValueStructurally = (
+		rowId: string,
+		colField: string,
+		value: unknown,
+		options?: { bypassValueSetter?: boolean }
+	): RowModelWriteResult<TRowData> => {
+		const node = this.getRowNodeById(rowId);
+		if (!node) return { visualChange: 'none' };
+
+		const col = this.runtime.getColumnDef(colField);
+		const oldValue = this.runtime.getCellValue(rowId, colField);
+		const updatedRow = { ...(node.data as object) } as TRowData;
+
+		if (!options?.bypassValueSetter && col?.valueSetter) {
+			const result = col.valueSetter({ value, oldValue, row: updatedRow, colField, abort: () => {} });
+			if (!(result instanceof Promise) && !result) return { visualChange: 'none' };
+		} else {
+			setValueByPath(updatedRow as Record<string, unknown>, colField, value);
+		}
+
+		node.setData(updatedRow);
+
+		const state = this.runtime.getState();
+		const affectsServerOrder =
+			(state.sortModel?.some((sort) => sort.colId === colField) ?? false) || (state.filterModel != null && colField in state.filterModel);
+		if (affectsServerOrder) this.purgeServerSide();
+
+		return {
+			updatedNodes: [node],
+			changedFieldsByRow: new Map([[rowId, new Set([colField])]]),
+			changedValuesByRow: new Map([[rowId, new Map([[colField, { oldValue, newValue: value }]])]]),
+			visualChange: 'none',
+		};
+	};
 
 	public getKnownRowCount(): number | null {
 		return this.rowCountState.kind === 'known' ? this.rowCountState.count : null;
@@ -1001,6 +1040,11 @@ export class ServerSideRowModelController<TRowData = unknown>
 
 	private getChildStore(route: ServerSideRoute): ServerSideRuntimeStore<TRowData> | null {
 		return this.childStores.get(createServerSideRouteKey(route)) ?? null;
+	}
+
+	private getKnownChildStoreRowCount(route: ServerSideRoute): number {
+		const rowCountState = this.getChildStore(route)?.rowCountState;
+		return rowCountState?.kind === 'known' ? rowCountState.count : 0;
 	}
 
 	private getOrCreateChildStore(route: ServerSideRoute): ServerSideRuntimeStore<TRowData> {

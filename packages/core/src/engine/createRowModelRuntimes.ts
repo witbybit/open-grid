@@ -4,7 +4,6 @@ import type {
 	ClientRowModelRuntime,
 	InfiniteRowModelRuntime,
 	RowModelRuntimeStoreBridge,
-	ServerPageRowModelRuntime,
 	ServerSideRowModelRuntime,
 } from './runtimePorts.js';
 
@@ -91,41 +90,6 @@ export function createInfiniteRowModelRuntime<TRowData>(store: RowModelRuntimeSt
 				error,
 				context: { blockIndex },
 			}),
-		getInstrumentation: () => store.getInstrumentation(),
-	};
-}
-
-export function createServerPageRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ServerPageRowModelRuntime<TRowData> {
-	return {
-		getState: store.getState,
-		initializeModel: (model) => store.engine.initializeRowModelState(model),
-		registerRowModel: store.registerRowModel,
-		addEventListener: store.addEventListener,
-		getRowId: store.getRowId,
-		getColumnDef: store.getColumnDef,
-		getCellValue: store.getCellValue,
-		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
-		applyRefreshInvalidation: (refreshResult, options) => store.engine.applyRowModelRefreshInvalidation(refreshResult, options),
-		publishAsyncRowModelUpdate: (publication) => publishAsyncRowModelUpdate(store, publication),
-		reportRowPipelineFault: (operation, error, context) =>
-			store.reportRuntimeFault({
-				source: 'row-pipeline',
-				operation,
-				error,
-				context,
-			}),
-		requestLayoutTransitionCapture: (reason) => store.engine.requestLayoutTransitionCapture(reason),
-		clearFormulas: () => store.engine.clearFormulas(),
-		setLoadingState: (loading) => store.engine.setRowModelLoadingState(loading),
-		dispatchServerPageLoadingStarted: (payload) => store.dispatchEvent(GridEventName.serverPageLoadingStarted, payload),
-		dispatchServerPageLoaded: (payload) => {
-			store.dispatchEvent(GridEventName.serverPageLoaded, payload);
-			store.dispatchEvent(GridEventName.serverPageChanged, payload);
-		},
-		dispatchServerPageLoadFailed: (payload) => store.dispatchEvent(GridEventName.serverPageLoadFailed, payload),
-		setServerPageState: (state) => store.engine.setServerPageState(state),
-		setServerSideState: (state) => store.engine.setServerSideState(state),
-		publishServerSideState: (state) => store.engine.publishServerSideState(state),
 		getInstrumentation: () => store.getInstrumentation(),
 	};
 }

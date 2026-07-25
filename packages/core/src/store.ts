@@ -5,7 +5,6 @@ import type {
 	RowModel,
 	ClientStructuralRowModel,
 	InfiniteControllableRowModel,
-	ServerPageControllableRowModel,
 	ServerSideControllableRowModel,
 	RowExpansionStateReadableModel,
 	RowModelCapability,
@@ -19,7 +18,6 @@ import {
 	asAllDataNodesCapableRowModel,
 	asRowExpansionStateReadableModel,
 	asInfiniteControllableRowModel,
-	asServerPageControllableRowModel,
 	asServerSideControllableRowModel,
 	asCapableRowModel,
 	UnsupportedRowModelOperationError,
@@ -27,17 +25,11 @@ import {
 import type { GridDomainVersions } from './state/GridDomainVersions.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
 import type { InfiniteDatasource } from './infiniteRowModel.js';
-import type { ServerDatasource, ServerPageState } from './serverPageRowModel.js';
 import type { ServerSideDatasource, ServerSideRefreshOptions, ServerSideStoreSnapshot } from './serverSideRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
-import type { ClientRowModelRuntime, InfiniteRowModelRuntime, ServerPageRowModelRuntime, ServerSideRowModelRuntime } from './engine/runtimePorts.js';
-import {
-	createClientRowModelRuntime,
-	createInfiniteRowModelRuntime,
-	createServerPageRowModelRuntime,
-	createServerSideRowModelRuntime,
-} from './engine/createRowModelRuntimes.js';
+import type { ClientRowModelRuntime, InfiniteRowModelRuntime, ServerSideRowModelRuntime } from './engine/runtimePorts.js';
+import { createClientRowModelRuntime, createInfiniteRowModelRuntime, createServerSideRowModelRuntime } from './engine/createRowModelRuntimes.js';
 import type { GridRuntimePorts, RuntimePortBinding, RuntimePortBindResult } from './engine/rendererPorts.js';
 import { HEADLESS_PORTS } from './engine/rendererPorts.js';
 import { type GridInstrumentation, NOOP_INSTRUMENTATION } from './diagnostics/GridInstrumentation.js';
@@ -157,7 +149,7 @@ export { validateRowIds } from './ids.js';
 // prettier-ignore
 const _FALLBACK_CAPS: Record<RowModelType, RowModelCapabilities> = {
 	infinite: { fullDataset: false, loadedDataset: true, pagedDataset: false, clientMutation: false, loadedRowMutation: true, pageRowMutation: false, transactions: false, rowOrder: false, blockLoading: true, serverPagination: false, clientSort: false, clientFilter: false, serverSort: true, serverFilter: true, clientGrouping: false, clientTree: false, aggregation: false, masterDetail: false, allRowSelection: false, loadedRowSelection: true, pageRowSelection: false },
-	server:   { fullDataset: false, loadedDataset: false, pagedDataset: true, clientMutation: false, loadedRowMutation: false, pageRowMutation: true, transactions: false, rowOrder: false, blockLoading: false, serverPagination: true, clientSort: false, clientFilter: false, serverSort: true, serverFilter: true, clientGrouping: false, clientTree: false, aggregation: false, masterDetail: false, allRowSelection: false, loadedRowSelection: false, pageRowSelection: true },
+	server:   { fullDataset: false, loadedDataset: true, pagedDataset: false, clientMutation: false, loadedRowMutation: true, pageRowMutation: false, transactions: false, rowOrder: false, blockLoading: true, serverPagination: false, clientSort: false, clientFilter: false, serverSort: true, serverFilter: true, clientGrouping: false, clientTree: false, aggregation: false, masterDetail: false, allRowSelection: false, loadedRowSelection: true, pageRowSelection: false },
 	client:   { fullDataset: true, loadedDataset: false, pagedDataset: false, clientMutation: true, loadedRowMutation: false, pageRowMutation: false, transactions: true, rowOrder: true, blockLoading: false, serverPagination: false, clientSort: true, clientFilter: true, serverSort: false, serverFilter: false, clientGrouping: true, clientTree: true, aggregation: true, masterDetail: true, allRowSelection: true, loadedRowSelection: false, pageRowSelection: false },
 };
 
@@ -755,11 +747,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 				if (!rowModel) {
 					return { status: 'rejected', reason: 'row model unavailable' } as const;
 				}
-				const serverPageModel = asServerPageControllableRowModel(rowModel);
-				if (serverPageModel) {
-					serverPageModel.reloadPage('row-node-retry-load');
-					return { status: 'applied', changeId: Date.now(), faults: [] } as const;
-				}
 				rowModel.ensureRange(rowIndex, rowIndex, 'row-node-retry-load');
 				return { status: 'applied', changeId: Date.now(), faults: [] } as const;
 			},
@@ -1008,10 +995,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return asInfiniteControllableRowModel(this.getRowModel());
 	}
 
-	private getServerPageControllableRowModel(): ServerPageControllableRowModel<TRowData> | null {
-		return asServerPageControllableRowModel(this.getRowModel());
-	}
-
 	private getServerSideControllableRowModel(): ServerSideControllableRowModel<TRowData> | null {
 		return asServerSideControllableRowModel(this.getRowModel());
 	}
@@ -1024,12 +1007,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		const m = this.getInfiniteControllableRowModel();
 		if (!m)
 			throw new UnsupportedRowModelOperationError({ operation: op, rowModelType: this.getRowModelType(), supportedRowModels: ['infinite'] });
-		return m;
-	}
-
-	private assertServerPageRowModel(op: string): ServerPageControllableRowModel<TRowData> {
-		const m = this.getServerPageControllableRowModel();
-		if (!m) throw new UnsupportedRowModelOperationError({ operation: op, rowModelType: this.getRowModelType(), supportedRowModels: ['server'] });
 		return m;
 	}
 
@@ -1052,7 +1029,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getClientRowModelRuntime = (): ClientRowModelRuntime<TRowData> => createClientRowModelRuntime(this);
 	public getInfiniteRowModelRuntime = (): InfiniteRowModelRuntime<TRowData> => createInfiniteRowModelRuntime(this);
-	public getServerPageRowModelRuntime = (): ServerPageRowModelRuntime<TRowData> => createServerPageRowModelRuntime(this);
 	public getServerSideRowModelRuntime = (): ServerSideRowModelRuntime<TRowData> => createServerSideRowModelRuntime(this);
 
 	public getDataRowAtVisualIndex = (index: number): TRowData | null => {
@@ -1131,7 +1107,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getRowModelType = (): RowModelType => {
 		const rowModel = this.getRowModel();
 		if (asServerSideControllableRowModel(rowModel)) return 'server';
-		if (asServerPageControllableRowModel(rowModel)) return 'server';
 		if (asInfiniteControllableRowModel(rowModel)) return 'infinite';
 		return 'client';
 	};
@@ -1153,28 +1128,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.assertInfiniteRowModel('setInfiniteDatasource').setDatasource(datasource, blockSize);
 	};
 
-	public setServerPageDatasource = (datasource: ServerDatasource<TRowData>): void => {
-		this.assertServerPageRowModel('setServerPageDatasource').setDatasource(datasource);
-	};
-
 	public setServerSideDatasource = (datasource: ServerSideDatasource<TRowData>): void => {
 		this.assertServerSideRowModel('setServerSideDatasource').setServerSideDatasource(datasource);
-	};
-
-	public goToServerPage = (page: number): void => {
-		this.assertServerPageRowModel('goToServerPage').goToPage(page);
-	};
-
-	public setServerPageSize = (pageSize: number): void => {
-		this.assertServerPageRowModel('setServerPageSize').setPageSize(pageSize);
-	};
-
-	public refreshServerPage = (reason?: string): void => {
-		this.assertServerPageRowModel('refreshServerPage').reloadPage(reason);
-	};
-
-	public getServerPageState = (): ServerPageState | null => {
-		return this.getServerPageControllableRowModel()?.getPageState() ?? null;
 	};
 
 	public refreshServerSide = (options?: ServerSideRefreshOptions): void => {
@@ -1187,18 +1142,6 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getServerSideStoreState = (): readonly ServerSideStoreSnapshot[] => {
 		return this.getServerSideControllableRowModel()?.getServerSideStoreState() ?? this.getState().serverSide?.storeStates ?? [];
-	};
-
-	public nextServerPage = (): void => {
-		const model = this.assertServerPageRowModel('nextServerPage');
-		const state = model.getPageState();
-		if (state.page < state.pageCount - 1) model.goToPage(state.page + 1);
-	};
-
-	public previousServerPage = (): void => {
-		const model = this.assertServerPageRowModel('previousServerPage');
-		const state = model.getPageState();
-		if (state.page > 0) model.goToPage(state.page - 1);
 	};
 
 	public setViewportPins = (pins: { left?: number; right?: number; top?: number; bottom?: number }): void => {

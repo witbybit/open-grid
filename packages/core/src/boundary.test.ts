@@ -94,7 +94,6 @@ describe('Public/internal boundary', () => {
 				'createLocalStorageAdapter',
 				'createLocalStorageWorkspaceAdapter',
 				'createQueryEvaluationContext',
-				'createServerPageGrid',
 				'createServerSideGetRowsRequest',
 				'createServerSideGrid',
 				'createServerSideRouteKey',

@@ -50,10 +50,10 @@ export interface SortModelItem {
 export type SortModel = SortModelItem[];
 
 /**
- * Internal row-model identity. Keep this explicit so the codebase does not imply
- * full SSRM support when the current async paged model is specifically server-page.
+ * Internal row-model identity. Keep this explicit so the public `server`
+ * alias maps to the real server-side row model (SSRM).
  */
-export type InternalRowModelKind = 'client' | 'infinite' | 'server-page';
+export type InternalRowModelKind = 'client' | 'infinite' | 'server-side';
 
 /**
  * Public/visual row-node kind surface. This is intentionally broader than the current
@@ -70,12 +70,10 @@ export interface RowModelQueryState {
 }
 
 export interface RowModelRequestToken extends AsyncRowModelRequestIdentity {
-	readonly kind: 'infinite-block' | 'server-page';
+	readonly kind: 'infinite-block' | 'server-side-block';
 	readonly startRow?: number;
 	readonly endRow?: number;
 	readonly blockIndex?: number;
-	readonly page?: number;
-	readonly pageSize?: number;
 }
 
 export type RowLoadState =
@@ -206,7 +204,7 @@ export interface VisualRowModel<TRowData = unknown> {
 /**
  * Renderer-facing viewport contract for all row models. The renderer should be able to ask
  * for rows, counts, and load/range state without knowing whether the backing model is client,
- * infinite, or server-page.
+ * infinite, or server-side.
  */
 export interface RowModelViewportAccess<TRowData = unknown> extends VisualRowModel<TRowData> {
 	getKnownRowCount(): number | null;
@@ -383,15 +381,6 @@ export interface InfiniteControllableRowModel<TRowData = unknown> {
 	setDatasource(datasource: import('./infiniteRowModel.js').InfiniteDatasource<TRowData>, blockSize?: number): void;
 }
 
-/** Capability interface for the server-page row model. */
-export interface ServerPageControllableRowModel<TRowData = unknown> {
-	goToPage(page: number): void;
-	setPageSize(pageSize: number): void;
-	reloadPage(reason?: string): void;
-	getPageState(): import('./serverPageRowModel.js').ServerPageState;
-	setDatasource(datasource: import('./serverPageRowModel.js').ServerDatasource<TRowData>): void;
-}
-
 /** Capability interface for the real server-side row model (SSRM). */
 export interface ServerSideControllableRowModel<TRowData = unknown> {
 	setServerSideDatasource(datasource: import('./serverSideRowModel.js').ServerSideDatasource<TRowData>): void;
@@ -471,14 +460,6 @@ export function asInfiniteControllableRowModel<TRowData = unknown>(
 ): InfiniteControllableRowModel<TRowData> | null {
 	return hasFunctions(rowModel, ['purgeCache', 'setDatasource', 'loadVisibleBlocks'])
 		? (rowModel as unknown as InfiniteControllableRowModel<TRowData>)
-		: null;
-}
-
-export function asServerPageControllableRowModel<TRowData = unknown>(
-	rowModel: RowModel<TRowData> | null
-): ServerPageControllableRowModel<TRowData> | null {
-	return hasFunctions(rowModel, ['goToPage', 'setPageSize', 'reloadPage', 'getPageState'])
-		? (rowModel as unknown as ServerPageControllableRowModel<TRowData>)
 		: null;
 }
 

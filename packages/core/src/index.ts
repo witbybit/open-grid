@@ -1,8 +1,7 @@
-export { createClientGrid, createInfiniteGrid, createServerPageGrid, createServerSideGrid, createLocalStorageAdapter } from './createGrid.js';
+export { createClientGrid, createInfiniteGrid, createServerSideGrid, createLocalStorageAdapter } from './createGrid.js';
 export type {
 	ClientGridOptions,
 	InfiniteGridOptions,
-	ServerPageGridOptions,
 	ServerSideGridOptions,
 	GridPersistenceAdapter,
 	PersistedGridState,
@@ -38,14 +37,6 @@ export type {
 } from './capabilities/capabilityTypes.js';
 export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from './capabilities/capabilityTypes.js';
 export type { InfiniteDatasource, InfiniteGetRowsParams, InfiniteGetRowsResult, InfiniteRowModelOptions } from './infiniteRowModel.js';
-export type {
-	ServerDatasource,
-	ServerGetPageParams,
-	ServerGetPageResult,
-	ServerPaginationOptions,
-	ServerPageState,
-	ServerPageRowModelOptions,
-} from './serverPageRowModel.js';
 export type {
 	CreateServerSideGetRowsRequestInput,
 	NormalizedServerSideGetRowsResult,

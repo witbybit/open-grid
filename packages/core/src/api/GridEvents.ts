@@ -48,10 +48,6 @@ export enum GridEventName {
 	infiniteBlockLoaded = 'infiniteBlockLoaded',
 	infiniteBlockLoadFailed = 'infiniteBlockLoadFailed',
 	// ── Server-page row model events ──────────────────────────────────────────
-	serverPageLoadingStarted = 'serverPageLoadingStarted',
-	serverPageLoaded = 'serverPageLoaded',
-	serverPageLoadFailed = 'serverPageLoadFailed',
-	serverPageChanged = 'serverPageChanged',
 	serverSideStateChanged = 'serverSideStateChanged',
 	showGroupFooterChanged = 'showGroupFooterChanged',
 	sortChanged = 'sortChanged',
@@ -139,10 +135,6 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 		endRow: number;
 		message: string;
 	};
-	[GridEventName.serverPageLoadingStarted]: { page: number; pageSize: number };
-	[GridEventName.serverPageLoaded]: { page: number; pageSize: number; pageCount: number; totalRowCount: number };
-	[GridEventName.serverPageLoadFailed]: { page: number; pageSize: number; message: string };
-	[GridEventName.serverPageChanged]: { page: number; pageSize: number; pageCount: number; totalRowCount: number };
 	[GridEventName.serverSideStateChanged]: {
 		loading: boolean;
 		error: string | null;

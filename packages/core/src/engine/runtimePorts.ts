@@ -127,18 +127,6 @@ export interface InfiniteRowModelRuntime<TRowData = unknown> extends RowModelRun
 	reportBlockLoadFailure: (blockIndex: number, error: unknown) => void;
 }
 
-/** Runtime for the server-page row model. */
-export interface ServerPageRowModelRuntime<TRowData = unknown> extends RowModelRuntimeBase<TRowData> {
-	clearFormulas: () => void;
-	setLoadingState: (loading: boolean) => void;
-	dispatchServerPageLoadingStarted: (payload: GridEventPayloadMap<TRowData>[GridEventName.serverPageLoadingStarted]) => void;
-	dispatchServerPageLoaded: (payload: GridEventPayloadMap<TRowData>[GridEventName.serverPageLoaded]) => void;
-	dispatchServerPageLoadFailed: (payload: GridEventPayloadMap<TRowData>[GridEventName.serverPageLoadFailed]) => void;
-	setServerPageState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverPage']>) => void;
-	setServerSideState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverSide']>) => void;
-	publishServerSideState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverSide']>) => void;
-}
-
 /** Runtime for the real server-side row model (SSRM). */
 export interface ServerSideRowModelRuntime<TRowData = unknown> extends RowModelRuntimeBase<TRowData> {
 	clearFormulas: () => void;
@@ -173,7 +161,6 @@ export interface RowModelRuntimeEngineBridge<TRowData = unknown> {
 	getScrollVelocity: () => { vx: number; vy: number };
 	setRowModelLoadingState: (loading: boolean) => void;
 	setServerPaginationState: (payload: GridEventPayloadMap<TRowData>[GridEventName.paginationChanged]) => void;
-	setServerPageState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverPage']>) => void;
 	setServerSideState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverSide']>) => void;
 	publishServerSideState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverSide']>) => void;
 }

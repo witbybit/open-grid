@@ -8,7 +8,3 @@ export interface AsyncRowModelRequestIdentity {
 export function createInfiniteBlockScopeId(blockIndex: number): string {
 	return `infinite:block:${blockIndex}`;
 }
-
-export function createServerPageScopeId(): string {
-	return 'server-page:active-page';
-}

@@ -30,7 +30,7 @@ import {
 	asInfiniteControllableRowModel,
 	asRowOrderCapableModel,
 	asRowExpansionStateReadableModel,
-	asServerPageControllableRowModel,
+	asServerSideControllableRowModel,
 	type RowModel,
 	type RowModelRefreshResult,
 	type VisualRowModel,
@@ -360,7 +360,7 @@ export class GridEngine<TRowData = unknown> {
 			applyTransaction: (input) => this.applyTransaction(input),
 			refreshRows: () => this.rowModel?.refresh(),
 			getRowModelType: () =>
-				asServerPageControllableRowModel(this.rowModel) ? 'server' : asInfiniteControllableRowModel(this.rowModel) ? 'infinite' : 'client',
+				asServerSideControllableRowModel(this.rowModel) ? 'server' : asInfiniteControllableRowModel(this.rowModel) ? 'infinite' : 'client',
 		});
 		this.cellNotifications = new CellNotificationController<TRowData>({
 			data: this.data,
@@ -798,14 +798,6 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
-	public setServerPageState(state: NonNullable<InternalGridState<TRowData>['serverPage']>): void {
-		this.changeApplier.apply({
-			reason: 'rows:set-server-page',
-			state: { serverPage: state },
-			requestRender: false,
-		});
-	}
-
 	public setServerSideState(state: NonNullable<InternalGridState<TRowData>['serverSide']>): void {
 		this.changeApplier.apply({
 			reason: 'rows:set-server-side',
@@ -878,18 +870,13 @@ export class GridEngine<TRowData = unknown> {
 				if (loadState.kind !== 'failed' || rowIndex == null || !this.rowModel) {
 					return { status: 'rejected', reason: 'Row retry is not available for this row.' } as const;
 				}
-				const serverPageModel = asServerPageControllableRowModel(this.rowModel);
-				if (serverPageModel) {
-					serverPageModel.reloadPage('row-node-retry-load');
-					return { status: 'applied', changeId: Date.now(), faults: [] } as const;
-				}
 				this.rowModel.ensureRange(rowIndex, rowIndex, 'row-node-retry-load');
 				return { status: 'applied', changeId: Date.now(), faults: [] } as const;
 			},
 			getRowIssues: (rowId) => this.dataIntegrity?.buildApi().getRowIssues(rowId) ?? [],
 			validateRow: (rowId) => this.dataIntegrity?.buildApi().validateRow(rowId) ?? Promise.resolve([]),
 			getRowModelType: () =>
-				asServerPageControllableRowModel(this.rowModel) ? 'server' : asInfiniteControllableRowModel(this.rowModel) ? 'infinite' : 'client',
+				asServerSideControllableRowModel(this.rowModel) ? 'server' : asInfiniteControllableRowModel(this.rowModel) ? 'infinite' : 'client',
 		};
 	}
 

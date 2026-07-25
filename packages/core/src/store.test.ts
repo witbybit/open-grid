@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { GridStore, GridEventName, validateColumns, validateRowIds } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { InfiniteRowModelController, type InfiniteDatasource } from './infiniteRowModel.js';
-import { ServerPageRowModelController } from './serverPageRowModel.js';
+import { ServerSideRowModelController } from './serverSideRowModel.js';
 import type { ServerSideDatasource, ServerSideRefreshOptions, ServerSideStoreSnapshot } from './serverSideRowModel.js';
 import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
 import type { ActiveEditState, ColumnDef } from './api/GridApi.js';
@@ -1158,14 +1158,14 @@ describe('GridStore generic row-store functionality', () => {
 			columns,
 			getRowId: (row) => row.id,
 		});
-		const serverController = new ServerPageRowModelController<TestRow>(serverStore.getServerPageRowModelRuntime(), {
+		const serverController = new ServerSideRowModelController<TestRow>(serverStore.getServerSideRowModelRuntime(), {
 			columns: serverStore.getState().columns,
 			getRowId: (row) => row.id,
-			pagination: { pageSize: 10 },
+			blockSize: 10,
 			datasource: {
-				getPage: vi.fn().mockResolvedValue({
+				getRows: vi.fn().mockResolvedValue({
 					rows: [{ id: '2', name: 'Beta', price: 20 }],
-					totalRowCount: 1,
+					rowCount: 1,
 				}),
 			},
 		});
@@ -2779,7 +2779,7 @@ describe('GridStore undo and redo functionality', () => {
 		store.destroy();
 	});
 
-	it('routes public row-node updateData and setData through the loaded-row write path on infinite and server-page models', async () => {
+	it('routes public row-node updateData and setData through the loaded-row write path on infinite and server-side models', async () => {
 		const infiniteStore = new GridStore<TestRow>({
 			columns: [
 				{ field: 'name', header: 'Name', width: 100 },
@@ -2812,14 +2812,14 @@ describe('GridStore undo and redo functionality', () => {
 			],
 			getRowId: (row) => row.id,
 		});
-		const serverController = new ServerPageRowModelController<TestRow>(serverStore.getServerPageRowModelRuntime(), {
+		const serverController = new ServerSideRowModelController<TestRow>(serverStore.getServerSideRowModelRuntime(), {
 			columns: serverStore.getState().columns,
 			getRowId: (row) => row.id,
-			pagination: { pageSize: 10 },
+			blockSize: 10,
 			datasource: {
-				getPage: vi.fn().mockResolvedValue({
+				getRows: vi.fn().mockResolvedValue({
 					rows: [{ id: '2', name: 'Beta', price: 20 }],
-					totalRowCount: 1,
+					rowCount: 1,
 				}),
 			},
 		});
@@ -2905,17 +2905,17 @@ describe('GridStore undo and redo functionality', () => {
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 			getRowId: (row) => row.id,
 		});
-		const controller = new ServerPageRowModelController<TestRow>(store.getServerPageRowModelRuntime(), {
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
 			columns: store.getState().columns,
 			getRowId: (row) => row.id,
-			pagination: { pageSize: 5 },
+			blockSize: 5,
 			datasource: {
-				getPage: vi.fn().mockImplementation(() => {
+				getRows: vi.fn().mockImplementation(() => {
 					callCount++;
-					if (callCount === 1) return Promise.reject(new Error('page failed'));
+					if (callCount === 1) return Promise.reject(new Error('block failed'));
 					return Promise.resolve({
 						rows: [{ id: '1', name: 'Recovered', price: 1 }],
-						totalRowCount: 1,
+						rowCount: 1,
 					});
 				}),
 			},
@@ -3215,12 +3215,11 @@ describe('GridStore undo and redo functionality', () => {
 		store.destroy();
 	});
 
-	it('integrity reports currentPage as an explicit partial server-page scope', async () => {
+	it('integrity reports loadedRows as an explicit partial server-side scope', async () => {
 		const store = new GridStore<TestRow>(
 			{
 				columns: [{ field: 'name', header: 'Name', width: 100 }],
 				getRowId: (row) => row.id,
-				pagination: { pageSize: 10 },
 			},
 			{
 				dataIntegrity: {
@@ -3228,24 +3227,24 @@ describe('GridStore undo and redo functionality', () => {
 				},
 			}
 		);
-		const controller = new ServerPageRowModelController<TestRow>(store.getServerPageRowModelRuntime(), {
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
 			columns: store.getState().columns,
 			getRowId: (row) => row.id,
-			pagination: { pageSize: 10 },
+			blockSize: 10,
 			datasource: {
-				getPage: async () => ({
+				getRows: async () => ({
 					rows: [{ id: '1', name: 'Alpha', price: 10 }],
-					totalRowCount: 1,
+					rowCount: 1,
 				}),
 			},
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		const result = await store.integrity.run({ scope: 'currentPage' });
+		const result = await store.integrity.run({ scope: 'loadedRows' });
 
 		expect(result).toMatchObject({
 			status: 'completed',
-			scope: 'currentPage',
+			scope: 'loadedRows',
 			complete: false,
 			capability: {
 				level: 'partial',
@@ -3256,7 +3255,7 @@ describe('GridStore undo and redo functionality', () => {
 		store.destroy();
 	});
 
-	it('publishes server-side store state through the engine without reusing the server-page slot', () => {
+	it('publishes server-side store state through the engine without reusing legacy page state', () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
@@ -3294,7 +3293,6 @@ describe('GridStore undo and redo functionality', () => {
 				},
 			],
 		});
-		expect(store.getState().serverPage).toBeUndefined();
 		expect(store.getServerSideStoreState()).toEqual([
 			{
 				storeId: 'root',
@@ -3990,33 +3988,32 @@ describe('Quick filter (search across columns)', () => {
 		store.destroy();
 	});
 
-	it('passes quickFilterModel through to the server-page datasource and refetches on change', async () => {
+	it('passes quickFilterModel through to the server-side datasource and refetches on change', async () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 			getRowId: (row) => row.id,
-			pagination: { pageSize: 10 },
 		});
-		const getPage = vi.fn(
-			async (): Promise<{ rows: TestRow[]; totalRowCount: number }> => ({
+		const getRows = vi.fn(
+			async (): Promise<{ rows: TestRow[]; rowCount: number }> => ({
 				rows: [{ id: '1', name: 'Alpha', price: 10 }],
-				totalRowCount: 1,
+				rowCount: 1,
 			})
 		);
-		const controller = new ServerPageRowModelController<TestRow>(store.getServerPageRowModelRuntime(), {
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
 			columns: store.getState().columns,
 			getRowId: (row) => row.id,
-			pagination: { pageSize: 10 },
-			datasource: { getPage },
+			blockSize: 10,
+			datasource: { getRows },
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		const callsBefore = getPage.mock.calls.length;
+		const callsBefore = getRows.mock.calls.length;
 
 		store.setQuickFilter('alp');
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		expect(getPage.mock.calls.length).toBeGreaterThan(callsBefore);
-		const lastCallParams = getPage.mock.calls.at(-1)?.[0];
+		expect(getRows.mock.calls.length).toBeGreaterThan(callsBefore);
+		const lastCallParams = getRows.mock.calls.at(-1)?.[0];
 		expect(lastCallParams?.quickFilterModel).toEqual({ text: 'alp', columnIds: undefined });
 
 		controller.dispose();

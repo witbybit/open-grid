@@ -126,8 +126,7 @@ export interface GridRuntimeState {
 }
 
 /**
- * Public row-model type surface. `'server'` is preserved here for compatibility, but the concrete
- * implementation in core is the server-page row model rather than a full SSRM.
+ * Public row-model type surface. `'server'` is the server-side row model (SSRM).
  */
 export type RowModelType = 'client' | 'infinite' | 'server';
 
@@ -148,16 +147,7 @@ export interface GridUIState {
 		totalRows: number;
 		pageSize: number;
 	};
-	/** Populated by the server-page row model. Replaces serverPagination for explicit page loading. */
-	serverPage?: {
-		page: number;
-		pageSize: number;
-		pageCount: number;
-		totalRowCount: number;
-		loading: boolean;
-		error: string | null;
-	};
-	/** Reserved for the real server-side row model (SSRM). */
+	/** Populated by the server-side row model (SSRM). */
 	serverSide?: {
 		loading: boolean;
 		error: string | null;

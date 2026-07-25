@@ -90,7 +90,7 @@ export interface GridIntegrityRowRef<TRowData> {
 	readonly rowId: string;
 	readonly row: TRowData;
 	readonly rowIndex?: number;
-	readonly source: 'client' | 'infiniteLoaded' | 'serverPage' | 'selected' | 'visible' | 'serverProvided';
+	readonly source: 'client' | 'infiniteLoaded' | 'serverLoaded' | 'selected' | 'visible' | 'serverProvided';
 }
 
 export type GridIntegrityRowsResult<TRowData> =

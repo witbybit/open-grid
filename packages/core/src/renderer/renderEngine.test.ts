@@ -7,7 +7,7 @@ import { createMinimalRowModel } from '../testUtils/createMinimalRowModel.js';
 import { RecordingGridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { RenderEngine } from './renderEngine.js';
 import { InfiniteRowModelController } from '../infiniteRowModel.js';
-import { ServerPageRowModelController } from '../serverPageRowModel.js';
+import { ServerSideRowModelController } from '../serverSideRowModel.js';
 
 /**
  * Count the row-slot DOM children of the rows container, excluding the `.og-layer-exiting`
@@ -1559,7 +1559,7 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
-	it('repaints visible server-page rows after an async sort response without an incidental scroll', async () => {
+	it('repaints visible server-side rows after an async sort response without an incidental scroll', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
 			return 1;
@@ -1570,18 +1570,18 @@ describe('RenderEngine', () => {
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
 		});
-		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
+		const controller = new ServerSideRowModelController(store.getServerSideRowModelRuntime(), {
 			columns: store.getState().columns,
-			pagination: { pageSize: 10 },
+			blockSize: 10,
 			datasource: {
-				getPage: async ({ sortModel }) => {
+				getRows: async ({ sortModel }) => {
 					if ((sortModel as Array<{ colId: string; sort: string }> | null)?.[0]?.sort === 'desc') {
 						return {
 							rows: [
 								{ id: '2', name: 'Zulu' },
 								{ id: '1', name: 'Alpha' },
 							],
-							totalRowCount: 2,
+							rowCount: 2,
 						};
 					}
 					return {
@@ -1589,7 +1589,7 @@ describe('RenderEngine', () => {
 							{ id: '1', name: 'Alpha' },
 							{ id: '2', name: 'Zulu' },
 						],
-						totalRowCount: 2,
+						rowCount: 2,
 					};
 				},
 			},
