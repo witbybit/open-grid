@@ -8,6 +8,7 @@ import {
 import type { ServerSideRowGroupColumn, ServerSideValueColumn } from './serverSideRowModel.js';
 import { createServerSideGrid } from './createGrid.js';
 import { GridStore } from './store.js';
+import { GridEventName } from './api/GridEvents.js';
 
 interface TestRow {
 	id: string;
@@ -466,6 +467,65 @@ describe('ServerSideRowModelController', () => {
 		]);
 		expect(controller.getBlockSnapshots()).toEqual([expect.objectContaining({ storeId: '', blockIndex: 0, state: 'loaded' })]);
 		expect(controller.isGroupExpanded('group:region=EMEA')).toBe(false);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('rejects child-store responses after the child route is purged', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name' }],
+			getRowId: (row) => row.id,
+		});
+		const childResponse = deferred<{ rows: TestRow[]; rowCount: number }>();
+		const getRows = vi.fn((request) => {
+			if (request.route.length === 0) {
+				return Promise.resolve({
+					rows: [{ id: 'group-emea', name: 'EMEA' }],
+					rowCount: 1,
+					groupMetadata: [
+						{
+							rowId: 'group-emea',
+							route: ['region', 'EMEA'],
+							groupKey: 'EMEA',
+							expandable: true,
+						},
+					],
+				});
+			}
+			return childResponse.promise;
+		});
+		const stateEvents: unknown[] = [];
+		store.addEventListener(GridEventName.serverSideStateChanged, (event) => {
+			stateEvents.push(event);
+		});
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
+			columns: store.getState().columns,
+			datasource: { getRows },
+			blockSize: 5,
+			getRowId: (row) => row.id,
+		});
+
+		await flushAsync();
+		controller.toggleGroupExpanded('group:region=EMEA');
+		expect(getRows).toHaveBeenCalledTimes(2);
+
+		controller.purgeServerSide({ route: ['region', 'EMEA'] });
+		const eventCountAfterPurge = stateEvents.length;
+
+		childResponse.resolve({ rows: [{ id: 'stale-child', name: 'Stale' }], rowCount: 1 });
+		await flushAsync();
+
+		expect(stateEvents).toHaveLength(eventCountAfterPurge);
+		expect(store.getServerSideStoreState()).toEqual([
+			expect.objectContaining({
+				storeId: '',
+				childStoreCount: 0,
+				rowCountState: { kind: 'known', count: 1 },
+			}),
+		]);
+		expect(controller.getBlockSnapshots()).toEqual([expect.objectContaining({ storeId: '', blockIndex: 0, state: 'loaded' })]);
+		expect(controller.getRawRowById('stale-child')).toBeNull();
 
 		controller.dispose();
 		store.destroy();

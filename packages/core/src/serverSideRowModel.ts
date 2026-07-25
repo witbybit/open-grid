@@ -816,7 +816,7 @@ export class ServerSideRowModelController<TRowData = unknown>
 		void this.datasource
 			.getRows(request, { signal: abortController.signal })
 			.then((result) => {
-				if (this.disposed || block.requestId !== requestId || block.queryGeneration !== this.queryGeneration) {
+				if (this.disposed || !this.isStoreActive(store) || block.requestId !== requestId || block.queryGeneration !== this.queryGeneration) {
 					this.finishBlockRequest(queryGeneration);
 					return;
 				}
@@ -857,6 +857,7 @@ export class ServerSideRowModelController<TRowData = unknown>
 				if (
 					abortController.signal.aborted ||
 					this.disposed ||
+					!this.isStoreActive(store) ||
 					block.requestId !== requestId ||
 					block.queryGeneration !== this.queryGeneration
 				) {
@@ -991,6 +992,11 @@ export class ServerSideRowModelController<TRowData = unknown>
 		const store = this.childStores.get(storeId);
 		if (!store) throw new Error(`Missing server-side store "${storeId}"`);
 		return store;
+	}
+
+	private isStoreActive(store: ServerSideRuntimeStore<TRowData>): boolean {
+		if (store.storeId === createServerSideRouteKey()) return true;
+		return this.childStores.get(store.storeId) === store;
 	}
 
 	private getChildStore(route: ServerSideRoute): ServerSideRuntimeStore<TRowData> | null {
