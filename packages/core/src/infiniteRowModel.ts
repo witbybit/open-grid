@@ -65,14 +65,8 @@ function validateInfiniteBlockResponse<TRowData>(
 			);
 		}
 	}
-	if (
-		typeof options?.totalCount === 'number' &&
-		typeof options?.lastRow === 'number' &&
-		options.totalCount !== options.lastRow
-	) {
-		throw new Error(
-			`Infinite datasource returned conflicting totalCount ${options.totalCount} and lastRow ${options.lastRow}`
-		);
+	if (typeof options?.totalCount === 'number' && typeof options?.lastRow === 'number' && options.totalCount !== options.lastRow) {
+		throw new Error(`Infinite datasource returned conflicting totalCount ${options.totalCount} and lastRow ${options.lastRow}`);
 	}
 	if (options?.hasMore === false) {
 		if (typeof options.totalCount === 'number' && options.totalCount !== minimumReachableCount) {
@@ -206,15 +200,7 @@ const INFINITE_CAPABILITIES: RowModelCapabilities = {
 	pageRowSelection: false,
 };
 
-type InfiniteBlockStatus =
-	| 'absent'
-	| 'queued'
-	| 'loadingInitial'
-	| 'loaded'
-	| 'refreshing'
-	| 'failedInitial'
-	| 'failedRefresh'
-	| 'stale';
+type InfiniteBlockStatus = 'absent' | 'queued' | 'loadingInitial' | 'loaded' | 'refreshing' | 'failedInitial' | 'failedRefresh' | 'stale';
 
 interface QueuedInfiniteBlockLoad {
 	blockIndex: number;
@@ -678,11 +664,7 @@ export class InfiniteRowModelController<TData = unknown>
 		const shouldQueueBlock = (blockIdx: number): boolean => {
 			const block = this.blockCache.getBlock(blockIdx);
 			if (!forceReload && block) {
-				if (
-					block.status === 'queued' ||
-					block.status === 'loadingInitial' ||
-					block.status === 'refreshing'
-				) {
+				if (block.status === 'queued' || block.status === 'loadingInitial' || block.status === 'refreshing') {
 					return false;
 				}
 				if (block.status === 'loaded' && !this.blockHasRepresentedGap(block)) return false;
@@ -846,14 +828,17 @@ export class InfiniteRowModelController<TData = unknown>
 		const querySnapshot = createAsyncRowModelQuerySnapshot(state);
 
 		try {
-			const response = await this.datasource.getRows({
-				startRow,
-				endRow,
-				sortModel: querySnapshot.sortModel,
-				filterModel: querySnapshot.filterModel,
-				quickFilterModel: querySnapshot.quickFilterModel,
-				queryModel: querySnapshot.queryModel,
-			}, { signal: abortController.signal });
+			const response = await this.datasource.getRows(
+				{
+					startRow,
+					endRow,
+					sortModel: querySnapshot.sortModel,
+					filterModel: querySnapshot.filterModel,
+					quickFilterModel: querySnapshot.quickFilterModel,
+					queryModel: querySnapshot.queryModel,
+				},
+				{ signal: abortController.signal }
+			);
 
 			if (!this.isRequestTokenCurrent(requestToken)) return;
 			validateInfiniteBlockResponse(response.rows, this.blockSize, (row) => this.runtime.getRowId(row as TData), {
@@ -1051,7 +1036,8 @@ export class InfiniteRowModelController<TData = unknown>
 			const nextQueued = this.dequeueNextBlockLoad();
 			if (!nextQueued) return;
 			const existingBlock = this.blockCache.getBlock(nextQueued.blockIndex);
-			if (existingBlock && this.blockCache.isBlockLoading(nextQueued.blockIndex) && this.activeAbortControllers.has(existingBlock.requestId)) continue;
+			if (existingBlock && this.blockCache.isBlockLoading(nextQueued.blockIndex) && this.activeAbortControllers.has(existingBlock.requestId))
+				continue;
 			void this.fetchBlock(nextQueued.blockIndex);
 		}
 	}
@@ -1069,11 +1055,7 @@ export class InfiniteRowModelController<TData = unknown>
 		if (this.pendingBlockLoads.size === 0) return null;
 		let best: QueuedInfiniteBlockLoad | null = null;
 		for (const queued of this.pendingBlockLoads.values()) {
-			if (
-				best === null ||
-				queued.priority < best.priority ||
-				(queued.priority === best.priority && queued.sequence < best.sequence)
-			) {
+			if (best === null || queued.priority < best.priority || (queued.priority === best.priority && queued.sequence < best.sequence)) {
 				best = queued;
 			}
 		}
