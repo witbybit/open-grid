@@ -6,6 +6,7 @@ import {
 	ServerSideRowModelController,
 } from './serverSideRowModel.js';
 import type { ServerSideRowGroupColumn, ServerSideValueColumn } from './serverSideRowModel.js';
+import { createServerSideGrid } from './createGrid.js';
 import { GridStore } from './store.js';
 
 interface TestRow {
@@ -301,6 +302,35 @@ describe('ServerSideRowModelController', () => {
 
 		controller.dispose();
 		store.destroy();
+	});
+
+	it('is constructed by createServerSideGrid and exposes the server row-model type', async () => {
+		const getRows = vi.fn(async () => ({
+			rows: [{ id: 'a', name: 'Alpha' }],
+			rowCount: 1,
+		}));
+		const api = createServerSideGrid<TestRow>({
+			columns: [{ field: 'name' }],
+			datasource: { getRows },
+			blockSize: 5,
+			getRowId: (row) => row.id,
+		});
+
+		expect(api.getRowModelType()).toBe('server');
+		expect(getRows).toHaveBeenCalledTimes(1);
+
+		await flushAsync();
+
+		expect(api.getDataRowAtVisualIndex(0)).toEqual({ id: 'a', name: 'Alpha' });
+		expect(api.getServerSideStoreState()).toEqual([
+			expect.objectContaining({
+				storeId: '',
+				rowCountState: { kind: 'known', count: 1 },
+				blockCount: 1,
+			}),
+		]);
+
+		api.destroy();
 	});
 
 	it('rejects stale root-store responses after sort changes and forwards the winning query snapshot', async () => {

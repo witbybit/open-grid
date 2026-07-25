@@ -1,8 +1,9 @@
-export { createClientGrid, createInfiniteGrid, createServerPageGrid, createLocalStorageAdapter } from './createGrid.js';
+export { createClientGrid, createInfiniteGrid, createServerPageGrid, createServerSideGrid, createLocalStorageAdapter } from './createGrid.js';
 export type {
 	ClientGridOptions,
 	InfiniteGridOptions,
 	ServerPageGridOptions,
+	ServerSideGridOptions,
 	GridPersistenceAdapter,
 	PersistedGridState,
 	GridWorkspaceAdapter,

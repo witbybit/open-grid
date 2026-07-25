@@ -96,6 +96,7 @@ describe('Public/internal boundary', () => {
 				'createQueryEvaluationContext',
 				'createServerPageGrid',
 				'createServerSideGetRowsRequest',
+				'createServerSideGrid',
 				'createServerSideRouteKey',
 				'createWorkspaceController',
 				'customCellRule',
