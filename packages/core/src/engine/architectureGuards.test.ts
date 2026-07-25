@@ -812,6 +812,22 @@ describe('Architecture guardrails', () => {
 		expect(createGrid).not.toContain('new ServerRowModelController<TRowData>(store,');
 	});
 
+	it('Plan 158 async row models publish committed responses through the explicit async publication port', () => {
+		const runtimePorts = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'runtimePorts.ts'), 'utf-8');
+		const runtimeFactory = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'createRowModelRuntimes.ts'), 'utf-8');
+		const infiniteContent = readFileSync(resolve(CORE_ROOT, 'src', 'infiniteRowModel.ts'), 'utf-8');
+		const serverPageContent = readFileSync(resolve(CORE_ROOT, 'src', 'serverPageRowModel.ts'), 'utf-8');
+
+		expect(runtimePorts).toContain('export interface AsyncRowModelPublication');
+		expect(runtimePorts).toContain('publishAsyncRowModelUpdate: (publication: AsyncRowModelPublication) => void;');
+		expect(runtimeFactory).toContain('function publishAsyncRowModelUpdate<TRowData>');
+		expect(runtimeFactory).toContain('store.engine.applyRowModelRefreshInvalidation(publication.refreshResult');
+		expect(infiniteContent).toContain('this.runtime.publishAsyncRowModelUpdate({');
+		expect(serverPageContent).toContain('this.runtime.publishAsyncRowModelUpdate({');
+		expect(infiniteContent).not.toContain('this.runtime.applyRefreshInvalidation(');
+		expect(serverPageContent).not.toContain('this.runtime.applyRefreshInvalidation(');
+	});
+
 	it('navigation and contextMenu plugins do not depend on GridStore downcasts', () => {
 		const files = ['interaction/GridInteractionController.ts', 'contextMenu.ts'];
 		for (const file of files) {
