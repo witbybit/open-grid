@@ -5,12 +5,10 @@ import type {
 	InfiniteRowModelRuntime,
 	RowModelRuntimeStoreBridge,
 	ServerPageRowModelRuntime,
+	ServerSideRowModelRuntime,
 } from './runtimePorts.js';
 
-function publishAsyncRowModelUpdate<TRowData>(
-	store: RowModelRuntimeStoreBridge<TRowData>,
-	publication: AsyncRowModelPublication
-): void {
+function publishAsyncRowModelUpdate<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>, publication: AsyncRowModelPublication): void {
 	store.engine.applyRowModelRefreshInvalidation(publication.refreshResult, {
 		invalidationReason: publication.invalidationReason,
 		requestRenderReason: publication.requestRenderReason,
@@ -126,6 +124,34 @@ export function createServerPageRowModelRuntime<TRowData>(store: RowModelRuntime
 		},
 		dispatchServerPageLoadFailed: (payload) => store.dispatchEvent(GridEventName.serverPageLoadFailed, payload),
 		setServerPageState: (state) => store.engine.setServerPageState(state),
+		setServerSideState: (state) => store.engine.setServerSideState(state),
+		publishServerSideState: (state) => store.engine.publishServerSideState(state),
+		getInstrumentation: () => store.getInstrumentation(),
+	};
+}
+
+export function createServerSideRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ServerSideRowModelRuntime<TRowData> {
+	return {
+		getState: store.getState,
+		initializeModel: (model) => store.engine.initializeRowModelState(model),
+		registerRowModel: store.registerRowModel,
+		addEventListener: store.addEventListener,
+		getRowId: store.getRowId,
+		getColumnDef: store.getColumnDef,
+		getCellValue: store.getCellValue,
+		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
+		applyRefreshInvalidation: (refreshResult, options) => store.engine.applyRowModelRefreshInvalidation(refreshResult, options),
+		publishAsyncRowModelUpdate: (publication) => publishAsyncRowModelUpdate(store, publication),
+		reportRowPipelineFault: (operation, error, context) =>
+			store.reportRuntimeFault({
+				source: 'row-pipeline',
+				operation,
+				error,
+				context,
+			}),
+		requestLayoutTransitionCapture: (reason) => store.engine.requestLayoutTransitionCapture(reason),
+		clearFormulas: () => store.engine.clearFormulas(),
+		setLoadingState: (loading) => store.engine.setRowModelLoadingState(loading),
 		setServerSideState: (state) => store.engine.setServerSideState(state),
 		publishServerSideState: (state) => store.engine.publishServerSideState(state),
 		getInstrumentation: () => store.getInstrumentation(),

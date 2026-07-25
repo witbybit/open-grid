@@ -139,6 +139,14 @@ export interface ServerPageRowModelRuntime<TRowData = unknown> extends RowModelR
 	publishServerSideState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverSide']>) => void;
 }
 
+/** Runtime for the real server-side row model (SSRM). */
+export interface ServerSideRowModelRuntime<TRowData = unknown> extends RowModelRuntimeBase<TRowData> {
+	clearFormulas: () => void;
+	setLoadingState: (loading: boolean) => void;
+	setServerSideState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverSide']>) => void;
+	publishServerSideState: (state: NonNullable<import('../state/GridState.js').GridUIState['serverSide']>) => void;
+}
+
 export interface RowModelRuntimeEngineBridge<TRowData = unknown> {
 	initializeRowModelState: (model: { columns?: ColumnDef<TRowData>[]; getRowId?: ((row: TRowData) => string) | undefined }) => void;
 	bumpRowModelGlobalVersion: () => void;

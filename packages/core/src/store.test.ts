@@ -3,6 +3,7 @@ import { GridStore, GridEventName, validateColumns, validateRowIds } from './sto
 import { ClientRowModelController } from './rowModel.js';
 import { InfiniteRowModelController, type InfiniteDatasource } from './infiniteRowModel.js';
 import { ServerPageRowModelController } from './serverPageRowModel.js';
+import type { ServerSideDatasource, ServerSideRefreshOptions, ServerSideStoreSnapshot } from './serverSideRowModel.js';
 import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
 import type { ActiveEditState, ColumnDef } from './api/GridApi.js';
 import type { GridQueryModel } from './query/GridQueryModel.js';
@@ -3368,6 +3369,54 @@ describe('GridStore undo and redo functionality', () => {
 				},
 			})
 		);
+	});
+
+	it('delegates SSRM public API calls to a server-side controllable row model', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const datasource: ServerSideDatasource<TestRow> = {
+			getRows: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+		};
+		const storeState: ServerSideStoreSnapshot[] = [
+			{
+				storeId: '',
+				route: [],
+				level: 0,
+				rowCountState: { kind: 'known', count: 0 },
+				blockCount: 0,
+				loadingBlockCount: 0,
+				failedBlockCount: 0,
+				childStoreCount: 0,
+			},
+		];
+		const setServerSideDatasource = vi.fn();
+		const refreshServerSide = vi.fn();
+		const purgeServerSide = vi.fn();
+		const getServerSideStoreState = vi.fn(() => storeState);
+		const rowModel = {
+			...createMinimalRowModel<TestRow>({ visualRows: [] }),
+			setServerSideDatasource,
+			refreshServerSide,
+			purgeServerSide,
+			getServerSideStoreState,
+		};
+
+		store.registerRowModel(rowModel);
+
+		const refreshOptions: ServerSideRefreshOptions = { route: ['region', 'EMEA'] };
+		const purgeOptions = { route: ['region'] };
+		store.setServerSideDatasource(datasource);
+		store.refreshServerSide(refreshOptions);
+		store.purgeServerSide(purgeOptions);
+
+		expect(store.getRowModelType()).toBe('server');
+		expect(setServerSideDatasource).toHaveBeenCalledWith(datasource);
+		expect(refreshServerSide).toHaveBeenCalledWith(refreshOptions);
+		expect(purgeServerSide).toHaveBeenCalledWith(purgeOptions);
+		expect(store.getServerSideStoreState()).toBe(storeState);
+
+		store.destroy();
 	});
 
 	it('avoids redundant state updates and geometry version increments on setRowHeights and setDefaultRowHeight', () => {

@@ -6,6 +6,7 @@ import type {
 	ClientStructuralRowModel,
 	InfiniteControllableRowModel,
 	ServerPageControllableRowModel,
+	ServerSideControllableRowModel,
 	RowExpansionStateReadableModel,
 	RowModelCapability,
 	RowModelCapabilities,
@@ -19,6 +20,7 @@ import {
 	asRowExpansionStateReadableModel,
 	asInfiniteControllableRowModel,
 	asServerPageControllableRowModel,
+	asServerSideControllableRowModel,
 	asCapableRowModel,
 	UnsupportedRowModelOperationError,
 } from './rowModel.js';
@@ -29,8 +31,13 @@ import type { ServerDatasource, ServerPageState } from './serverPageRowModel.js'
 import type { ServerSideDatasource, ServerSideRefreshOptions, ServerSideStoreSnapshot } from './serverSideRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
-import type { ClientRowModelRuntime, InfiniteRowModelRuntime, ServerPageRowModelRuntime } from './engine/runtimePorts.js';
-import { createClientRowModelRuntime, createInfiniteRowModelRuntime, createServerPageRowModelRuntime } from './engine/createRowModelRuntimes.js';
+import type { ClientRowModelRuntime, InfiniteRowModelRuntime, ServerPageRowModelRuntime, ServerSideRowModelRuntime } from './engine/runtimePorts.js';
+import {
+	createClientRowModelRuntime,
+	createInfiniteRowModelRuntime,
+	createServerPageRowModelRuntime,
+	createServerSideRowModelRuntime,
+} from './engine/createRowModelRuntimes.js';
 import type { GridRuntimePorts, RuntimePortBinding, RuntimePortBindResult } from './engine/rendererPorts.js';
 import { HEADLESS_PORTS } from './engine/rendererPorts.js';
 import { type GridInstrumentation, NOOP_INSTRUMENTATION } from './diagnostics/GridInstrumentation.js';
@@ -1005,6 +1012,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return asServerPageControllableRowModel(this.getRowModel());
 	}
 
+	private getServerSideControllableRowModel(): ServerSideControllableRowModel<TRowData> | null {
+		return asServerSideControllableRowModel(this.getRowModel());
+	}
+
 	private getExpansionStateReadableRowModel(): RowExpansionStateReadableModel | null {
 		return asRowExpansionStateReadableModel(this.getRowModel());
 	}
@@ -1022,6 +1033,17 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return m;
 	}
 
+	private assertServerSideRowModel(op: string): ServerSideControllableRowModel<TRowData> {
+		const m = this.getServerSideControllableRowModel();
+		if (!m)
+			throw new UnsupportedRowModelOperationError({
+				operation: op,
+				rowModelType: this.getRowModelType(),
+				supportedRowModels: ['server (SSRM)'],
+			});
+		return m;
+	}
+
 	private assertClientStructuralRowModel(op: string): ClientStructuralRowModel<TRowData> {
 		const m = this.getClientStructuralRowModel();
 		if (!m) throw new UnsupportedRowModelOperationError({ operation: op, rowModelType: this.getRowModelType(), supportedRowModels: ['client'] });
@@ -1031,6 +1053,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getClientRowModelRuntime = (): ClientRowModelRuntime<TRowData> => createClientRowModelRuntime(this);
 	public getInfiniteRowModelRuntime = (): InfiniteRowModelRuntime<TRowData> => createInfiniteRowModelRuntime(this);
 	public getServerPageRowModelRuntime = (): ServerPageRowModelRuntime<TRowData> => createServerPageRowModelRuntime(this);
+	public getServerSideRowModelRuntime = (): ServerSideRowModelRuntime<TRowData> => createServerSideRowModelRuntime(this);
 
 	public getDataRowAtVisualIndex = (index: number): TRowData | null => {
 		const vr = this.getVisualRow(index);
@@ -1107,6 +1130,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getRowModelType = (): RowModelType => {
 		const rowModel = this.getRowModel();
+		if (asServerSideControllableRowModel(rowModel)) return 'server';
 		if (asServerPageControllableRowModel(rowModel)) return 'server';
 		if (asInfiniteControllableRowModel(rowModel)) return 'infinite';
 		return 'client';
@@ -1133,12 +1157,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.assertServerPageRowModel('setServerPageDatasource').setDatasource(datasource);
 	};
 
-	public setServerSideDatasource = (_datasource: ServerSideDatasource<TRowData>): void => {
-		throw new UnsupportedRowModelOperationError({
-			operation: 'setServerSideDatasource',
-			rowModelType: this.getRowModelType(),
-			supportedRowModels: ['server (SSRM)'],
-		});
+	public setServerSideDatasource = (datasource: ServerSideDatasource<TRowData>): void => {
+		this.assertServerSideRowModel('setServerSideDatasource').setServerSideDatasource(datasource);
 	};
 
 	public goToServerPage = (page: number): void => {
@@ -1157,24 +1177,16 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return this.getServerPageControllableRowModel()?.getPageState() ?? null;
 	};
 
-	public refreshServerSide = (_options?: ServerSideRefreshOptions): void => {
-		throw new UnsupportedRowModelOperationError({
-			operation: 'refreshServerSide',
-			rowModelType: this.getRowModelType(),
-			supportedRowModels: ['server (SSRM)'],
-		});
+	public refreshServerSide = (options?: ServerSideRefreshOptions): void => {
+		this.assertServerSideRowModel('refreshServerSide').refreshServerSide(options);
 	};
 
-	public purgeServerSide = (_options?: Omit<ServerSideRefreshOptions, 'purge'>): void => {
-		throw new UnsupportedRowModelOperationError({
-			operation: 'purgeServerSide',
-			rowModelType: this.getRowModelType(),
-			supportedRowModels: ['server (SSRM)'],
-		});
+	public purgeServerSide = (options?: Omit<ServerSideRefreshOptions, 'purge'>): void => {
+		this.assertServerSideRowModel('purgeServerSide').purgeServerSide(options);
 	};
 
 	public getServerSideStoreState = (): readonly ServerSideStoreSnapshot[] => {
-		return this.getState().serverSide?.storeStates ?? [];
+		return this.getServerSideControllableRowModel()?.getServerSideStoreState() ?? this.getState().serverSide?.storeStates ?? [];
 	};
 
 	public nextServerPage = (): void => {

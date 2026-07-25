@@ -392,6 +392,14 @@ export interface ServerPageControllableRowModel<TRowData = unknown> {
 	setDatasource(datasource: import('./serverPageRowModel.js').ServerDatasource<TRowData>): void;
 }
 
+/** Capability interface for the real server-side row model (SSRM). */
+export interface ServerSideControllableRowModel<TRowData = unknown> {
+	setServerSideDatasource(datasource: import('./serverSideRowModel.js').ServerSideDatasource<TRowData>): void;
+	refreshServerSide(options?: import('./serverSideRowModel.js').ServerSideRefreshOptions): void;
+	purgeServerSide(options?: Omit<import('./serverSideRowModel.js').ServerSideRefreshOptions, 'purge'>): void;
+	getServerSideStoreState(): readonly import('./serverSideRowModel.js').ServerSideStoreSnapshot[];
+}
+
 export interface VisibleBlockLoadCapableRowModel {
 	loadVisibleBlocks(startRow: number, endRow: number): void;
 }
@@ -471,6 +479,14 @@ export function asServerPageControllableRowModel<TRowData = unknown>(
 ): ServerPageControllableRowModel<TRowData> | null {
 	return hasFunctions(rowModel, ['goToPage', 'setPageSize', 'reloadPage', 'getPageState'])
 		? (rowModel as unknown as ServerPageControllableRowModel<TRowData>)
+		: null;
+}
+
+export function asServerSideControllableRowModel<TRowData = unknown>(
+	rowModel: RowModel<TRowData> | null
+): ServerSideControllableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['setServerSideDatasource', 'refreshServerSide', 'purgeServerSide', 'getServerSideStoreState'])
+		? (rowModel as unknown as ServerSideControllableRowModel<TRowData>)
 		: null;
 }
 
