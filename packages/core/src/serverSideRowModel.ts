@@ -1,5 +1,6 @@
 import type { AggregationDef, FilterModel, QuickFilterModel, SortModel } from './rowModel.js';
 import type { GridQueryModel } from './query/GridQueryModel.js';
+import { normalizeServerSideRoute } from './serverSideRoute.js';
 
 /**
  * Canonical immutable store route identity for the real server-side row model.
@@ -36,6 +37,52 @@ export interface ServerSideGetRowsRequest {
 	readonly filterModel: FilterModel | null;
 	readonly quickFilterModel: QuickFilterModel | null;
 	readonly queryModel: GridQueryModel | null;
+}
+
+export interface CreateServerSideGetRowsRequestInput {
+	readonly startRow: number;
+	readonly endRow: number;
+	readonly route?: ServerSideRoute | null;
+	readonly groupKeys?: readonly string[] | null;
+	readonly rowGroupColumns?: readonly ServerSideRowGroupColumn[] | null;
+	readonly valueColumns?: readonly ServerSideValueColumn[] | null;
+	readonly sortModel?: SortModel | null;
+	readonly filterModel?: FilterModel | null;
+	readonly quickFilterModel?: QuickFilterModel | null;
+	readonly queryModel?: GridQueryModel | null;
+}
+
+function freezeColumnMetadata<TColumn extends object>(columns?: readonly TColumn[] | null): readonly TColumn[] {
+	return Object.freeze((columns ?? []).map((column) => Object.freeze({ ...column }) as TColumn));
+}
+
+function freezeStrings(values?: readonly string[] | null): readonly string[] {
+	return values && values.length > 0 ? Object.freeze([...values]) : Object.freeze([]);
+}
+
+export function createServerSideGetRowsRequest(input: CreateServerSideGetRowsRequestInput): ServerSideGetRowsRequest {
+	if (!Number.isInteger(input.startRow) || input.startRow < 0) {
+		throw new Error(`Invalid server-side request startRow: ${input.startRow}`);
+	}
+	if (!Number.isInteger(input.endRow) || input.endRow < input.startRow) {
+		throw new Error(`Invalid server-side request endRow: ${input.endRow}`);
+	}
+
+	const route = normalizeServerSideRoute(input.route);
+	const groupKeys = freezeStrings(input.groupKeys ?? route);
+
+	return Object.freeze({
+		startRow: input.startRow,
+		endRow: input.endRow,
+		route,
+		groupKeys,
+		rowGroupColumns: freezeColumnMetadata(input.rowGroupColumns),
+		valueColumns: freezeColumnMetadata(input.valueColumns),
+		sortModel: input.sortModel ?? null,
+		filterModel: input.filterModel ?? null,
+		quickFilterModel: input.quickFilterModel ?? null,
+		queryModel: input.queryModel ?? null,
+	});
 }
 
 export interface ServerSideGetRowsResult<TRowData> {

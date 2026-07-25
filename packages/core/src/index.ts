@@ -46,6 +46,7 @@ export type {
 	ServerPageRowModelOptions,
 } from './serverPageRowModel.js';
 export type {
+	CreateServerSideGetRowsRequestInput,
 	ServerSideBlockSnapshot,
 	ServerSideBlockState,
 	ServerSideDatasource,
@@ -59,6 +60,7 @@ export type {
 	ServerSideStoreSnapshot,
 	ServerSideValueColumn,
 } from './serverSideRowModel.js';
+export { createServerSideGetRowsRequest } from './serverSideRowModel.js';
 export {
 	areServerSideRoutesEqual,
 	createServerSideRouteKey,
