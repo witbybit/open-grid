@@ -1,156 +1,49 @@
 # Plan 158 Server-Page Deletion Manifest
 
-Last audited: 2026-07-12
+Last audited: 2026-07-25
 
-Source search used for this manifest:
+This document is the deletion evidence record for the page-oriented `rowModelType: 'server'` implementation. The old server-page model must not survive as a compatibility mode, legacy alias, nested fallback, or deprecated public API.
+
+## Deletion outcome
+
+The Stage C server-page demolition has landed in core:
+
+- `packages/core/src/serverPageRowModel.ts` is deleted.
+- `createServerPageGrid` and `ServerPageGridOptions` are removed from public exports.
+- `ServerDatasource`, `ServerPageState`, and page-oriented datasource contracts are removed from the public surface.
+- `goToServerPage(...)` and related page navigation APIs are removed.
+- `GridEventName.serverPageLoadingStarted`, `serverPageLoaded`, `serverPageLoadFailed`, and `serverPageChanged` are removed.
+- `GridUIState.serverPage` is removed.
+- Server runtime forwarding now targets SSRM operations: `setServerSideDatasource(...)`, `refreshServerSide(...)`, `purgeServerSide(...)`, and `getServerSideStoreState()`.
+- Core retry routing uses the row-model viewport/load contract instead of page-specific retry hooks.
+
+## Replacement outcome
+
+The public `server` row model now maps to SSRM:
+
+- `createServerSideGrid(...)` constructs `ServerSideRowModelController`.
+- `rowModelType: 'server'` routes through `ServerSideRowModelController` in React/core entrypoints.
+- SSRM exposes route-aware refresh and purge operations.
+- SSRM publishes immutable store snapshots through `getServerSideStoreState()`.
+- SSRM forwards sort, filter, quick-filter, and query-model snapshots to `getRows(...)`.
+- SSRM owns loaded-row mutation, loaded-row selection, and partial loaded-row integrity semantics.
+
+## Search expectation
+
+The live implementation search should no longer find server-page symbols in `packages/core/src`, `packages/react/src`, or `demo` except for historical plan/documentation references:
 
 ```txt
-rg -n "ServerPageRowModelController|server-page|serverPage|getCurrentServerPage|goToServerPage|serverPageChanged|serverPageLoaded|pageNumber" packages demo docs plans
+rg -n "ServerPageRowModelController|serverPage|goToServerPage|getCurrentServerPage|serverPageLoaded|serverPageChanged|pageNumber" packages/core/src packages/react/src demo docs -g '!**/node_modules/**'
 ```
 
-This document is the Stage C demolition map for Plan 158. Its purpose is to identify every page-oriented `rowModelType: 'server'` seam that must be deleted or replaced before the new hierarchical SSRM can truthfully own the public `server` row model.
+Allowed remaining hits are historical migration notes in `docs/architecture/*` or old plans that explicitly describe removal history. Live code must not contain page-oriented server implementation seams.
 
-## Demolition rule
+## Verification snapshot
 
-The current server-page architecture must not survive as:
+The core demolition/replacement slice was committed only after:
 
-- a compatibility mode
-- a legacy alias
-- a nested controller inside SSRM
-- a fallback runtime branch
-- a public deprecated API
+- `corepack pnpm --filter @open-grid/core exec tsc --noEmit`
+- `corepack pnpm --filter @open-grid/core test`
+- Result: `111` test files passed, `1900` tests passed
 
-Breaking changes are expected. The final repository must contain exactly one server row model: real SSRM.
-
-## Primary implementation files to delete or replace
-
-These files currently encode page-oriented server behavior and must be deleted or rewritten as part of the SSRM cutover:
-
-- `packages/core/src/serverPageRowModel.ts`
-- `packages/core/src/createGrid.ts`
-- `packages/core/src/rowModel.ts`
-- `packages/core/src/engine/runtimePorts.ts`
-- `packages/core/src/engine/createRowModelRuntimes.ts`
-- `packages/core/src/engine/GridEngine.ts`
-- `packages/core/src/store.ts`
-- `packages/core/src/internal/createGridRuntimeComposition.ts`
-- `packages/core/src/plugins/createGridPluginRuntime.ts`
-- `packages/core/src/state/GridState.ts`
-- `packages/core/src/api/GridApiSurfaces.ts`
-- `packages/core/src/api/GridEvents.ts`
-- `packages/core/src/index.ts`
-- `packages/core/src/renderer/paginationBarRenderer.ts`
-- `packages/react/src/Grid.tsx`
-
-## Page-oriented state and runtime seams to remove
-
-These current seams are specific to the selected-page model and must not exist after SSRM replacement:
-
-- `InternalRowModelKind = 'server-page'` in `packages/core/src/rowModel.ts`
-- `GridUIState.serverPage` in `packages/core/src/state/GridState.ts`
-- `setServerPageState(...)` in `packages/core/src/engine/GridEngine.ts`
-- `getServerPageRowModelRuntime()` consumers throughout core
-- `dispatchServerPageLoadingStarted`, `dispatchServerPageLoaded`, and `dispatchServerPageLoadFailed`
-- server-page request scope identity from `packages/core/src/asyncRowModelRequestIdentity.ts`
-- server-page retry routing in `packages/core/src/store.ts` and `packages/core/src/engine/GridEngine.ts`
-- server-page pagination rendering in `packages/core/src/renderer/paginationBarRenderer.ts`
-
-## Public API and event surface to delete
-
-These public contracts must be removed rather than deprecated:
-
-- `goToServerPage(...)` in `packages/core/src/api/GridApiSurfaces.ts`
-- `ServerDatasource` and `ServerPageState` exports from `packages/core/src/serverPageRowModel.ts`
-- `GridEventName.serverPageLoadingStarted`
-- `GridEventName.serverPageLoaded`
-- `GridEventName.serverPageLoadFailed`
-- `GridEventName.serverPageChanged`
-- page-oriented event payloads in `packages/core/src/api/GridEvents.ts`
-- page-oriented runtime composition forwarding in `packages/core/src/internal/createGridRuntimeComposition.ts`
-- plugin runtime forwarding of `goToServerPage(...)`
-
-The public replacement surface should move to SSRM-specific operations such as:
-
-- `setServerSideDatasource(...)`
-- `refreshServerSide(...)`
-- `purgeServerSide(...)`
-- `getServerSideStoreState()`
-
-## Tests that currently protect the page architecture
-
-These suites must be rewritten to protect SSRM behavior or deleted if they only encode page semantics:
-
-- `packages/core/src/serverRowModel.test.ts`
-- `packages/core/src/serverRowModel.adversarial.test.ts`
-- `packages/core/src/rowModel.capabilities.test.ts`
-- `packages/core/src/store.test.ts`
-- `packages/core/src/query/queryModel.test.ts`
-- `packages/core/src/features/dataIntegrity/GridDataIntegrityManager.test.ts`
-- `packages/core/src/asyncRowModelRequestIdentity.test.ts`
-- server-page assertions in `packages/core/src/engine/architectureGuards.test.ts`
-
-Specific server-page expectations to delete:
-
-- explicit page loading events
-- current-page-only integrity/source labels
-- `goToServerPage(...)` capability behavior
-- `currentPage` partial-scope semantics
-- selected-page request identity
-
-## React and presentation seams to replace
-
-These files currently expose page-oriented server behavior above the core model:
-
-- `packages/react/src/Grid.tsx`
-- `packages/core/src/renderer/paginationBarRenderer.ts`
-
-Required replacement direction:
-
-- server row model props must describe SSRM block/cache/datasource options, not selected-page pagination
-- any future pagination UI must be presentation-only and must not define the datasource contract
-
-## Documentation and plan references to migrate
-
-The following documents currently describe or justify the page-oriented server model:
-
-- `plans/034-server-grid-polish-foundation.md`
-- `plans/140-row-model-integrity-parity.md`
-- `plans/156-row-model-completion-and-public-row-node-facade.md`
-
-These should remain only as historical migration notes once SSRM lands. They must not remain normative documentation for the live `server` row model.
-
-## Reusable pieces that may survive only if made page-agnostic
-
-These areas are candidates for reuse, but only if the page semantics are removed:
-
-- datasource generation and query generation authority
-- abortable async request handling
-- response validation patterns
-- authoritative async publication patterns
-- row-count normalization concepts
-- bounded cache primitives
-
-Anything that assumes:
-
-- one selected page
-- page count
-- page number
-- current-page integrity scope
-- page-owned visual index derivation
-
-must be deleted instead of reused.
-
-## Atomic replacement checklist
-
-Stage C is not complete until all of the following are true:
-
-- `packages/core/src/serverPageRowModel.ts` is gone
-- `rowModelType: 'server'` creates only SSRM
-- no server-page events remain
-- no `serverPage` state key remains
-- no `goToServerPage(...)` API remains
-- no page-oriented datasource types remain
-- no architecture guards require `server-page` naming
-- no tests assert current-page-only server semantics
-- no React props expose selected-page server loading
-- repo search for server-page symbols returns only migration notes that explicitly describe removal
+Plan 158 is complete only after React tests, root build, and the plan index update also pass.

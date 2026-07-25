@@ -58,15 +58,7 @@ export interface InfiniteRowModelOptions<TData = unknown> {
 - `packages/core/src/infiniteRowModel.ts:209-217`
 
 ```ts
-type InfiniteBlockStatus =
-  | 'absent'
-  | 'queued'
-  | 'loadingInitial'
-  | 'loaded'
-  | 'refreshing'
-  | 'failedInitial'
-  | 'failedRefresh'
-  | 'stale';
+type InfiniteBlockStatus = 'absent' | 'queued' | 'loadingInitial' | 'loaded' | 'refreshing' | 'failedInitial' | 'failedRefresh' | 'stale';
 ```
 
 - `packages/core/src/infiniteRowModel.ts:273-330`
@@ -121,16 +113,16 @@ public getBlockSnapshots = (): readonly InfiniteBlockSnapshot[] => {
 
 ```ts
 export interface ServerGetPageParams {
-  readonly page: number;
-  readonly pageSize: number;
-  readonly sortModel: unknown;
-  readonly filterModel: unknown;
-  readonly quickFilterModel: unknown;
-  readonly queryModel: unknown;
+	readonly page: number;
+	readonly pageSize: number;
+	readonly sortModel: unknown;
+	readonly filterModel: unknown;
+	readonly quickFilterModel: unknown;
+	readonly queryModel: unknown;
 }
 
 export interface ServerDatasource<TRowData = unknown> {
-  getPage(params: ServerGetPageParams, context: { signal?: AbortSignal }): Promise<ServerGetPageResult<TRowData>>;
+	getPage(params: ServerGetPageParams, context: { signal?: AbortSignal }): Promise<ServerGetPageResult<TRowData>>;
 }
 ```
 
@@ -138,12 +130,12 @@ export interface ServerDatasource<TRowData = unknown> {
 
 ```ts
 export interface ServerPageState {
-  readonly page: number;
-  readonly pageSize: number;
-  readonly pageCount: number;
-  readonly totalRowCount: number;
-  readonly loading: boolean;
-  readonly error: string | null;
+	readonly page: number;
+	readonly pageSize: number;
+	readonly pageCount: number;
+	readonly totalRowCount: number;
+	readonly loading: boolean;
+	readonly error: string | null;
 }
 ```
 
@@ -212,23 +204,23 @@ Relevant repo conventions and evidence files:
 
 - Plan files use the handoff template in `C:\Users\rishi\witbybit\open-grid\.agents\skills\improve\references\plan-template.md`.
 - Existing row-model demolition evidence already lives in:
-  - `C:\Users\rishi\witbybit\open-grid\docs\architecture\plan-158-readiness-audit.md`
-  - `C:\Users\rishi\witbybit\open-grid\docs\architecture\plan-158-server-page-deletion-manifest.md`
+    - `C:\Users\rishi\witbybit\open-grid\docs\architecture\plan-158-readiness-audit.md`
+    - `C:\Users\rishi\witbybit\open-grid\docs\architecture\plan-158-server-page-deletion-manifest.md`
 - Use `packages/core/src/serverRowModel.test.ts` and `packages/core/src/serverRowModel.adversarial.test.ts` as the primary test homes for infinite/server-backed async correctness.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-| ------- | ------- | ------------------- |
-| Drift check | `git diff --stat 6f594575..HEAD -- packages/core/src/infiniteRowModel.ts packages/core/src/serverPageRowModel.ts packages/core/src/serverRowModel.test.ts packages/core/src/serverRowModel.adversarial.test.ts packages/core/src/createGrid.ts packages/core/src/store.ts packages/core/src/rowModel.ts packages/core/src/api packages/core/src/engine packages/react/src/Grid.tsx demo docs/architecture plans/README.md` | exit 0; inspect output for drift |
-| Core focused tests | `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.test.ts src/serverRowModel.adversarial.test.ts src/renderer/renderEngine.test.ts src/renderer/serverRuntimePerformance.test.ts` | all pass |
-| Core full tests | `corepack pnpm --filter @open-grid/core test` | exit 0; all tests pass |
-| React tests | `corepack pnpm --filter @open-grid/react test` | exit 0; all tests pass |
-| Workspace tests | `corepack pnpm run test` | exit 0; all tests pass |
-| Architecture guards | `corepack pnpm --filter @open-grid/core exec vitest run src/boundary.test.ts src/engine/architectureGuards.test.ts` | all pass |
-| Adversarial suite | `corepack pnpm run test:adversarial` | exit 0; all tests pass |
-| Build | `corepack pnpm run build` | exit 0 |
-| Repo search for removed symbols | `rg -n "ServerPageRowModelController|serverPage|goToServerPage|getCurrentServerPage|serverPageLoaded|serverPageChanged|pageNumber" packages/core/src packages/react/src demo docs -g '!**/node_modules/**'` | no matches outside explicit migration notes, if any |
+| Purpose                         | Command                                                                                                                                                                                                                                                                                                                                                                                                                    | Expected on success              |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | -------------- | -------------------- | ---------------- | ----------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| Drift check                     | `git diff --stat 6f594575..HEAD -- packages/core/src/infiniteRowModel.ts packages/core/src/serverPageRowModel.ts packages/core/src/serverRowModel.test.ts packages/core/src/serverRowModel.adversarial.test.ts packages/core/src/createGrid.ts packages/core/src/store.ts packages/core/src/rowModel.ts packages/core/src/api packages/core/src/engine packages/react/src/Grid.tsx demo docs/architecture plans/README.md` | exit 0; inspect output for drift |
+| Core focused tests              | `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.test.ts src/serverRowModel.adversarial.test.ts src/renderer/renderEngine.test.ts src/renderer/serverRuntimePerformance.test.ts`                                                                                                                                                                                                                 | all pass                         |
+| Core full tests                 | `corepack pnpm --filter @open-grid/core test`                                                                                                                                                                                                                                                                                                                                                                              | exit 0; all tests pass           |
+| React tests                     | `corepack pnpm --filter @open-grid/react test`                                                                                                                                                                                                                                                                                                                                                                             | exit 0; all tests pass           |
+| Workspace tests                 | `corepack pnpm run test`                                                                                                                                                                                                                                                                                                                                                                                                   | exit 0; all tests pass           |
+| Architecture guards             | `corepack pnpm --filter @open-grid/core exec vitest run src/boundary.test.ts src/engine/architectureGuards.test.ts`                                                                                                                                                                                                                                                                                                        | all pass                         |
+| Adversarial suite               | `corepack pnpm run test:adversarial`                                                                                                                                                                                                                                                                                                                                                                                       | exit 0; all tests pass           |
+| Build                           | `corepack pnpm run build`                                                                                                                                                                                                                                                                                                                                                                                                  | exit 0                           |
+| Repo search for removed symbols | `rg -n "ServerPageRowModelController                                                                                                                                                                                                                                                                                                                                                                                       | serverPage                       | goToServerPage | getCurrentServerPage | serverPageLoaded | serverPageChanged | pageNumber" packages/core/src packages/react/src demo docs -g '!**/node_modules/**'` | no matches outside explicit migration notes, if any |
 
 ## Scope
 
@@ -276,15 +268,15 @@ Relevant repo conventions and evidence files:
 Use the existing focused suites to prove the failures and pin the expected core behavior before large refactors:
 
 - Add or finish tests in `packages/core/src/serverRowModel.test.ts` for:
-  - infinite blank-row replacement when a non-zero block resolves
-  - infinite sort publication after async commit
-  - infinite filter publication and row-count update after async commit
-  - row-count transitions across unknown, estimated, and known states
-  - deliberate loading/failed placeholders instead of unexplained blanks
+    - infinite blank-row replacement when a non-zero block resolves
+    - infinite sort publication after async commit
+    - infinite filter publication and row-count update after async commit
+    - row-count transitions across unknown, estimated, and known states
+    - deliberate loading/failed placeholders instead of unexplained blanks
 - Add or finish adversarial tests in `packages/core/src/serverRowModel.adversarial.test.ts` for:
-  - stale query responses losing to newer sort/filter/query generations
-  - datasource replacement invalidating old authority
-  - rapid scrolling not requiring incidental renders to repaint committed rows
+    - stale query responses losing to newer sort/filter/query generations
+    - datasource replacement invalidating old authority
+    - rapid scrolling not requiring incidental renders to repaint committed rows
 - If a renderer-specific reproduction is clearer, add a narrowly focused assertion in `packages/core/src/renderer/renderEngine.test.ts`.
 
 **Verify**: `corepack pnpm --filter @open-grid/core exec vitest run src/serverRowModel.test.ts src/serverRowModel.adversarial.test.ts src/renderer/renderEngine.test.ts` -> all pass
@@ -397,47 +389,47 @@ Keep demo changes minimal and downstream of the core fix.
 ## Test plan
 
 - Add or complete tests in `packages/core/src/serverRowModel.test.ts` covering:
-  - infinite non-zero block commit replaces loading placeholders immediately
-  - infinite sorting changes visible order only after the async response commits
-  - infinite filtering changes visible rows and row count atomically
-  - infinite refresh retains committed rows
-  - failed refresh retains committed rows
-  - hard purge intentionally removes committed rows
-  - row-count transitions unknown -> estimated -> known and known shrink
-  - no represented in-range visual index resolves to unexplained blank output
+    - infinite non-zero block commit replaces loading placeholders immediately
+    - infinite sorting changes visible order only after the async response commits
+    - infinite filtering changes visible rows and row count atomically
+    - infinite refresh retains committed rows
+    - failed refresh retains committed rows
+    - hard purge intentionally removes committed rows
+    - row-count transitions unknown -> estimated -> known and known shrink
+    - no represented in-range visual index resolves to unexplained blank output
 - Add or complete adversarial tests in `packages/core/src/serverRowModel.adversarial.test.ts` covering:
-  - stale query responses
-  - stale datasource responses
-  - rapid distant scrolling
-  - concurrency limit behavior
-  - queue prioritization
+    - stale query responses
+    - stale datasource responses
+    - rapid distant scrolling
+    - concurrency limit behavior
+    - queue prioritization
 - Add SSRM replacement tests for:
-  - root-store loading and sort/filter/query forwarding
-  - child-store route construction
-  - route-targeted refresh/purge
-  - stale child-store rejection
-  - server-page API/type removal
+    - root-store loading and sort/filter/query forwarding
+    - child-store route construction
+    - route-targeted refresh/purge
+    - stale child-store rejection
+    - server-page API/type removal
 - Reuse structural patterns from the existing row-model and adversarial suites rather than inventing a new test harness.
 - Verification:
-  - `corepack pnpm --filter @open-grid/core test` -> all pass
-  - `corepack pnpm --filter @open-grid/react test` -> all pass
-  - `corepack pnpm run test` -> all pass
+    - `corepack pnpm --filter @open-grid/core test` -> all pass
+    - `corepack pnpm --filter @open-grid/react test` -> all pass
+    - `corepack pnpm run test` -> all pass
 
 ## Done criteria
 
 All must hold:
 
-- [ ] `corepack pnpm --filter @open-grid/core test` exits 0
-- [ ] `corepack pnpm --filter @open-grid/react test` exits 0
-- [ ] `corepack pnpm run build` exits 0
-- [ ] Infinite scrolling no longer produces unexplained blank or skipped in-range rows under the focused adversarial tests
-- [ ] Infinite sorting and filtering are verified in core tests, not demo-only behavior
-- [ ] `rowModelType: 'server'` instantiates only the new SSRM
-- [ ] No page-oriented server datasource contract remains in public types
-- [ ] No page-oriented server events or public APIs remain
-- [ ] Repo search for `ServerPageRowModelController|serverPage|goToServerPage|getCurrentServerPage|serverPageLoaded|serverPageChanged|pageNumber` finds no live implementation usage
-- [ ] No files outside the in-scope list are modified except for unavoidable compile-fix touch points caused by the server-page demolition
-- [ ] `plans/README.md` status row updated
+- [x] `corepack pnpm --filter @open-grid/core test` exits 0
+- [x] `corepack pnpm --filter @open-grid/react test` exits 0
+- [x] `corepack pnpm run build` exits 0
+- [x] Infinite scrolling no longer produces unexplained blank or skipped in-range rows under the focused adversarial tests
+- [x] Infinite sorting and filtering are verified in core tests, not demo-only behavior
+- [x] `rowModelType: 'server'` instantiates only the new SSRM
+- [x] No page-oriented server datasource contract remains in public types
+- [x] No page-oriented server events or public APIs remain
+- [x] Repo search for `ServerPageRowModelController|serverPage|goToServerPage|getCurrentServerPage|serverPageLoaded|serverPageChanged|pageNumber` finds no live implementation usage
+- [x] No files outside the in-scope list are modified except for unavoidable compile-fix touch points caused by the server-page demolition
+- [x] `plans/README.md` status row updated
 
 ## STOP conditions
 
