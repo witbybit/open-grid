@@ -1,5 +1,7 @@
 # Plan 151: Keep the Grid Fast After Millions of Interactions, Not Just the First Minute
 
+> **Status: SUPERSEDED by Plan 160.** Its deterministic ownership diagnostics, long-session scenarios, bounded scheduler/cache contracts, and React portal evidence fully replace this earlier planning document. Plan 153 consumed that evidence before completion.
+
 ## Mission
 
 Add long-session performance, memory, and scheduler resilience guardrails so the grid stays snappy after sustained scrolling, editing, selection churn, async updates, and renderer hydration over time.

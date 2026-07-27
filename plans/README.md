@@ -149,9 +149,9 @@
 | 148 | [Make Grouping, Tree Data, Master/Detail, and Pinned Lanes Compose Cleanly](./148-group-tree-master-detail-and-pinned-composition.md) | DONE | working tree |
 | 149 | [Converge Filtering, Query Building, and Analysis Surfaces Into One Serious Workflow](./149-filtering-query-and-analysis-surface-convergence.md) | DONE | working tree |
 | 150 | [Make Open Grid Easy to Integrate Into Real Business Workflows](./150-import-export-and-interoperability-foundation.md) | TODO | c4f9506e |
-| 151 | [Keep the Grid Fast After Millions of Interactions, Not Just the First Minute](./151-long-session-performance-memory-and-scheduler-resilience.md) | TODO | c4f9506e |
+| 151 | [Keep the Grid Fast After Millions of Interactions, Not Just the First Minute](./151-long-session-performance-memory-and-scheduler-resilience.md) | SUPERSEDED (160) | working tree |
 | 152 | [Make Customization Powerful Without Letting Consumers Break the Core](./152-extension-surface-and-enterprise-customization-contract.md) | TODO | c4f9506e |
-| 153 | [Feather Scroll Snapshot Program](./153-feather-scroll-snapshot-program.md) | TODO | working tree |
+| 153 | [Feather Scroll Snapshot Program](./153-feather-scroll-snapshot-program.md) | DONE | working tree |
 | 156 | [Row Model Completion + Public RowNode Facade](./156-row-model-completion-and-public-row-node-facade.md) | TODO | working tree |
 | 157 | [Interaction Kernel Hardening](./157-interaction-kernel-hardening.md) | DONE | working tree |
 | 158 | [Server-Backed Row Model Correctness + Real SSRM Replacement](./158-server-backed-row-model-correctness-and-ssrm-replacement.md) | DONE | working tree |

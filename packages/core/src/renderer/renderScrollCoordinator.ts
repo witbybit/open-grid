@@ -60,8 +60,12 @@ export interface RenderScrollCoordinatorState<TRowData = unknown> {
 	lastPrewarmRequest: { visibleRowStart: number; visibleRowEnd: number; visibleColStart: number; visibleColEnd: number } | null;
 	postScrollDecorationScheduled: boolean;
 	postScrollDecorationTimer: number | null;
+	/** Monotonic identity for motion callbacks; invalidates a callback that escaped cancellation. */
+	postScrollDecorationGeneration: number;
 	postScrollFidelityScheduled: boolean;
 	postScrollFidelityTimer: number | null;
+	/** Monotonic identity for fidelity callbacks; invalidates a callback that escaped cancellation. */
+	postScrollFidelityGeneration: number;
 	/** scrollEpoch captured when scheduleBudgetedFidelityDecoration was last called. */
 	fidelityEpoch: number;
 	cachedMaxScrollLeft: number;
@@ -316,6 +320,10 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	}
 
 	public clearPostScrollDecorationTimer(): void {
+		// `cancelIdle` is advisory in some host shims. Advance both generations so a
+		// callback that has already escaped cancellation cannot mutate current-epoch state.
+		this.state.postScrollDecorationGeneration++;
+		this.state.postScrollFidelityGeneration++;
 		if (this.state.postScrollDecorationTimer !== null) {
 			this.deps.gridScheduler.cancelIdle(this.state.postScrollDecorationTimer);
 			this.state.postScrollDecorationTimer = null;
@@ -455,145 +463,28 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 			if (!col) return true;
 			const isImpostorEligible = compiledPlan.columnPlans[colIndex]?.mode === 'custom';
 			const rowId = visualRow.node.id;
+			if (hasFreshSnapshot(rowId, col.field)) return true;
 			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
 			const shouldPrimeFormula = typeof rawValue === 'string' && rawValue.startsWith('=');
 			const hasRegisteredFormula = this.deps.engine.hasFormula(rowId, col.field);
 			const shouldPrimeDisplayValue = col.valueGetter || shouldPrimeFormula || hasRegisteredFormula || isImpostorEligible;
-			if (!shouldPrimeDisplayValue) return true;
 			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
-			const hasInsightDecorations = cellDecorations.length > 0;
 			const isFocused = isCellFocused(rowId, col, focusedCell);
 			const isSelected = isCellSelected(rowIndex, colIndex, selectionBounds);
 			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
 			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
 			const needsStyleSnapshot = compiledStyleRules.hasCellRules && visualRow.node.data !== null;
 			const cachedValue = this.deps.engine.getCachedDisplayValue(rowId, col.field);
-			const plainSnapshotEligible =
-				!hasInsightDecorations && !isFocused && !isSelected && !needsReadonlyEvaluation && !needsTooltipSnapshot && !needsStyleSnapshot;
-			const displayValue =
-				(col.valueGetter || hasRegisteredFormula) && cachedValue !== undefined
+			const primedValue = shouldPrimeDisplayValue
+				? (col.valueGetter || hasRegisteredFormula) && cachedValue !== undefined
 					? cachedValue
-					: this.deps.engine.primeDisplayValue(rowId, col.field);
-			if (displayValue !== undefined) {
-				recordWork();
+					: this.deps.engine.primeDisplayValue(rowId, col.field)
+				: undefined;
+			const displayValue = primedValue ?? cachedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field);
+			if (shouldPrimeDisplayValue && primedValue !== undefined) {
 				this.deps.renderStats.prewarmedDisplayValues++;
-				if (plainSnapshotEligible) {
-					const snapshotContentKind = isImpostorEligible && displayValue !== '' ? 'impostor' : displayValue !== '' ? 'text' : 'empty';
-					const snapshotContentMode = isImpostorEligible && displayValue !== '' ? 'fallback' : displayValue !== '' ? 'text' : 'empty';
-					this.deps.engine.cellDisplaySnapshots.set(
-						createCellDisplaySnapshot({
-							rowId,
-							columnInstanceId: getColumnInstanceIdentity(col),
-							colField: col.field,
-							rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
-							globalVersion: state.globalVersion,
-							insightVersion: this.deps.engine.insights.getVersion(),
-							styleVersion: this.deps.rowRenderer.styleVersion,
-							loadingVersion: this.deps.rowRenderer.loadingVersion,
-							selectionVersion: this.deps.engine.selectionVersion,
-							baseClassName: 'og-cell',
-							contentKind: snapshotContentKind,
-							contentMode: snapshotContentMode,
-							formattedValue: displayValue,
-							title: '',
-						})
-					);
-					this.deps.renderStats.prewarmedCellSnapshots++;
-				} else {
-					const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
-					let stateClassName = '';
-					if (isFocused) {
-						stateClassName += stateClassName ? ' og-cell-focused' : 'og-cell-focused';
-					}
-					if (isSelected) {
-						stateClassName += stateClassName ? ' og-cell-selected' : 'og-cell-selected';
-					}
-					if (needsReadonlyEvaluation) {
-						const isEditable = normalizeCapabilityResult(
-							col.canEdit!({ action: 'edit', row: visualRow.node.data, rowId, colField: col.field })
-						).allowed;
-						if (!isEditable) {
-							stateClassName += stateClassName ? ' og-cell-readonly' : 'og-cell-readonly';
-						}
-					}
-					if (needsStyleSnapshot) {
-						const styleScratch = this.deps.rowRenderer.cellClassScratch;
-						styleScratch.row = visualRow.node.data;
-						styleScratch.rowId = rowId;
-						styleScratch.rowIndex = rowIndex;
-						styleScratch.col = col;
-						styleScratch.colField = col.field;
-						styleScratch.colIndex = colIndex;
-						styleScratch.isFocused = isFocused;
-						styleScratch.isRowFocused = focusedCell?.rowId === rowId;
-						styleScratch.isRowSelected = isSelected;
-						styleScratch.isSelected = isSelected;
-						styleScratch.isEditing = false;
-						styleScratch.value = displayValue;
-						styleScratch.rawValue = rawValue ?? displayValue;
-						styleScratch.isLoading = false;
-						styleScratch.selection = interaction.cellSelection.selection;
-						const customCellClass = evaluateCellStyleRules(compiledStyleRules, col, visualRow.node.data, styleScratch);
-						if (customCellClass) stateClassName += stateClassName ? ` ${customCellClass}` : customCellClass;
-					}
-					const tooltipText =
-						col.tooltip !== undefined && visualRow.node.data !== null
-							? typeof col.tooltip === 'string'
-								? col.tooltip
-								: col.tooltip({
-										row: visualRow.node.data,
-										rowId,
-										colField: col.field,
-										value: rawValue ?? displayValue,
-									})
-							: null;
-					const snapshotContentKind = isImpostorEligible && displayValue !== '' ? 'impostor' : displayValue !== '' ? 'text' : 'empty';
-					const snapshotContentMode = isImpostorEligible && displayValue !== '' ? 'fallback' : displayValue !== '' ? 'text' : 'empty';
-					this.deps.engine.cellDisplaySnapshots.set(
-						createCellDisplaySnapshot({
-							rowId,
-							columnInstanceId: getColumnInstanceIdentity(col),
-							colField: col.field,
-							rowVersion: this.deps.engine.rowVersions.get(rowId) ?? -1,
-							globalVersion: state.globalVersion,
-							insightVersion: this.deps.engine.insights.getVersion(),
-							styleVersion: this.deps.rowRenderer.styleVersion,
-							loadingVersion: this.deps.rowRenderer.loadingVersion,
-							selectionVersion: this.deps.engine.selectionVersion,
-							baseClassName: 'og-cell',
-							stateClassName,
-							decorationClassName: decorationMetadata.classNameSuffix,
-							contentKind: snapshotContentKind,
-							contentMode: snapshotContentMode,
-							formattedValue: displayValue,
-							title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
-							validationError: decorationMetadata.validationError,
-						})
-					);
-					this.deps.renderStats.prewarmedCellSnapshots++;
-				}
 			}
-			return canContinue();
-		});
-
-		visitApproachBand((rowIndex, colIndex) => {
-			if (!canContinue()) return false;
-			const visualRow = rowModel.getVisualRow(rowIndex);
-			if (visualRow?.kind !== 'data') return true;
-			const col = columns[colIndex];
-			if (!col) return true;
-			const isImpostorEligible = compiledPlan.columnPlans[colIndex]?.mode === 'custom';
-			const rowId = visualRow.node.id;
-			if (hasFreshSnapshot(rowId, col.field)) return true;
-			const rawValue = col.valueGetter ? undefined : this.deps.engine.getRawCellValue(rowId, col.field);
-			const cellDecorations = this.deps.engine.insights.getCellDecorations(rowId, col.field);
-			const hasInsightDecorations = cellDecorations.length > 0;
-			const isFocused = isCellFocused(rowId, col, focusedCell);
-			const isSelected = isCellSelected(rowIndex, colIndex, selectionBounds);
-			const needsReadonlyEvaluation = col.canEdit !== undefined && visualRow.node.data !== null;
-			const needsTooltipSnapshot = col.tooltip !== undefined && visualRow.node.data !== null;
-			const needsStyleSnapshot = compiledStyleRules.hasCellRules && visualRow.node.data !== null;
-			const primedValue = this.deps.engine.getCachedDisplayValue(rowId, col.field);
+			recordWork();
 			const decorationMetadata = collectCellDecorationSnapshotMetadata(cellDecorations);
 			let stateClassName = '';
 			if (isFocused) {
@@ -623,8 +514,8 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 				styleScratch.isRowSelected = isSelected;
 				styleScratch.isSelected = isSelected;
 				styleScratch.isEditing = false;
-				styleScratch.value = primedValue;
-				styleScratch.rawValue = rawValue ?? primedValue;
+				styleScratch.value = displayValue;
+				styleScratch.rawValue = rawValue ?? displayValue;
 				styleScratch.isLoading = false;
 				styleScratch.selection = interaction.cellSelection.selection;
 				const customCellClass = evaluateCellStyleRules(compiledStyleRules, col, visualRow.node.data, styleScratch);
@@ -638,15 +529,11 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 								row: visualRow.node.data,
 								rowId,
 								colField: col.field,
-								value: rawValue ?? primedValue,
+								value: rawValue ?? displayValue,
 							})
 					: null;
-			recordWork();
-			const snapshotFormattedValue = primedValue ?? this.deps.engine.getCheapDisplayValue(rowId, col.field);
-			const snapshotContentKind =
-				isImpostorEligible && snapshotFormattedValue !== '' ? 'impostor' : snapshotFormattedValue !== '' ? 'text' : 'empty';
-			const snapshotContentMode =
-				isImpostorEligible && snapshotFormattedValue !== '' ? 'fallback' : snapshotFormattedValue !== '' ? 'text' : 'empty';
+			const snapshotContentKind = isImpostorEligible && displayValue !== '' ? 'impostor' : displayValue !== '' ? 'text' : 'empty';
+			const snapshotContentMode = isImpostorEligible && displayValue !== '' ? 'fallback' : displayValue !== '' ? 'text' : 'empty';
 			this.deps.engine.cellDisplaySnapshots.set(
 				createCellDisplaySnapshot({
 					rowId,
@@ -663,7 +550,7 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 					decorationClassName: decorationMetadata.classNameSuffix,
 					contentKind: snapshotContentKind,
 					contentMode: snapshotContentMode,
-					formattedValue: snapshotFormattedValue,
+					formattedValue: displayValue,
 					title: mergeCellSnapshotTitle(tooltipText, decorationMetadata.insightTitle),
 					validationError: decorationMetadata.validationError,
 				})
@@ -686,10 +573,15 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	public scheduleBudgetedDecoration(): void {
 		if (this.state.postScrollDecorationScheduled) return;
 		this.state.postScrollDecorationScheduled = true;
+		const generation = ++this.state.postScrollDecorationGeneration;
+		const scrollEpoch = this.deps.runtimeState.scrollEpoch;
 		this.state.postScrollDecorationTimer = this.deps.gridScheduler.idle(() => {
+			if (this.state.postScrollDecorationGeneration !== generation || !this.deps.runtimeState.isScrollEpochCurrent(scrollEpoch)) {
+				return;
+			}
 			this.state.postScrollDecorationTimer = null;
 			this.state.postScrollDecorationScheduled = false;
-			if (this.deps.runtimeState.isScrolling()) {
+			if (!this.deps.runtimeState.canRunDecoration()) {
 				return;
 			}
 			this.deps.renderStats.postScrollDecorationChunks++;
@@ -746,19 +638,20 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 	public scheduleBudgetedFidelityDecoration(): void {
 		if (this.state.postScrollFidelityScheduled) return;
 		this.state.postScrollFidelityScheduled = true;
-		this.state.fidelityEpoch = this.deps.runtimeState.scrollEpoch;
+		const generation = ++this.state.postScrollFidelityGeneration;
+		const scrollEpoch = this.deps.runtimeState.scrollEpoch;
+		this.state.fidelityEpoch = scrollEpoch;
 		this.state.postScrollFidelityTimer = this.deps.gridScheduler.idle(() => {
-			this.state.postScrollFidelityTimer = null;
-			this.state.postScrollFidelityScheduled = false;
-			if (this.deps.runtimeState.isScrolling()) {
-				// A new scroll is active — reschedule so this work fires after it ends
-				// rather than silently dropping the remaining queue.
-				this.scheduleBudgetedFidelityDecoration();
+			if (this.state.postScrollFidelityGeneration !== generation || !this.deps.runtimeState.isScrollEpochCurrent(scrollEpoch)) {
 				return;
 			}
-			// If a new scroll epoch has completed since we were scheduled, the motion
-			// lane already ran a fresh decoration pass. Re-run under the current epoch.
-			this.state.fidelityEpoch = this.deps.runtimeState.scrollEpoch;
+			this.state.postScrollFidelityTimer = null;
+			this.state.postScrollFidelityScheduled = false;
+			if (!this.deps.runtimeState.canRunDecoration()) {
+				// finishScrolling() owns the fresh-epoch reschedule; retaining the dirty set
+				// here prevents stale work from racing the next gesture.
+				return;
+			}
 			this.deps.renderStats.postScrollDecorationChunks++;
 			this.deps.renderStats.postScrollFidelityChunks++;
 			this.deps.portalMountManager.beginCellReleaseTransaction();

@@ -54,6 +54,26 @@ export interface DecorateDirtyCellsAfterScrollResult {
 	remainingFidelity: number;
 }
 
+/**
+ * Explicitly order repairs within a priority bucket. Set insertion order reflects whichever
+ * scroll frame happened to dirty a cell first, so it must not decide which visible cell settles
+ * first. Keeping the tie-break entirely on physical binding identity makes repeated runs and
+ * lane changes deterministic without introducing a new queue owner.
+ */
+export function sortDirtyCellsForRepair(cells: HTMLDivElement[], getPriority: (cell: HTMLDivElement) => number): void {
+	cells.sort((a, b) => {
+		const priorityDelta = getPriority(b) - getPriority(a);
+		if (priorityDelta !== 0) return priorityDelta;
+		const aSlot = (a as unknown as { __cellSlot?: { rowIndex?: number; colIndex?: number; cellInstanceId?: string } }).__cellSlot;
+		const bSlot = (b as unknown as { __cellSlot?: { rowIndex?: number; colIndex?: number; cellInstanceId?: string } }).__cellSlot;
+		const rowDelta = (aSlot?.rowIndex ?? Number.MAX_SAFE_INTEGER) - (bSlot?.rowIndex ?? Number.MAX_SAFE_INTEGER);
+		if (rowDelta !== 0) return rowDelta;
+		const colDelta = (aSlot?.colIndex ?? Number.MAX_SAFE_INTEGER) - (bSlot?.colIndex ?? Number.MAX_SAFE_INTEGER);
+		if (colDelta !== 0) return colDelta;
+		return (aSlot?.cellInstanceId ?? '').localeCompare(bSlot?.cellInstanceId ?? '');
+	});
+}
+
 function classifyDirtyCellLane<TRowData>(cell: HTMLDivElement, columns: readonly ColumnDef<TRowData>[]): Exclude<PostScrollRepairLane, 'all'> {
 	const cs = (
 		cell as unknown as {
@@ -280,6 +300,7 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 		else if (p > 1) b2.push(cell);
 		else b3.push(cell);
 	}
+	for (const bucket of deps.dirtyBuckets) sortDirtyCellsForRepair(bucket, getCellPriority);
 
 	let processed = 0;
 	for (let bi = 0; bi < 4 && processed < maxCells; bi++) {

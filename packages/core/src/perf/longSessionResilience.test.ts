@@ -8,6 +8,7 @@ import { GridStore, type ColumnDef } from '../store.js';
 import { DefaultFrameCoordinator } from '../renderer/frameCoordinator.js';
 import type { GridScheduler } from '../renderer/gridScheduler.js';
 import { RenderEngine } from '../renderer/renderEngine.js';
+import { CellDisplaySnapshotStore, createCellDisplaySnapshot } from '../renderer/cellDisplaySnapshot.js';
 
 /** Fixed-queue scheduler: tests own every flush and never depend on elapsed time. */
 class DeterministicScheduler implements GridScheduler {
@@ -119,6 +120,34 @@ describe('long-session deterministic resilience', () => {
 		expect(snapshot.frames).toHaveLength(8);
 		expect(snapshot.frames[0]?.durationMs).toBe(99_992);
 		expect(snapshot.droppedFrames).toBe(99_992);
+	});
+
+	it('keeps the 10,000-cell directional-prewarm snapshot working set bounded', () => {
+		const snapshots = new CellDisplaySnapshotStore(128);
+		const epochs: number[] = [];
+		for (let operation = 0; operation < 10_000; operation++) {
+			snapshots.set(
+				createCellDisplaySnapshot({
+					rowId: `row-${operation}`,
+					colField: 'value',
+					rowVersion: 0,
+					globalVersion: 0,
+					insightVersion: 0,
+					styleVersion: 0,
+					loadingVersion: 0,
+					selectionVersion: 0,
+					baseClassName: 'og-cell',
+					contentKind: 'text',
+					contentMode: 'text',
+					formattedValue: String(operation),
+					title: '',
+				})
+			);
+			if ((operation + 1) % 2_500 === 0) epochs.push(snapshots.getOwnershipSnapshot().entryCount);
+		}
+		boundedPeak(epochs, 128, 'directional-prewarm snapshots');
+		noPositiveSlopeAcrossEpochs(epochs, 'directional-prewarm snapshots');
+		expect(snapshots.getOwnershipSnapshot()).toEqual({ entryCount: 128, maxEntries: 128, evictedSnapshotCount: 9_872 });
 	});
 
 	it('keeps a mounted 100,000-row client grid at a stable slot plateau through 10,000 mixed scroll operations', () => {

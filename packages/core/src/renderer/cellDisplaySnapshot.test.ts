@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { CellDisplaySnapshotStore, createCellDisplaySnapshot, joinCellSnapshotClassNameParts } from './cellDisplaySnapshot.js';
 
 describe('CellDisplaySnapshotStore', () => {
+	function makeSnapshot(rowId: string, colField: string, formattedValue = rowId) {
+		return createCellDisplaySnapshot({
+			rowId,
+			colField,
+			rowVersion: 0,
+			globalVersion: 0,
+			insightVersion: 0,
+			styleVersion: 0,
+			loadingVersion: 0,
+			selectionVersion: 0,
+			baseClassName: 'og-cell',
+			contentKind: 'text',
+			contentMode: 'text',
+			formattedValue,
+			title: '',
+		});
+	}
+
 	it('stores snapshots by logical cell identity', () => {
 		const store = new CellDisplaySnapshotStore();
 		store.set(
@@ -78,6 +96,19 @@ describe('CellDisplaySnapshotStore', () => {
 			formattedValue: 'Alicia',
 			className: 'og-cell fresh',
 		});
+	});
+
+	it('bounds the directional-prewarm working set without making reads mutate ownership', () => {
+		const store = new CellDisplaySnapshotStore(2);
+		store.set(makeSnapshot('r1', 'name'));
+		store.set(makeSnapshot('r2', 'name'));
+		expect(store.get('r1', 'name')).toBeDefined();
+		store.set(makeSnapshot('r3', 'name'));
+
+		expect(store.get('r1', 'name')).toBeUndefined();
+		expect(store.get('r2', 'name')).toBeDefined();
+		expect(store.get('r3', 'name')).toBeDefined();
+		expect(store.getOwnershipSnapshot()).toEqual({ entryCount: 2, maxEntries: 2, evictedSnapshotCount: 1 });
 	});
 
 	it('canonicalizes class segments into a stable snapshot payload', () => {

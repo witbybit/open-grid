@@ -6,6 +6,13 @@ import type { VisualFreshness } from './visualFreshness.js';
 export type CellDisplayContentKind = CellContentMode | 'portal-live' | 'portal-frozen' | 'impostor';
 
 /**
+ * Snapshot authority is a bounded working set, not a per-dataset mirror. This comfortably covers
+ * the rendered window plus several directional prewarm rings while making long-session growth
+ * independent of how many distinct cells a user visits.
+ */
+export const DEFAULT_CELL_DISPLAY_SNAPSHOT_CAPACITY = 1024;
+
+/**
  * Extends VisualFreshness (rowVersion/globalVersion/insightVersion/styleVersion/loadingVersion/
  * selectionVersion) so a snapshot's freshness can be judged by the same canonical predicate
  * (isVisualFresh) that mounted CellSlot state is judged by — see visualFreshness.ts.
@@ -121,13 +128,26 @@ function buildCellSnapshotKey(rowId: string, columnInstanceId: ColumnInstanceId 
 
 export class CellDisplaySnapshotStore {
 	private readonly snapshots = new Map<string, CellDisplaySnapshot>();
+	private evictedSnapshotCount = 0;
+
+	constructor(private readonly maxEntries = DEFAULT_CELL_DISPLAY_SNAPSHOT_CAPACITY) {}
 
 	public get(rowId: string, columnInstanceId: ColumnInstanceId | string): CellDisplaySnapshot | undefined {
 		return this.snapshots.get(buildCellSnapshotKey(rowId, columnInstanceId));
 	}
 
 	public set(snapshot: CellDisplaySnapshot): void {
-		this.snapshots.set(buildCellSnapshotKey(snapshot.rowId, snapshot.columnInstanceId), snapshot);
+		const key = buildCellSnapshotKey(snapshot.rowId, snapshot.columnInstanceId);
+		// Targeted invalidation/full-bind updates refresh recency. Reads deliberately do not: active
+		// scroll must consume snapshots without mutating cache ownership.
+		this.snapshots.delete(key);
+		this.snapshots.set(key, snapshot);
+		while (this.snapshots.size > this.maxEntries) {
+			const oldestKey = this.snapshots.keys().next().value as string | undefined;
+			if (oldestKey === undefined) break;
+			this.snapshots.delete(oldestKey);
+			this.evictedSnapshotCount++;
+		}
 	}
 
 	public delete(rowId: string, columnInstanceId: ColumnInstanceId | string): void {
@@ -136,5 +156,10 @@ export class CellDisplaySnapshotStore {
 
 	public clear(): void {
 		this.snapshots.clear();
+	}
+
+	/** Read-only ownership gauge for deterministic long-session diagnostics. */
+	public getOwnershipSnapshot(): Readonly<{ entryCount: number; maxEntries: number; evictedSnapshotCount: number }> {
+		return Object.freeze({ entryCount: this.snapshots.size, maxEntries: this.maxEntries, evictedSnapshotCount: this.evictedSnapshotCount });
 	}
 }

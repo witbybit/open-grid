@@ -49,6 +49,37 @@ The cell display snapshot has been upgraded from a flat `className + text` cache
 Phase C progress note:
 The post-scroll repair path is now explicitly split into a motion lane and a fidelity lane. Primitive and loading-shell repairs drain through the motion budget first, while custom-renderer / portal / other richer dirty cells are left in the queue and drained afterward through a separate fidelity budget instead of sharing the same generic decoration chunk. Phase C has also now taken its first real bite out of active-scroll rich work: `custom-live` cells can consume fallback/impostor snapshots during scroll instead of forcing an immediate live portal mount when a fresh snapshot already exists, and full-bind / prewarm snapshot writers now tag those motion-safe fallbacks explicitly as `impostor` content rather than plain primitive text. The approach-band prewarm ring now also includes `custom-live` columns even when they are not formula- or valueGetter-driven, which closes the horizontal wake-up hole where offscreen rich cells could remain blank until a later vertical scroll or direct interaction. Fidelity-lane starvation is now closed: when the motion pass exhausts, the first fidelity batch runs in the same idle slice rather than scheduling a separate idle callback, eliminating the one-idle-gap where visible rich cells could remain as impostors after motion completes. Pinned-lane impostor parity is now proven by dedicated tests: pinned-left and pinned-right `custom-live` columns follow exactly the same impostor path as center columns, with no lane-dependent branching in the scroll binder. The approach-band prewarm ring is also now a true ring: in addition to the horizontal band (visible rows × approach columns) and vertical band (approach rows × visible columns), diagonal corner cells (approach rows × approach columns) are now prewarmed, so diagonal trackpad scroll no longer arrives at cold snapshots. Live `mountCellImmediately` calls during scroll are now eliminated for all `custom-live` cells that lack existing live portal content: when a `custom-live` cell enters the viewport with no frozen portal and no prewarm snapshot, the scroll frame synthesizes a cheap text impostor (from the display value cache or the last warm text) instead of mounting the portal synchronously. Cells that already have live content in their portal host still freeze in place; all others are deferred to the post-scroll fidelity lane. Widening impostors to the broader deferred `custom` lane is still intentionally not done because it regressed a server perf contract in prior exploration.
 
+## Reconciliation record (2026-07-28)
+
+Plan 160's bounded working-set rules are authoritative. The remaining implementation work was deliberately limited to proven gaps; no hybrid/canvas Phase G spike is justified because the DOM motion contracts continue to pass.
+
+| Requirement                                        | Current evidence and disposition                                                                                                                                                                                                                                                 |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase A perceptual contract and scenario matrix    | Complete before this execution in `docs/architecture/plan-153-feather-scroll-contract.md` and `serverRuntimePerformance.test.ts`.                                                                                                                                                |
+| Canonical snapshot authority / no hidden-DOM truth | Complete before this execution; `cellDisplaySnapshot.ts`, `rowCellBinder.ts`, `scrollCellPresentation.ts`, and their focused tests enforce freshness and identity.                                                                                                               |
+| Directional prewarm-on-approach                    | Completed here: `renderScrollCoordinator.ts` now uses one freshness-gated, bounded directional ring traversal, including diagonal corners. The redundant fallback sweep was removed.                                                                                             |
+| Snapshot/prewarm cache ownership                   | Completed here: `CellDisplaySnapshotStore` is FIFO-bounded to 1,024 entries; scroll reads do not mutate recency; deterministic 10,000-cell plateau evidence is in `longSessionResilience.test.ts`.                                                                               |
+| Expensive-cell impostors                           | Complete within reviewed contracts: snapshot-capable custom renderers use text/HTML impostors; an explicit live presentation remains an intentional opt-in. Cold DOM renderer cells use a non-mounting shell, never a gesture-time mount.                                        |
+| Fidelity repair fairness and epoch safety          | Completed here: motion/fidelity budgets remain separate; repairs are sorted by urgency then physical identity; idle callbacks carry both a generation and scroll epoch and cannot run after cancellation/new scroll.                                                             |
+| Mandatory demolition                               | The duplicate prewarm path is deleted; no visible cell relies on later repair for its initial snapshot/impostor coherence; hidden portal reuse stays identity/freshness-gated; active-scroll semantic-read and mount counters are covered by `serverRuntimePerformance.test.ts`. |
+| Optional hybrid surface                            | Not started. The deterministic DOM evidence does not meet Phase G's trigger condition.                                                                                                                                                                                           |
+
+The completion record below is valid only after the focused, full-core, React, build, package, and long-session gates recorded in this plan's final verification entry pass.
+
+### Final verification (2026-07-28)
+
+All gates passed against the reconciled implementation:
+
+- Focused snapshot, prewarm, impostor, epoch, fairness, server-performance, and long-session coverage: 103 tests across 6 core files.
+- Core typecheck and build; formatting; lint; full core suite: 117 files / 1,948 tests.
+- Architecture: 316 core tests plus 5 React boundary tests. Adversarial: 20 core plus 8 React tests.
+- API and package-consumer checks passed.
+- Complete React suite: 7 files / 99 tests.
+- `bench:long-session`: 5 core resilience tests plus 8 React portal ownership tests.
+- Workspace package and demo build passed.
+
+**Status: DONE.** The optional hybrid-surface spike remains intentionally unstarted: no deterministic DOM evidence met its trigger condition.
+
 Open Grid already has:
 
 - stable slot ownership
