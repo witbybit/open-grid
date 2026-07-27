@@ -48,6 +48,7 @@ export type ReleaseReason = 'scrolled-out' | 'destroyed' | 'edited' | 'invalidat
 export interface CustomRendererStats {
 	activeCount: number;
 	warmCount: number;
+	pendingWarmMoveCount: number;
 	totalAcquires: number;
 	warmHits: number;
 	warmMisses: number;
@@ -92,6 +93,7 @@ export class CustomRendererManager<TRowData = unknown> {
 	private stats: CustomRendererStats = {
 		activeCount: 0,
 		warmCount: 0,
+		pendingWarmMoveCount: 0,
 		totalAcquires: 0,
 		warmHits: 0,
 		warmMisses: 0,
@@ -127,6 +129,7 @@ export class CustomRendererManager<TRowData = unknown> {
 	public getStats(): CustomRendererStats {
 		this.stats.activeCount = this.activeRenderersByRendererKey.size;
 		this.stats.warmCount = this.warmRenderersByRendererKey.size;
+		this.stats.pendingWarmMoveCount = this.pendingWarmMoves.length;
 		return { ...this.stats };
 	}
 
@@ -134,6 +137,7 @@ export class CustomRendererManager<TRowData = unknown> {
 		this.stats = {
 			activeCount: this.activeRenderersByRendererKey.size,
 			warmCount: this.warmRenderersByRendererKey.size,
+			pendingWarmMoveCount: this.pendingWarmMoves.length,
 			totalAcquires: 0,
 			warmHits: 0,
 			warmMisses: 0,

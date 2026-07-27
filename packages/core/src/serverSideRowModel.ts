@@ -456,6 +456,37 @@ export class ServerSideRowModelController<TRowData = unknown>
 		return SERVER_SIDE_CAPABILITIES;
 	}
 
+	/** Read-only, current ownership gauges used by deterministic long-session tests. */
+	public getOwnershipSnapshot(): Readonly<{
+		rootStoreCount: number;
+		childStoreCount: number;
+		blockCount: number;
+		loadingBlockCount: number;
+		queuedBlockCount: number;
+		activeRequestCount: number;
+		nodeIndexCount: number;
+		visualIndexCount: number;
+	}> {
+		let blockCount = 0;
+		let loadingBlockCount = 0;
+		let queuedBlockCount = 0;
+		for (const block of this.getAllBlocks()) {
+			blockCount++;
+			if (block.state === 'loadingInitial' || block.state === 'refreshing') loadingBlockCount++;
+			if (block.state === 'queued') queuedBlockCount++;
+		}
+		return Object.freeze({
+			rootStoreCount: 1,
+			childStoreCount: this.childStores.size,
+			blockCount,
+			loadingBlockCount,
+			queuedBlockCount,
+			activeRequestCount: this.activeRequestCount,
+			nodeIndexCount: this.rowIdToIndex.size,
+			visualIndexCount: this.visualRowIdToIndex.size,
+		});
+	}
+
 	public setServerSideDatasource(datasource: ServerSideDatasource<TRowData>): void {
 		this.datasource = datasource;
 		this.purgeServerSide();

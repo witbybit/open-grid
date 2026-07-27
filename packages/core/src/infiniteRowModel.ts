@@ -567,6 +567,32 @@ export class InfiniteRowModelController<TData = unknown>
 		return INFINITE_CAPABILITIES;
 	}
 
+	/**
+	 * Read-only live ownership gauges for deterministic resilience tests. These are
+	 * intentionally separate from block snapshots and cumulative telemetry.
+	 */
+	public getOwnershipSnapshot(): Readonly<{
+		cacheBlockCount: number;
+		loadingBlockCount: number;
+		pendingBlockLoadCount: number;
+		activeAbortControllerCount: number;
+		pendingVisibleLoadCount: number;
+		visibleBlockCount: number;
+		nodeCount: number;
+		visualIndexCount: number;
+	}> {
+		return Object.freeze({
+			cacheBlockCount: this.blockCache.getSnapshots().length,
+			loadingBlockCount: this.blockCache.getLoadingBlockCount(),
+			pendingBlockLoadCount: this.pendingBlockLoads.size,
+			activeAbortControllerCount: this.activeAbortControllers.size,
+			pendingVisibleLoadCount: this.pendingVisibleLoad === null ? 0 : 1,
+			visibleBlockCount: this.latestVisibleBlocks.size,
+			nodeCount: this.nodeMap.size,
+			visualIndexCount: this.visualRowIdToIndex.size + this.rowIdToVisualIndex.size,
+		});
+	}
+
 	public getVisualRow = (rowIndex: number): VisualRow<TData> | null => {
 		const committedNode = this.blockCache.getCommittedRow(rowIndex, this.blockSize);
 		if (committedNode) {

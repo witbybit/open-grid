@@ -642,6 +642,27 @@ export class PortalMountManager<TRowData = unknown> {
 		return this.deferredCellReleases.size + this.deferredCellMounts.size + this.deferredRowReleases.size + this.deferredRowMounts.size;
 	}
 
+	/** Live ownership gauges for deterministic long-session diagnostics. */
+	public getOwnershipSnapshot(): Readonly<{
+		activeCells: number;
+		activeRows: number;
+		activeMenus: number;
+		deferredCellMounts: number;
+		deferredCellReleases: number;
+		deferredRowMounts: number;
+		deferredRowReleases: number;
+	}> {
+		return Object.freeze({
+			activeCells: this.mountedCells.size,
+			activeRows: this.mountedRows.size,
+			activeMenus: this.mountedMenus.size,
+			deferredCellMounts: this.deferredCellMounts.size,
+			deferredCellReleases: this.deferredCellReleases.size,
+			deferredRowMounts: this.deferredRowMounts.size,
+			deferredRowReleases: this.deferredRowReleases.size,
+		});
+	}
+
 	public getScrollStats(): {
 		portalFlushesDuringScroll: number;
 		portalDeferredDuringScroll: number;

@@ -1,6 +1,8 @@
 # Plan 153: Feather Scroll Snapshot Program
 
 > This is a **convergence plan**, not a tweak plan. It is complete only when active scroll is governed by one authoritative visual-snapshot pipeline, the old scroll-time semantic wake-up paths are reduced to compatibility edges or deleted, and correctness, polish, and perceptual smoothness are measured together. More hot-path branching without architectural deletion is failure.
+>
+> **Reconciled by Plan 160 (2026-07-27):** Do not restore the removed Cartesian snapshot-prewarm sweeps or treat hidden warm DOM as snapshot authority. Plan 159's current snapshot/impostor and motion/fidelity contracts are the baseline. Any new prewarm work must consume Plan 160's bounded ownership gauges and retain its documented cache and queue caps.
 
 ## Mission
 
@@ -32,7 +34,7 @@ That is enough to produce numbers, but not enough to produce the “weightless p
 - **Priority**: P0 — flagship differentiator
 - **Effort**: XL
 - **Risk**: HIGH — renderer core, memory profile, composition behavior
-- **Depends on**: Plans 091, 099, 111, 118, 119, 126, 144, 151
+- **Depends on**: Plans 091, 099, 111, 118, 119, 126, 144, 160
 - **Category**: rendering, performance, scroll, architecture, polish
 - **Planned at**: 2026-06-29
 

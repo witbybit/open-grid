@@ -35,6 +35,15 @@ export interface FrameCoordinator {
 	requestPostScrollWork(): void;
 	/** Synchronous flush — test-only / documented transactional boundaries. */
 	flushNowForTests(): void;
+	/** Current coordinator ownership only; cumulative render counters live elsewhere. */
+	getOwnershipSnapshot(): Readonly<{
+		pendingScroll: boolean;
+		pendingPaint: boolean;
+		pendingPostScroll: boolean;
+		ownsAnimationFrame: boolean;
+		inFrame: boolean;
+		destroyed: boolean;
+	}>;
 	destroy(): void;
 }
 
@@ -197,6 +206,24 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 		if (this.destroyed) return;
 		this.pendingPaint = false;
 		this.runPaintFrame();
+	}
+
+	public getOwnershipSnapshot(): Readonly<{
+		pendingScroll: boolean;
+		pendingPaint: boolean;
+		pendingPostScroll: boolean;
+		ownsAnimationFrame: boolean;
+		inFrame: boolean;
+		destroyed: boolean;
+	}> {
+		return Object.freeze({
+			pendingScroll: this.pendingScroll,
+			pendingPaint: this.pendingPaint,
+			pendingPostScroll: this.pendingPostScroll,
+			ownsAnimationFrame: this.rafId !== null,
+			inFrame: this.inFrame,
+			destroyed: this.destroyed,
+		});
 	}
 
 	private runPaintFrame(): void {

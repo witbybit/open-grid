@@ -114,7 +114,21 @@ export function createPortalStore<TRowData = unknown>() {
 
 	return {
 		getDebugStats() {
-			return { ...debugStats };
+			let cellDataListenerCount = 0;
+			for (const listeners of cellDataListeners.values()) cellDataListenerCount += listeners.size;
+			return {
+				...debugStats,
+				cellPortalCount: portals.size,
+				rowPortalCount: rowPortals.size,
+				menuPortalCount: menuPortals.size,
+				cellListenerKeyCount: cellDataListeners.size,
+				cellDataListenerCount,
+				cellStructuralListenerCount: cellStructuralListeners.size,
+				rowMenuStructuralListenerCount: rowMenuStructuralListeners.size,
+				imperativeUpdaterCount: imperativeUpdaters.size,
+				pendingCellStructuralNotification: cellStructuralScheduled,
+				pendingRowMenuNotification: rowMenuScheduled,
+			};
 		},
 		resetDebugStats() {
 			debugStats.cellStructuralPublishes = 0;

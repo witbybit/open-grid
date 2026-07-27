@@ -96,6 +96,23 @@ export class RowRenderer<TRowData = unknown> {
 	public runtimeState!: import('./renderRuntimeState.js').RenderRuntimeState;
 	public dirtyCellsMarkedDuringScroll = 0;
 
+	/** Current viewport-owned resources; cumulative paint telemetry remains in RenderStats. */
+	public getOwnershipSnapshot(): Readonly<{
+		rowSlotCount: number;
+		cellSlotCount: number;
+		activeRowCount: number;
+		dirtyCellCount: number;
+		dirtyRowCount: number;
+	}> {
+		return Object.freeze({
+			rowSlotCount: this.slotStats.rowSlotCount,
+			cellSlotCount: this.slotStats.cellSlotCount,
+			activeRowCount: this.activeRows.size,
+			dirtyCellCount: this.dirtyCellsAfterScroll.size,
+			dirtyRowCount: this.dirtyRowsAfterScroll.size,
+		});
+	}
+
 	// Stable-slot virtualization counters — reset per scroll frame by renderScrollCoordinator.
 	public slotStats: SlotRuntimeStats = {
 		rowSlotCount: 0,

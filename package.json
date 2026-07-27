@@ -12,6 +12,7 @@
 		"test:architecture": "pnpm --filter @open-grid/core exec vitest run src/boundary.test.ts src/engine/architectureGuards.test.ts && pnpm --filter @open-grid/react exec vitest run src/boundary.test.tsx",
 		"test:adversarial": "pnpm --filter @open-grid/core exec vitest run src/rowModel.adversarial.test.ts src/lifecycle.adversarial.test.ts src/serverRowModel.adversarial.test.ts src/gridHost.adversarial.test.ts && pnpm --filter @open-grid/react exec vitest run src/gridPortalStore.adversarial.test.ts",
 		"bench": "pnpm --filter @open-grid/core exec vitest run src/perf/instrumentedBudgets.test.ts",
+		"bench:long-session": "pnpm --filter @open-grid/core exec vitest run src/perf/longSessionResilience.test.ts && pnpm --filter @open-grid/react exec vitest run src/gridPortalStore.adversarial.test.ts",
 		"typecheck:core": "pnpm --filter @open-grid/core run typecheck",
 		"lint:core": "pnpm --filter @open-grid/core run lint",
 		"api:check": "pnpm --filter @open-grid/core run api:check",
