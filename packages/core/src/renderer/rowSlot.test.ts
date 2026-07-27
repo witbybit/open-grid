@@ -116,4 +116,17 @@ describe('RowSlot & CellSlot Controllers', () => {
 		expect(rowEl.dataset.rowId).toBe('row-2');
 		expect(rowEl.getAttribute('aria-rowindex')).toBe('3');
 	});
+
+	it('update() makes a hot-unbound slot visible when it is rebound', () => {
+		const rowEl = document.createElement('div');
+		const row = new RowSlot('row-1', rowEl);
+
+		row.update(2, 'row-2', 'data', 80, 40, 'og-row selected');
+		row.unbindHot();
+		const updated = row.update(4, 'row-4', 'data', 160, 40, 'og-row');
+
+		expect(updated).toBe(true);
+		expect(rowEl.style.visibility).toBe('');
+		expect(rowEl.dataset.rowIndex).toBe('4');
+	});
 });

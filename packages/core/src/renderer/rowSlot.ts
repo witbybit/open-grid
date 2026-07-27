@@ -127,6 +127,11 @@ export class RowSlot<TRowData = unknown> {
 		this.rowTop = rowTop;
 		this.rowHeight = rowHeight;
 
+		if (this.element.style.visibility === 'hidden') {
+			this.element.style.visibility = '';
+			domUpdated = true;
+		}
+
 		if (this.lastTop !== rowTop) {
 			this.lastTop = rowTop;
 			// translateY (not top): moving a row must never invalidate layout — transform
