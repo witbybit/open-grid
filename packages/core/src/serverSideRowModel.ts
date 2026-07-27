@@ -757,8 +757,9 @@ export class ServerSideRowModelController<TRowData = unknown>
 		return state;
 	}
 
-	public ensureRange(startRow: number, endRow: number, _reason?: string): void {
+	public ensureRange(startRow: number, endRow: number, reason?: string): void {
 		if (this.disposed || startRow > endRow) return;
+		const shouldRetryFailedInitial = reason === 'row-node-retry-load' || reason === 'retry' || reason === 'force-reload';
 		const firstBlock = Math.floor(Math.max(0, startRow) / this.blockSize);
 		const lastBlock = Math.floor(Math.max(0, endRow) / this.blockSize);
 		for (let blockIndex = firstBlock; blockIndex <= lastBlock; blockIndex++) {
@@ -766,7 +767,9 @@ export class ServerSideRowModelController<TRowData = unknown>
 			if (block?.state === 'queued') {
 				block.lastAccessedAt = Date.now();
 			}
-			if (!block || block.state === 'failedInitial') this.loadBlock(blockIndex, false);
+			// Viewport rendering may call ensureRange on every paint. Keep failed
+			// initial blocks visible until an explicit retry asks to replace them.
+			if (!block || (shouldRetryFailedInitial && block.state === 'failedInitial')) this.loadBlock(blockIndex, false);
 		}
 	}
 

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type VisualRow } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
 import { createMinimalRowModel } from '../testUtils/createMinimalRowModel.js';
 import { RecordingGridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { RenderEngine } from './renderEngine.js';
@@ -613,6 +614,88 @@ describe('RenderEngine', () => {
 		expect(renderer.getRenderStats().fullPaints).toBeGreaterThanOrEqual(before.fullPaints);
 		expect(inst.snapshot().fallbacks).toEqual([]);
 
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('batches visible auto-row-height measurements into one commit and geometry rebuild', async () => {
+		const paintCallbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			paintCallbacks.push(callback);
+			return paintCallbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= paintCallbacks.length) paintCallbacks[id - 1] = () => {};
+		});
+
+		const columns = [{ field: 'name', header: 'Name', width: 120 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowOverscanPx: 0,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 10_000 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			columns,
+		});
+		// The bulk commit must merge its measurements rather than replacing unrelated explicit heights.
+		store.setRowHeight('explicit-offscreen', 88);
+		store.engine.commandHistory.clear();
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.setAutoRowHeight(true);
+		renderer.resetRenderStats();
+
+		const measuredSlots = renderer.rowRenderer
+			.rowSlotPool!.getSlots()
+			.filter((slot) => slot.rowKind === 'data' && slot.visualRowId.startsWith('row:'));
+		expect(measuredSlots.length).toBeGreaterThan(4);
+		for (const [index, slot] of measuredSlots.entries()) {
+			const cell = slot.element.querySelector<HTMLElement>('.og-cell');
+			expect(cell).not.toBeNull();
+			Object.defineProperty(cell!, 'scrollHeight', { configurable: true, value: 60 + index });
+		}
+
+		let resizedEvents = 0;
+		const removeResizeListener = store.engine.eventBus.addEventListener(GridEventName.rowResized, () => {
+			resizedEvents++;
+		});
+		const stateCommits = vi.spyOn(store.engine.stateManager, 'commitState');
+		const projectionGeometryRebuilds = vi.spyOn(store.engine.geometry, 'updateRows');
+
+		// Drive one measurement delivery directly: work assertions use commits/rebuilds, never time.
+		(renderer as unknown as { measureAndUpdateRowHeights(): void }).measureAndUpdateRowHeights();
+
+		expect(stateCommits).toHaveBeenCalledTimes(1);
+		expect(projectionGeometryRebuilds).toHaveBeenCalledTimes(1);
+		expect(resizedEvents).toBe(measuredSlots.length);
+		expect(store.getState().rowHeights['explicit-offscreen']).toBe(88);
+		expect(store.canUndo()).toBe(false);
+
+		// The one scheduled renderer flush performs one geometry recompute for the whole batch.
+		await Promise.resolve();
+		while (paintCallbacks.length > 0) paintCallbacks.shift()!(0);
+		expect(renderer.getRenderStats().geometryRecomputes).toBe(1);
+
+		removeResizeListener();
 		renderer.unmount();
 		controller.dispose();
 		store.destroy();

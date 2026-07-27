@@ -161,6 +161,10 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 				if (targetParent && cell.parentNode !== targetParent) {
 					targetParent.appendChild(cell);
 					this.engine.instrumentation.increment(GridMetric.FLOATING_FILTER_VIEW_RELOCATED);
+				} else if (targetParent) {
+					// Appending in compiled display order keeps same-lane reorders in
+					// topology/DOM order without a layout read.
+					targetParent.appendChild(cell);
 				}
 				// Sync filter value if it changed
 				this.updateCellFilterValue(cell, currentFilter, col);
@@ -525,19 +529,23 @@ export class FloatingFilterRenderer<TRowData = unknown> {
 	private setupTabNavigation(input: HTMLInputElement): void {
 		input.addEventListener('keydown', (e) => {
 			if (e.key !== 'Tab') return;
-			e.preventDefault();
 
-			// Collect all focusable filter inputs/triggers sorted by screen position
+			// The wrapper owns one grid's left, center, and right filter lanes in
+			// topology order. Restrict traversal to it and use DOM order, avoiding
+			// cross-grid focus jumps and layout reads.
+			const wrapper = input.closest<HTMLElement>('.og-layer-floating-filter-wrapper');
+			if (!wrapper) return;
 			const all = Array.from(
-				document.querySelectorAll<HTMLElement>('.og-floating-filter-input, .og-floating-filter-set-badge, .og-floating-filter-empty')
-			)
-				.filter((el) => !el.closest('.og-layer-floating-filter-wrapper')?.classList.contains('og-layer-floating-filter-wrapper') || true)
-				.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+				wrapper.querySelectorAll<HTMLElement>('.og-floating-filter-input, .og-floating-filter-set-badge, .og-floating-filter-empty')
+			);
 
 			const idx = all.indexOf(input);
 			if (idx === -1) return;
 			const next = e.shiftKey ? all[idx - 1] : all[idx + 1];
-			if (next) (next as HTMLInputElement).focus();
+			if (!next) return;
+
+			e.preventDefault();
+			next.focus();
 		});
 	}
 

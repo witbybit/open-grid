@@ -2,8 +2,16 @@ import { describe, it, expect, vi } from 'vitest';
 import * as publicApi from './index.js';
 import * as experimentalApi from './experimental.js';
 import * as internalApi from './internal.js';
-import { createClientGrid } from './createGrid.js';
+import { createClientGrid, createInfiniteGrid, createServerSideGrid } from './createGrid.js';
 import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((resolvePromise) => {
+		resolve = resolvePromise;
+	});
+	return { promise, resolve };
+}
 
 describe('Public/internal boundary', () => {
 	describe('Public entry (@open-grid/core)', () => {
@@ -363,6 +371,41 @@ describe('Public/internal boundary', () => {
 				])
 			);
 			expect(adapter.save).not.toHaveBeenCalled();
+		});
+
+		it.each([
+			['client', (persistence: object) => createClientGrid({ columns: [{ field: 'id', width: 100 }], rows: [{ id: '1' }], persistence })],
+			[
+				'infinite',
+				(persistence: object) =>
+					createInfiniteGrid({
+						columns: [{ field: 'id', width: 100 }],
+						datasource: { getRows: vi.fn().mockResolvedValue({ rows: [], totalCount: 0 }) },
+						persistence,
+					}),
+			],
+			[
+				'SSRM',
+				(persistence: object) =>
+					createServerSideGrid({
+						columns: [{ field: 'id', width: 100 }],
+						datasource: { getRows: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) },
+						persistence,
+					}),
+			],
+		] as const)('does not hydrate async persistence after %s destroy', async (_mode, create) => {
+			const load = deferred<{
+				v: number;
+				state: { columnWidths: Record<string, number> };
+			}>();
+			const api = create({ load: vi.fn(() => load.promise), save: vi.fn() });
+
+			api.destroy();
+			load.resolve({ v: GRID_STATE_SCHEMA_VERSION, state: { columnWidths: { id: 180 } } });
+			await Promise.resolve();
+			await Promise.resolve();
+
+			expect(api.getGridState().state.columnWidths?.id).toBe(100);
 		});
 	});
 });

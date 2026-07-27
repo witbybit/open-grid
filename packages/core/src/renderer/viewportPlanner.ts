@@ -23,11 +23,9 @@ export interface ViewportPlan {
 	readonly renderedRows: Range;
 	readonly primitiveRows: Range;
 	readonly liveRowRange: Range;
-	readonly snapshotPrewarmRows: Range;
 	readonly visibleCenterColumns: ColumnInstanceId[];
 	readonly renderedCenterColumns: ColumnInstanceId[];
 	readonly liveCenterColumnWindow: ColumnInstanceId[];
-	readonly snapshotPrewarmColumns: ColumnInstanceId[];
 	readonly pinnedLeftColumns: ColumnInstanceId[];
 	readonly pinnedRightColumns: ColumnInstanceId[];
 	readonly liveCells: {
@@ -36,11 +34,6 @@ export interface ViewportPlan {
 		exited: CellAddress[];
 		mountPriority: CellAddress[];
 		updatePriority: CellAddress[];
-	};
-	readonly htmlSnapshotCells: {
-		visible: CellAddress[];
-		prewarm: CellAddress[];
-		pending: CellAddress[];
 	};
 	readonly retainedFocusEditRowIndices: ReadonlySet<number>;
 	readonly reasons: {
@@ -64,10 +57,58 @@ function intersectRange(a: Range, b: Range): Range {
 	return { start: Math.max(a.start, b.start), end: Math.min(a.end, b.end) };
 }
 
+function columnIdsInRange(
+	placements: readonly { readonly absoluteIndex: number; readonly columnId: ColumnInstanceId }[],
+	start: number,
+	end: number
+): ColumnInstanceId[] {
+	if (start > end || placements.length === 0) return [];
+
+	const firstAbsoluteIndex = placements[0]!.absoluteIndex;
+	const from = Math.max(0, start - firstAbsoluteIndex);
+	const to = Math.min(placements.length, end - firstAbsoluteIndex + 1);
+	if (from >= to) return [];
+	return placements.slice(from, to).map((placement) => placement.columnId);
+}
+
+interface RendererModeClassification {
+	readonly compiledPlanVersion: number;
+	readonly topologyVersion: number;
+	readonly hasCompiledPlan: boolean;
+	readonly liveColumns: ReadonlySet<ColumnInstanceId>;
+}
+
 export class ViewportPlanner<TRowData = unknown> {
 	private frameCounter = 0;
 	private prevWindow: RenderWindow | null = null;
 	private prevTopology: CompiledColumnTopology | null = null;
+	private prevRenderedCenterColumns: ColumnInstanceId[] | null = null;
+	private rendererModeClassification: RendererModeClassification | null = null;
+
+	private getRendererModeClassification(
+		compiledPlan: CompiledGridPlan<TRowData> | undefined,
+		topology: CompiledColumnTopology
+	): RendererModeClassification {
+		const compiledPlanVersion = compiledPlan?.version ?? topology.version;
+		const cached = this.rendererModeClassification;
+		if (
+			cached &&
+			cached.compiledPlanVersion === compiledPlanVersion &&
+			cached.topologyVersion === topology.version &&
+			cached.hasCompiledPlan === !!compiledPlan
+		) {
+			return cached;
+		}
+
+		const liveColumns = new Set<ColumnInstanceId>();
+		for (const column of (compiledPlan?.displayedColumns ?? []) as InternalColumnDef<TRowData>[]) {
+			if (column.cellRendererCapabilities?.scrollPresentation === 'live') liveColumns.add(column.instanceId);
+		}
+
+		const classification = { compiledPlanVersion, topologyVersion: topology.version, hasCompiledPlan: !!compiledPlan, liveColumns };
+		this.rendererModeClassification = classification;
+		return classification;
+	}
 
 	public computePlan(
 		window: RenderWindow,
@@ -84,24 +125,11 @@ export class ViewportPlanner<TRowData = unknown> {
 			renderedRows
 		);
 
-		const visibleCenterColumns = topology.center
-			.filter(
-				(placement) =>
-					placement.absoluteIndex >= (window.visibleColStart ?? window.colStart) &&
-					placement.absoluteIndex <= (window.visibleColEnd ?? window.colEnd)
-			)
-			.map((placement) => placement.columnId);
-		const renderedCenterColumns = topology.center
-			.filter((placement) => placement.absoluteIndex >= window.colStart && placement.absoluteIndex <= window.colEnd)
-			.map((placement) => placement.columnId);
-		const prevRenderedCenterColumns =
-			this.prevTopology && this.prevWindow
-				? this.prevTopology.center
-						.filter(
-							(placement) => placement.absoluteIndex >= this.prevWindow!.colStart && placement.absoluteIndex <= this.prevWindow!.colEnd
-						)
-						.map((placement) => placement.columnId)
-				: null;
+		const visibleColStart = window.visibleColStart ?? window.colStart;
+		const visibleColEnd = window.visibleColEnd ?? window.colEnd;
+		const visibleCenterColumns = columnIdsInRange(topology.center, visibleColStart, visibleColEnd);
+		const renderedCenterColumns = columnIdsInRange(topology.center, window.colStart, window.colEnd);
+		const prevRenderedCenterColumns = this.prevRenderedCenterColumns;
 		const columnWindowDelta =
 			this.prevTopology && prevRenderedCenterColumns
 				? this.prevTopology.version !== topology.version
@@ -111,51 +139,27 @@ export class ViewportPlanner<TRowData = unknown> {
 		const pinnedLeftColumns = topology.left.map((placement) => placement.columnId);
 		const pinnedRightColumns = topology.right.map((placement) => placement.columnId);
 
-		const centerIds = topology.center.map((placement) => placement.columnId);
-		const visibleStart = Math.max(0, (window.visibleColStart ?? window.colStart) - window.pinLeftCols);
-		const visibleEnd = Math.max(visibleStart, (window.visibleColEnd ?? window.colEnd) - window.pinLeftCols);
-		const rawLiveCenterColumnWindow = centerIds.slice(
-			Math.max(0, visibleStart - (rendererOptions?.liveReact?.columnOverscan ?? 0)),
-			Math.min(centerIds.length, visibleEnd + (rendererOptions?.liveReact?.columnOverscan ?? 0) + 1)
+		const liveColumnOverscan = rendererOptions?.liveReact?.columnOverscan ?? 0;
+		const liveCenterColumnWindow = columnIdsInRange(
+			topology.center,
+			Math.max(window.colStart, visibleColStart - liveColumnOverscan),
+			Math.min(window.colEnd, visibleColEnd + liveColumnOverscan)
 		);
-		const renderedCenterColumnSet = new Set(renderedCenterColumns);
-		const liveCenterColumnWindow = rawLiveCenterColumnWindow.filter((columnInstanceId) => renderedCenterColumnSet.has(columnInstanceId));
-
-		const liveColumns = new Set<ColumnInstanceId>();
-		const snapshotColumns: ColumnInstanceId[] = [];
-		for (const column of (compiledPlan?.displayedColumns ?? []) as InternalColumnDef<TRowData>[]) {
-			const mode = column.cellRendererCapabilities?.scrollPresentation;
-			if (mode === 'live') liveColumns.add(column.instanceId);
-			if (mode === 'html-snapshot') snapshotColumns.push(column.instanceId);
-		}
+		const { liveColumns } = this.getRendererModeClassification(compiledPlan, topology);
+		const executableLiveColumns = [...pinnedLeftColumns, ...liveCenterColumnWindow, ...pinnedRightColumns];
+		const visibleExecutableColumns = new Set([...pinnedLeftColumns, ...visibleCenterColumns, ...pinnedRightColumns]);
 
 		const liveVisibleCells: CellAddress[] = [];
 		const liveOverscanCells: CellAddress[] = [];
 		for (let rowIndex = liveRowRange.start; rowIndex <= liveRowRange.end; rowIndex++) {
-			for (const columnInstanceId of [...pinnedLeftColumns, ...liveCenterColumnWindow, ...pinnedRightColumns]) {
+			for (const columnInstanceId of executableLiveColumns) {
 				if (!liveColumns.has(columnInstanceId)) continue;
 				const address = { rowIndex, columnInstanceId };
-				if (
-					rowIndex >= visibleRows.start &&
-					rowIndex <= visibleRows.end &&
-					(visibleCenterColumns.includes(columnInstanceId) ||
-						pinnedLeftColumns.includes(columnInstanceId) ||
-						pinnedRightColumns.includes(columnInstanceId))
-				) {
+				if (rowIndex >= visibleRows.start && rowIndex <= visibleRows.end && visibleExecutableColumns.has(columnInstanceId)) {
 					liveVisibleCells.push(address);
 				} else {
 					liveOverscanCells.push(address);
 				}
-			}
-		}
-
-		const snapshotVisibleCells: CellAddress[] = [];
-		const snapshotPrewarmCells: CellAddress[] = [];
-		for (let rowIndex = renderedRows.start; rowIndex <= renderedRows.end; rowIndex++) {
-			for (const columnInstanceId of snapshotColumns) {
-				const address = { rowIndex, columnInstanceId };
-				if (rowIndex >= visibleRows.start && rowIndex <= visibleRows.end) snapshotVisibleCells.push(address);
-				else snapshotPrewarmCells.push(address);
 			}
 		}
 
@@ -170,11 +174,9 @@ export class ViewportPlanner<TRowData = unknown> {
 			renderedRows,
 			primitiveRows: renderedRows,
 			liveRowRange,
-			snapshotPrewarmRows: renderedRows,
 			visibleCenterColumns,
 			renderedCenterColumns,
 			liveCenterColumnWindow,
-			snapshotPrewarmColumns: snapshotColumns,
 			pinnedLeftColumns,
 			pinnedRightColumns,
 			liveCells: {
@@ -183,11 +185,6 @@ export class ViewportPlanner<TRowData = unknown> {
 				exited: [],
 				mountPriority: [...liveVisibleCells, ...liveOverscanCells],
 				updatePriority: [...liveVisibleCells, ...liveOverscanCells],
-			},
-			htmlSnapshotCells: {
-				visible: snapshotVisibleCells,
-				prewarm: snapshotPrewarmCells,
-				pending: [],
 			},
 			retainedFocusEditRowIndices,
 			reasons: {
@@ -204,12 +201,15 @@ export class ViewportPlanner<TRowData = unknown> {
 
 		this.prevWindow = window;
 		this.prevTopology = topology;
+		this.prevRenderedCenterColumns = renderedCenterColumns;
 		return plan;
 	}
 
 	public reset(): void {
 		this.prevWindow = null;
 		this.prevTopology = null;
+		this.prevRenderedCenterColumns = null;
+		this.rendererModeClassification = null;
 		this.frameCounter = 0;
 	}
 }

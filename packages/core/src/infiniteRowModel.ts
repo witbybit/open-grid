@@ -664,7 +664,15 @@ export class InfiniteRowModelController<TData = unknown>
 		const shouldQueueBlock = (blockIdx: number): boolean => {
 			const block = this.blockCache.getBlock(blockIdx);
 			if (!forceReload && block) {
-				if (block.status === 'queued' || block.status === 'loadingInitial' || block.status === 'refreshing') {
+				// A viewport paint must preserve a failed initial block as a visible,
+				// retryable failure. Retrying it here turns every render frame into an
+				// implicit retry and makes the failed slot impossible to interact with.
+				if (
+					block.status === 'queued' ||
+					block.status === 'loadingInitial' ||
+					block.status === 'refreshing' ||
+					block.status === 'failedInitial'
+				) {
 					return false;
 				}
 				if (block.status === 'loaded' && !this.blockHasRepresentedGap(block)) return false;

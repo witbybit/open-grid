@@ -121,6 +121,39 @@ export class GridStateFeatureController<TRowData = unknown> {
 		this.applyRowHeight(rowId, height, undoable ? oldHeight : null);
 	}
 
+	/**
+	 * Applies DOM-measured row heights from one renderer delivery in a single commit.
+	 * Measurements are deliberately not recorded in history, but retain the same row
+	 * resize events as individual non-undoable resizeRow calls so renderer anchoring and
+	 * row-level invalidation continue to work.
+	 */
+	public applyAutoRowHeightBatch(measuredHeights: ReadonlyMap<string, number>): void {
+		if (measuredHeights.size === 0) return;
+
+		const state = this.deps.stateManager.getState();
+		const nextRowHeights = { ...state.rowHeights };
+		const changed: Array<{ rowId: string; height: number }> = [];
+		for (const [rowId, height] of measuredHeights) {
+			const currentHeight = state.rowHeights[rowId] ?? state.defaultRowHeight;
+			if (Math.abs(height - currentHeight) <= 1) continue;
+			nextRowHeights[rowId] = height;
+			changed.push({ rowId, height });
+		}
+		if (changed.length === 0) return;
+
+		this.deps.applyChange({
+			reason: 'geometry:resize-row',
+			state: { rowHeights: nextRowHeights },
+			invalidations: [
+				{ kind: 'geometry', reason: 'row resize' },
+				...changed.map(({ rowId }) => ({ kind: 'row' as const, rowId, reason: 'row resize' })),
+			],
+			domains: ['geometry'],
+			events: changed.map(({ rowId, height }) => ({ type: GridEventName.rowResized as const, payload: { rowId, height } })),
+			requestRender: true,
+		});
+	}
+
 	public setRowHeights(rowHeights: Record<string, number>): void {
 		this.deps.applyChange({
 			reason: 'geometry:set-row-heights',

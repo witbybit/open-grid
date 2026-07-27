@@ -588,6 +588,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		const state = this.engine.stateManager.getState();
 		const slots = this.rowRenderer.rowSlotPool?.getSlots() ?? [];
+		const measuredHeights = new Map<string, number>();
 
 		for (const slot of slots) {
 			if (slot.rowKind !== 'data') continue;
@@ -605,9 +606,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 			const currentHeight = state.rowHeights[rawRowId] ?? state.defaultRowHeight;
 			if (Math.abs(measuredHeight - currentHeight) > 1) {
-				this.engine.resizeRow(rawRowId, measuredHeight, false);
+				measuredHeights.set(rawRowId, measuredHeight);
 			}
 		}
+
+		// All DOM reads above finish before the state/geometry write below. A visible
+		// batch therefore yields at most one commit and one projection geometry rebuild.
+		this.engine.applyAutoRowHeightBatch(measuredHeights);
 	}
 
 	public schedulePaint(): void {

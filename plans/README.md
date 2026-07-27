@@ -2,6 +2,7 @@
 
 | #   | Plan                                                                                                                          | Status   | Commit       |
 | --- | ----------------------------------------------------------------------------------------------------------------------------- | -------- | ------------ |
+| 159 | [Core Contract and Performance Convergence](./159-core-contract-and-performance-convergence.md)                               | DONE     | working tree |
 | 001 | [Row Multi-Select](./001-row-multiselect.md)                                                                                  | DONE     | 3d32692      |
 | 002 | [ColumnType Registry](./002-column-type-registry.md)                                                                          | DONE     | 970c777      |
 | 003 | [Row Pipeline Tests](./003-row-pipeline-tests.md)                                                                             | DONE     | 970c777      |

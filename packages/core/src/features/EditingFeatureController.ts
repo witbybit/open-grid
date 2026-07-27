@@ -70,6 +70,13 @@ export class EditingFeatureController<TRowData = unknown> {
 		return !!column && activeEdit.columnInstanceId === column.instanceId;
 	}
 
+	private isCurrentEdit(activeEdit: ActiveEditState): boolean {
+		const current = this.ctx.getState().activeEdit;
+		return (
+			current?.rowId === activeEdit.rowId && current.columnInstanceId === activeEdit.columnInstanceId && current.version === activeEdit.version
+		);
+	}
+
 	public startEdit(rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
 		if (!this.canEditCell(rowId, colFieldOrInstanceId)) return;
 		const column = this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId);
@@ -185,6 +192,7 @@ export class EditingFeatureController<TRowData = unknown> {
 			} catch {
 				success = false;
 			}
+			if (matchedActiveEdit && !this.isCurrentEdit(matchedActiveEdit)) return false;
 			if (!success || didAbort) {
 				return false;
 			}
@@ -193,6 +201,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		}
 
 		const proposalIssues = await this.validateWriteProposal?.([{ rowId, colField, proposedValue: committedValue }], 'edit');
+		if (matchedActiveEdit && !this.isCurrentEdit(matchedActiveEdit)) return false;
 		if ((proposalIssues?.length ?? 0) > 0) {
 			dispatchWriteBlockedEvent(
 				this.dispatchEvent,
@@ -205,7 +214,7 @@ export class EditingFeatureController<TRowData = unknown> {
 
 		const result = this.ctx.applyChange({
 			reason: 'data:set-cell-value',
-			state: { activeEdit: null },
+			state: matchedActiveEdit ? { activeEdit: null } : undefined,
 			domainMutations: [
 				{
 					kind: 'cell-value',
@@ -217,11 +226,11 @@ export class EditingFeatureController<TRowData = unknown> {
 				},
 			],
 			invalidations: [
-				{ kind: 'cell', rowId, colId: renderColId, reason: 'edit stopped' },
-				{ kind: 'overlay', reason: 'edit stopped' },
+				{ kind: 'cell', rowId, colId: renderColId, reason: matchedActiveEdit ? 'edit stopped' : 'cell value changed' },
+				...(matchedActiveEdit ? [{ kind: 'overlay' as const, reason: 'edit stopped' }] : []),
 			],
 			domains: ['editing'],
-			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel: false } }],
+			events: matchedActiveEdit ? [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel: false } }] : undefined,
 		});
 
 		if (result.status === 'rejected') {

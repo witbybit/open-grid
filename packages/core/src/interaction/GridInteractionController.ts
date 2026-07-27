@@ -49,6 +49,14 @@ export interface GridInteractionHandle {
 export class GridInteractionController<TRowData = unknown> implements GridInteractionHandle {
 	private isSelecting = false;
 	private rowSelectionAnchorId: string | null = null;
+	private editNavigationIntent = 0;
+	private editNavigationInFlight = false;
+	private pendingEditNavigation: {
+		intent: number;
+		active: GridCellPointer;
+		target: { row: number; col: number };
+		startEditing: boolean;
+	} | null = null;
 	private options: GridNavigationOptions;
 	private readonly commands: GridInteractionCommandPort;
 
@@ -425,7 +433,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 				event.preventDefault();
 				const upRow = this.getNextDataRowIndex(row, 'up');
 				if (upRow !== -1) {
-					void this.commitAndMoveSelection(active, { row: upRow, col }, this.options.arrowKeyNavigationEdit);
+					this.queueCommitAndMoveSelection(active, { row: upRow, col }, this.options.arrowKeyNavigationEdit);
 				}
 				break;
 			}
@@ -433,27 +441,27 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 				event.preventDefault();
 				const downRow = this.getNextDataRowIndex(row, 'down');
 				if (downRow !== -1) {
-					void this.commitAndMoveSelection(active, { row: downRow, col }, this.options.arrowKeyNavigationEdit);
+					this.queueCommitAndMoveSelection(active, { row: downRow, col }, this.options.arrowKeyNavigationEdit);
 				}
 				break;
 			}
 			case 'ArrowLeft':
 				if (this.options.arrowKeyNavigationEdit) {
 					event.preventDefault();
-					void this.commitAndMoveSelection(active, { row, col: Math.max(0, col - 1) }, true);
+					this.queueCommitAndMoveSelection(active, { row, col: Math.max(0, col - 1) }, true);
 				}
 				break;
 			case 'ArrowRight':
 				if (this.options.arrowKeyNavigationEdit) {
 					event.preventDefault();
-					void this.commitAndMoveSelection(active, { row, col: Math.min(maxCol, col + 1) }, true);
+					this.queueCommitAndMoveSelection(active, { row, col: Math.min(maxCol, col + 1) }, true);
 				}
 				break;
 			case 'Enter': {
 				event.preventDefault();
 				const nextRowIdx = this.getNextDataRowIndex(row, 'down');
 				if (nextRowIdx !== -1) {
-					void this.commitAndMoveSelection(active, { row: nextRowIdx, col }, true);
+					this.queueCommitAndMoveSelection(active, { row: nextRowIdx, col }, true);
 				}
 				break;
 			}
@@ -461,7 +469,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 				event.preventDefault();
 				const tabDest = this.getTabTarget(row, col, maxCol, !event.shiftKey);
 				if (tabDest) {
-					void this.commitAndMoveSelection(active, { row: tabDest.row, col: tabDest.col }, true);
+					this.queueCommitAndMoveSelection(active, { row: tabDest.row, col: tabDest.col }, true);
 				}
 				break;
 			}
@@ -481,18 +489,42 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 		}
 	}
 
-	private async commitAndMoveSelection(
+	private queueCommitAndMoveSelection(
 		active: GridCellPointer,
 		target: { row: number; col: number },
-		startEditing = this.options.arrowKeyNavigationEdit
-	): Promise<void> {
-		const committed = await this.commitEdit();
-		if (!committed) return;
-		this.moveEditSelection(target.row, target.col, active, startEditing);
+		startEditing = this.options.arrowKeyNavigationEdit ?? false
+	): void {
+		const intent = ++this.editNavigationIntent;
+		this.pendingEditNavigation = { intent, active, target, startEditing };
+		if (this.editNavigationInFlight) return;
+		void this.commitAndMoveSelection();
+	}
+
+	private invalidateEditNavigation(): void {
+		this.editNavigationIntent += 1;
+		this.pendingEditNavigation = null;
+	}
+
+	private async commitAndMoveSelection(): Promise<void> {
+		if (!this.pendingEditNavigation) return;
+		this.editNavigationInFlight = true;
+		let committed = false;
+		try {
+			committed = await this.commitEdit();
+		} catch {
+			return;
+		} finally {
+			this.editNavigationInFlight = false;
+		}
+		const latestRequest = this.pendingEditNavigation;
+		this.pendingEditNavigation = null;
+		if (!committed || !latestRequest || latestRequest.intent !== this.editNavigationIntent) return;
+		this.moveEditSelection(latestRequest.target.row, latestRequest.target.col, latestRequest.active, latestRequest.startEditing);
 	}
 
 	public handleMouseDown = (pointer: GridCellPointer, event: MouseEvent): void => {
 		if (event.button !== 0) return;
+		this.invalidateEditNavigation();
 		if (event.ctrlKey || event.metaKey) {
 			this.commands.applyRowSelectionGesture({ kind: 'toggle', rowIds: [pointer.rowId], source: 'pointer' });
 			return;
@@ -534,6 +566,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	}
 
 	public selectCell(pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void {
+		this.invalidateEditNavigation();
 		this.commands.selectCell(this.canonicalizePointer(pointer), source);
 	}
 
@@ -578,6 +611,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	}
 
 	public startEdit(rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
+		this.invalidateEditNavigation();
 		this.commands.startEditing(rowId, colFieldOrInstanceId, source);
 	}
 
@@ -615,6 +649,7 @@ export class GridInteractionController<TRowData = unknown> implements GridIntera
 	}
 
 	public cancelEdit(): void {
+		this.invalidateEditNavigation();
 		this.stopEdit(true);
 	}
 }

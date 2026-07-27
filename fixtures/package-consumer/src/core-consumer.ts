@@ -14,3 +14,4 @@ const api = createClientGrid<Row>({
 });
 
 api.setCellValue('1', 'name', 'Grace');
+api.destroy();

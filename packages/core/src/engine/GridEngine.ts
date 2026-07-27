@@ -1019,6 +1019,10 @@ export class GridEngine<TRowData = unknown> {
 	public resizeRow(rowId: string, height: number, undoable = true): void {
 		this.stateFeature.resizeRow(rowId, height, undoable);
 	}
+	/** Internal renderer path for a single delivery of DOM row-height measurements. */
+	public applyAutoRowHeightBatch(measuredHeights: ReadonlyMap<string, number>): void {
+		this.stateFeature.applyAutoRowHeightBatch(measuredHeights);
+	}
 	public setRowHeights(rowHeights: Record<string, number>): void {
 		this.stateFeature.setRowHeights(rowHeights);
 	}

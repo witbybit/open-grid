@@ -10,6 +10,14 @@ async function flushAsyncWork(): Promise<void> {
 	await Promise.resolve();
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((resolvePromise) => {
+		resolve = resolvePromise;
+	});
+	return { promise, resolve };
+}
+
 function createRuntime(overrides: Partial<GridPluginRuntime<TestRow>> = {}): GridPluginRuntime<TestRow> {
 	const displayedColumns = [
 		{ field: 'name', colId: 'name-a', instanceId: 'name-a' },
@@ -590,6 +598,66 @@ describe('GridInteractionController', () => {
 		expect(commitEdit).toHaveBeenCalledWith('r1', 'name-a', 'Draft A');
 		expect(runtime.selectCell).not.toHaveBeenCalled();
 		expect(runtime.startEditing).not.toHaveBeenCalled();
+	});
+
+	it('coalesces rapid Tab and Enter navigation behind one edit commit', async () => {
+		const commit = deferred<boolean>();
+		const runtime = createRuntime({
+			commitEdit: vi.fn(() => commit.promise),
+			getStateSnapshot: () =>
+				({
+					selection: {
+						focus: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+						anchor: null,
+						range: null,
+						bounds: null,
+						source: 'keyboard',
+						focusOrigin: 'keyboard',
+						version: 1,
+					},
+					activeEdit: {
+						rowId: 'r1',
+						colField: 'name',
+						colId: 'name-a',
+						columnInstanceId: 'name-a',
+						draftValue: 'Draft A',
+					},
+					columns: [
+						{ field: 'name', colId: 'name-a', instanceId: 'name-a' },
+						{ field: 'name', colId: 'name-b', instanceId: 'name-b' },
+					],
+				}) as GridStateSnapshot<TestRow>,
+			getVisualRow: (index: number) =>
+				[
+					{ kind: 'data', rowId: 'r1', id: 'r1', node: { id: 'r1', data: { id: 'r1', name: 'A' } } },
+					{ kind: 'data', rowId: 'r2', id: 'r2', node: { id: 'r2', data: { id: 'r2', name: 'B' } } },
+				][index] as any,
+			getVisualRowCount: () => 2,
+			getVisualIndexByRowId: (rowId: string) => (rowId === 'r1' ? 0 : rowId === 'r2' ? 1 : null),
+			getRowModel: () =>
+				({
+					getVisualRowCount: () => 2,
+					getVisualRow: (index: number) => (index < 2 ? ({ kind: 'data', rowId: index === 0 ? 'r1' : 'r2' } as any) : null),
+					getVisualIndexByRowId: (rowId: string) => (rowId === 'r1' ? 0 : rowId === 'r2' ? 1 : -1),
+				}) as any,
+		});
+		const controller = new GridInteractionController(runtime, { arrowKeyNavigationEdit: true });
+		const key = (value: string) =>
+			({ key: value, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, preventDefault: vi.fn() }) as unknown as KeyboardEvent;
+
+		controller.handleKeyDown(key('Tab'));
+		controller.handleKeyDown(key('Enter'));
+		expect(runtime.commitEdit).toHaveBeenCalledTimes(1);
+
+		commit.resolve(true);
+		await flushAsyncWork();
+
+		expect(runtime.selectCell).toHaveBeenCalledTimes(1);
+		expect(runtime.selectCell).toHaveBeenCalledWith(
+			expect.objectContaining<GridCellPointer>({ rowId: 'r2', colField: 'name', columnInstanceId: 'name-a' }),
+			'keyboard'
+		);
+		expect(runtime.startEditing).toHaveBeenCalledWith('r2', 'name-a', 'keyboard');
 	});
 
 	it('dispatchInput routes typed input commands through the kernel surface', () => {

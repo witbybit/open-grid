@@ -12,6 +12,16 @@ interface TestRow {
 	price: number;
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (reason?: unknown) => void } {
+	let resolve!: (value: T) => void;
+	let reject!: (reason?: unknown) => void;
+	const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+		resolve = resolvePromise;
+		reject = rejectPromise;
+	});
+	return { promise, resolve, reject };
+}
+
 function makeStore(columnOverrides?: Parameters<typeof GridStore>[0]['columns']): GridStore<TestRow> {
 	return new GridStore<TestRow>({
 		columns: columnOverrides ?? [
@@ -392,6 +402,90 @@ describe('EditingFeatureController', () => {
 		expect(valueSetter).toHaveBeenCalledTimes(1);
 		expect(engine.getRawCellValue('1', 'name')).toBe('Server Accepted');
 		expect(store.canUndo()).toBe(true);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('fences an overlapping older value-setter completion from a newer commit', async () => {
+		const first = deferred<boolean>();
+		const second = deferred<boolean>();
+		const valueSetter = vi.fn(({ row }) => {
+			row.name = valueSetter.mock.calls.length === 1 ? 'Older Value' : 'Newer Value';
+			return valueSetter.mock.calls.length === 1 ? first.promise : second.promise;
+		});
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 50 },
+			{ field: 'name', header: 'Name', width: 150, valueSetter },
+			{ field: 'price', header: 'Price', width: 100 },
+		]);
+		const ctrl = makeController(store);
+		const feature = makeEditingFeature(store);
+
+		feature.startEdit('1', 'name');
+		const olderCommit = feature.commitEdit('1', 'name', 'Older');
+		const newerCommit = feature.commitEdit('1', 'name', 'Newer');
+		second.resolve(true);
+		expect(await newerCommit).toBe(true);
+		first.resolve(true);
+		expect(await olderCommit).toBe(false);
+
+		expect(store.getCellValue('1', 'name')).toBe('Newer Value');
+		expect(store.getState().activeEdit).toBeNull();
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('does not let a stale validator close a newer editor or emit its lifecycle event', async () => {
+		const validation = deferred<readonly []>();
+		const store = makeStore();
+		const ctrl = makeController(store);
+		const engine = (store as any).engine;
+		const editStopped = vi.fn();
+		store.addEventListener(GridEventName.editStopped, editStopped);
+		const feature = new EditingFeatureController<TestRow>({
+			ctx: getFeatureContext(store),
+			getRowModel: () => engine.getRowModel(),
+			data: engine.data,
+			notifyCellChange: (rowId, colField) => engine.notifyCellChange(rowId, colField),
+			validateWriteProposal: () => validation.promise,
+		});
+
+		feature.startEdit('1', 'name');
+		const commit = feature.commitEdit('1', 'name', 'Older Value');
+		feature.startEdit('2', 'name');
+		validation.resolve([]);
+
+		expect(await commit).toBe(false);
+		expect(store.getCellValue('1', 'name')).toBe('Product A');
+		expect(store.getState().activeEdit).toEqual(expect.objectContaining({ rowId: '2', colField: 'name' }));
+		expect(editStopped).not.toHaveBeenCalled();
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('keeps a newer editor active when a stale value setter rejects', async () => {
+		const setter = deferred<boolean>();
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 50 },
+			{ field: 'name', header: 'Name', width: 150, valueSetter: () => setter.promise },
+			{ field: 'price', header: 'Price', width: 100 },
+		]);
+		const ctrl = makeController(store);
+		const feature = makeEditingFeature(store);
+		const editStopped = vi.fn();
+		store.addEventListener(GridEventName.editStopped, editStopped);
+
+		feature.startEdit('1', 'name');
+		const commit = feature.commitEdit('1', 'name', 'Rejected');
+		feature.startEdit('2', 'name');
+		setter.reject(new Error('rejected'));
+
+		expect(await commit).toBe(false);
+		expect(store.getState().activeEdit).toEqual(expect.objectContaining({ rowId: '2', colField: 'name' }));
+		expect(editStopped).not.toHaveBeenCalled();
 
 		ctrl.dispose();
 		store.destroy();

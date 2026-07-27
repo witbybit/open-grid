@@ -158,6 +158,59 @@ describe('ViewportPlanner', () => {
 		expect(plan.liveCells.overscan.every((cell) => plan.renderedCenterColumns.includes(cell.columnInstanceId))).toBe(true);
 	});
 
+	it('keeps a 1,000-column plan bounded to the visible and pinned executable window', () => {
+		let rendererModeReads = 0;
+		const cols = Array.from({ length: 1_000 }, (_, index) => {
+			const column = makeCol(`c${index}`);
+			Object.defineProperty(column, 'cellRendererCapabilities', {
+				get() {
+					rendererModeReads++;
+					return { scrollPresentation: 'live' };
+				},
+			});
+			return column;
+		});
+		const compiledPlan = makePlan(cols, 2, 2, 1);
+		const topology = compileColumnTopology(compiledPlan);
+		let centerPlacementReads = 0;
+		const countedTopology = {
+			...topology,
+			center: new Proxy(topology.center, {
+				get(target, property) {
+					if (typeof property === 'string' && /^\d+$/.test(property)) centerPlacementReads++;
+					return Reflect.get(target, property);
+				},
+			}),
+		};
+		const window = {
+			...windowWithRows(8, 14),
+			colCount: 1_000,
+			colStart: 398,
+			colEnd: 406,
+			visibleRowStart: 10,
+			visibleRowEnd: 12,
+			visibleColStart: 400,
+			visibleColEnd: 404,
+			pinLeftCols: 2,
+			pinRightCols: 2,
+		};
+		const planner = new ViewportPlanner();
+		const plan = planner.computePlan(window, countedTopology, new Set(), compiledPlan, { liveReact: { columnOverscan: 2 } });
+
+		// 2 pinned columns on each side plus 9 rendered center columns, across 3 visible rows.
+		expect(plan.liveCells.visible).toHaveLength(27);
+		expect(plan.liveCells.overscan).toHaveLength(12);
+		expect(plan.liveCells.visible.length + plan.liveCells.overscan.length).toBe(39);
+		// Three bounded center slices read 5 + 9 + 9 placements plus their range boundaries,
+		// rather than walking all 996 center columns.
+		expect(centerPlacementReads).toBeLessThanOrEqual(30);
+		expect(rendererModeReads).toBe(1_000);
+
+		planner.computePlan(window, countedTopology, new Set(), compiledPlan, { liveReact: { columnOverscan: 2 } });
+		// Renderer mode classification is retained while both compiled-plan and topology versions match.
+		expect(rendererModeReads).toBe(1_000);
+	});
+
 	it('reset() clears diffing state so the next frame is treated as freshly-entered', () => {
 		const planner = new ViewportPlanner();
 		const topology = compileColumnTopology(makePlan([makeCol('a')], 0, 0, 1));

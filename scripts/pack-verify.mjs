@@ -33,16 +33,20 @@ function run(command, args, cwd, env = {}) {
 }
 
 function packPackage(packageDir, destinationDir, env) {
-	const output = run('npm', ['pack', '--pack-destination', destinationDir], packageDir, env);
-	const tarballName = output
-		.split(/\r?\n/)
-		.map((line) => line.trim())
-		.filter(Boolean)
-		.at(-1);
-	if (!tarballName) {
-		throw new Error(`npm pack did not report a tarball name for ${packageDir}`);
+	const output = run('npm', ['pack', '--json', '--pack-destination', destinationDir], packageDir, env);
+	const packed = JSON.parse(output);
+	if (!Array.isArray(packed) || packed.length !== 1 || typeof packed[0]?.filename !== 'string') {
+		throw new Error(`npm pack did not report one tarball for ${packageDir}`);
 	}
-	return path.join(destinationDir, tarballName);
+	return { path: path.join(destinationDir, packed[0].filename), files: new Set(packed[0].files.map((file) => file.path)) };
+}
+
+function assertTarballContents(tarball, packageName, requiredFiles) {
+	for (const file of requiredFiles) {
+		if (!tarball.files.has(file)) {
+			throw new Error(`${packageName} tarball is missing required published file ${file}`);
+		}
+	}
 }
 
 function copyWorkspacePackage(sourceSegments, destinationSegments) {
@@ -69,18 +73,38 @@ function main() {
 	mkdirSync(npmCacheDir, { recursive: true });
 
 	try {
+		// Pack only freshly compiled declarations: this is a type-level consumer gate,
+		// not a check against a potentially stale local dist directory.
+		run('npm', ['run', 'build'], path.join(ROOT, 'packages', 'core'), npmEnv);
+		run('npm', ['run', 'build'], path.join(ROOT, 'packages', 'react'), npmEnv);
+
 		const coreTarball = packPackage(path.join(ROOT, 'packages', 'core'), tarballDir, npmEnv);
 		const reactTarball = packPackage(path.join(ROOT, 'packages', 'react'), tarballDir, npmEnv);
+		assertTarballContents(coreTarball, '@open-grid/core', [
+			'README.md',
+			'dist/index.js',
+			'dist/index.d.ts',
+			'dist/experimental.js',
+			'dist/experimental.d.ts',
+			'dist/internal.js',
+			'dist/internal.d.ts',
+		]);
+		assertTarballContents(reactTarball, '@open-grid/react', [
+			'dist/index.js',
+			'dist/index.d.ts',
+			'dist/experimental.js',
+			'dist/experimental.d.ts',
+		]);
 
 		cpSync(fixtureTemplateDir, fixtureDir, { recursive: true });
 
 		const packageJsonPath = path.join(fixtureDir, 'package.json');
 		const packageJson = readFileSync(packageJsonPath, 'utf8')
-			.replace('__CORE_TARBALL__', coreTarball.replace(/\\/g, '/'))
-			.replace('__REACT_TARBALL__', reactTarball.replace(/\\/g, '/'));
+			.replace('__CORE_TARBALL__', coreTarball.path.replace(/\\/g, '/'))
+			.replace('__REACT_TARBALL__', reactTarball.path.replace(/\\/g, '/'));
 		writeFileSync(packageJsonPath, packageJson);
 
-		run('npm', ['install', '--no-save', '--ignore-scripts', '--legacy-peer-deps', coreTarball, reactTarball], fixtureDir, npmEnv);
+		run('npm', ['install', '--no-save', '--ignore-scripts', '--legacy-peer-deps', coreTarball.path, reactTarball.path], fixtureDir, npmEnv);
 		copyWorkspacePackage(['react'], [fixtureDir, 'node_modules', 'react']);
 		copyWorkspacePackage(['react-dom'], [fixtureDir, 'node_modules', 'react-dom']);
 		copyWorkspacePackage(['@types', 'react'], [fixtureDir, 'node_modules', '@types', 'react']);

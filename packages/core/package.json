@@ -30,8 +30,12 @@
 	"scripts": {
 		"prebuild": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
 		"build": "tsc",
+		"api:report": "npm run build && node ../../scripts/check-core-api.mjs --write",
+		"api:check": "npm run build && node ../../scripts/check-core-api.mjs --check",
 		"prepublishOnly": "npm run build",
 		"watch": "tsc --watch",
+		"typecheck": "tsc --noEmit && node ../../scripts/check-core-test-typecheck.mjs",
+		"lint": "eslint src --max-warnings=0",
 		"test": "vitest run"
 	},
 	"keywords": [
