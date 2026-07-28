@@ -186,10 +186,14 @@ describe('Public/internal boundary', () => {
 			expect(typeof (experimentalApi as Record<string, unknown>)['isDataVisualRow']).toBe('function');
 			expect(typeof (experimentalApi as Record<string, unknown>)['parseVisualRowId']).toBe('function');
 			expect(typeof (experimentalApi as Record<string, unknown>)['toDataVisualRowId']).toBe('function');
+			expect(typeof (experimentalApi as Record<string, unknown>)['createGridTraceReplay']).toBe('function');
 		});
 
 		it('matches the reviewed experimental runtime export snapshot', () => {
 			expect(Object.keys(experimentalApi).sort()).toEqual([
+				'GRID_TRACE_REPLAY_LIMITS',
+				'GRID_TRACE_REPLAY_VERSION',
+				'GridTraceReplay',
 				'NOOP_INSTRUMENTATION',
 				'NoopGridInstrumentation',
 				'RecordingGridInstrumentation',
@@ -197,6 +201,7 @@ describe('Public/internal boundary', () => {
 				'canFocusVisualRow',
 				'clearFlightRecorder',
 				'compileStyleRules',
+				'createGridTraceReplay',
 				'explainFlightRecorderCell',
 				'getFlightRecorderSnapshot',
 				'isDataCellSelectable',
@@ -212,6 +217,7 @@ describe('Public/internal boundary', () => {
 				'toFooterVisualRowId',
 				'toGroupVisualRowId',
 				'toLoadingVisualRowId',
+				'validateGridReplayTrace',
 			]);
 		});
 	});

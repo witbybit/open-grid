@@ -11,3 +11,5 @@ export { GridFlightRecorderDevTools } from './devtools/GridFlightRecorderDevTool
 export type { GridFlightRecorderDevToolsProps } from './devtools/GridFlightRecorderDevTools.js';
 export { buildFrameDistribution, filterTraceEvents, groupTimeline, SLOW_FRAME_THRESHOLD_MS, tracePrivacyLabel } from './devtools/traceViewModel.js';
 export type { FrameDistribution, TimelineGroup, TraceFilter, TraceWorkspace } from './devtools/traceViewModel.js';
+export { GridTraceReplayControls } from './devtools/replay/GridTraceReplayControls.js';
+export type { GridTraceReplayControlsProps } from './devtools/replay/GridTraceReplayControls.js';

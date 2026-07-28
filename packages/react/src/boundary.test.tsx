@@ -82,6 +82,7 @@ describe('React public boundary', () => {
 		expect((experimentalApi as Record<string, unknown>)['FormulaBar']).toBeDefined();
 		expect((experimentalApi as Record<string, unknown>)['ColumnFilterRenderer']).toBeDefined();
 		expect((experimentalApi as Record<string, unknown>)['GridFlightRecorderDevTools']).toBeTypeOf('function');
+		expect((experimentalApi as Record<string, unknown>)['GridTraceReplayControls']).toBeTypeOf('function');
 	});
 
 	it('matches the reviewed experimental runtime export snapshot', () => {
@@ -89,6 +90,7 @@ describe('React public boundary', () => {
 			'ColumnFilterRenderer',
 			'FormulaBar',
 			'GridFlightRecorderDevTools',
+			'GridTraceReplayControls',
 			'PortalCell',
 			'PortalManager',
 			'SLOW_FRAME_THRESHOLD_MS',
