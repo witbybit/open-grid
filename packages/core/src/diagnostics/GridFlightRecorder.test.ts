@@ -28,6 +28,90 @@ describe('GridFlightRecorder', () => {
 		expect(recorder.snapshot().events.map((entry) => entry.event.type)).toEqual(['commit-request', 'commit-outcome']);
 	});
 
+	it('does not read the frame clock while inactive', () => {
+		const clock = vi.fn(() => 1);
+		const recorder = new GridFlightRecorder(clock);
+		const token = recorder.beginExecutingFrame([1]);
+		recorder.finishExecutingFrame(token, 'full');
+		expect(token).toBeUndefined();
+		expect(clock).not.toHaveBeenCalled();
+		expect(recorder.snapshot().events).toEqual([]);
+	});
+
+	it('records deterministic frame duration with the exact cause IDs', () => {
+		const clock = vi.fn().mockReturnValueOnce(10).mockReturnValueOnce(13.5);
+		const recorder = new GridFlightRecorder(clock);
+		recorder.start();
+		const changeIds = [4, 7] as const;
+		const token = recorder.beginExecutingFrame(changeIds);
+		recorder.finishExecutingFrame(token, 'full');
+		expect(recorder.snapshot().events[0]?.event).toEqual({
+			type: 'frame',
+			changeIds,
+			correlation: 'render-request',
+			kind: 'full',
+			durationMs: 3.5,
+		});
+	});
+
+	it('emits an untimed frame when clock reads fail, are non-finite, or move backward', () => {
+		for (const clock of [
+			vi.fn(() => {
+				throw new Error('clock');
+			}),
+			vi.fn(() => Number.NaN),
+			vi.fn().mockReturnValueOnce(8).mockReturnValueOnce(7),
+		]) {
+			const recorder = new GridFlightRecorder(clock);
+			recorder.start();
+			expect(() => recorder.finishExecutingFrame(recorder.beginExecutingFrame([]), 'full')).not.toThrow();
+			const event = recorder.snapshot().events[0]?.event;
+			expect(event).toMatchObject({ type: 'frame', changeIds: [], correlation: 'uncorrelated', kind: 'full' });
+			expect(event).not.toHaveProperty('durationMs');
+		}
+	});
+
+	it('restores nested frame context and measures each frame independently', () => {
+		const clock = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(2).mockReturnValueOnce(5).mockReturnValueOnce(10);
+		const recorder = new GridFlightRecorder(clock);
+		recorder.start();
+		const outer = recorder.beginExecutingFrame([1]);
+		const inner = recorder.beginExecutingFrame([2]);
+		recorder.recordObservedFallback('renderer', 'inner');
+		recorder.finishExecutingFrame(inner, 'post-scroll');
+		recorder.recordObservedFallback('renderer', 'outer');
+		recorder.finishExecutingFrame(outer, 'full');
+
+		const events = recorder.snapshot().events.map((entry) => entry.event);
+		expect(events).toEqual([
+			{ type: 'fallback', component: 'renderer', reason: 'inner', changeIds: [2], correlation: 'render-request' },
+			{ type: 'frame', changeIds: [2], correlation: 'render-request', kind: 'post-scroll', durationMs: 3 },
+			{ type: 'fallback', component: 'renderer', reason: 'outer', changeIds: [1], correlation: 'render-request' },
+			{ type: 'frame', changeIds: [1], correlation: 'render-request', kind: 'full', durationMs: 10 },
+		]);
+	});
+
+	it('restores context but does not read or emit across recorder sessions', () => {
+		const clock = vi.fn().mockReturnValueOnce(1).mockReturnValueOnce(2).mockReturnValueOnce(3);
+		const recorder = new GridFlightRecorder(clock);
+		recorder.start();
+		const token = recorder.beginExecutingFrame([3]);
+		recorder.stop();
+		recorder.start();
+		recorder.finishExecutingFrame(token, 'full');
+		expect(recorder.getExecutingFrameChangeIds()).toEqual([]);
+		expect(recorder.snapshot().events).toEqual([]);
+
+		const current = recorder.beginExecutingFrame([9]);
+		recorder.recordObservedFallback('renderer', 'current');
+		recorder.finishExecutingFrame(current, 'full');
+		expect(clock).toHaveBeenCalledTimes(3);
+		expect(recorder.snapshot().events.map((entry) => entry.event)).toEqual([
+			{ type: 'fallback', component: 'renderer', reason: 'current', changeIds: [9], correlation: 'render-request' },
+			{ type: 'frame', changeIds: [9], correlation: 'render-request', kind: 'full', durationMs: 1 },
+		]);
+	});
+
 	it('wraps at fixed capacity with monotonic sequence and drop accounting', () => {
 		const recorder = new GridFlightRecorder();
 		recorder.start({ capacity: 2 });
@@ -51,6 +135,23 @@ describe('GridFlightRecorder', () => {
 		recorder.record(factory);
 		expect(factory).not.toHaveBeenCalled();
 		expect(recorder.snapshot()).toMatchObject({ active: true, dropped: 1, events: [] });
+	});
+
+	it('normalizes invalid, fractional, negative, and absurd recorder capacities', () => {
+		for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+			const recorder = new GridFlightRecorder();
+			expect(() => recorder.start({ capacity: value })).not.toThrow();
+			expect((recorder as unknown as { capacity: number }).capacity).toBe(256);
+		}
+		const fractional = new GridFlightRecorder();
+		fractional.start({ capacity: 2.9 });
+		expect((fractional as unknown as { capacity: number }).capacity).toBe(2);
+		const negative = new GridFlightRecorder();
+		negative.start({ capacity: -4 });
+		expect((negative as unknown as { capacity: number }).capacity).toBe(0);
+		const huge = new GridFlightRecorder();
+		expect(() => huge.start({ capacity: Number.MAX_SAFE_INTEGER })).not.toThrow();
+		expect((huge as unknown as { capacity: number }).capacity).toBe(100_000);
 	});
 
 	it('honors start, stop, clear, and destroy terminality', () => {

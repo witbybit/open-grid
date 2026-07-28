@@ -214,21 +214,19 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.frameCoordinator = new DefaultFrameCoordinator({
 			onScrollFrame: () => this.flushScrollFrame(),
 			onPaintFrame: (changeIds) => {
-				engine.flightRecorder.enterExecutingFrame(changeIds);
+				const frameToken = engine.flightRecorder.beginExecutingFrame(changeIds);
 				try {
 					this.flushPaint();
 				} finally {
-					engine.flightRecorder.recordCompletedFrame('full', changeIds);
-					engine.flightRecorder.leaveExecutingFrame();
+					engine.flightRecorder.finishExecutingFrame(frameToken, 'full');
 				}
 			},
 			onPostScrollWork: (changeIds) => {
-				engine.flightRecorder.enterExecutingFrame(changeIds);
+				const frameToken = engine.flightRecorder.beginExecutingFrame(changeIds);
 				try {
 					this.flushPaint();
 				} finally {
-					engine.flightRecorder.recordCompletedFrame('post-scroll', changeIds);
-					engine.flightRecorder.leaveExecutingFrame();
+					engine.flightRecorder.finishExecutingFrame(frameToken, 'post-scroll');
 				}
 			},
 			onScrollEnd: () => this.scrollCoordinator.finishScrolling(),

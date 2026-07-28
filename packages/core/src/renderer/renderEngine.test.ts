@@ -27,6 +27,43 @@ describe('RenderEngine', () => {
 		vi.useRealTimers();
 	});
 
+	it('wraps paint and post-scroll work in recorder timing without changing causes or error propagation', () => {
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name' }],
+			getRowId: (row) => row.id,
+		});
+		const renderer = new RenderEngine(store.engine, store);
+		const recorder = store.engine.flightRecorder;
+		recorder.start();
+		const begin = vi.spyOn(recorder, 'beginExecutingFrame');
+		const finish = vi.spyOn(recorder, 'finishExecutingFrame');
+		const flush = vi.spyOn(renderer as unknown as { flushPaint: () => void }, 'flushPaint').mockImplementation(() => {});
+		const coordinator = (renderer as unknown as { frameCoordinator: object }).frameCoordinator as {
+			onPaintFrame: (changeIds: readonly number[]) => void;
+			onPostScrollWork: (changeIds: readonly number[]) => void;
+		};
+
+		coordinator.onPaintFrame([11, 12]);
+		coordinator.onPostScrollWork([21]);
+		expect(begin.mock.calls).toEqual([[[11, 12]], [[21]]]);
+		expect(finish.mock.calls.map(([, kind]) => kind)).toEqual(['full', 'post-scroll']);
+		expect(flush).toHaveBeenCalledTimes(2);
+		expect(recorder.snapshot().events.map((entry) => entry.event)).toEqual([
+			expect.objectContaining({ type: 'frame', kind: 'full', changeIds: [11, 12] }),
+			expect.objectContaining({ type: 'frame', kind: 'post-scroll', changeIds: [21] }),
+		]);
+
+		flush.mockImplementationOnce(() => {
+			throw new Error('paint failure');
+		});
+		expect(() => coordinator.onPaintFrame([31])).toThrow('paint failure');
+		expect(finish).toHaveBeenLastCalledWith(expect.anything(), 'full');
+		expect(recorder.getExecutingFrameChangeIds()).toEqual([]);
+
+		renderer.unmount();
+		store.destroy();
+	});
+
 	it('syncs state-driven paints from the real scroll viewport position', () => {
 		const store = new GridStore<{ id: string; name: string }>({
 			columns: [{ field: 'name', header: 'Name', width: 120 }],

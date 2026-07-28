@@ -36,6 +36,7 @@ export type GridCausalEvent =
 			readonly changeIds: readonly number[];
 			readonly correlation: 'render-request' | 'uncorrelated';
 			readonly kind: string;
+			readonly durationMs?: number;
 			readonly rowsVisited?: number;
 			readonly cellsWritten?: number;
 	  }
@@ -78,6 +79,7 @@ export interface GridCellExplanation {
 }
 
 export interface GridFlightRecorderOptions {
+	/** Retained event capacity. Finite values are floored and clamped to 0..100,000; non-finite values use the default. */
 	readonly capacity?: number;
 	readonly captureValues?: GridTraceValueCapture;
 	readonly redactValue?: (value: unknown, cell: GridTraceCellCoordinate) => unknown;

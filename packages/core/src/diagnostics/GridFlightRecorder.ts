@@ -11,7 +11,16 @@ import type { FallbackMetric, FrameMetrics, GridInstrumentation, GridInstrumenta
 
 const EMPTY_EVENTS = Object.freeze([]) as readonly GridCausalTraceEnvelope[];
 const EMPTY_SNAPSHOT: GridCausalTraceSnapshot = Object.freeze({ v: 1, sessionId: null, active: false, dropped: 0, events: EMPTY_EVENTS });
+const DEFAULT_CAPACITY = 256;
+const MAX_CAPACITY = 100_000;
 let nextSession = 1;
+
+interface GridFlightRecorderFrameToken {
+	readonly startedAt?: number;
+	readonly sessionId: string;
+	readonly changeIds: readonly number[];
+	readonly previousChangeIds: readonly number[];
+}
 
 export class GridFlightRecorder {
 	private active = false;
@@ -28,21 +37,50 @@ export class GridFlightRecorder {
 	private redactValue?: GridFlightRecorderOptions['redactValue'];
 	private executingFrameChangeIds: readonly number[] = EMPTY_CHANGE_IDS;
 
-	public enterExecutingFrame(changeIds: readonly number[]): void {
+	constructor(private readonly clock: () => number = defaultMonotonicClock) {}
+
+	public beginExecutingFrame(changeIds: readonly number[]): GridFlightRecorderFrameToken | undefined {
+		if (!this.isActive()) return undefined;
+		const token: GridFlightRecorderFrameToken = {
+			startedAt: this.readClock(),
+			sessionId: this.sessionId!,
+			changeIds,
+			previousChangeIds: this.executingFrameChangeIds,
+		};
 		this.executingFrameChangeIds = changeIds;
-	}
-	public leaveExecutingFrame(): void {
-		this.executingFrameChangeIds = EMPTY_CHANGE_IDS;
+		return token;
 	}
 	public getExecutingFrameChangeIds(): readonly number[] {
 		return this.executingFrameChangeIds;
 	}
-	public recordCompletedFrame(kind: string, changeIds: readonly number[]): void {
-		this.record(() => ({ type: 'frame', changeIds, correlation: changeIds.length ? 'render-request' : 'uncorrelated', kind }));
+	public finishExecutingFrame(token: GridFlightRecorderFrameToken | undefined, kind: string): void {
+		if (!token) return;
+		if (!this.isActive() || this.sessionId !== token.sessionId) return;
+		this.executingFrameChangeIds = token.previousChangeIds;
+		const endedAt = token.startedAt === undefined ? undefined : this.readClock();
+		const durationMs =
+			token.startedAt !== undefined && endedAt !== undefined && endedAt >= token.startedAt ? endedAt - token.startedAt : undefined;
+		const { changeIds } = token;
+		this.record(() => ({
+			type: 'frame',
+			changeIds,
+			correlation: changeIds.length ? 'render-request' : 'uncorrelated',
+			kind,
+			...(durationMs === undefined ? {} : { durationMs }),
+		}));
 	}
 	public recordObservedFallback(component: string, reason: string): void {
 		const changeIds = this.executingFrameChangeIds;
 		this.record(() => ({ type: 'fallback', component, reason, changeIds, correlation: changeIds.length ? 'render-request' : 'uncorrelated' }));
+	}
+
+	private readClock(): number | undefined {
+		try {
+			const value = this.clock();
+			return Number.isFinite(value) ? value : undefined;
+		} catch {
+			return undefined;
+		}
 	}
 
 	public isActive(): boolean {
@@ -67,7 +105,7 @@ export class GridFlightRecorder {
 
 	public start(options: GridFlightRecorderOptions = {}): void {
 		if (this.destroyed) return;
-		this.capacity = Math.max(0, Math.floor(options.capacity ?? 256));
+		this.capacity = normalizeFlightRecorderCapacity(options.capacity);
 		this.captureValues = options.captureValues ?? 'none';
 		this.redactValue = options.redactValue;
 		this.buffer = new Array(this.capacity);
@@ -76,11 +114,13 @@ export class GridFlightRecorder {
 		this.dropped = 0;
 		this.sequence = 0;
 		this.sessionId = `grid-flight-${nextSession++}`;
+		this.executingFrameChangeIds = EMPTY_CHANGE_IDS;
 		this.active = true;
 	}
 
 	public stop(): void {
 		this.active = false;
+		this.executingFrameChangeIds = EMPTY_CHANGE_IDS;
 	}
 
 	public clear(): void {
@@ -219,6 +259,20 @@ export class GridFlightRecorderInstrumentation implements GridInstrumentation {
 }
 
 const EMPTY_CHANGE_IDS = Object.freeze([]) as readonly number[];
+
+function defaultMonotonicClock(): number {
+	try {
+		if (typeof globalThis.performance?.now === 'function') return globalThis.performance.now();
+	} catch {
+		// Fall through to the wall clock when a host performance implementation is unavailable.
+	}
+	return Date.now();
+}
+
+function normalizeFlightRecorderCapacity(value: number | undefined): number {
+	if (value === undefined || !Number.isFinite(value)) return DEFAULT_CAPACITY;
+	return Math.min(MAX_CAPACITY, Math.max(0, Math.floor(value)));
+}
 
 function detachJsonSafe<T>(value: T): T {
 	if (value === undefined) return value;
