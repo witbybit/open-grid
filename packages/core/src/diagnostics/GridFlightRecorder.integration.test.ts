@@ -31,6 +31,54 @@ function grid() {
 }
 
 describe('experimental causal flight-recorder integration', () => {
+	it('records a blocking edit rejection before writeBlocked without fabricating a change', async () => {
+		const api = createClientGrid<Row>({
+			getRowId: (row) => row.id,
+			columns: [
+				{ field: 'value', header: 'Value' },
+				{ field: 'other', header: 'Other' },
+			],
+			rows: [{ id: 'r1', value: 1, other: 2 }],
+			dataIntegrity: {
+				validation: {
+					validateOnSubmit: true,
+					cellRules: [
+						{
+							id: 'positive',
+							field: 'value',
+							blocking: true,
+							validate: ({ value }) => (typeof value === 'number' && value >= 0 ? null : { message: 'positive only' }),
+						},
+					],
+				},
+			},
+		});
+		startFlightRecorder(api);
+		let snapshotAtWriteBlocked = getFlightRecorderSnapshot(api);
+		api.addEventListener(GridEventName.writeBlocked, () => {
+			snapshotAtWriteBlocked = getFlightRecorderSnapshot(api);
+		});
+		api.startEditing('r1', 'value');
+		const committed = await api.commitEdit('r1', 'value', -1);
+
+		expect(committed).toBe(false);
+		expect(api.getCellValue('r1', 'value')).toBe(1);
+		const events = snapshotAtWriteBlocked.events.map((entry) => entry.event);
+		const request = events.find((event) => event.type === 'commit-request' && event.reason === 'editing:validation');
+		expect(request).toEqual({
+			type: 'commit-request',
+			attemptId: 2,
+			reason: 'editing:validation',
+			cell: { rowId: 'r1', colField: 'value' },
+		});
+		expect(events.filter((event) => event.type === 'commit-outcome' && event.attemptId === 2)).toEqual([
+			{ type: 'commit-outcome', attemptId: 2, changeId: undefined, outcome: 'validation-rejected', domains: [] },
+		]);
+		const rejectionTail = events.slice(events.indexOf(request!));
+		expect(rejectionTail.some((event) => event.type === 'invalidation' || event.type === 'cell-change')).toBe(false);
+		expect(getFlightRecorderSnapshot(api).events).toHaveLength(snapshotAtWriteBlocked.events.length);
+		api.destroy();
+	});
 	it('captures accepted, rejected, batch, formula-derived, and fault signals without raw values by default', () => {
 		const api = grid();
 		startFlightRecorder(api, { capacity: 64 });

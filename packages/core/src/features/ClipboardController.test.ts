@@ -314,6 +314,7 @@ describe('ClipboardController', () => {
 					validation: {
 						validateOnSubmit: true,
 						cellRules: [
+							{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) },
 							{ id: 'required-note', field: 'note', validate: ({ value }) => (value ? null : { message: 'Note is required' }) },
 						],
 					},
@@ -330,7 +331,12 @@ describe('ClipboardController', () => {
 		const handler = vi.fn();
 		const blockedHandler = vi.fn();
 		store.addEventListener(GridEventName.cellsPasted, handler);
-		store.addEventListener(GridEventName.writeBlocked, blockedHandler);
+		store.engine.flightRecorder.start();
+		let traceAtWriteBlocked = store.engine.flightRecorder.snapshot();
+		store.addEventListener(GridEventName.writeBlocked, (event) => {
+			traceAtWriteBlocked = store.engine.flightRecorder.snapshot();
+			blockedHandler(event);
+		});
 
 		clip.setStored('\t');
 		store.selectCell({ rowId: '1', colField: 'name' });
@@ -350,6 +356,25 @@ describe('ClipboardController', () => {
 		expect(store.getCellValue('2', 'name')).toBe('Beta');
 		expect(store.getCellValue('2', 'note')).toBe('keep');
 		expect(store.canUndo()).toBe(false);
+		const traceEvents = traceAtWriteBlocked.events.map((entry) => entry.event);
+		const request = traceEvents.find((event) => event.type === 'commit-request' && event.reason === 'clipboard:validation');
+		expect(request).toEqual({ type: 'commit-request', attemptId: 2, reason: 'clipboard:validation' });
+		expect(request && 'cell' in request).toBe(false);
+		expect(traceEvents.filter((event) => event.type === 'commit-outcome' && event.attemptId === 2)).toEqual([
+			{ type: 'commit-outcome', attemptId: 2, changeId: undefined, outcome: 'validation-rejected', domains: [] },
+		]);
+		expect(store.engine.flightRecorder.snapshot().events).toHaveLength(traceAtWriteBlocked.events.length);
+		const resolveExact = (store.engine.clipboard as any).getExactRejectedCell.bind(store.engine.clipboard);
+		const adversarialIssue = (rowId: string, colField: string) => ({ rowId, colField });
+		expect(
+			resolveExact(
+				[
+					{ rowId: 'a\0b:雪', colField: 'c' },
+					{ rowId: 'a', colField: 'b\0c:雪' },
+				],
+				[adversarialIssue('a\0b:雪', 'c'), adversarialIssue('a', 'b\0c:雪')]
+			)
+		).toBeUndefined();
 
 		ctrl.dispose();
 		store.destroy();

@@ -86,6 +86,9 @@ export interface GridFlightRecorderOptions {
 /** Narrow observer port used by commit/render/runtime layers. */
 export interface GridCausalTraceSink {
 	isActive(): boolean;
+	beginCommitAttempt(reason: string, cell?: GridTraceCellCoordinate): number | undefined;
+	finishCommitAttempt(attemptId: number | undefined, outcome: string, changeId?: number, domains?: readonly string[]): void;
+	recordRejectedWrite(reason: string, cell?: GridTraceCellCoordinate): void;
 	record(factory: () => GridCausalEvent): void;
 	captureValue(value: unknown, cell: GridTraceCellCoordinate): GridTraceCapturedValue | undefined;
 }

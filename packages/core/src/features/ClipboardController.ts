@@ -26,6 +26,7 @@ interface ClipboardContext<TRowData> {
 		source: 'paste' | 'api' | 'fill' | 'edit' | 'undo' | 'redo'
 	) => Promise<readonly GridIntegrityIssue[]>;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
+	recordRejectedWrite?: (reason: string, cell?: { rowId: string; colField: string }) => void;
 }
 
 interface CopyResult {
@@ -161,6 +162,8 @@ export class ClipboardController<TRowData = unknown> {
 					'paste'
 				);
 				if ((issues?.length ?? 0) > 0) {
+					const exactCell = this.getExactRejectedCell(updates, issues!);
+					this.c.recordRejectedWrite?.('clipboard:validation', exactCell);
 					dispatchWriteBlockedEvent(
 						this.c.dispatchEvent,
 						'paste',
@@ -199,6 +202,16 @@ export class ClipboardController<TRowData = unknown> {
 		} catch {
 			// Clipboard access denied — silently ignore
 		}
+	}
+
+	private getExactRejectedCell(
+		updates: readonly { rowId: string; colField: string }[],
+		issues: readonly GridIntegrityIssue[]
+	): { rowId: string; colField: string } | undefined {
+		if (updates.length === 1) return { rowId: updates[0]!.rowId, colField: updates[0]!.colField };
+		if (issues.some((issue) => issue.rowId === undefined || issue.colField === undefined)) return undefined;
+		const first = { rowId: issues[0]!.rowId!, colField: issues[0]!.colField! };
+		return issues.every((issue) => issue.rowId === first.rowId && issue.colField === first.colField) ? first : undefined;
 	}
 
 	private async _copyRange(minRow: number, maxRow: number, minCol: number, maxCol: number): Promise<void> {

@@ -17,6 +17,17 @@ describe('GridFlightRecorder', () => {
 		expect(recorder.snapshot().events).toEqual([]);
 	});
 
+	it('does not allocate attempt IDs while inactive', () => {
+		const recorder = new GridFlightRecorder();
+		expect(recorder.beginCommitAttempt('inactive')).toBeUndefined();
+		recorder.finishCommitAttempt(undefined, 'validation-rejected');
+		recorder.start();
+		const attemptId = recorder.beginCommitAttempt('active', { rowId: 'r', colField: 'c' });
+		recorder.finishCommitAttempt(attemptId, 'validation-rejected');
+		expect(attemptId).toBe(1);
+		expect(recorder.snapshot().events.map((entry) => entry.event.type)).toEqual(['commit-request', 'commit-outcome']);
+	});
+
 	it('wraps at fixed capacity with monotonic sequence and drop accounting', () => {
 		const recorder = new GridFlightRecorder();
 		recorder.start({ capacity: 2 });

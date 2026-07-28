@@ -199,7 +199,6 @@ class GridCommitRejectedError {
 
 export class GridCommitKernel<TRowData = unknown> {
 	private nextChangeId = 1;
-	private nextTraceAttemptId = 1;
 	private isReplayingHistory = false;
 
 	constructor(private readonly deps: GridCommitKernelDeps<TRowData>) {}
@@ -209,8 +208,7 @@ export class GridCommitKernel<TRowData = unknown> {
 	}
 
 	commitDetailed(change: GridCommit<TRowData>): GridCommitExecution<TRowData> {
-		const attemptId = this.nextTraceAttemptId++;
-		this.deps.flightRecorder?.record(() => ({ type: 'commit-request', attemptId, reason: change.reason }));
+		const attemptId = this.deps.flightRecorder?.beginCommitAttempt(change.reason);
 		const validation = this.validate(change);
 		if (validation.status === 'rejected') {
 			this.traceOutcome(attemptId, 'rejected');
@@ -378,13 +376,7 @@ export class GridCommitKernel<TRowData = unknown> {
 			});
 		}
 
-		this.deps.flightRecorder?.record(() => ({
-			type: 'commit-outcome',
-			attemptId,
-			changeId: record.changeId,
-			outcome: 'committed',
-			domains: record.domains.map(String),
-		}));
+		this.deps.flightRecorder?.finishCommitAttempt(attemptId, 'committed', record.changeId, record.domains.map(String));
 		return {
 			result: {
 				status: 'committed',
@@ -396,8 +388,13 @@ export class GridCommitKernel<TRowData = unknown> {
 		};
 	}
 
-	private traceOutcome(attemptId: number, outcome: string, changeId?: number, domains: readonly (keyof GridDomainVersions)[] = []): void {
-		this.deps.flightRecorder?.record(() => ({ type: 'commit-outcome', attemptId, changeId, outcome, domains: domains.map(String) }));
+	private traceOutcome(
+		attemptId: number | undefined,
+		outcome: string,
+		changeId?: number,
+		domains: readonly (keyof GridDomainVersions)[] = []
+	): void {
+		this.deps.flightRecorder?.finishCommitAttempt(attemptId, outcome, changeId, domains.map(String));
 	}
 
 	apply(change: GridChange<TRowData>): GridCommitResult {

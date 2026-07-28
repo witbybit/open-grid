@@ -115,7 +115,6 @@ export class GridEngine<TRowData = unknown> {
 	public readonly geometry: GeometryModel;
 	public readonly selection: SelectionModel;
 	public readonly cellAccess: CellAccessModel<TRowData>;
-
 	public readonly stateManager: StateManager<TRowData>;
 	public readonly commandHistory: CommandHistory;
 	public readonly eventBus: EventBus<TRowData>;
@@ -143,7 +142,6 @@ export class GridEngine<TRowData = unknown> {
 	public setApiRef(api: import('../api/GridApi.js').GridApi<TRowData>): void {
 		this._apiRef = api;
 	}
-
 	private getDistinctValueSourceNodes(): RowNode<TRowData>[] {
 		return asAllDataNodesCapableRowModel(this.rowModel)?.getAllDataNodes() ?? [];
 	}
@@ -534,6 +532,7 @@ export class GridEngine<TRowData = unknown> {
 			dispatchEvent: (type, payload) => this.eventBus.dispatchEvent(type, payload),
 			validateWriteProposal: (updates, source) => this.dataIntegrity?.validateWriteProposal(updates, source) ?? Promise.resolve([]),
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
+			recordRejectedWrite: (reason, cell) => this.flightRecorder.recordRejectedWrite(reason, cell),
 		});
 		this.groupingFeature = new GroupingFeatureController<TRowData>({
 			ctx: featureContext,
@@ -552,6 +551,7 @@ export class GridEngine<TRowData = unknown> {
 			validateWriteProposal: (updates, source) => this.dataIntegrity?.validateWriteProposal(updates, source) ?? Promise.resolve([]),
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 			dispatchEvent: (type, payload) => this.eventBus.dispatchEvent(type, payload),
+			recordRejectedWrite: (reason, cell) => this.flightRecorder.recordRejectedWrite(reason, cell),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
 		this.stateFeature = new GridStateFeatureController<TRowData>({

@@ -25,6 +25,7 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	) => Promise<readonly GridIntegrityIssue[]>;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 	dispatchEvent: <K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]) => void;
+	recordRejectedWrite?: (reason: string, cell: { rowId: string; colField: string }) => void;
 }
 
 export class EditingFeatureController<TRowData = unknown> {
@@ -43,6 +44,7 @@ export class EditingFeatureController<TRowData = unknown> {
 	) => Promise<readonly GridIntegrityIssue[]>;
 	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 	private readonly dispatchEvent: EditingFeatureControllerDeps<TRowData>['dispatchEvent'];
+	private readonly recordRejectedWrite?: EditingFeatureControllerDeps<TRowData>['recordRejectedWrite'];
 
 	constructor(deps: EditingFeatureControllerDeps<TRowData>) {
 		this.ctx = deps.ctx;
@@ -53,6 +55,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.validateWriteProposal = deps.validateWriteProposal;
 		this.checkCapability = deps.checkCapability;
 		this.dispatchEvent = deps.dispatchEvent;
+		this.recordRejectedWrite = deps.recordRejectedWrite;
 	}
 
 	private canEditCell(rowId: string, colFieldOrInstanceId: string): boolean {
@@ -203,6 +206,7 @@ export class EditingFeatureController<TRowData = unknown> {
 		const proposalIssues = await this.validateWriteProposal?.([{ rowId, colField, proposedValue: committedValue }], 'edit');
 		if (matchedActiveEdit && !this.isCurrentEdit(matchedActiveEdit)) return false;
 		if ((proposalIssues?.length ?? 0) > 0) {
+			this.recordRejectedWrite?.('editing:validation', { rowId, colField });
 			dispatchWriteBlockedEvent(
 				this.dispatchEvent,
 				'edit',

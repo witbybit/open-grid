@@ -18,6 +18,7 @@ export class GridFlightRecorder {
 	private destroyed = false;
 	private sessionId: string | null = null;
 	private sequence = 0;
+	private nextAttemptId = 1;
 	private dropped = 0;
 	private capacity = 0;
 	private buffer: Array<GridCausalTraceEnvelope | undefined> = [];
@@ -46,6 +47,22 @@ export class GridFlightRecorder {
 
 	public isActive(): boolean {
 		return this.active && !this.destroyed;
+	}
+
+	public beginCommitAttempt(reason: string, cell?: GridTraceCellCoordinate): number | undefined {
+		if (!this.isActive()) return undefined;
+		const attemptId = this.nextAttemptId++;
+		this.record(() => (cell ? { type: 'commit-request', attemptId, reason, cell } : { type: 'commit-request', attemptId, reason }));
+		return attemptId;
+	}
+
+	public finishCommitAttempt(attemptId: number | undefined, outcome: string, changeId?: number, domains: readonly string[] = []): void {
+		if (attemptId === undefined) return;
+		this.record(() => ({ type: 'commit-outcome', attemptId, changeId, outcome, domains }));
+	}
+
+	public recordRejectedWrite(reason: string, cell?: GridTraceCellCoordinate): void {
+		this.finishCommitAttempt(this.beginCommitAttempt(reason, cell), 'validation-rejected');
 	}
 
 	public start(options: GridFlightRecorderOptions = {}): void {
