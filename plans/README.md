@@ -2,6 +2,9 @@
 
 | #   | Plan                                                                                                                          | Status   | Commit       |
 | --- | ----------------------------------------------------------------------------------------------------------------------------- | -------- | ------------ |
+| 163 | [Deterministic Grid Trace Replay](./163-deterministic-grid-trace-replay.md)                                                   | IN PROGRESS | a942762b     |
+| 162 | [Advanced Flight Recorder DevTools](./162-advanced-flight-recorder-devtools.md)                                               | DONE     | a942762b     |
+| 161 | [Causal Grid Flight Recorder](./161-causal-grid-flight-recorder.md)                                                           | DONE     | 8c54cb59     |
 | 160 | [Long-Session Runtime Resilience](./160-long-session-runtime-resilience.md)                                                   | DONE     | working tree |
 | 159 | [Core Contract and Performance Convergence](./159-core-contract-and-performance-convergence.md)                               | DONE     | working tree |
 | 001 | [Row Multi-Select](./001-row-multiselect.md)                                                                                  | DONE     | 3d32692      |
@@ -124,7 +127,7 @@
 | 119 | [Unified Column Topology](./119-unified-column-topology-and-pinned-lane-rendering.md)                                         | DONE     | faf18afa     |
 | 120 | [Portal Identity Completion](./120-portal-identity-completion.md)                                                             | DONE     | 5cb7d65c     |
 | 121 | [React Portal Identity Completion](./121-react-portal-identity-completion.md)                                                 | DONE     | efba7b58     |
-| 122 | [Grid DevTools / Runtime Inspector](./122-grid-devtools-runtime-inspector.md)                                                 | TODO     | —            |
+| 122 | [Grid DevTools / Runtime Inspector](./122-grid-devtools-runtime-inspector.md)                                                 | SUPERSEDED (161-163) | —            |
 | 123 | [Workspace Views and Persistence Controls](./123-workspace-views-and-persistence-controls.md)                                 | TODO     | —            |
 | 124 | [Advanced Query Builder](./124-advanced-query-builder.md)                                                                     | TODO     | —            |
 | 125 | [Validation and Cell Capability Framework](./125-validation-and-cell-capability-framework.md)                                 | TODO     | —            |
@@ -155,6 +158,16 @@
 | 156 | [Row Model Completion + Public RowNode Facade](./156-row-model-completion-and-public-row-node-facade.md) | SUPERSEDED (158) | working tree |
 | 157 | [Interaction Kernel Hardening](./157-interaction-kernel-hardening.md) | DONE | working tree |
 | 158 | [Server-Backed Row Model Correctness + Real SSRM Replacement](./158-server-backed-row-model-correctness-and-ssrm-replacement.md) | DONE | working tree |
+
+## Flight Recorder program
+
+Execute the signature DevTools program strictly in this order:
+
+1. `161-causal-grid-flight-recorder.md` — establish the bounded, redaction-safe causal trace and `explainCell()` contract without UI or replay concerns.
+2. `162-advanced-flight-recorder-devtools.md` — build the interactive inspector only after the trace contract is stable; this supersedes Plan 122.
+3. `163-deterministic-grid-trace-replay.md` — validate untrusted traces and replay supported commands only in a fresh isolated headless runtime.
+
+Plan 162 depends on 161 because UI correlation must not invent recorder semantics. Plan 163 depends on both because replay needs the versioned trace contract and the DevTools host. Do not combine all three into one implementation diff: privacy, disabled-mode performance, UI quality, and replay isolation need independent review gates.
 
 ## Execution order
 
