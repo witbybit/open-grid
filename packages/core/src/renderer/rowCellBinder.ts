@@ -622,6 +622,9 @@ export function bindCellFull<TRowData>(deps: RowCellBinderDeps<TRowData>, reques
 				: 'portal-live'
 			: contentMode;
 	const snapshotContentMode = contentMode === 'portal' && snapshotContentKind === 'impostor' ? ('fallback' as const) : contentMode;
+	if (snapshotContentMode === 'fallback' && deps.engine.flightRecorder?.isActive()) {
+		deps.engine.flightRecorder.recordObservedFallback('cell-renderer', 'impostor-content');
+	}
 	const snapshotFormattedValue = contentMode === 'portal' && snapshotContentKind === 'impostor' ? portalImpostorValue : formattedValue;
 	deps.engine.cellDisplaySnapshots.set(
 		createCellDisplaySnapshot({

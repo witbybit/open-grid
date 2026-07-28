@@ -16,6 +16,7 @@ import type {
 } from './GridDomainMutation.js';
 import type { StateCommitPhase } from '../state/StateManager.js';
 import type { RowsUpdatedDispatchPayload } from './runtimePorts.js';
+import type { GridCausalTraceSink } from '../diagnostics/GridCausalTrace.js';
 
 export type GridCommitReason =
 	| 'columns:set-data'
@@ -181,12 +182,13 @@ export interface GridCommitKernelDeps<TRowData = unknown> {
 	eventBus: EventBus<TRowData>;
 	dispatchEvent?: <K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridCommitPayload<TRowData, K>) => void;
 	commandHistory: CommandHistory;
-	requestRender: (commitReason: string) => void;
+	requestRender: (commitReason: string, changeId?: number) => void;
 	commitContext?: GridCommitContext<TRowData>;
 	domainMutationExecutorRegistry?: GridDomainMutationExecutorRegistry<TRowData>;
 	publishDomains?: (domains: readonly (keyof GridDomainVersions)[]) => void;
 	projectStateChange?: (phase: StateCommitPhase<TRowData>) => void;
 	faultReporter?: RuntimeFaultReporter<TRowData>;
+	flightRecorder?: GridCausalTraceSink;
 }
 
 export type GridChangeApplierDeps<TRowData = unknown> = GridCommitKernelDeps<TRowData>;
@@ -197,6 +199,7 @@ class GridCommitRejectedError {
 
 export class GridCommitKernel<TRowData = unknown> {
 	private nextChangeId = 1;
+	private nextTraceAttemptId = 1;
 	private isReplayingHistory = false;
 
 	constructor(private readonly deps: GridCommitKernelDeps<TRowData>) {}
@@ -206,11 +209,19 @@ export class GridCommitKernel<TRowData = unknown> {
 	}
 
 	commitDetailed(change: GridCommit<TRowData>): GridCommitExecution<TRowData> {
+		const attemptId = this.nextTraceAttemptId++;
+		this.deps.flightRecorder?.record(() => ({ type: 'commit-request', attemptId, reason: change.reason }));
 		const validation = this.validate(change);
-		if (validation.status === 'rejected') return { result: validation.result, appliedMutations: [] };
+		if (validation.status === 'rejected') {
+			this.traceOutcome(attemptId, 'rejected');
+			return { result: validation.result, appliedMutations: [] };
+		}
 
 		const domainMutationResolution = this.resolveDomainMutations(change);
-		if (domainMutationResolution.status !== 'ok') return { result: domainMutationResolution.result, appliedMutations: [] };
+		if (domainMutationResolution.status !== 'ok') {
+			this.traceOutcome(attemptId, domainMutationResolution.result.status);
+			return { result: domainMutationResolution.result, appliedMutations: [] };
+		}
 
 		const appliedMutations: AppliedDomainMutation<TRowData>[] = [];
 		let failureOperation: string | null = null;
@@ -257,6 +268,7 @@ export class GridCommitKernel<TRowData = unknown> {
 			}
 			if (rollbackFaults.length === 0) {
 				if (primaryRejections) {
+					this.traceOutcome(attemptId, 'rejected');
 					return {
 						result: {
 							status: 'rejected',
@@ -266,12 +278,14 @@ export class GridCommitKernel<TRowData = unknown> {
 						appliedMutations: [],
 					};
 				}
+				this.traceOutcome(attemptId, 'failed-before-commit');
 				return {
 					result: { status: 'failed-before-commit', fault: primaryFault! },
 					appliedMutations: [],
 				};
 			}
 			const committedChangeId = this.nextChangeId++;
+			this.traceOutcome(attemptId, 'committed-with-faults', committedChangeId, change.domains ?? []);
 			return {
 				result: {
 					status: 'committed',
@@ -284,7 +298,10 @@ export class GridCommitKernel<TRowData = unknown> {
 		}
 
 		const record = this.toCommitRecord(change, appliedMutations);
-		if (!record) return { result: { status: 'noop' }, appliedMutations };
+		if (!record) {
+			this.traceOutcome(attemptId, 'noop');
+			return { result: { status: 'noop' }, appliedMutations };
+		}
 
 		const faults: RuntimeFault[] = [];
 		const isolate = (operation: string, work: () => void): void => {
@@ -307,8 +324,23 @@ export class GridCommitKernel<TRowData = unknown> {
 				const normalized = normalizeInvalidationPlan(record.invalidations);
 				this.deps.invalidation.applyNormalizedPlan(normalized);
 			});
+			this.deps.flightRecorder?.record(() => ({
+				type: 'invalidation',
+				changeId: record.changeId,
+				reason: record.reason,
+				domains: record.domains.map(String),
+			}));
 		}
 		const cellChanges = this.mergeCellChanges(appliedMutations);
+		if (this.deps.flightRecorder?.isActive() && cellChanges.size > 0) {
+			for (const [rowId, fields] of cellChanges) {
+				for (const colField of fields) {
+					const cell = { rowId, colField };
+					const value = this.deps.flightRecorder.captureValue(this.deps.commitContext?.getCellValue?.(rowId, colField), cell);
+					this.deps.flightRecorder.record(() => ({ type: 'cell-change', changeId: record.changeId, cell, value }));
+				}
+			}
+		}
 		if (cellChanges.size > 0 && this.deps.commitContext?.publishCommittedCellChanges) {
 			isolate('publish-cell-changes', () => {
 				this.deps.commitContext!.publishCommittedCellChanges!(cellChanges);
@@ -326,7 +358,7 @@ export class GridCommitKernel<TRowData = unknown> {
 		// 5. Request rendering before user events so listeners cannot block scheduling.
 		if (record.requestRender) {
 			isolate('request-render', () => {
-				this.deps.requestRender(record.reason);
+				this.deps.requestRender(record.reason, record.changeId);
 			});
 		}
 		// 6. Dispatch events after state is durable and render is scheduled.
@@ -346,6 +378,13 @@ export class GridCommitKernel<TRowData = unknown> {
 			});
 		}
 
+		this.deps.flightRecorder?.record(() => ({
+			type: 'commit-outcome',
+			attemptId,
+			changeId: record.changeId,
+			outcome: 'committed',
+			domains: record.domains.map(String),
+		}));
 		return {
 			result: {
 				status: 'committed',
@@ -355,6 +394,10 @@ export class GridCommitKernel<TRowData = unknown> {
 			},
 			appliedMutations,
 		};
+	}
+
+	private traceOutcome(attemptId: number, outcome: string, changeId?: number, domains: readonly (keyof GridDomainVersions)[] = []): void {
+		this.deps.flightRecorder?.record(() => ({ type: 'commit-outcome', attemptId, changeId, outcome, domains: domains.map(String) }));
 	}
 
 	apply(change: GridChange<TRowData>): GridCommitResult {

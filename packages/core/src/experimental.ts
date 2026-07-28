@@ -22,3 +22,17 @@ export {
 	toLoadingVisualRowId,
 } from './rows/visualRowIds.js';
 export type { GroupPathItem } from './rows/visualRowIds.js';
+export {
+	startFlightRecorder,
+	stopFlightRecorder,
+	getFlightRecorderSnapshot,
+	explainFlightRecorderCell,
+	clearFlightRecorder,
+} from './flightRecorderExperimental.js';
+export type {
+	GridCausalEvent,
+	GridCausalTraceEnvelope,
+	GridCausalTraceSnapshot,
+	GridCellExplanation,
+	GridFlightRecorderOptions,
+} from './diagnostics/GridCausalTrace.js';

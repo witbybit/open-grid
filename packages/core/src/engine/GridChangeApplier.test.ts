@@ -301,7 +301,7 @@ describe('GridChangeApplier', () => {
 		expect(result.status).toBe('committed');
 		expect(rowOrder).toEqual(['3', '1', '2']);
 		expect(publishDomains).toHaveBeenCalledWith(['rows']);
-		expect(requestRender).toHaveBeenCalledWith('rows:set-order');
+		expect(requestRender).toHaveBeenCalledWith('rows:set-order', 1);
 		expect(eventSpy).toHaveBeenCalledOnce();
 		expect(commandHistory.canUndo()).toBe(true);
 
@@ -820,7 +820,7 @@ describe('GridChangeApplier', () => {
 		});
 
 		expect(result).toEqual({ status: 'committed', changeId: 1, faults: [] });
-		expect(requestRender).toHaveBeenCalledWith('listener-fault');
+		expect(requestRender).toHaveBeenCalledWith('listener-fault', 1);
 		expect(faultReporter.snapshot()).toHaveLength(1);
 		expect(faultReporter.snapshot()[0]?.source).toBe('event-bus');
 	});

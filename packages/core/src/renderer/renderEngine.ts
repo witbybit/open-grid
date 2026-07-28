@@ -213,8 +213,24 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.scrollEngine = new ScrollEngine<TRowData>(engine);
 		this.frameCoordinator = new DefaultFrameCoordinator({
 			onScrollFrame: () => this.flushScrollFrame(),
-			onPaintFrame: () => this.flushPaint(),
-			onPostScrollWork: () => this.flushPaint(),
+			onPaintFrame: (changeIds) => {
+				engine.flightRecorder.enterExecutingFrame(changeIds);
+				try {
+					this.flushPaint();
+				} finally {
+					engine.flightRecorder.recordCompletedFrame('full', changeIds);
+					engine.flightRecorder.leaveExecutingFrame();
+				}
+			},
+			onPostScrollWork: (changeIds) => {
+				engine.flightRecorder.enterExecutingFrame(changeIds);
+				try {
+					this.flushPaint();
+				} finally {
+					engine.flightRecorder.recordCompletedFrame('post-scroll', changeIds);
+					engine.flightRecorder.leaveExecutingFrame();
+				}
+			},
 			onScrollEnd: () => this.scrollCoordinator.finishScrolling(),
 			onFault: (msg) => engine.runtimeFaults.report({ source: 'renderer', operation: 'frame-reentry', error: new Error(msg) }),
 			runtimeState: this.runtimeState,
@@ -413,8 +429,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			scrollCellIntoView: (pointer) => this.viewportCoordinator.scrollCellPointerIntoView(pointer),
 			resetScroll: () => this.scrollEngine.scrollTo(0, this.engine.viewport.scrollLeft),
 			updateCachedGeometryBounds: () => this.updateCachedGeometryBounds(),
-			markFlushPendingAfterScroll: () => {
-				this.scrollCoordinator.markFlushPendingAfterScroll();
+			markFlushPendingAfterScroll: (changeIds) => {
+				this.scrollCoordinator.markFlushPendingAfterScroll(changeIds);
 			},
 			markViewportDirtyAfterScroll: () => {
 				this.scrollCoordinator.markViewportDirtyAfterScroll();

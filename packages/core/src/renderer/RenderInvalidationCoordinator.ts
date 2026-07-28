@@ -19,7 +19,7 @@ export interface RenderInvalidationCoordinatorDeps<TRowData = unknown> {
 	scrollCellIntoView: (pointer: CanonicalGridCellPointer) => void;
 	resetScroll: () => void;
 	updateCachedGeometryBounds: () => void;
-	markFlushPendingAfterScroll: () => void;
+	markFlushPendingAfterScroll: (changeIds: readonly number[]) => void;
 	markViewportDirtyAfterScroll: () => void;
 }
 
@@ -72,7 +72,7 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		);
 		this.unsubscribers.push(
 			this.deps.engine.eventBus.addEventListener(GridEventName.renderInvalidated, (event) => {
-				this.requestFlushGated(event.payload.reason);
+				this.requestFlushGated(event.payload.reason, this.deps.engine.takePendingRenderChangeIds());
 			})
 		);
 	}
@@ -129,12 +129,12 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		this.requestFlushGated(reason);
 	}
 
-	private requestFlushGated(reason: string): void {
+	private requestFlushGated(reason: string, changeIds: readonly number[] = []): void {
 		if (this.isScrollActive()) {
-			this.deps.markFlushPendingAfterScroll();
+			this.deps.markFlushPendingAfterScroll(changeIds);
 			return;
 		}
-		this.deps.frameCoordinator.requestPaintFrame();
+		this.deps.frameCoordinator.requestPaintFrame(changeIds);
 	}
 
 	private isScrollActive(): boolean {

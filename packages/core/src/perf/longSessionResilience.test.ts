@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RecordingGridInstrumentation } from '../diagnostics/GridInstrumentation.js';
+import { GridFlightRecorder } from '../diagnostics/GridFlightRecorder.js';
 import { InfiniteRowModelController } from '../infiniteRowModel.js';
 import { ClientRowModelController } from '../rowModel.js';
 import { ServerSideRowModelController } from '../serverSideRowModel.js';
@@ -254,4 +255,18 @@ describe('long-session deterministic resilience', () => {
 		await run('infinite');
 		await run('server');
 	}, 30_000);
+});
+
+describe('bounded flight recorder long session', () => {
+	it('retains only its fixed capacity and clears terminal state on destroy', () => {
+		const recorder = new GridFlightRecorder();
+		recorder.start({ capacity: 32 });
+		for (let index = 0; index < 10_000; index++)
+			recorder.record(() => ({ type: 'fault', source: 'perf', operation: 'long-session', message: String(index) }));
+		const snapshot = recorder.snapshot();
+		expect(snapshot.events).toHaveLength(32);
+		expect(snapshot.dropped).toBe(9_968);
+		recorder.destroy();
+		expect(recorder.snapshot().events).toHaveLength(0);
+	});
 });

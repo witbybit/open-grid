@@ -143,8 +143,8 @@ describe('Architecture guardrails', () => {
 	it('DefaultFrameCoordinator owns a distinct post-scroll callback and scroll epoch (Plan 080)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts'), 'utf-8');
 		// Distinct callback — not an alias of onPaintFrame.
-		expect(content).toContain('onPostScrollWork: () => void');
-		expect(content).toContain('this.onPostScrollWork()');
+		expect(content).toContain('onPostScrollWork: (changeIds: readonly number[]) => void');
+		expect(content).toContain('this.onPostScrollWork(changeIds)');
 		// Scroll epoch captured at schedule time for stale-work rejection.
 		expect(content).toContain('this.runtimeState?.scrollEpoch');
 		expect(content).toContain('rs.isScrollEpochCurrent(this.postScrollEpoch)');
@@ -1497,7 +1497,7 @@ describe('Architecture guardrails', () => {
 		// The microtask is required to prevent 2x render work on common operations.
 		const fcPath = resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts');
 		const content = readFileSync(fcPath, 'utf-8');
-		expect(content).toContain('requestPaintFrame(): void {');
+		expect(content).toContain('requestPaintFrame(changeIds: readonly number[] = []): void {');
 		expect(content).toContain('this.pendingPaint = true;');
 		expect(content).toContain('this.gs.microtask(() => {');
 		expect(content).toContain('this.scheduleFrame();');

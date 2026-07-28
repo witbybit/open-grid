@@ -296,12 +296,20 @@ Exports (284):
 
 ## `./experimental` — experimental
 
-Declaration SHA-256: `4e887c554b240e6428ab27647ff2dc52f8a88fc6de50215d95e542e7733f677b`
-Exports (18):
+Declaration SHA-256: `5590297f72982ce0db60741357ac37992ec44273278bfe8836737d7187252cbd`
+Exports (28):
 
 - `canEditCell` — value
 - `canFocusVisualRow` — value
+- `clearFlightRecorder` — value
 - `compileStyleRules` — value
+- `explainFlightRecorderCell` — value
+- `getFlightRecorderSnapshot` — value
+- `GridCausalEvent` — type
+- `GridCausalTraceEnvelope` — type
+- `GridCausalTraceSnapshot` — type
+- `GridCellExplanation` — type
+- `GridFlightRecorderOptions` — type
 - `GroupPathItem` — type
 - `isDataCellSelectable` — value
 - `isDataVisualRow` — value
@@ -312,6 +320,8 @@ Exports (18):
 - `NoopGridInstrumentation` — value + type
 - `parseVisualRowId` — value
 - `RecordingGridInstrumentation` — value + type
+- `startFlightRecorder` — value
+- `stopFlightRecorder` — value
 - `toDataVisualRowId` — value
 - `toDetailVisualRowId` — value
 - `toFooterVisualRowId` — value

@@ -89,6 +89,8 @@ import { HtmlScrollSnapshotStore } from '../renderer/htmlScrollSnapshotStore.js'
 import { RowCtrlStore } from '../renderer/controllers/RowCtrlStore.js';
 import type { RowsUpdatedDispatchPayload } from './runtimePorts.js';
 import { mapRowsUpdatedDispatchPayload, type PublicRowNodeDispatchDeps } from './publicRowNodeDispatch.js';
+import { GridFlightRecorder } from '../diagnostics/GridFlightRecorder.js';
+import { RenderRequestCoordinator } from './RenderRequestCoordinator.js';
 
 export type ManagedRowDragBlockReason =
 	| 'unsupported-row-model'
@@ -118,6 +120,7 @@ export class GridEngine<TRowData = unknown> {
 	public readonly commandHistory: CommandHistory;
 	public readonly eventBus: EventBus<TRowData>;
 	public readonly runtimeFaults: RuntimeFaultReporter<TRowData>;
+	public readonly flightRecorder = new GridFlightRecorder();
 	public readonly invalidation: InvalidationManager;
 	public readonly changeApplier: GridCommitKernel<TRowData>;
 	public readonly columnFeature: ColumnFeatureController<TRowData>;
@@ -264,8 +267,7 @@ export class GridEngine<TRowData = unknown> {
 
 	private readonly cellNotifications: CellNotificationController<TRowData>;
 	private readonly renderBridge: GridEngineRenderBridge<TRowData>;
-	private renderTransactionDepth = 0;
-	private pendingRenderReason: string | null = null;
+	private readonly renderRequests: RenderRequestCoordinator<TRowData>;
 
 	private readonly getContainerElement: () => HTMLElement | null;
 
@@ -277,6 +279,7 @@ export class GridEngine<TRowData = unknown> {
 			maxSingleEntryBytes: config.rendererOptions?.htmlSnapshot?.maxSingleSnapshotBytes,
 		});
 		this.eventBus = new EventBus<TRowData>();
+		this.renderRequests = new RenderRequestCoordinator(this.eventBus);
 		// Sweep RowCtrl/CellCtrl identity for rows permanently removed via a structural transaction
 		// (grid.applyTransaction({ remove: [...] })). Known gap, not a regression: a full row-data
 		// replace (setRowData) does not emit removedNodes (see RowDataStore.setRows/
@@ -291,6 +294,13 @@ export class GridEngine<TRowData = unknown> {
 		});
 		this.runtimeFaults = new RuntimeFaultReporter<TRowData>({
 			emit: (fault) => this.eventBus.dispatchEvent(GridEventName.runtimeFault, fault),
+			observe: (fault) =>
+				this.flightRecorder.record(() => ({
+					type: 'fault',
+					source: fault.source,
+					operation: fault.operation,
+					message: fault.message,
+				})),
 		});
 		this.eventBus.setRuntimeFaultReporter(this.runtimeFaults);
 		this.commandHistory = new CommandHistory(this.runtimeFaults);
@@ -478,7 +488,7 @@ export class GridEngine<TRowData = unknown> {
 				this.dispatchEvent(type, payload as GridEventPayloadMap<TRowData>[typeof type]);
 			},
 			commandHistory: this.commandHistory,
-			requestRender: (reason) => this.requestRender(reason),
+			requestRender: (reason, changeId) => this.requestRender(reason, changeId),
 			commitContext: {
 				getState: () => this.stateManager.getState(),
 				getRowModel: () => this.rowModel,
@@ -495,6 +505,7 @@ export class GridEngine<TRowData = unknown> {
 			publishDomains: (domains) => this.publishDomains(domains),
 			projectStateChange: (phase) => this.projectionPipeline.run({ phase }),
 			faultReporter: this.runtimeFaults,
+			flightRecorder: this.flightRecorder,
 		});
 
 		const featureContext = {
@@ -1434,27 +1445,20 @@ export class GridEngine<TRowData = unknown> {
 		this.columnFeature.setColumns(columns, undoable);
 	}
 
-	private requestRender(reason: string): void {
-		if (this.renderTransactionDepth > 0) {
-			this.pendingRenderReason = this.pendingRenderReason ? `${this.pendingRenderReason}+${reason}` : reason;
-			return;
-		}
-		this.eventBus.dispatchEvent(GridEventName.renderInvalidated, { reason });
+	private requestRender(reason: string, changeId?: number): void {
+		this.renderRequests.request(reason, changeId);
+	}
+
+	public takePendingRenderChangeIds(): readonly number[] {
+		return this.renderRequests.takeChangeIds();
 	}
 
 	private beginRenderTransaction(): void {
-		this.renderTransactionDepth++;
+		this.renderRequests.begin();
 	}
 
 	private endRenderTransaction(): void {
-		if (this.renderTransactionDepth === 0) return;
-		this.renderTransactionDepth--;
-		if (this.renderTransactionDepth > 0) return;
-		const reason = this.pendingRenderReason;
-		this.pendingRenderReason = null;
-		if (reason) {
-			this.eventBus.dispatchEvent(GridEventName.renderInvalidated, { reason });
-		}
+		this.renderRequests.end();
 	}
 
 	public undo(): void {
@@ -1476,6 +1480,7 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public destroy(): void {
+		this.flightRecorder.destroy();
 		this.insights.clear();
 		this.cellNotifications.clear();
 		this.eventBus.clear();

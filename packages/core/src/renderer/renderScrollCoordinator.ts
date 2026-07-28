@@ -104,6 +104,7 @@ export interface RenderScrollCoordinatorDeps<TRowData = unknown> {
 }
 
 export class RenderScrollCoordinator<TRowData = unknown> {
+	private readonly pendingPaintChangeIds = new Set<number>();
 	constructor(
 		private readonly deps: RenderScrollCoordinatorDeps<TRowData>,
 		private readonly state: RenderScrollCoordinatorState<TRowData>
@@ -117,8 +118,9 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		return this.deps.runtimeState.phase === 'scroll-frame';
 	}
 
-	public markFlushPendingAfterScroll(): void {
+	public markFlushPendingAfterScroll(changeIds: readonly number[] = []): void {
 		this.state.flushPendingAfterScroll = true;
+		for (const changeId of changeIds) this.pendingPaintChangeIds.add(changeId);
 	}
 
 	public markViewportDirtyAfterScroll(): void {
@@ -281,7 +283,9 @@ export class RenderScrollCoordinator<TRowData = unknown> {
 		this.restoreDeferredFocus();
 		if (this.state.flushPendingAfterScroll) {
 			this.state.flushPendingAfterScroll = false;
-			this.deps.frameCoordinator.requestPostScrollWork();
+			const changeIds = [...this.pendingPaintChangeIds];
+			this.pendingPaintChangeIds.clear();
+			this.deps.frameCoordinator.requestPostScrollWork(changeIds);
 		}
 		if (
 			this.state.viewportDirtyAfterScroll ||
