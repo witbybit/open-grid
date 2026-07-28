@@ -15,7 +15,6 @@ import type { GridQueryModel } from './query/GridQueryModel.js';
 import { evaluateQueryModel, createQueryEvaluationContext } from './query/evaluateQueryModel.js';
 import {
 	asClientStructuralRowModel,
-	asAllDataNodesCapableRowModel,
 	asRowExpansionStateReadableModel,
 	asInfiniteControllableRowModel,
 	asServerSideControllableRowModel,
@@ -34,8 +33,7 @@ import type { GridRuntimePorts, RuntimePortBinding, RuntimePortBindResult } from
 import { HEADLESS_PORTS } from './engine/rendererPorts.js';
 import { type GridInstrumentation, NOOP_INSTRUMENTATION } from './diagnostics/GridInstrumentation.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
-import { createRowsAccessor } from './rowsAccessor.js';
-import { createGridRowNodeFacade, type GridRowNode } from './publicRowNode.js';
+import type { GridRowNode } from './publicRowNode.js';
 import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
 import type { PersistenceStatus, PersistedGridState } from './persistence/statePersistence.js';
@@ -140,6 +138,7 @@ import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './feature
 import { makeNoopIntegrityApi } from './features/dataIntegrity/noopIntegrityApi.js';
 import { createGridStoreSubscriptions, type GridStoreSubscriptionsFacade } from './store/GridStoreSubscriptions.js';
 import { createGridStoreHostFacade, type GridStoreHostFacade } from './store/GridStoreHostFacade.js';
+import { createGridStoreRowFacade, type GridStoreRowFacade } from './store/GridStoreRowFacade.js';
 import { GridInteractionController } from './interaction/GridInteractionController.js';
 import { doesCanonicalCellPointerMatchColumn } from './interaction/cellPointer.js';
 import { readInteractionState } from './interaction/interactionState.js';
@@ -188,6 +187,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private cachedStateSnapshot: GridStateSnapshot<TRowData> | null = null;
 	private readonly subscriptionsFacade: GridStoreSubscriptionsFacade<TRowData>;
 	private readonly hostFacade: GridStoreHostFacade;
+	private readonly rowFacade: GridStoreRowFacade<TRowData>;
 
 	constructor(
 		initialState: Partial<GridInitialState<TRowData>> = {},
@@ -276,6 +276,35 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 				},
 			}
 		);
+		this.rowFacade = createGridStoreRowFacade<TRowData>({
+			getRowModel: () => this.engine.getRowModel(),
+			getRowId: (data) => this.engine.getRowId(data),
+			getCellValue: (rowId, colField) => this.getCellValue(rowId, colField),
+			getSelectedRowIds: () => this.getSelectedRowIds(),
+			isRowNodeSelected: (rowId) => this.isRowNodeSelected(rowId),
+			isGroupExpanded: (groupId) => this.isGroupExpanded(groupId),
+			isDetailExpanded: (rowId) => this.isDetailExpanded(rowId),
+			selectRows: (rowIds, options) => this.selectRows(rowIds, options),
+			deselectRows: (rowIds) => this.deselectRows(rowIds),
+			scrollToRow: (rowId, options) => this.scrollToRow(rowId, options),
+			setCellValue: (rowId, colField, value) => this.setCellValue(rowId, colField, value),
+			batchCellValues: (updates, source) => this.engine.batchCellValues(updates, source),
+			toggleGroupExpanded: (groupId) => this.toggleGroupExpanded(groupId),
+			toggleDetailExpanded: (rowId) => this.toggleDetailExpanded(rowId),
+			refreshRows: () => this.refreshRows(),
+			retryRowLoad: (rowIndex, loadState) => {
+				if (loadState.kind !== 'failed') return { status: 'rejected', reason: 'Row retry is only available for failed rows.' };
+				if (rowIndex == null || rowIndex < 0) return { status: 'rejected', reason: 'Row retry requires a visible failed row index.' };
+				const rowModel = this.engine.getRowModel();
+				if (!rowModel) return { status: 'rejected', reason: 'row model unavailable' };
+				rowModel.ensureRange(rowIndex, rowIndex, 'row-node-retry-load');
+				return { status: 'applied', changeId: Date.now(), faults: [] };
+			},
+			getRowIssues: (rowId) => this.integrity.getRowIssues(rowId),
+			validateRow: (rowId) => this.integrity.validateRow(rowId),
+			getRowModelType: () => this.getRowModelType(),
+			getState: () => this.state,
+		});
 		this.subscriptionsFacade = createGridStoreSubscriptions<TRowData>({
 			subscribe: (listener) => this.engine.subscribe(listener),
 			subscribeToKey: (key, listener) => this.engine.subscribeToKey(key, listener),
@@ -698,191 +727,51 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public getVisualRow = (index: number): VisualRow<TRowData> | null => {
-		return this.getRowModel()?.getVisualRow(index) ?? null;
+		return this.rowFacade.getVisualRow(index);
 	};
 
 	public getVisualRowCount = (): number => {
-		return this.getRowModel()?.getVisualRowCount() ?? 0;
+		return this.rowFacade.getVisualRowCount();
 	};
 
 	public getVisualIndexById = (visualRowId: string): number | null => {
-		const idx = this.getRowModel()?.getVisualIndexById(visualRowId);
-		return idx !== undefined && idx >= 0 ? idx : null;
+		return this.rowFacade.getVisualIndexById(visualRowId);
 	};
 
 	public getVisualIndexByRowId = (rowId: string): number | null => {
-		const idx = this.getRowModel()?.getVisualIndexByRowId(rowId);
-		return idx !== undefined && idx >= 0 ? idx : null;
+		return this.rowFacade.getVisualIndexByRowId(rowId);
 	};
 
 	public getRowLoadState = (index: number): RowLoadState => {
-		return this.getRowModel()?.getRowLoadState(index) ?? { kind: 'missing' };
+		return this.rowFacade.getRowLoadState(index);
 	};
 
-	private createGridRowNodeSource() {
-		return {
-			getRowId: this.getRowId,
-			getRawRowById: this.getRawRowById,
-			getCellValue: this.getCellValue,
-			getVisualIndexByRowId: this.getVisualIndexByRowId,
-			getVisualRowCount: this.getVisualRowCount,
-			getSelectedRowIds: this.getSelectedRowIds,
-			isGroupExpanded: this.isGroupExpanded,
-			isDetailExpanded: this.isDetailExpanded,
-			selectRows: this.selectRows,
-			deselectRows: this.deselectRows,
-			scrollToRow: this.scrollToRow,
-			setCellValue: this.setCellValue,
-			batchCellValues: (updates: ReadonlyArray<{ rowId: string; colField: string; value: unknown }>) =>
-				this.batchCellValues([...updates], 'api'),
-			toggleGroupExpanded: this.toggleGroupExpanded,
-			toggleDetailExpanded: this.toggleDetailExpanded,
-			refreshRows: () => this.refreshRows(),
-			retryRowLoad: (rowIndex: number | null, loadState: import('./rowModel.js').RowLoadState) => {
-				if (loadState.kind !== 'failed') {
-					return { status: 'rejected', reason: `Row retry is only available for failed rows.` } as const;
-				}
-				if (rowIndex == null || rowIndex < 0) {
-					return { status: 'rejected', reason: `Row retry requires a visible failed row index.` } as const;
-				}
-				const rowModel = this.getRowModel();
-				if (!rowModel) {
-					return { status: 'rejected', reason: 'row model unavailable' } as const;
-				}
-				rowModel.ensureRange(rowIndex, rowIndex, 'row-node-retry-load');
-				return { status: 'applied', changeId: Date.now(), faults: [] } as const;
-			},
-			getRowIssues: (rowId: string) => this.integrity.getRowIssues(rowId),
-			validateRow: (rowId: string) => this.integrity.validateRow(rowId),
-			getRowModelType: this.getRowModelType,
-		};
-	}
-
 	public getRowNode = (rowId: string): GridRowNode<TRowData> | undefined => {
-		const data = this.getRawRowById(rowId);
-		if (data == null) return undefined;
-		return createGridRowNodeFacade(this.createGridRowNodeSource(), {
-			id: rowId,
-			kind: 'data',
-			rowIndex: this.getVisualIndexByRowId(rowId),
-			loadState: { kind: 'loaded', rowId },
-			data,
-			selectable: true,
-			selected: this.isRowNodeSelected(rowId),
-			expandable: false,
-			expanded: this.isDetailExpanded(rowId),
-			editable: true,
-		});
+		return this.rowFacade.getRowNode(rowId);
 	};
 
 	public getDisplayedRowAtIndex = (index: number): GridRowNode<TRowData> | undefined => {
-		const row = this.getVisualRow(index);
-		if (!row) return undefined;
-		if (row.kind === 'data') {
-			return createGridRowNodeFacade(this.createGridRowNodeSource(), {
-				id: row.rowId,
-				kind: 'data',
-				rowIndex: index,
-				loadState: { kind: 'loaded', rowId: row.rowId },
-				data: row.node.data,
-				selectable: true,
-				selected: this.isRowNodeSelected(row.rowId),
-				expandable: false,
-				expanded: this.isDetailExpanded(row.rowId),
-				editable: true,
-			});
-		}
-		if (row.kind === 'loading') {
-			return createGridRowNodeFacade(this.createGridRowNodeSource(), {
-				id: row.id,
-				kind: 'loading',
-				rowIndex: index,
-				loadState: { kind: 'loading' },
-				selectable: false,
-				editable: false,
-			});
-		}
-		if (row.kind === 'failed') {
-			return createGridRowNodeFacade(this.createGridRowNodeSource(), {
-				id: row.id,
-				kind: 'failed',
-				rowIndex: index,
-				loadState: { kind: 'failed', error: row.error, retryable: row.retryable },
-				selectable: false,
-				editable: false,
-			});
-		}
-		if (row.kind === 'placeholder') {
-			return createGridRowNodeFacade(this.createGridRowNodeSource(), {
-				id: row.id,
-				kind: 'placeholder',
-				rowIndex: index,
-				loadState: { kind: 'placeholder', reason: row.reason },
-				selectable: false,
-				editable: false,
-			});
-		}
-		if (row.kind === 'group') {
-			return createGridRowNodeFacade(this.createGridRowNodeSource(), {
-				id: row.groupId,
-				kind: 'group',
-				rowIndex: index,
-				loadState: { kind: 'loaded', rowId: row.groupId },
-				selectable: row.selectable !== false,
-				expandable: true,
-				expanded: row.expanded,
-				editable: false,
-			});
-		}
-		if (row.kind === 'detail') {
-			return createGridRowNodeFacade(this.createGridRowNodeSource(), {
-				id: row.parentRowId ?? row.parentId,
-				kind: 'detail',
-				rowIndex: index,
-				loadState: { kind: 'loaded', rowId: row.parentRowId ?? row.parentId },
-				selectable: false,
-				expandable: false,
-				expanded: true,
-				editable: false,
-			});
-		}
-		return undefined;
+		return this.rowFacade.getDisplayedRowAtIndex(index);
 	};
 
 	public getRowIndexById = (rowId: string): number | undefined => {
-		return this.getVisualIndexByRowId(rowId) ?? undefined;
+		return this.rowFacade.getRowIndexById(rowId);
 	};
 
 	public forEachNode = (callback: (node: GridRowNode<TRowData>, index: number) => void): void => {
-		const allNodesModel = asAllDataNodesCapableRowModel(this.getRowModel());
-		if (allNodesModel) {
-			allNodesModel.getAllDataNodes().forEach((node, index) => {
-				const facade = this.getRowNode(node.id);
-				if (facade) callback(facade, index);
-			});
-			return;
-		}
-		let index = 0;
-		for (let rowIndex = 0; rowIndex < this.getVisualRowCount(); rowIndex++) {
-			const row = this.getDisplayedRowAtIndex(rowIndex);
-			if (!row || row.kind !== 'data') continue;
-			callback(row, index++);
-		}
+		this.rowFacade.forEachNode(callback);
 	};
 
 	public forEachDisplayedNode = (callback: (node: GridRowNode<TRowData>, index: number) => void): void => {
-		for (let index = 0; index < this.getVisualRowCount(); index++) {
-			const row = this.getDisplayedRowAtIndex(index);
-			if (row) callback(row, index);
-		}
+		this.rowFacade.forEachDisplayedNode(callback);
 	};
 
 	public getRowNodeById = (rowId: string): RowNode<TRowData> | null => {
-		return this.getRowModel()?.getRowNodeById(rowId) ?? null;
+		return this.rowFacade.getRowNodeById(rowId);
 	};
 
 	public getRawRowById = (rowId: string): TRowData | null => {
-		return this.getRowModel()?.getRawRowById(rowId) ?? null;
+		return this.rowFacade.getRawRowById(rowId);
 	};
 
 	public addEventListener = <K extends keyof GridEventPayloadMap<TRowData>>(
@@ -1034,17 +923,15 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getServerSideRowModelRuntime = (): ServerSideRowModelRuntime<TRowData> => createServerSideRowModelRuntime(this);
 
 	public getDataRowAtVisualIndex = (index: number): TRowData | null => {
-		const vr = this.getVisualRow(index);
-		return vr?.kind === 'data' ? vr.node.data : null;
+		return this.rowFacade.getDataRowAtVisualIndex(index);
 	};
 
 	public getDataRowNodeAtVisualIndex = (index: number): RowNode<TRowData> | null => {
-		const vr = this.getVisualRow(index);
-		return vr?.kind === 'data' ? vr.node : null;
+		return this.rowFacade.getDataRowNodeAtVisualIndex(index);
 	};
 
 	public rows = (): GridRowsAccessor<TRowData> => {
-		return createRowsAccessor(this);
+		return this.rowFacade.rows();
 	};
 
 	public setRows = (rows: TRowData[]): GridWriteResult => {

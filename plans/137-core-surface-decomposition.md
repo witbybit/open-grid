@@ -6,6 +6,7 @@
 
 ## Status
 
+- **Status**: DONE (reconciled 2026-07-28)
 - **Priority**: P2
 - **Effort**: L
 - **Risk**: MED
@@ -111,12 +112,16 @@ Remove any adapter, helper, or barrel that exists only to preserve the pre-decom
 
 ## Done criteria
 
-- [ ] `GridStore`, `GridEngine`, and `GridApi` are materially decomposed by responsibility
-- [ ] Extracted responsibilities do not depend on broad backreferences to the old monoliths
-- [ ] Compatibility clutter created solely to preserve the old layout is deleted
-- [ ] `corepack pnpm run test:architecture` exits 0
-- [ ] `corepack pnpm run test` exits 0
-- [ ] `corepack pnpm run build` exits 0
+- [x] `GridStore`, `GridEngine`, and `GridApi` are materially decomposed by responsibility
+- [x] Extracted responsibilities do not depend on broad backreferences to the old monoliths
+- [x] Compatibility clutter created solely to preserve the old layout is deleted
+- [x] `corepack pnpm run test:architecture` exits 0
+- [x] `corepack pnpm run test` exits 0
+- [x] `corepack pnpm run build` exits 0
+
+## Reconciliation evidence
+
+- 2026-07-28: Reconciled against the post-136/153/158/160 architecture. `GridApi.ts` is now a type/value utility boundary while conceptual public contracts compose in `api/GridApiSurfaces.ts`. `GridStore` delegates targeted subscriptions and host binding to `store/GridStoreSubscriptions.ts` and `store/GridStoreHostFacade.ts`, and now delegates the complete public row-model / `GridRowNode` / rows-accessor surface to `store/GridStoreRowFacade.ts`; the store composition root fell from 1,333 to 1,220 lines. Each facade receives a narrow dependency port and has architecture guards preventing `GridStore` backreferences. `GridEngine` delegates formal domain publication to `engine/GridDomainSubscriptionHub.ts`, render/cell notification batching to `engine/GridEngineRenderBridge.ts`, projection to `engine/GridProjectionPipeline.ts`, and feature commands to the feature controllers. No further extraction was made because a wrapper retaining unrestricted `GridEngine` access would be fake decomposition under this plan's STOP condition. Architecture verification passed (316 core + 5 React tests), full suites passed (1,949 core + 101 React tests), root build passed, packed-package consumer verification passed, and `bench:long-session` passed (5 core + 8 React tests).
 
 ## STOP conditions
 

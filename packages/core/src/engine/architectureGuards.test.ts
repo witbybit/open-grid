@@ -2717,13 +2717,18 @@ describe('Architecture guardrails', () => {
 			const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
 			const subscriptionsContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreSubscriptions.ts'), 'utf-8');
 			const hostContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreHostFacade.ts'), 'utf-8');
+			const rowContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreRowFacade.ts'), 'utf-8');
 			expect(storeContent).toContain('createGridStoreSubscriptions');
 			expect(storeContent).toContain('createGridStoreHostFacade');
+			expect(storeContent).toContain('createGridStoreRowFacade');
 			expect(storeContent).not.toContain("subscribeToKey('globalVersion', notify)");
 			expect(subscriptionsContent).toContain('export function createGridStoreSubscriptions');
 			expect(subscriptionsContent).not.toContain('GridStore<');
 			expect(hostContent).toContain('export function createGridStoreHostFacade');
 			expect(hostContent).not.toContain('GridStore<');
+			expect(rowContent).toContain('export function createGridStoreRowFacade');
+			expect(rowContent).not.toContain('GridStore<');
+			expect(rowContent).not.toContain("from '../store.js'");
 		});
 
 		it('GridEngine delegates domain and render update ownership to dedicated modules', () => {

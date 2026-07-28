@@ -7,6 +7,7 @@
 
 ## Status
 
+- **Status**: SUPERSEDED by Plan 158 (reconciled 2026-07-28)
 - **Priority**: P1
 - **Effort**: XL
 - **Risk**: HIGH
@@ -230,6 +231,10 @@ Capabilities are truthful.
 - [x] Renderer no longer relies on row-model-specific loading seams
 - [x] Unsupported operations fail consistently
 - [x] Core tests and build pass
+
+## Post-Plan-158 reconciliation
+
+- 2026-07-28: **SUPERSEDED, not reopened.** Direct current-state audit confirmed that the client and infinite portions of this plan remain live through `RowModelViewportAccess`, `GridRowNode`, explicit visual loading/failed/placeholder vocabulary, block/request ownership, and public facade tests. The server-page portion is intentionally no longer executable: `packages/core/src/serverPageRowModel.ts` was deleted, and Plan 158's deletion manifest confirms that public `rowModelType: 'server'` now maps only to `ServerSideRowModelController` (real SSRM), with page APIs and page datasource contracts removed. The equivalent SSRM contract is covered by `serverSideRowModel.test.ts`, including load state, visual loading rows, request ordering, query churn, loaded-row mutation, and selection scope. Focused current-model verification passed: `corepack pnpm --filter @open-grid/core exec vitest run src/rowModel.test.ts src/rowModel.capabilities.test.ts src/serverRowModel.test.ts src/serverRowModel.adversarial.test.ts src/serverSideRowModel.test.ts src/store.test.ts src/renderer/runtimePerformance.test.ts src/engine/architectureGuards.test.ts` (8 files, 591 tests). Plan 158 is the authoritative completion record for the deleted server-page architecture; no compatibility model was restored.
 
 ## STOP conditions
 
