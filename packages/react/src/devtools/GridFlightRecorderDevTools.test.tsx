@@ -211,6 +211,20 @@ describe('GridFlightRecorderDevTools', () => {
 		expect(revoke).toHaveBeenCalledWith('blob:trace');
 	});
 
+	it('mounts isolated replay import controls only in Faults & trace without autoplay', () => {
+		const grid = api();
+		render(<GridFlightRecorderDevTools api={grid} />);
+		expect(screen.queryByLabelText('Trace replay controls')).toBeNull();
+		const listenerCount = [...grid._listeners.values()].reduce((sum, set) => sum + set.size, 0);
+		fireEvent.click(screen.getByRole('tab', { name: /Faults & trace/i }));
+		expect(screen.getByLabelText('Trace replay controls')).toBeTruthy();
+		expect(screen.getByText(/Drop a redacted JSON trace here/i)).toBeTruthy();
+		expect(screen.queryByText('running')).toBeNull();
+		expect([...grid._listeners.values()].reduce((sum, set) => sum + set.size, 0)).toBe(listenerCount);
+		fireEvent.click(screen.getByRole('tab', { name: /Why this cell/i }));
+		expect(screen.queryByLabelText('Trace replay controls')).toBeNull();
+	});
+
 	it('removes every grid listener on unmount', () => {
 		const grid = api();
 		const view = render(<GridFlightRecorderDevTools api={grid} />);

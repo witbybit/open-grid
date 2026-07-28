@@ -30,6 +30,7 @@ import {
 	type TraceFilter,
 	type TraceWorkspace,
 } from './traceViewModel.js';
+import { GridTraceReplayControls } from './replay/GridTraceReplayControls.js';
 import './flightRecorderDevTools.css';
 
 const TABS: readonly { id: TraceWorkspace; label: string; short: string }[] = [
@@ -563,6 +564,12 @@ export function GridFlightRecorderDevTools<TRowData>({
 								v{snapshot.v} · {snapshot.events.length} events · {snapshot.dropped} dropped
 							</code>
 						</div>
+						<GridTraceReplayControls
+							onWhyCell={(cell) => {
+								setFocusedCell(cell);
+								setWorkspace('why');
+							}}
+						/>
 					</section>
 				)}
 			</main>
