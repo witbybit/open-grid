@@ -36,7 +36,13 @@ export type {
 	GridCellExplanation,
 	GridFlightRecorderOptions,
 } from './diagnostics/GridCausalTrace.js';
-export { GRID_TRACE_REPLAY_LIMITS, GRID_TRACE_REPLAY_VERSION, GridTraceReplay, createGridTraceReplay, validateGridReplayTrace } from './diagnostics/GridTraceReplay.js';
+export {
+	GRID_TRACE_REPLAY_LIMITS,
+	GRID_TRACE_REPLAY_VERSION,
+	GridTraceReplay,
+	createGridTraceReplay,
+	validateGridReplayTrace,
+} from './diagnostics/GridTraceReplay.js';
 export type {
 	GridReplayCheckpoint,
 	GridReplayCheckpointExpectation,

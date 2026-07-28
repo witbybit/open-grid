@@ -32,7 +32,7 @@ export type GridReplayCommand =
 	| {
 			readonly kind: 'batch-cells';
 			readonly updates: readonly { readonly rowId: string; readonly colField: string; readonly value: JsonValue }[];
-		  }
+	  }
 	| { readonly kind: 'select-cell'; readonly rowId: string; readonly colField: string }
 	| { readonly kind: 'clear-selection' };
 
@@ -114,7 +114,13 @@ export type JsonValue = JsonPrimitive | readonly JsonValue[] | { readonly [key: 
 
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const OBSERVATION_KINDS = new Set<GridReplayObservationKind>([
-	'formula-dependency', 'conflict-resolution', 'rejected-validation', 'fault', 'fallback', 'deleted-row', 'partial-server-evidence',
+	'formula-dependency',
+	'conflict-resolution',
+	'rejected-validation',
+	'fault',
+	'fallback',
+	'deleted-row',
+	'partial-server-evidence',
 ]);
 
 export interface GridReplayScheduler {
@@ -154,7 +160,14 @@ export function validateGridReplayTrace(input: unknown): GridReplayValidation {
 	const observations = parseObservations(json.observations, commands.length, errors);
 	if (parsedCommands.unsupported) return { ok: false, status: 'unsupported', errors };
 	if (!initial || errors.length > 0) return { ok: false, status: 'invalid', errors };
-	return freezeReplayTrace({ v: GRID_TRACE_REPLAY_VERSION, initial, commands, ...(checkpoints.length ? { checkpoints } : {}), ...(observations.known.length ? { observations: observations.known } : {}), ...(observations.unsupported.length ? { unsupportedObservations: observations.unsupported } : {}) });
+	return freezeReplayTrace({
+		v: GRID_TRACE_REPLAY_VERSION,
+		initial,
+		commands,
+		...(checkpoints.length ? { checkpoints } : {}),
+		...(observations.known.length ? { observations: observations.known } : {}),
+		...(observations.unsupported.length ? { unsupportedObservations: observations.unsupported } : {}),
+	});
 }
 
 function invalid(errors: string[], message: string): GridReplayValidation {
@@ -292,12 +305,30 @@ function parseCheckpoints(value: JsonValue | undefined, commandCount: number, er
 		const faults = parseStringArray(facts.faults, `$.checkpoints[${index}].facts.faults`, errors);
 		const fallbacks = parseStringArray(facts.fallbacks, `$.checkpoints[${index}].facts.fallbacks`, errors);
 		const causalEvidence = parseStringArray(checkpoint.causalEvidence, `$.checkpoints[${index}].causalEvidence`, errors);
-		result.push({ at, facts: { ...(outcome === undefined ? {} : { outcome }), ...(reason === undefined ? {} : { reason }), ...(hash === undefined ? {} : { hash }), ...(cells ? { cells } : {}), ...(formulaResults ? { formulaResults } : {}), ...(domains ? { domains } : {}), ...(invalidationKinds ? { invalidationKinds } : {}), ...(faults ? { faults } : {}), ...(fallbacks ? { fallbacks } : {}) }, ...(causalEvidence ? { causalEvidence } : {}) });
+		result.push({
+			at,
+			facts: {
+				...(outcome === undefined ? {} : { outcome }),
+				...(reason === undefined ? {} : { reason }),
+				...(hash === undefined ? {} : { hash }),
+				...(cells ? { cells } : {}),
+				...(formulaResults ? { formulaResults } : {}),
+				...(domains ? { domains } : {}),
+				...(invalidationKinds ? { invalidationKinds } : {}),
+				...(faults ? { faults } : {}),
+				...(fallbacks ? { fallbacks } : {}),
+			},
+			...(causalEvidence ? { causalEvidence } : {}),
+		});
 	}
 	return result;
 }
 
-function parseObservations(value: JsonValue | undefined, commandCount: number, errors: string[]): { known: GridReplayObservation[]; unsupported: GridReplayObservation[] } {
+function parseObservations(
+	value: JsonValue | undefined,
+	commandCount: number,
+	errors: string[]
+): { known: GridReplayObservation[]; unsupported: GridReplayObservation[] } {
 	if (value === undefined) return { known: [], unsupported: [] };
 	const raw = readArray(value, '$.observations', errors);
 	if (!raw) return { known: [], unsupported: [] };
@@ -448,7 +479,10 @@ export class GridTraceReplay {
 	private speedValue = 1;
 	private readonly listeners = new Set<() => void>();
 
-	constructor(private readonly trace: GridReplayTrace, private readonly scheduler: GridReplayScheduler = DEFAULT_SCHEDULER) {
+	constructor(
+		private readonly trace: GridReplayTrace,
+		private readonly scheduler: GridReplayScheduler = DEFAULT_SCHEDULER
+	) {
 		this.restart();
 	}
 
@@ -473,7 +507,13 @@ export class GridTraceReplay {
 	}
 
 	public play(speed = this.speedValue): GridTraceReplayStatus {
-		if (this.statusValue === 'cancelled' || this.statusValue === 'diverged' || this.statusValue === 'invalid' || this.statusValue === 'unsupported') return this.statusValue;
+		if (
+			this.statusValue === 'cancelled' ||
+			this.statusValue === 'diverged' ||
+			this.statusValue === 'invalid' ||
+			this.statusValue === 'unsupported'
+		)
+			return this.statusValue;
 		this.setSpeed(speed);
 		this.statusValue = 'running';
 		this.scheduleNextTurn();
@@ -584,15 +624,18 @@ export class GridTraceReplay {
 			this.publish();
 			return;
 		}
-		this.cancelScheduledTurn = this.scheduler.schedule(() => {
-			this.cancelScheduledTurn = null;
-			if (this.statusValue !== 'running') return;
-			const afterStep = this.step();
-			if (afterStep === 'paused') {
-				this.statusValue = 'running';
-				this.scheduleNextTurn();
-			}
-		}, Math.round(100 / this.speedValue));
+		this.cancelScheduledTurn = this.scheduler.schedule(
+			() => {
+				this.cancelScheduledTurn = null;
+				if (this.statusValue !== 'running') return;
+				const afterStep = this.step();
+				if (afterStep === 'paused') {
+					this.statusValue = 'running';
+					this.scheduleNextTurn();
+				}
+			},
+			Math.round(100 / this.speedValue)
+		);
 	}
 
 	private publish(): void {
@@ -606,14 +649,27 @@ export class GridTraceReplay {
 
 	private execute(command: GridReplayCommand): GridReplaySemanticFacts {
 		const store = this.store;
-		if (!store) return freezeFacts({ outcome: 'failed', reason: 'Replay runtime is unavailable.', cells: [], domains: emptyDomains(), invalidationKinds: [], formulaResults: [], faults: [], fallbacks: [] });
+		if (!store)
+			return freezeFacts({
+				outcome: 'failed',
+				reason: 'Replay runtime is unavailable.',
+				cells: [],
+				domains: emptyDomains(),
+				invalidationKinds: [],
+				formulaResults: [],
+				faults: [],
+				fallbacks: [],
+			});
 		let result: { status: string; reason?: string } = { status: 'applied' };
 		let cells: Array<{ rowId: string; colField: string; value: JsonValue }> = [];
 		if (command.kind === 'set-cell') {
 			result = store.setCellValue(command.rowId, command.colField, command.value);
 			cells = [readCell(store, command.rowId, command.colField)];
 		} else if (command.kind === 'batch-cells') {
-			result = store.batchCellValues(command.updates.map((update) => ({ ...update })), 'api');
+			result = store.batchCellValues(
+				command.updates.map((update) => ({ ...update })),
+				'api'
+			);
 			cells = command.updates.map((update) => readCell(store, update.rowId, update.colField));
 		} else if (command.kind === 'select-cell') {
 			store.selectCell({ rowId: command.rowId, colField: command.colField });
@@ -631,15 +687,27 @@ export class GridTraceReplay {
 			domains: store.engine.getDomainVersions(),
 			invalidationKinds,
 			formulaResults,
-			faults: store.getRuntimeFaults().map((fault) => `${fault.source}:${fault.operation}:${fault.message}`).sort(),
-			fallbacks: store.getInstrumentation().snapshot().fallbacks.map((fallback) => `${fallback.component}:${fallback.reason}`).sort(),
+			faults: store
+				.getRuntimeFaults()
+				.map((fault) => `${fault.source}:${fault.operation}:${fault.message}`)
+				.sort(),
+			fallbacks: store
+				.getInstrumentation()
+				.snapshot()
+				.fallbacks.map((fallback) => `${fallback.component}:${fallback.reason}`)
+				.sort(),
 		});
 	}
 }
 
-export function createGridTraceReplay(input: unknown, options: { readonly scheduler?: GridReplayScheduler } = {}): { readonly validation: GridReplayValidation; readonly replay: GridTraceReplay | null; readonly status: GridTraceReplayStatus } {
+export function createGridTraceReplay(
+	input: unknown,
+	options: { readonly scheduler?: GridReplayScheduler } = {}
+): { readonly validation: GridReplayValidation; readonly replay: GridTraceReplay | null; readonly status: GridTraceReplayStatus } {
 	const validation = validateGridReplayTrace(input);
-	return validation.ok ? { validation, replay: new GridTraceReplay(validation.trace, options.scheduler), status: 'ready' } : { validation, replay: null, status: validation.status };
+	return validation.ok
+		? { validation, replay: new GridTraceReplay(validation.trace, options.scheduler), status: 'ready' }
+		: { validation, replay: null, status: validation.status };
 }
 
 function readCell(store: GridStore<Record<string, unknown>>, rowId: string, colField: string): { rowId: string; colField: string; value: JsonValue } {
@@ -651,7 +719,8 @@ function formulaFacts(store: GridStore<Record<string, unknown>>, cells: readonly
 	const facts: Array<{ rowId: string; colField: string; value: JsonValue }> = [];
 	for (const cell of cells) {
 		const state = store.getCellState(cell.rowId, cell.colField);
-		if (typeof state.value === 'string' && state.value.startsWith('=')) facts.push({ rowId: cell.rowId, colField: cell.colField, value: normalizeFactValue(state.computedValue) });
+		if (typeof state.value === 'string' && state.value.startsWith('='))
+			facts.push({ rowId: cell.rowId, colField: cell.colField, value: normalizeFactValue(state.computedValue) });
 	}
 	return facts;
 }
@@ -670,9 +739,24 @@ function emptyDomains(): GridDomainVersions {
 }
 
 function freezeFacts(input: Omit<GridReplaySemanticFacts, 'hash'>): GridReplaySemanticFacts {
-	const normalized = { ...input, cells: [...input.cells].sort(compareCells), formulaResults: [...input.formulaResults].sort(compareCells), invalidationKinds: [...input.invalidationKinds].sort(), faults: [...input.faults].sort(), fallbacks: [...input.fallbacks].sort() };
+	const normalized = {
+		...input,
+		cells: [...input.cells].sort(compareCells),
+		formulaResults: [...input.formulaResults].sort(compareCells),
+		invalidationKinds: [...input.invalidationKinds].sort(),
+		faults: [...input.faults].sort(),
+		fallbacks: [...input.fallbacks].sort(),
+	};
 	const canonical = JSON.stringify(normalized);
-	return Object.freeze({ ...normalized, cells: Object.freeze(normalized.cells), formulaResults: Object.freeze(normalized.formulaResults), invalidationKinds: Object.freeze(normalized.invalidationKinds), faults: Object.freeze(normalized.faults), fallbacks: Object.freeze(normalized.fallbacks), hash: stableHash(canonical) });
+	return Object.freeze({
+		...normalized,
+		cells: Object.freeze(normalized.cells),
+		formulaResults: Object.freeze(normalized.formulaResults),
+		invalidationKinds: Object.freeze(normalized.invalidationKinds),
+		faults: Object.freeze(normalized.faults),
+		fallbacks: Object.freeze(normalized.fallbacks),
+		hash: stableHash(canonical),
+	});
 }
 
 function compareCells(a: { rowId: string; colField: string }, b: { rowId: string; colField: string }): number {
@@ -693,8 +777,10 @@ function matchesExpected(expected: GridReplayExpectedFacts, actual: GridReplaySe
 	if (expected.reason !== undefined && expected.reason !== actual.reason) return false;
 	if (expected.hash !== undefined && expected.hash !== actual.hash) return false;
 	if (expected.cells && JSON.stringify([...expected.cells].sort(compareCells)) !== JSON.stringify(actual.cells)) return false;
-	if (expected.formulaResults && JSON.stringify([...expected.formulaResults].sort(compareCells)) !== JSON.stringify(actual.formulaResults)) return false;
-	if (expected.invalidationKinds && JSON.stringify([...expected.invalidationKinds].sort()) !== JSON.stringify(actual.invalidationKinds)) return false;
+	if (expected.formulaResults && JSON.stringify([...expected.formulaResults].sort(compareCells)) !== JSON.stringify(actual.formulaResults))
+		return false;
+	if (expected.invalidationKinds && JSON.stringify([...expected.invalidationKinds].sort()) !== JSON.stringify(actual.invalidationKinds))
+		return false;
 	if (expected.faults && JSON.stringify([...expected.faults].sort()) !== JSON.stringify(actual.faults)) return false;
 	if (expected.fallbacks && JSON.stringify([...expected.fallbacks].sort()) !== JSON.stringify(actual.fallbacks)) return false;
 	if (expected.domains) {

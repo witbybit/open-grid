@@ -31,14 +31,14 @@ Match `RecordingGridInstrumentation` fixed-capacity behavior and immutable snaps
 
 ## Commands
 
-| Gate | Command | Expected |
-| --- | --- | --- |
-| Focused | `corepack pnpm --filter @open-grid/core exec vitest run src/diagnostics/GridFlightRecorder.test.ts src/engine/GridChangeApplier.test.ts src/diagnostics/GridInstrumentation.test.ts` | exit 0 |
-| Budgets | `corepack pnpm run bench` | exit 0 |
-| Long session | `corepack pnpm run bench:long-session` | exit 0 |
-| Architecture | `corepack pnpm run test:architecture` | exit 0 |
-| Core | `corepack pnpm run verify:core` | exit 0 |
-| Build | `corepack pnpm run build:packages` | exit 0 |
+| Gate         | Command                                                                                                                                                                              | Expected |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| Focused      | `corepack pnpm --filter @open-grid/core exec vitest run src/diagnostics/GridFlightRecorder.test.ts src/engine/GridChangeApplier.test.ts src/diagnostics/GridInstrumentation.test.ts` | exit 0   |
+| Budgets      | `corepack pnpm run bench`                                                                                                                                                            | exit 0   |
+| Long session | `corepack pnpm run bench:long-session`                                                                                                                                               | exit 0   |
+| Architecture | `corepack pnpm run test:architecture`                                                                                                                                                | exit 0   |
+| Core         | `corepack pnpm run verify:core`                                                                                                                                                      | exit 0   |
+| Build        | `corepack pnpm run build:packages`                                                                                                                                                   | exit 0   |
 
 ## Scope
 
@@ -57,11 +57,11 @@ Use a versioned JSON-safe envelope with monotonic sequence order:
 
 ```ts
 interface GridTraceEnvelope {
-  readonly v: 1;
-  readonly sessionId: string;
-  readonly sequence: number;
-  readonly timestamp: number; // diagnostic, never ordering authority
-  readonly event: GridTraceEvent;
+	readonly v: 1;
+	readonly sessionId: string;
+	readonly sequence: number;
+	readonly timestamp: number; // diagnostic, never ordering authority
+	readonly event: GridTraceEvent;
 }
 ```
 
