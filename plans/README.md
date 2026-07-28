@@ -134,7 +134,7 @@
 | 133 | [Replace Void Mutations with a Public Commit Result Protocol](./133-public-commit-result-protocol.md) | DONE | 568f4a63 |
 | 134 | [Reset the Derived Projection Pipeline Around the Commit Kernel](./134-derived-projection-pipeline-reset.md) | DONE | ed2c25fd |
 | 135 | [Delete Duplicate Streaming and Converge Integrity Runtime Paths](./135-streaming-and-integrity-convergence.md) | DONE | aa414634 |
-| 136 | [Replace Broad Store Wakeups with Selector-Grade Domain Subscriptions](./136-selector-grade-subscription-surface.md) | TODO | 6dac6c08 |
+| 136 | [Replace Broad Store Wakeups with Selector-Grade Domain Subscriptions](./136-selector-grade-subscription-surface.md) | DONE | working tree |
 | 137 | [Decompose the Core Control Surfaces So Features Stop Accreting in GridEngine and GridStore](./137-core-surface-decomposition.md) | TODO | 6dac6c08 |
 | 138 | [Make Every Data Mutation Flow Through One Canonical Write Pipeline](./138-canonical-data-write-pipeline.md) | DONE | working tree |
 | 139 | [Converge Managed Row Drag Into the Canonical Runtime Instead of a DOM Side Channel](./139-row-drag-runtime-convergence.md) | DONE | working tree |

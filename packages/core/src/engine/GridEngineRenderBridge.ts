@@ -72,6 +72,10 @@ export class GridEngineRenderBridge<TRowData = unknown> {
 		this.deps.cellNotifications.unregisterCellSubscription(sub);
 	}
 
+	public subscribeToRow(rowId: string, listener: () => void): () => void {
+		return this.deps.cellNotifications.subscribeToRow(rowId, listener);
+	}
+
 	public updateCellSubscription(sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void {
 		this.deps.cellNotifications.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
 	}

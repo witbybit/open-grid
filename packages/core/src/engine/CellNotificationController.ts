@@ -18,6 +18,7 @@ export interface CellNotificationControllerDeps<TRowData = unknown> {
 export class CellNotificationController<TRowData = unknown> {
 	private readonly cellSubscriptions = new Map<string, Set<CellSubscription>>();
 	private readonly colSubscriptions = new Map<string, Set<CellSubscription>>();
+	private readonly rowSubscriptions = new Map<string, Set<() => void>>();
 	private readonly cellUpdateBatch = new Map<string, Set<string>>();
 	private batchFlushScheduled = false;
 	private batched = true;
@@ -65,6 +66,21 @@ export class CellNotificationController<TRowData = unknown> {
 				this.colSubscriptions.delete(sub.colField);
 			}
 		}
+	}
+
+	public subscribeToRow(rowId: string, listener: () => void): () => void {
+		let subscribers = this.rowSubscriptions.get(rowId);
+		if (!subscribers) {
+			subscribers = new Set();
+			this.rowSubscriptions.set(rowId, subscribers);
+		}
+		subscribers.add(listener);
+		return () => {
+			const current = this.rowSubscriptions.get(rowId);
+			if (!current) return;
+			current.delete(listener);
+			if (current.size === 0) this.rowSubscriptions.delete(rowId);
+		};
 	}
 
 	public updateCellSubscription(sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void {
@@ -150,6 +166,7 @@ export class CellNotificationController<TRowData = unknown> {
 	public publishCommittedCellChanges(changes: Map<string, Set<string>>): void {
 		for (const rowId of changes.keys()) {
 			this.deps.rowVersions.set(rowId, (this.deps.rowVersions.get(rowId) ?? 0) + 1);
+			this.notifyRowSubscribers(rowId);
 		}
 
 		for (const [rowId, fields] of changes) {
@@ -161,7 +178,11 @@ export class CellNotificationController<TRowData = unknown> {
 	}
 
 	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true, renderColId?: string): void {
-		this.deps.rowVersions.set(rowId, (this.deps.rowVersions.get(rowId) ?? 0) + 1);
+		// Projection-only cell invalidations (focus/edit overlays) do not mutate the row.
+		if (includeRenderInvalidation) {
+			this.deps.rowVersions.set(rowId, (this.deps.rowVersions.get(rowId) ?? 0) + 1);
+			this.notifyRowSubscribers(rowId);
+		}
 		this.deps.data.clearValueGetterCache(rowId, colField);
 		this.notifyCellSubscribers(rowId, colField);
 		if (!includeRenderInvalidation) return;
@@ -189,6 +210,7 @@ export class CellNotificationController<TRowData = unknown> {
 	public clear(): void {
 		this.cellSubscriptions.clear();
 		this.colSubscriptions.clear();
+		this.rowSubscriptions.clear();
 		this.cellUpdateBatch.clear();
 		this.batchFlushScheduled = false;
 	}
@@ -196,6 +218,18 @@ export class CellNotificationController<TRowData = unknown> {
 	private notifyCellSubscribers(rowId: string, colField: string): void {
 		const cellKey = `${rowId}:${colField}`;
 		this.notifySubscribers(this.cellSubscriptions.get(cellKey), `GridEngine: Error in cell subscription notification`);
+	}
+
+	private notifyRowSubscribers(rowId: string): void {
+		const subscribers = this.rowSubscriptions.get(rowId);
+		if (!subscribers) return;
+		subscribers.forEach((listener) => {
+			try {
+				listener();
+			} catch (error) {
+				this.deps.faultReporter?.report({ source: 'cell-notifications', operation: 'row subscription notification', error });
+			}
+		});
 	}
 
 	private notifySubscribers(subs: Set<CellSubscription> | undefined, errorMessage: string): void {

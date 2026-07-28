@@ -10,6 +10,7 @@ import { GridProvider } from './gridContext.js';
 import { GridView } from './GridView.js';
 import { GridEventName, Grid, useGridKeySelector, useGridApi, useGridSelector } from './index.js';
 import { PortalCell, PortalManager, createPortalStore } from './GridPortal.js';
+import { FormulaBar } from './FormulaBar.js';
 
 // Mock ResizeObserver for jsdom environment
 class MockResizeObserver {
@@ -1103,6 +1104,85 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		expect(renderSpy).toHaveBeenCalledTimes(1);
+		grid.api.destroy();
+	});
+
+	it('does not rerender a key-scoped selector for an unrelated column mutation', () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const renderSpy = vi.fn();
+
+		const SelectionInspector = () => {
+			const focused = useGridKeySelector('selection', (state) => state.selection.focus);
+			renderSpy(focused);
+			return <span data-testid='key-scoped-focus'>{focused?.rowId ?? 'none'}</span>;
+		};
+
+		render(
+			<GridProvider api={grid.api}>
+				<SelectionInspector />
+			</GridProvider>
+		);
+
+		expect(renderSpy).toHaveBeenCalledTimes(1);
+		act(() => {
+			grid.api.setColumnWidth('name', 180);
+		});
+		expect(renderSpy).toHaveBeenCalledTimes(1);
+
+		act(() => {
+			grid.api.selectCell({ rowId: '1', colField: 'name' });
+		});
+		expect(renderSpy).toHaveBeenCalledTimes(2);
+		grid.api.destroy();
+	});
+
+	it('FormulaBar subscribes only to the focused cell', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: '1', name: 'Product A' },
+				{ id: '2', name: 'Product B' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const cellNotifications = vi.fn();
+		const subscribeToCell = vi.fn((rowId: string, colField: string, listener: () => void) =>
+			grid.api.subscribeToCell(rowId, colField, () => {
+				cellNotifications(rowId, colField);
+				listener();
+			})
+		);
+		const formulaApi = { ...grid.api, subscribeToCell };
+
+		act(() => {
+			grid.api.selectCell({ rowId: '1', colField: 'name' });
+		});
+		render(<FormulaBar api={formulaApi} />);
+
+		const input = await screen.findByRole('textbox');
+		await waitFor(() => {
+			expect(subscribeToCell).toHaveBeenCalledWith('1', 'name', expect.any(Function));
+			expect((input as HTMLInputElement).value).toBe('Product A');
+		});
+
+		act(() => {
+			grid.api.setCellValue('2', 'name', 'Product B+');
+			grid.api.flushCellUpdatesSync();
+		});
+		expect(cellNotifications).not.toHaveBeenCalled();
+		expect((input as HTMLInputElement).value).toBe('Product A');
+
+		act(() => {
+			grid.api.setCellValue('1', 'name', 'Product A+');
+			grid.api.flushCellUpdatesSync();
+		});
+		await waitFor(() => {
+			expect(cellNotifications).toHaveBeenCalledTimes(1);
+			expect((input as HTMLInputElement).value).toBe('Product A+');
+		});
+
 		grid.api.destroy();
 	});
 

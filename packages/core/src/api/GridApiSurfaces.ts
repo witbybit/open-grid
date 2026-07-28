@@ -194,6 +194,7 @@ export interface GridRuntimeSubscriptionApi<TRowData = unknown> {
 		isEqual?: GridSnapshotSelectorEquality<TValue>
 	): () => void;
 	subscribeToIntegrity(listener: (integrity: GridIntegrityState<TRowData>) => void): () => void;
+	subscribeToCell(rowId: string, colField: string, listener: () => void): () => void;
 	subscribeToDomainVersions(listener: (v: GridDomainVersions) => void): () => void;
 	subscribeDomain(domain: keyof GridDomainVersions, listener: (version: number) => void): () => void;
 	getRuntimeFaults(): RuntimeFault[];

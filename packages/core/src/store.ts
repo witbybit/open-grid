@@ -280,12 +280,14 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			subscribe: (listener) => this.engine.subscribe(listener),
 			subscribeToKey: (key, listener) => this.engine.subscribeToKey(key, listener),
 			subscribeToSelector: (keys, selector, listener, isEqual) => this.engine.subscribeToSelector(keys, selector, listener, isEqual),
+			subscribeDomain: (domain, listener) => this.engine.subscribeDomain(domain, listener),
 			getState: () => this.state,
 			getStateSnapshot: () => this.getStateSnapshot(),
 			getVisualIndexByRowId: (rowId) => this.getVisualIndexByRowId(rowId),
 			getVisualRow: (index) => this.getVisualRow(index),
 			registerCellSubscription: (sub) => this.registerCellSubscription(sub),
 			unregisterCellSubscription: (sub) => this.unregisterCellSubscription(sub),
+			subscribeToRowChanges: (rowId, listener) => this.engine.subscribeToRow(rowId, listener),
 			rowVersions: this.engine.rowVersions,
 		});
 		this.hostFacade = createGridStoreHostFacade({

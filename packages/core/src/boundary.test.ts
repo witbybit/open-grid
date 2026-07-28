@@ -278,7 +278,6 @@ describe('Public/internal boundary', () => {
 				'resetRenderStats',
 				'getVisualRow',
 				'getCellAccess',
-				'subscribeToCell',
 				'subscribeToRow',
 				'subscribeToViewport',
 				'getCachedDisplayValue',

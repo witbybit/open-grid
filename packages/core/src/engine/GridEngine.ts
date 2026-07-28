@@ -1293,6 +1293,10 @@ export class GridEngine<TRowData = unknown> {
 		this.renderBridge.unregisterCellSubscription(sub);
 	};
 
+	public subscribeToRow = (rowId: string, listener: () => void): (() => void) => {
+		return this.renderBridge.subscribeToRow(rowId, listener);
+	};
+
 	public updateCellSubscription = (sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void => {
 		this.renderBridge.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
 	};

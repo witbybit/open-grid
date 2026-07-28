@@ -284,6 +284,38 @@ describe('GridStore generic row-store functionality', () => {
 		store.destroy();
 	});
 
+	it("notifies a row subscription only for that row's committed cell changes", () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const firstRow = vi.fn();
+		const secondRow = vi.fn();
+		const unsubscribeFirst = store.subscribeToRow('1', firstRow);
+		const unsubscribeSecond = store.subscribeToRow('2', secondRow);
+
+		store.setCellValue('1', 'name', 'Product A+');
+		store.flushCellUpdatesSync();
+
+		expect(firstRow).toHaveBeenCalledTimes(1);
+		expect(secondRow).not.toHaveBeenCalled();
+
+		unsubscribeFirst();
+		unsubscribeSecond();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('executes a sync valueSetter exactly once for a direct cell write', () => {
 		const valueSetter = vi.fn(({ row, value }) => {
 			row.name = `${String(value)} accepted`;

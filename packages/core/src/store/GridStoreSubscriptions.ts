@@ -13,6 +13,7 @@ import type { InternalGridState } from '../state/GridState.js';
 import type { VisualRow } from '../visualRow.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { SortModel } from '../rowModel.js';
+import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import { areCanonicalCellPointersEqual } from '../interaction/cellPointer.js';
 import { readInteractionState } from '../interaction/interactionState.js';
 
@@ -45,12 +46,14 @@ export interface GridStoreSubscriptionsDeps<TRowData = unknown> {
 		listener: (value: TValue) => void,
 		isEqual?: (left: TValue, right: TValue) => boolean
 	): () => void;
+	subscribeDomain(domain: keyof GridDomainVersions, listener: (version: number) => void): () => void;
 	getState(): InternalGridState<TRowData>;
 	getStateSnapshot(): GridStateSnapshot<TRowData>;
 	getVisualIndexByRowId(rowId: string): number | null;
 	getVisualRow(index: number): VisualRow<TRowData> | null;
 	registerCellSubscription(sub: CellSubscription): void;
 	unregisterCellSubscription(sub: CellSubscription): void;
+	subscribeToRowChanges(rowId: string, listener: () => void): () => void;
 	rowVersions: ReadonlyMap<string, number>;
 }
 
@@ -84,6 +87,23 @@ export function createGridStoreSubscriptions<TRowData>(deps: GridStoreSubscripti
 		};
 	};
 
+	const subscribeDomainProjection = <TValue>(
+		domains: readonly (keyof GridDomainVersions)[],
+		selector: () => TValue,
+		listener: GridSnapshotListener<TRowData>,
+		isEqual: (left: TValue, right: TValue) => boolean = Object.is
+	): (() => void) => {
+		let current = selector();
+		const notifyIfChanged = () => {
+			const next = selector();
+			if (isEqual(current, next)) return;
+			current = next;
+			listener(deps.getStateSnapshot());
+		};
+		const unsubscribers = domains.map((domain) => deps.subscribeDomain(domain, notifyIfChanged));
+		return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+	};
+
 	return {
 		subscribe: (listener) => deps.subscribe(() => listener(deps.getStateSnapshot())),
 		subscribeToKey: (key, listener) => deps.subscribeToKey(key as string, () => listener(deps.getStateSnapshot()[key])),
@@ -112,24 +132,36 @@ export function createGridStoreSubscriptions<TRowData>(deps: GridStoreSubscripti
 			deps.registerCellSubscription(sub);
 			return () => deps.unregisterCellSubscription(sub);
 		},
-		subscribeToRow: (rowId, listener) =>
-			subscribeSnapshotProjection(
-				['globalVersion', 'rowHeights'],
-				() => getRowSubscriptionProjection(rowId),
-				listener,
-				areRowSubscriptionProjectionsEqual
-			),
+		subscribeToRow: (rowId, listener) => {
+			const getProjection = () => getRowSubscriptionProjection(rowId);
+			let current = getProjection();
+			const notifyIfChanged = () => {
+				const next = getProjection();
+				if (areRowSubscriptionProjectionsEqual(current, next)) return;
+				current = next;
+				listener(deps.getStateSnapshot());
+			};
+			const unsubscribeRowChanges = deps.subscribeToRowChanges(rowId, notifyIfChanged);
+			const unsubscribeDomains = (['rows', 'geometry'] as const).map((domain) => deps.subscribeDomain(domain, notifyIfChanged));
+			return () => {
+				unsubscribeRowChanges();
+				unsubscribeDomains.forEach((unsubscribe) => unsubscribe());
+			};
+		},
 		subscribeToColumn: (colField, listener) =>
-			subscribeSnapshotProjection(
-				['columns', 'columnWidths', 'sortModel'],
-				(state) => getColumnSubscriptionProjection(state, colField),
+			subscribeDomainProjection(
+				['columns', 'sorting'],
+				() => getColumnSubscriptionProjection(deps.getState(), colField),
 				listener,
 				areColumnSubscriptionProjectionsEqual
 			),
 		subscribeToHeaders: (listener) =>
-			subscribeSnapshotProjection(
-				['columns', 'columnWidths', 'sortModel'],
-				(state) => ({ columns: state.columns, columnWidths: state.columnWidths, sortModel: state.sortModel }),
+			subscribeDomainProjection(
+				['columns', 'sorting'],
+				() => {
+					const state = deps.getState();
+					return { columns: state.columns, columnWidths: state.columnWidths, sortModel: state.sortModel };
+				},
 				listener,
 				areHeaderSubscriptionProjectionsEqual
 			),

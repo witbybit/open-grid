@@ -27,30 +27,19 @@ export function FormulaBar<TRowData = unknown>({ api, className, style }: Formul
 	const [isEditing, setIsEditing] = useState(false);
 	const [focusCell, setFocusCell] = useState<{ rowId: string; colField: string } | null>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const isEditingRef = useRef(isEditing);
+	isEditingRef.current = isEditing;
 
 	// Subscribe to selection changes to update displayed value.
 	useEffect(() => {
-		const unsubscribe = api.subscribeToKey('selection', () => {
+		const syncFocusedCell = () => {
 			const state = api.getStateSnapshot();
 			const focus = state.selection.focus;
 			setFocusCell(focus ? { rowId: focus.rowId, colField: focus.colField } : null);
-		});
-		// Also subscribe broadly to catch cell value changes (e.g. live data).
-		const unsubscribeGlobal = api.subscribe(() => {
-			if (!isEditing) {
-				const state = api.getStateSnapshot();
-				const focus = state.selection.focus;
-				if (focus) {
-					const formula = api.getFormula(focus.rowId, focus.colField);
-					setLocalValue(formula !== undefined ? formula : String(api.getCellValue(focus.rowId, focus.colField) ?? ''));
-				}
-			}
-		});
-		return () => {
-			unsubscribe();
-			unsubscribeGlobal();
 		};
-	}, [api, isEditing]);
+		syncFocusedCell();
+		return api.subscribeToKey('selection', syncFocusedCell);
+	}, [api]);
 
 	// Sync localValue when focus cell changes.
 	useEffect(() => {
@@ -62,6 +51,15 @@ export function FormulaBar<TRowData = unknown>({ api, className, style }: Formul
 		const formula = api.getFormula(focusCell.rowId, focusCell.colField);
 		setLocalValue(formula !== undefined ? formula : String(api.getCellValue(focusCell.rowId, focusCell.colField) ?? ''));
 	}, [api, focusCell, isEditing]);
+
+	useEffect(() => {
+		if (!focusCell) return;
+		return api.subscribeToCell(focusCell.rowId, focusCell.colField, () => {
+			if (isEditingRef.current) return;
+			const formula = api.getFormula(focusCell.rowId, focusCell.colField);
+			setLocalValue(formula !== undefined ? formula : String(api.getCellValue(focusCell.rowId, focusCell.colField) ?? ''));
+		});
+	}, [api, focusCell]);
 
 	const commit = useCallback(() => {
 		if (!isEditing || !focusCell) return;

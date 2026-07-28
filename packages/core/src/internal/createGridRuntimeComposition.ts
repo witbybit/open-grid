@@ -169,6 +169,7 @@ export function createGridRuntimeComposition<TRowData>({
 			isEqual?: GridSnapshotSelectorEquality<TValue>
 		) => runtime.subscribeToSnapshotSelector(keys, selector, listener, isEqual),
 		subscribeToIntegrity: (listener: Parameters<typeof runtime.subscribeToIntegrity>[0]) => runtime.subscribeToIntegrity(listener),
+		subscribeToCell: (rowId: string, colField: string, listener: () => void) => runtime.subscribeToCell(rowId, colField, listener),
 		subscribeToDomainVersions: (listener: Parameters<typeof runtime.subscribeToDomainVersions>[0]) => runtime.subscribeToDomainVersions(listener),
 		subscribeDomain: (domain: Parameters<typeof runtime.subscribeDomain>[0], listener: Parameters<typeof runtime.subscribeDomain>[1]) =>
 			runtime.subscribeDomain(domain, listener),
