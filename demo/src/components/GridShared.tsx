@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { CellRendererProps, CellEditorProps, GridApi, GridCellClickParams, GridContextMenuOptions } from '@open-grid/react';
 
 export type GridPageType =
+	| 'devtools'
 	| 'lab'
 	| 'perf'
 	| 'server'

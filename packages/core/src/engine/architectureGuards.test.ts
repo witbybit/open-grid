@@ -482,7 +482,9 @@ describe('Architecture guardrails', () => {
 		for (const file of collectSourceFiles(resolve(DEMO_ROOT, 'src'))) {
 			const content = readFileSync(file, 'utf-8');
 			expect(content, `${file} must not import @open-grid/core/internal`).not.toContain('@open-grid/core/internal');
-			expect(content, `${file} must not import @open-grid/react internals by subpath`).not.toMatch(/from ['"]@open-grid\/react\//);
+			expect(content, `${file} must not import @open-grid/react internals by subpath`).not.toMatch(
+				/from ['"]@open-grid\/react\/(?!experimental['"])/
+			);
 			expect(content, `${file} must not import @open-grid/core internals by subpath`).not.toMatch(/from ['"]@open-grid\/core\//);
 		}
 	});

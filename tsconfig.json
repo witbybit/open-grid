@@ -6,6 +6,7 @@
 		"baseUrl": ".",
 		"paths": {
 			"@open-grid/core": ["packages/core/src/index.ts"],
+			"@open-grid/core/experimental": ["packages/core/src/experimental.ts"],
 			"@open-grid/core/internal": ["packages/core/src/internal.ts"],
 			"@open-grid/react": ["packages/react/src/index.ts"],
 			"@open-grid/react/experimental": ["packages/react/src/experimental.ts"]

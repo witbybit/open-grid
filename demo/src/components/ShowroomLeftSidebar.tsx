@@ -26,6 +26,7 @@ import {
 	ShieldCheck,
 	Building2,
 	LayoutDashboard,
+	Activity,
 } from 'lucide-react';
 import { APP_VERSION } from '../utils';
 import { GridPageType } from './GridShared';
@@ -91,6 +92,12 @@ export default function ShowroomLeftSidebar({ activePage, leftSidebarCollapsed, 
 			label: 'Hierarchical Desk',
 			subtitle: 'Tree • Group • Detail',
 			icon: FolderTree,
+		},
+		{
+			id: 'devtools',
+			label: 'Flight Recorder',
+			subtitle: 'Causal trace workbench',
+			icon: Activity,
 		},
 		{
 			id: 'lab',

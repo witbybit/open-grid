@@ -7,3 +7,7 @@ export { PortalCell, PortalManager } from './GridPortal.js';
 export { FormulaBar } from './FormulaBar.js';
 export type { FormulaBarProps } from './FormulaBar.js';
 export { ColumnFilterRenderer } from './filters/ColumnFilterRenderer.js';
+export { GridFlightRecorderDevTools } from './devtools/GridFlightRecorderDevTools.js';
+export type { GridFlightRecorderDevToolsProps } from './devtools/GridFlightRecorderDevTools.js';
+export { buildFrameDistribution, filterTraceEvents, groupTimeline, SLOW_FRAME_THRESHOLD_MS, tracePrivacyLabel } from './devtools/traceViewModel.js';
+export type { FrameDistribution, TimelineGroup, TraceFilter, TraceWorkspace } from './devtools/traceViewModel.js';
