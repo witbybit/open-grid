@@ -2,7 +2,7 @@
 
 | #   | Plan                                                                                                                          | Status   | Commit       |
 | --- | ----------------------------------------------------------------------------------------------------------------------------- | -------- | ------------ |
-| 163 | [Deterministic Grid Trace Replay](./163-deterministic-grid-trace-replay.md)                                                   | IN PROGRESS | a942762b     |
+| 163 | [Deterministic Grid Trace Replay](./163-deterministic-grid-trace-replay.md)                                                   | DONE     | 6fc0fcf4     |
 | 162 | [Advanced Flight Recorder DevTools](./162-advanced-flight-recorder-devtools.md)                                               | DONE     | a942762b     |
 | 161 | [Causal Grid Flight Recorder](./161-causal-grid-flight-recorder.md)                                                           | DONE     | 8c54cb59     |
 | 160 | [Long-Session Runtime Resilience](./160-long-session-runtime-resilience.md)                                                   | DONE     | working tree |

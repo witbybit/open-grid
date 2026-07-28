@@ -6,7 +6,7 @@
 
 ## Status
 
-- **State**: IN PROGRESS from `a942762bcccae0c0a41b8f4a81110e65faf02278`
+- **State**: DONE at `6fc0fcf4`
 - **Priority**: P1
 - **Effort**: L
 - **Risk**: HIGH
