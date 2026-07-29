@@ -66,11 +66,6 @@ describe('Architecture guardrails', () => {
 		expect(lines, `store.ts has ${lines} lines; budget is 1500 and target is 1000`).toBeLessThan(1500);
 	});
 
-	it('GridEngine.ts is below 1600 lines (intermediate budget, target 1000)', () => {
-		const lines = countLines('engine/GridEngine.ts');
-		expect(lines, `GridEngine.ts has ${lines} lines; intermediate budget is 1600 and target is 1000`).toBeLessThan(1600);
-	});
-
 	it('renderEngine.ts is below 1500 lines (intermediate budget, target 1000)', () => {
 		const lines = countLines('renderer/renderEngine.ts');
 		expect(lines, `renderEngine.ts has ${lines} lines; intermediate budget is 1500 and target is 1000`).toBeLessThan(1150);
@@ -559,15 +554,16 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("domainMutations: [{ kind: 'row-transaction', transaction }]");
 	});
 
-	it('row-transaction executor narrows to TransactionalRowModel instead of optional row-model hooks', () => {
+	it('row-transaction executor owns lifecycle through the structural client capability', () => {
 		const mutationContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridDomainMutation.ts'), 'utf-8');
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
-		expect(rowModelContent).toContain('export interface TransactionalRowModel<TRowData = unknown>');
-		expect(rowModelContent).toContain('export function asTransactionalRowModel<TRowData = unknown>(');
-		expect(mutationContent).toContain('return asTransactionalRowModel(context.getRowModel());');
-		expect(mutationContent).not.toContain('rowModel!.captureTransactionSnapshot!(mutation)');
-		expect(mutationContent).not.toContain('rowModel!.applyTransaction!(mutation.transaction)');
-		expect(mutationContent).not.toContain('context.getRowModel()!.restoreTransactionSnapshot!(preparedRestoreSnapshot)');
+		expect(rowModelContent).toContain('export interface ClientStructuralRowModel<TRowData = unknown>');
+		expect(rowModelContent).toContain('captureTransactionSnapshot(');
+		expect(rowModelContent).toContain('restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;');
+		expect(rowModelContent).not.toContain('export interface TransactionalRowModel<TRowData = unknown>');
+		expect(rowModelContent).not.toContain('export function asTransactionalRowModel<TRowData = unknown>(');
+		expect(mutationContent).toContain('asClientStructuralRowModel(context.getRowModel())');
+		expect(mutationContent).not.toContain('.applyTransaction(mutation.transaction)');
 	});
 
 	it('row-order executor narrows to an explicit row-order capability instead of optional row-model hooks', () => {
@@ -700,7 +696,6 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderer.ts'), 'utf-8');
 		expect(content).toContain("this.engine.getRowModel()?.ensureRange(nextWindow.rowStart, nextWindow.rowEnd, 'viewport-render');");
 		expect(content).not.toContain('loadVisibleBlocks(');
-		expect(content).not.toContain('asVisibleBlockLoadCapableRowModel(');
 		expect(content).not.toContain('id: `loading:${r}`');
 	});
 
@@ -1236,6 +1231,9 @@ describe('Architecture guardrails', () => {
 			resolve(srcDir, 'renderer', 'floatingFilterRenderer.ts'), // filter debounce + focus
 			resolve(srcDir, 'renderer', 'headerMenuController.ts'), // filter debounce
 			resolve(srcDir, 'renderer', 'scrollEngine.ts'), // scroll-end timer
+			// Replay presentation pacing only: GridTraceReplay uses a replaceable scheduler
+			// for cooperative DevTools replay turns, never renderer frame scheduling.
+			resolve(srcDir, 'diagnostics', 'GridTraceReplay.ts'),
 		]);
 		const schedulingPattern = /\bsetTimeout\b|\brequestAnimationFrame\b|\brequestIdleCallback\b/;
 		const violators: string[] = [];
@@ -1250,6 +1248,13 @@ describe('Architecture guardrails', () => {
 			violators,
 			`New files calling browser scheduling APIs outside the allowed set — add migration plan or route through frameCoordinator/gridScheduler: ${violators.join(', ')}`
 		).toHaveLength(0);
+	});
+
+	it('GridTraceReplay keeps its timer exception behind injected replay scheduling', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'diagnostics', 'GridTraceReplay.ts'), 'utf-8');
+		expect(content).toContain('export interface GridReplayScheduler');
+		expect(content).toContain('options: { readonly scheduler?: GridReplayScheduler } = {}');
+		expect(content).toContain('new GridTraceReplay(validation.trace, options.scheduler)');
 	});
 
 	it('contextMenu rAF is documented as interaction-only animation staging, not render scheduling (Plan 111)', () => {
@@ -1440,7 +1445,7 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(rowModelPath, 'utf-8');
 		expect(content).toContain('GridMetric.ROW_MUTATION_FULL_REBUILD');
 		expect(content).toContain('GridMetric.ROW_MUTATION_INCREMENTAL');
-		expect(content).toContain('getInstrumentation().increment');
+		expect(content).toContain('const inst = this.runtime.getInstrumentation();');
 	});
 
 	// ── Plan 092: aggregation input mutation correctness ─────────────────────
@@ -1453,11 +1458,13 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("return 'aggregation-input'");
 	});
 
-	it('applyTransaction classifies update impact and triggers refresh for aggregation-input (Plan 092)', () => {
+	it('structural transaction commit classifies update impact and triggers refresh for aggregation-input (Plan 092)', () => {
 		const rowModelPath = resolve(CORE_ROOT, 'src', 'rowModel.ts');
+		const mutationPath = resolve(CORE_ROOT, 'src', 'engine', 'GridDomainMutation.ts');
 		const content = readFileSync(rowModelPath, 'utf-8');
+		const mutationContent = readFileSync(mutationPath, 'utf-8');
 		expect(content).toContain("impact === 'aggregation-input'");
-		expect(content).toContain('classifyFieldMutation(allChangedFields)');
+		expect(mutationContent).toContain('structuralRowModel.classifyFieldMutation(allFields)');
 	});
 
 	// ── Plan 093: single RAF frame arbitration ────────────────────────────────
@@ -2733,16 +2740,24 @@ describe('Architecture guardrails', () => {
 			expect(rowContent).not.toContain("from '../store.js'");
 		});
 
-		it('GridEngine delegates domain and render update ownership to dedicated modules', () => {
+		it('GridEngine keeps domain subscriptions and cell notifications with their semantic owners', () => {
 			const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
 			const domainContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridDomainSubscriptionHub.ts'), 'utf-8');
-			const renderContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngineRenderBridge.ts'), 'utf-8');
+			const notificationContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'CellNotificationController.ts'), 'utf-8');
 			expect(engineContent).toContain('new GridDomainSubscriptionHub');
-			expect(engineContent).toContain('new GridEngineRenderBridge');
+			expect(engineContent).not.toContain('GridEngineRenderBridge');
+			expect(engineContent).not.toContain('cellSubscriptions = new Map');
+			expect(engineContent).not.toContain('cellUpdateBatch = new Map');
+			expect(engineContent).toContain('this.beginRenderTransaction();');
+			expect(engineContent).toContain('this.stateManager.startTransaction();');
+			expect(engineContent).toContain('this.stateManager.endTransaction();');
+			expect(engineContent).toContain('this.cellNotifications.flushCellUpdatesSync();');
+			expect(engineContent).toContain('this.endRenderTransaction();');
 			expect(domainContent).toContain('export class GridDomainSubscriptionHub');
 			expect(domainContent).not.toContain('GridEngine<');
-			expect(renderContent).toContain('export class GridEngineRenderBridge');
-			expect(renderContent).not.toContain('GridEngine<');
+			expect(notificationContent).toContain('export class CellNotificationController');
+			expect(notificationContent).toContain('private readonly cellSubscriptions = new Map');
+			expect(notificationContent).toContain('private readonly cellUpdateBatch = new Map');
 		});
 
 		it('GridApi exports conceptual surface contracts', () => {

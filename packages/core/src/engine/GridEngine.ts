@@ -82,7 +82,6 @@ import type { LayoutTransitionReason } from '../renderer/layoutTransitionControl
 import type { GridMutationRejection } from './GridDomainMutation.js';
 import type { GridCommitResult as InternalGridCommitResult } from './GridChangeApplier.js';
 import { GridDomainSubscriptionHub } from './GridDomainSubscriptionHub.js';
-import { GridEngineRenderBridge } from './GridEngineRenderBridge.js';
 import { normalizeInitialActiveEdit, normalizeInitialSelection } from './normalizeInitialInteractionState.js';
 import { CellDisplaySnapshotStore, type CellDisplaySnapshot } from '../renderer/cellDisplaySnapshot.js';
 import { HtmlScrollSnapshotStore } from '../renderer/htmlScrollSnapshotStore.js';
@@ -264,7 +263,6 @@ export class GridEngine<TRowData = unknown> {
 	public customRendererWarmMisses = 0;
 
 	private readonly cellNotifications: CellNotificationController<TRowData>;
-	private readonly renderBridge: GridEngineRenderBridge<TRowData>;
 	private readonly renderRequests: RenderRequestCoordinator<TRowData>;
 
 	private readonly getContainerElement: () => HTMLElement | null;
@@ -458,15 +456,6 @@ export class GridEngine<TRowData = unknown> {
 		};
 
 		this.stateManager = new StateManager<TRowData>(initialState, undefined, this.runtimeFaults, this.instrumentation);
-		this.renderBridge = new GridEngineRenderBridge<TRowData>({
-			stateManager: this.stateManager,
-			commandHistory: this.commandHistory,
-			cellNotifications: this.cellNotifications,
-			requestRender: (reason) => this.requestRender(reason),
-			beginRenderTransaction: () => this.beginRenderTransaction(),
-			endRenderTransaction: () => this.endRenderTransaction(),
-		});
-
 		const capCfg = config.capabilities ?? (config.canPerformAction ? { canPerformAction: config.canPerformAction } : {});
 		this.capabilityManager = new GridCapabilityManager<TRowData>(
 			capCfg,
@@ -1265,51 +1254,68 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public batch = (callback: () => void): void => {
-		this.renderBridge.batch(callback);
+		this.beginRenderTransaction();
+		this.stateManager.startTransaction();
+		try {
+			callback();
+		} finally {
+			this.stateManager.endTransaction();
+			this.cellNotifications.flushCellUpdatesSync();
+			this.endRenderTransaction();
+		}
 	};
 
 	public scheduleBatchFlush(): void {
-		this.renderBridge.scheduleBatchFlush();
+		this.cellNotifications.scheduleBatchFlush();
 	}
 
 	public flushCellUpdates(): void {
-		this.renderBridge.flushCellUpdates();
+		this.cellNotifications.flushCellUpdates();
 	}
 
 	public enqueueCellUpdate(rowId: string, colField: string): void {
-		this.renderBridge.enqueueCellUpdate(rowId, colField);
+		this.cellNotifications.enqueueCellUpdate(rowId, colField);
 	}
 
 	public flushCellUpdatesSync(): void {
-		this.renderBridge.flushCellUpdatesSync();
+		this.cellNotifications.flushCellUpdatesSync();
 	}
 
 	public notifyBulkCellChange(changes: Map<string, Set<string>>): void {
-		this.renderBridge.notifyBulkCellChange(changes);
+		this.cellNotifications.notifyBulkCellChange(changes);
 	}
 
 	public publishCommittedCellChanges(changes: Map<string, Set<string>>): void {
-		this.renderBridge.publishCommittedCellChanges(changes, this.batchedUpdates);
+		if (this.cellNotifications.batchedUpdates) {
+			for (const [rowId, fields] of changes) {
+				for (const colField of fields) {
+					this.cellNotifications.enqueueCellUpdate(rowId, colField);
+				}
+			}
+			this.cellNotifications.scheduleBatchFlush();
+			return;
+		}
+		this.cellNotifications.publishCommittedCellChanges(changes);
 	}
 
 	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true, renderColId?: string): void {
-		this.renderBridge.notifyCellChange(rowId, colField, includeRenderInvalidation, renderColId);
+		this.cellNotifications.notifyCellChange(rowId, colField, includeRenderInvalidation, renderColId);
 	}
 
 	public registerCellSubscription = (sub: CellSubscription): void => {
-		this.renderBridge.registerCellSubscription(sub);
+		this.cellNotifications.registerCellSubscription(sub);
 	};
 
 	public unregisterCellSubscription = (sub: CellSubscription): void => {
-		this.renderBridge.unregisterCellSubscription(sub);
+		this.cellNotifications.unregisterCellSubscription(sub);
 	};
 
 	public subscribeToRow = (rowId: string, listener: () => void): (() => void) => {
-		return this.renderBridge.subscribeToRow(rowId, listener);
+		return this.cellNotifications.subscribeToRow(rowId, listener);
 	};
 
 	public updateCellSubscription = (sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void => {
-		this.renderBridge.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
+		this.cellNotifications.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
 	};
 
 	// ── Row node selection ─────────────────────────────────────────────────────

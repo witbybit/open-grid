@@ -2,6 +2,10 @@
 
 | #   | Plan                                                                                                                          | Status               | Commit       |
 | --- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------- | ------------ |
+| 167 | [Delete GridEngine Render Forwarding Bridge](./167-delete-grid-engine-render-forwarding-bridge.md)                            | DONE                 | working tree |
+| 166 | [Delete Obsolete Row Model Capability Artifacts](./166-delete-obsolete-row-model-capability-artifacts.md)                     | DONE                 | working tree |
+| 165 | [Delete Row Transaction Compatibility Shell](./165-delete-row-transaction-compatibility-shell.md)                             | DONE                 | working tree |
+| 164 | [Core Simplicity Ownership and Deletion Baseline](./164-core-simplicity-ownership-and-deletion-baseline.md)                   | DONE                 | working tree |
 | 163 | [Deterministic Grid Trace Replay](./163-deterministic-grid-trace-replay.md)                                                   | DONE                 | 6fc0fcf4     |
 | 162 | [Advanced Flight Recorder DevTools](./162-advanced-flight-recorder-devtools.md)                                               | DONE                 | a942762b     |
 | 161 | [Causal Grid Flight Recorder](./161-causal-grid-flight-recorder.md)                                                           | DONE                 | 8c54cb59     |
@@ -168,6 +172,10 @@ Execute the signature DevTools program strictly in this order:
 3. `163-deterministic-grid-trace-replay.md` — validate untrusted traces and replay supported commands only in a fresh isolated headless runtime.
 
 Plan 162 depends on 161 because UI correlation must not invent recorder semantics. Plan 163 depends on both because replay needs the versioned trace contract and the DevTools host. Do not combine all three into one implementation diff: privacy, disabled-mode performance, UI quality, and replay isolation need independent review gates.
+
+## Core simplicity program
+
+Plan 164 replaces the rejected incremental-view-engine direction. It freezes speculative core feature growth long enough to establish sole ownership, trace canonical operations, classify indirection, and select one deletion-oriented vertical slice. Do not author or execute Plan 165 until Plan 164's evidence package has been reviewed; simplification plans must be derived from verified duplicate authority or replaceable indirection, not class/file counts.
 
 ## Execution order
 

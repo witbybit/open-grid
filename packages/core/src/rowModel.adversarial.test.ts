@@ -44,6 +44,22 @@ const COLUMNS: ColumnDef<TestRow>[] = [
 
 const NAME_POOL = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Hank', 'Iris', 'Jack'];
 
+function applyStructuralTransaction(
+	controller: ClientRowModelController<TestRow>,
+	transaction: Parameters<ClientRowModelController<TestRow>['applyTransactionStructurally']>[0]
+): void {
+	const writeResult = controller.applyTransactionStructurally(transaction);
+	const hasStructural = (writeResult.addedNodes?.length ?? 0) > 0 || (writeResult.removedNodes?.length ?? 0) > 0;
+	const changedFields = new Set<string>();
+	for (const fields of writeResult.changedFieldsByRow?.values() ?? []) {
+		for (const field of fields) changedFields.add(field);
+	}
+	controller.reconcileAfterDataWrite(
+		writeResult,
+		hasStructural ? 'insert' : changedFields.size > 0 ? controller.classifyFieldMutation(changedFields) : 'value-only'
+	);
+}
+
 // ── Reference + invariant checker ────────────────────────────────────────────
 
 function checkInvariants(controller: ClientRowModelController<TestRow>, store: GridStore<TestRow>, opLabel: string): void {
@@ -118,11 +134,11 @@ function runAdversarialSequence(seed: number, steps: number): void {
 				name: NAME_POOL[lcgInt(rng, NAME_POOL.length)],
 				amount: lcgInt(rng, 200),
 			};
-			controller.applyTransaction!({ add: [newRow] });
+			applyStructuralTransaction(controller, { add: [newRow] });
 		} else if (op === OP_REMOVE) {
 			if (allNodes.length > 0) {
 				const target = allNodes[lcgInt(rng, allNodes.length)];
-				controller.applyTransaction!({ remove: [target.data] });
+				applyStructuralTransaction(controller, { remove: [target.data] });
 			}
 		} else if (op === OP_UPDATE) {
 			if (allNodes.length > 0) {
@@ -193,9 +209,9 @@ describe('ClientRowModelController — adversarial differential invariants', () 
 			const nodes = controller.getAllDataNodes!()!;
 			if (nodes.length > 1 && lcgInt(rng, 2) === 0) {
 				const idx = lcgInt(rng, nodes.length);
-				controller.applyTransaction!({ remove: [nodes[idx].data] });
+				applyStructuralTransaction(controller, { remove: [nodes[idx].data] });
 			} else {
-				controller.applyTransaction!({
+				applyStructuralTransaction(controller, {
 					add: [{ id: String(nextId++), name: NAME_POOL[lcgInt(rng, NAME_POOL.length)], amount: lcgInt(rng, 200) }],
 				});
 			}
@@ -247,11 +263,11 @@ describe('ClientRowModelController — adversarial differential invariants', () 
 		checkInvariants(controller, store, 'change-filter');
 
 		// add rows while filtered+sorted
-		controller.applyTransaction!({ add: [{ id: '6', name: 'Frank', amount: 45 }] });
+		applyStructuralTransaction(controller, { add: [{ id: '6', name: 'Frank', amount: 45 }] });
 		checkInvariants(controller, store, 'add-while-filtered');
 
 		// remove a visible row
-		controller.applyTransaction!({ remove: [{ id: '3', name: 'Charlie', amount: 30 }] });
+		applyStructuralTransaction(controller, { remove: [{ id: '3', name: 'Charlie', amount: 30 }] });
 		checkInvariants(controller, store, 'remove-while-filtered');
 
 		// clear both
@@ -278,7 +294,7 @@ describe('ClientRowModelController — adversarial differential invariants', () 
 			columns: store.getState().columns,
 		});
 
-		controller.applyTransaction!({
+		applyStructuralTransaction(controller, {
 			add: [{ id: '4', name: 'Diana', amount: 40 }],
 			remove: [{ id: '2', name: 'Alice', amount: 10 }],
 		});

@@ -282,10 +282,6 @@ export interface RowOrderCapableModel {
 	setRowOrder(rowIds: string[]): void;
 }
 
-export interface CellValueWritableRowModel<TRowData = unknown> {
-	setCellValue(rowId: string, colField: string, value: unknown, options?: { bypassValueSetter?: boolean }): boolean;
-}
-
 // ── Structural write contract ─────────────────────────────────────────────────
 
 /**
@@ -311,6 +307,10 @@ export interface RowModelWriteResult<TRowData = unknown> {
  * dispatch events, invalidate formulas, or bump versions.
  */
 export interface ClientStructuralRowModel<TRowData = unknown> extends RowOrderCapableModel {
+	captureTransactionSnapshot(
+		mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TRowData>
+	): RowModelTransactionSnapshot<TRowData>;
+	restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;
 	replaceRowsStructurally(rows: readonly TRowData[]): RowModelWriteResult<TRowData>;
 	updateRowsStructurally(updater: (rows: TRowData[]) => TRowData[]): RowModelWriteResult<TRowData>;
 	applyTransactionStructurally(
@@ -345,6 +345,8 @@ export function classifyWriteImpact(rowModel: RowModel<unknown> | null, changedF
 
 export function asClientStructuralRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): ClientStructuralRowModel<TRowData> | null {
 	return hasFunctions(rowModel, [
+		'captureTransactionSnapshot',
+		'restoreTransactionSnapshot',
 		'replaceRowsStructurally',
 		'updateRowsStructurally',
 		'applyTransactionStructurally',
@@ -398,14 +400,6 @@ export interface RowModelTransactionSnapshot<TRowData = unknown> {
 	readonly snapshot: unknown;
 }
 
-export interface TransactionalRowModel<TRowData = unknown> {
-	captureTransactionSnapshot(
-		mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TRowData>
-	): RowModelTransactionSnapshot<TRowData>;
-	applyTransaction(mutation: RowDataTransaction<TRowData>): InternalRowNodeTransaction<TRowData>;
-	restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;
-}
-
 /** Shared row-model contract used across engine and rendering code. */
 export interface RowModel<TRowData = unknown> extends RowModelViewportAccess<TRowData> {
 	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
@@ -451,10 +445,6 @@ export function asRowOrderCapableModel(rowModel: RowModel<unknown> | null): RowO
 	return hasFunctions(rowModel, ['getRowOrder', 'setRowOrder']) ? (rowModel as unknown as RowOrderCapableModel) : null;
 }
 
-export function asCellValueWritableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): CellValueWritableRowModel<TRowData> | null {
-	return hasFunctions(rowModel, ['setCellValue']) ? (rowModel as unknown as CellValueWritableRowModel<TRowData>) : null;
-}
-
 export function asInfiniteControllableRowModel<TRowData = unknown>(
 	rowModel: RowModel<TRowData> | null
 ): InfiniteControllableRowModel<TRowData> | null {
@@ -468,16 +458,6 @@ export function asServerSideControllableRowModel<TRowData = unknown>(
 ): ServerSideControllableRowModel<TRowData> | null {
 	return hasFunctions(rowModel, ['setServerSideDatasource', 'refreshServerSide', 'purgeServerSide', 'getServerSideStoreState'])
 		? (rowModel as unknown as ServerSideControllableRowModel<TRowData>)
-		: null;
-}
-
-export function asVisibleBlockLoadCapableRowModel(rowModel: RowModel<unknown> | null): VisibleBlockLoadCapableRowModel | null {
-	return hasFunctions(rowModel, ['loadVisibleBlocks']) ? (rowModel as unknown as VisibleBlockLoadCapableRowModel) : null;
-}
-
-export function asTransactionalRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): TransactionalRowModel<TRowData> | null {
-	return hasFunctions(rowModel, ['captureTransactionSnapshot', 'applyTransaction', 'restoreTransactionSnapshot'])
-		? (rowModel as unknown as TransactionalRowModel<TRowData>)
 		: null;
 }
 
@@ -1393,37 +1373,6 @@ export class ClientRowModelController<TData = unknown>
 		return { changed: false };
 	}
 
-	private collectCommittedCellChanges(writeResult: RowModelWriteResult<TData>): Map<string, Set<string>> {
-		const changes = new Map<string, Set<string>>();
-		if (!writeResult.changedFieldsByRow || writeResult.changedFieldsByRow.size === 0) return changes;
-
-		const addCell = (rowId: string, colField: string): void => {
-			let fields = changes.get(rowId);
-			if (!fields) {
-				fields = new Set<string>();
-				changes.set(rowId, fields);
-			}
-			fields.add(colField);
-		};
-
-		for (const [rowId, fields] of writeResult.changedFieldsByRow) {
-			const changedValues = writeResult.changedValuesByRow?.get(rowId);
-			for (const field of fields) {
-				const newRawValue = changedValues?.get(field)?.newValue ?? this.runtime.getCellValue(rowId, field);
-				this.runtime.syncFormulaForCell(rowId, field, newRawValue);
-				addCell(rowId, field);
-				for (const dep of this.runtime.getValueGetterDependents(field)) {
-					if (dep !== field) addCell(rowId, dep);
-				}
-				for (const formulaCell of this.runtime.invalidateFormulaCell(rowId, field)) {
-					addCell(formulaCell.rowId, formulaCell.colField);
-				}
-			}
-		}
-
-		return changes;
-	}
-
 	/**
 	 * Threshold (added + removed rows) above which a full pipeline rebuild is cheaper than
 	 * incremental insert/remove into the visual array. Chosen empirically: below this threshold
@@ -1596,46 +1545,6 @@ export class ClientRowModelController<TData = unknown>
 		this.dataStore.restoreTransactionSnapshot(clientSnapshot.snapshot.dataStore);
 		this.runtime.clearFormulas();
 		this.refresh('bulk');
-	};
-
-	// Compatibility shell only: structural writes and post-write lifecycle ownership stay centralized
-	// in applyTransactionStructurally(...) + reconcileAfterDataWrite(...) so transaction updates cannot
-	// diverge from setCellValue, batchCellValues, updateRows, or integrity-driven writes.
-	public applyTransaction = (transaction: RowDataTransaction<TData>): InternalRowNodeTransaction<TData> => {
-		const writeResult = this.applyTransactionStructurally(transaction);
-		const notifyCells = this.collectCommittedCellChanges(writeResult);
-		if (notifyCells.size > 0) {
-			this.runtime.notifyBulkCellChange(notifyCells);
-		}
-		const hasStructural = (writeResult.addedNodes?.length ?? 0) > 0 || (writeResult.removedNodes?.length ?? 0) > 0;
-		const allChangedFields = new Set<string>();
-		if (!hasStructural && writeResult.changedFieldsByRow) {
-			for (const fields of writeResult.changedFieldsByRow.values()) {
-				for (const field of fields) allChangedFields.add(field);
-			}
-		}
-		const impact = hasStructural
-			? ('insert' as RowWriteImpact)
-			: allChangedFields.size > 0
-				? this.classifyFieldMutation(allChangedFields)
-				: ('value-only' as RowWriteImpact);
-		// Guardrail note: row mutation instrumentation remains centralized in reconcileAfterDataWrite via runtime.getInstrumentation().increment(...).
-		this.reconcileAfterDataWrite(writeResult, impact);
-
-		if ((writeResult.add?.length ?? 0) > 0 || (writeResult.remove?.length ?? 0) > 0 || (writeResult.update?.length ?? 0) > 0) {
-			this.runtime.dispatchRowsUpdated({
-				changedValuesByRow: writeResult.changedValuesByRow ?? new Map(),
-				changedNodes: writeResult.update ?? [],
-				addedNodes: writeResult.add ?? [],
-				removedNodes: writeResult.remove ?? [],
-			});
-		}
-
-		return {
-			add: writeResult.add ?? [],
-			remove: writeResult.remove ?? [],
-			update: writeResult.update ?? [],
-		};
 	};
 
 	public getVisualRow = (index: number): VisualRow<TData> | null => {

@@ -383,7 +383,12 @@ describe('GridChangeApplier', () => {
 		};
 		const rowModel = {
 			captureTransactionSnapshot: vi.fn(() => ({ modelType: 'test', snapshot: {} })),
-			applyTransaction: vi.fn(() => resultPayload),
+			replaceRowsStructurally: vi.fn(),
+			updateRowsStructurally: vi.fn(),
+			applyTransactionStructurally: vi.fn(() => resultPayload),
+			writeCellValueStructurally: vi.fn(),
+			reconcileAfterDataWrite: vi.fn(() => ({ changed: false })),
+			classifyFieldMutation: vi.fn(() => 'value-only'),
 			restoreTransactionSnapshot: vi.fn(),
 		};
 		const kernel = new GridCommitKernel<TestRow>({
@@ -405,8 +410,8 @@ describe('GridChangeApplier', () => {
 		});
 
 		expect(execution.result.status).toBe('committed');
-		expect(rowModel.applyTransaction).toHaveBeenCalledOnce();
-		expect(execution.appliedMutations[0]?.result).toBe(resultPayload);
+		expect(rowModel.applyTransactionStructurally).toHaveBeenCalledOnce();
+		expect(execution.appliedMutations[0]?.result).toStrictEqual(resultPayload);
 	});
 
 	it('row-transaction commits create undo history that restores previous rows and order', () => {
@@ -439,13 +444,18 @@ describe('GridChangeApplier', () => {
 					rowOrder: rowOrder.slice(),
 				},
 			})),
-			applyTransaction: vi.fn((transaction: { add?: TestRow[] }) => {
+			replaceRowsStructurally: vi.fn(),
+			updateRowsStructurally: vi.fn(),
+			applyTransactionStructurally: vi.fn((transaction: { add?: TestRow[] }) => {
 				if (transaction.add) {
 					rows = rows.concat(transaction.add);
 					rowOrder = rowOrder.concat(transaction.add.map((row) => row.id));
 				}
-				return { add: transaction.add?.map((row) => ({ id: row.id })) ?? [], remove: [], update: [] };
+				return { add: transaction.add?.map((row) => ({ id: row.id })) ?? [], remove: [], update: [], visualChange: 'full' };
 			}),
+			writeCellValueStructurally: vi.fn(),
+			reconcileAfterDataWrite: vi.fn(() => ({ changed: false })),
+			classifyFieldMutation: vi.fn(() => 'value-only'),
 			restoreTransactionSnapshot: vi.fn((snapshot: { snapshot: { rows: TestRow[]; rowOrder: string[] } }) => {
 				rows = snapshot.snapshot.rows.slice();
 				rowOrder = snapshot.snapshot.rowOrder.slice();

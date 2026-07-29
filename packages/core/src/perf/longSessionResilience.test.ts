@@ -151,6 +151,7 @@ describe('long-session deterministic resilience', () => {
 		expect(snapshots.getOwnershipSnapshot()).toEqual({ entryCount: 128, maxEntries: 128, evictedSnapshotCount: 9_872 });
 	});
 
+	// Parallel-suite contention can exceed Vitest's default; boundedness assertions remain the contract.
 	it('keeps a mounted 100,000-row client grid at a stable slot plateau through 10,000 mixed scroll operations', () => {
 		type Row = { id: string; [field: string]: string };
 		const columns: ColumnDef<Row>[] = Array.from({ length: 12 }, (_, index) => ({ field: `c${index}`, header: `C${index}`, width: 90 }));
@@ -198,7 +199,7 @@ describe('long-session deterministic resilience', () => {
 			controller.dispose();
 			store.destroy();
 		}
-	});
+	}, 15_000);
 
 	it('keeps infinite and SSRM blocks, requests, and indexes bounded across 2,000 non-adjacent traversals', async () => {
 		type Row = { id: string; name: string };

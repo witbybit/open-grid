@@ -38,6 +38,22 @@ function doSetCellValue<T>(ctrl: ClientRowModelController<T>, rowId: string, fie
 	ctrl.reconcileAfterDataWrite(wr, ctrl.classifyFieldMutation(new Set([field])));
 }
 
+function doApplyTransaction<T>(
+	ctrl: ClientRowModelController<T>,
+	transaction: Parameters<ClientRowModelController<T>['applyTransactionStructurally']>[0]
+): void {
+	const writeResult = ctrl.applyTransactionStructurally(transaction);
+	const hasStructural = (writeResult.addedNodes?.length ?? 0) > 0 || (writeResult.removedNodes?.length ?? 0) > 0;
+	const changedFields = new Set<string>();
+	for (const fields of writeResult.changedFieldsByRow?.values() ?? []) {
+		for (const field of fields) changedFields.add(field);
+	}
+	ctrl.reconcileAfterDataWrite(
+		writeResult,
+		hasStructural ? 'insert' : changedFields.size > 0 ? ctrl.classifyFieldMutation(changedFields) : 'value-only'
+	);
+}
+
 describe('ClientRowModelController', () => {
 	it('should initialize and populate visualRows correctly', () => {
 		const store = new GridStore<TestRow>({
@@ -1111,7 +1127,7 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 			columns: store.getState().columns,
 		});
 
-		ctrl.applyTransaction({ add: [{ id: '2', name: 'Bob', price: 20 }] });
+		doApplyTransaction(ctrl, { add: [{ id: '2', name: 'Bob', price: 20 }] });
 
 		expect(ctrl.getVisualRowCount()).toBe(2);
 		expect(getRowNode(ctrl, 0)?.id).toBe('1');
@@ -1135,7 +1151,7 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 			columns: store.getState().columns,
 		});
 
-		ctrl.applyTransaction({ add: [{ id: '2', name: 'Bob', price: 20 }] });
+		doApplyTransaction(ctrl, { add: [{ id: '2', name: 'Bob', price: 20 }] });
 
 		expect(ctrl.getVisualRowCount()).toBe(3);
 		expect(getRowNode(ctrl, 0)?.id).toBe('1'); // 10
@@ -1157,7 +1173,7 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 			columns: store.getState().columns,
 		});
 
-		ctrl.applyTransaction({ add: [{ id: '2', name: 'Bob', price: 20 }] });
+		doApplyTransaction(ctrl, { add: [{ id: '2', name: 'Bob', price: 20 }] });
 
 		// Bob doesn't match filter — should not appear
 		expect(ctrl.getVisualRowCount()).toBe(1);
@@ -1178,7 +1194,7 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 			columns: store.getState().columns,
 		});
 
-		ctrl.applyTransaction({ add: [{ id: '2', name: 'Alice', price: 20 }] });
+		doApplyTransaction(ctrl, { add: [{ id: '2', name: 'Alice', price: 20 }] });
 
 		expect(ctrl.getVisualRowCount()).toBe(2);
 	});
@@ -1200,7 +1216,7 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 			columns: store.getState().columns,
 		});
 
-		ctrl.applyTransaction({ remove: [{ id: '2', name: 'Bob', price: 20 }] });
+		doApplyTransaction(ctrl, { remove: [{ id: '2', name: 'Bob', price: 20 }] });
 
 		expect(ctrl.getVisualRowCount()).toBe(2);
 		expect(ctrl.getVisualIndexByRowId('1')).toBe(0);
@@ -1225,7 +1241,7 @@ describe('Phase 068 — incremental insert/remove in applyTransaction()', () => 
 			columns: store.getState().columns,
 		});
 
-		ctrl.applyTransaction({ add: [{ id: '2', name: 'B', price: 20 }] });
+		doApplyTransaction(ctrl, { add: [{ id: '2', name: 'B', price: 20 }] });
 
 		// Both rows should be visible (full rebuild correctly groups them)
 		expect(ctrl.getRowNodeById('1')).not.toBeNull();
@@ -1378,7 +1394,7 @@ describe('Plan 083 — incremental index maintenance', () => {
 			{ id: '4', value: 40 },
 		]);
 
-		ctrl.applyTransaction({ remove: [{ id: '1', value: 10 }] });
+		doApplyTransaction(ctrl, { remove: [{ id: '1', value: 10 }] });
 
 		expect(ctrl.getVisualIndexByRowId('1')).toBe(-1);
 		expect(ctrl.getVisualIndexByRowId('2')).toBe(0);
@@ -1396,7 +1412,7 @@ describe('Plan 083 — incremental index maintenance', () => {
 			{ sorted: true }
 		);
 
-		ctrl.applyTransaction({ add: [{ id: '1', value: 5 }] });
+		doApplyTransaction(ctrl, { add: [{ id: '1', value: 5 }] });
 
 		expect(ctrl.getVisualIndexByRowId('1')).toBe(0);
 		expect(ctrl.getVisualIndexByRowId('2')).toBe(1);
@@ -1436,7 +1452,7 @@ describe('Plan 083 — incremental index maintenance', () => {
 			{ id: '3', value: 30 },
 		]);
 
-		ctrl.applyTransaction({
+		doApplyTransaction(ctrl, {
 			add: [{ id: '4', value: 40 }],
 			remove: [{ id: '2', value: 20 }],
 		});
@@ -1590,7 +1606,7 @@ describe('ClientRowModelController – differential correctness (Plan 099)', () 
 			rows: [...initial],
 			columns: store.getState().columns,
 		});
-		incr.applyTransaction!({ add: [added] });
+		doApplyTransaction(incr, { add: [added] });
 
 		// Full rebuild: construct from scratch with all three rows.
 		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
@@ -1615,7 +1631,7 @@ describe('ClientRowModelController – differential correctness (Plan 099)', () 
 			rows: [...initial],
 			columns: store.getState().columns,
 		});
-		incr.applyTransaction!({ remove: [initial[1]] }); // remove by row object (matched by row ID)
+		doApplyTransaction(incr, { remove: [initial[1]] }); // remove by row object (matched by row ID)
 
 		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [initial[0], initial[2]],
@@ -1638,7 +1654,7 @@ describe('ClientRowModelController – differential correctness (Plan 099)', () 
 			rows: [...initial],
 			columns: store.getState().columns,
 		});
-		incr.applyTransaction!({ update: [{ id: '1', name: 'Alicia' }] });
+		doApplyTransaction(incr, { update: [{ id: '1', name: 'Alicia' }] });
 
 		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [{ id: '1', name: 'Alicia' }, initial[1]],
@@ -1666,7 +1682,7 @@ describe('ClientRowModelController – differential correctness (Plan 099)', () 
 			columns: store.getState().columns,
 		});
 		// Remove Bob, add Dave (remove takes row objects matched by ID).
-		incr.applyTransaction!({ remove: [initial[1]], add: [{ id: '4', name: 'Dave' }] });
+		doApplyTransaction(incr, { remove: [initial[1]], add: [{ id: '4', name: 'Dave' }] });
 
 		const full = new ClientRowModelController(store.getClientRowModelRuntime(), {
 			rows: [initial[0], initial[2], { id: '4', name: 'Dave' }],
@@ -1747,7 +1763,7 @@ describe('ClientRowModelController – differential correctness (Plan 099)', () 
 			rows: [...initial],
 			columns: store.getState().columns,
 		});
-		controller.applyTransaction!({ remove: [initial[1]], add: [{ id: '4', name: 'Dave' }] });
+		doApplyTransaction(controller, { remove: [initial[1]], add: [{ id: '4', name: 'Dave' }] });
 
 		// After mutation: verify lookup consistency for all remaining rows.
 		for (let i = 0; i < controller.getVisualRowCount(); i++) {

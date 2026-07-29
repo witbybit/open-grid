@@ -2198,6 +2198,41 @@ describe('GridStore auto-batching and dirty cell fanout', () => {
 		controller.dispose();
 	});
 
+	it('closes engine transaction brackets and flushes queued notifications when a batch callback throws', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+		const listener = vi.fn();
+		const renderInvalidated = vi.fn();
+		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: listener });
+		store.addEventListener(GridEventName.renderInvalidated, renderInvalidated);
+
+		expect(() =>
+			store.engine.batch(() => {
+				store.setCellValue('1', 'price', 15);
+				throw new Error('batch failure');
+			})
+		).toThrow('batch failure');
+
+		expect(listener).toHaveBeenCalledTimes(1);
+		expect(renderInvalidated).toHaveBeenCalledTimes(1);
+
+		store.engine.batch(() => {
+			store.setCellValue('1', 'price', 20);
+		});
+
+		expect(listener).toHaveBeenCalledTimes(2);
+		expect(renderInvalidated).toHaveBeenCalledTimes(2);
+		controller.dispose();
+	});
+
 	it('should only notify subscribers of edited and dependent cells, not all columns on the row', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
