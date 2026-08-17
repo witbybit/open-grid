@@ -37,8 +37,9 @@ function makeDeps(
 			invalidation: { consume: vi.fn(() => ({ reasons: [] as string[] })) },
 		} as any,
 		viewportRenderer: { syncViewportScrollFromDom: vi.fn() } as any,
-		rowRenderer: { styleVersion: 0, loadingVersion: 0 } as any,
+		rowRenderer: { styleVersion: 0, loadingVersion: 0, syncInteractionAccessibility: vi.fn() } as any,
 		headerRenderer: { repaintHeaders: vi.fn() } as any,
+		floatingFilterRenderer: { repaintFloatingFilters: vi.fn() } as any,
 		overlayRenderer: { repaintOverlay: vi.fn() } as any,
 		stickyGroupRenderer: { sync: vi.fn() } as any,
 		portalMountManager: {

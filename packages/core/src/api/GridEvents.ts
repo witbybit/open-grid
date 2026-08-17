@@ -1,11 +1,11 @@
 import type { AggregationDef } from '../rows/stages/aggregateStage.js';
 import type { FilterModel, QuickFilterModel, SortModel } from '../rowModel.js';
-import type { RowNode } from '../rowNode.js';
 import type { GridCellPointer, GridSelectionState, SelectionChangeResult, RowSelectionChangeResult, GridCellClickParams } from './GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
 import type { GridViewDefinition, GridWorkspaceState } from '../workspace/workspaceTypes.js';
 import type { GridIntegrityIssue } from '../features/dataIntegrity/integrityTypes.js';
+import type { GridRowNode } from '../publicRowNode.js';
 
 export interface GridEvent<T = unknown> {
 	type: string;
@@ -36,6 +36,7 @@ export enum GridEventName {
 	groupColumnAdded = 'groupColumnAdded',
 	groupColumnRemoved = 'groupColumnRemoved',
 	groupColumnMoved = 'groupColumnMoved',
+	layoutTransitionCaptureRequested = 'layoutTransitionCaptureRequested',
 	renderInvalidated = 'renderInvalidated',
 	rowResized = 'rowResized',
 	rowSelectionChanged = 'rowSelectionChanged',
@@ -47,10 +48,7 @@ export enum GridEventName {
 	infiniteBlockLoaded = 'infiniteBlockLoaded',
 	infiniteBlockLoadFailed = 'infiniteBlockLoadFailed',
 	// ── Server-page row model events ──────────────────────────────────────────
-	serverPageLoadingStarted = 'serverPageLoadingStarted',
-	serverPageLoaded = 'serverPageLoaded',
-	serverPageLoadFailed = 'serverPageLoadFailed',
-	serverPageChanged = 'serverPageChanged',
+	serverSideStateChanged = 'serverSideStateChanged',
 	showGroupFooterChanged = 'showGroupFooterChanged',
 	sortChanged = 'sortChanged',
 	cellValidationChanged = 'cellValidationChanged',
@@ -72,6 +70,7 @@ export enum GridEventName {
 
 export type GridWriteBlockedSource = 'edit' | 'paste' | 'fill';
 export type GridWriteBlockedStatus = 'validationFailed' | 'capabilityDenied' | 'rejected';
+type LayoutTransitionCaptureReason = 'sort' | 'expansion' | 'detail' | 'live-reorder' | 'other';
 
 export interface GridWriteBlockedEventPayload {
 	source: GridWriteBlockedSource;
@@ -105,14 +104,15 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 	[GridEventName.groupColumnAdded]: { colId: string; index: number; groupBy: string[] };
 	[GridEventName.groupColumnRemoved]: { colId: string; groupBy: string[] };
 	[GridEventName.groupColumnMoved]: { colId: string; fromIndex: number; toIndex: number; groupBy: string[] };
+	[GridEventName.layoutTransitionCaptureRequested]: { reason: LayoutTransitionCaptureReason };
 	[GridEventName.renderInvalidated]: { reason: string };
 	[GridEventName.rowResized]: { rowId: string; height: number };
 	[GridEventName.rowSelectionChanged]: RowSelectionChangeResult;
 	[GridEventName.rowsUpdated]: {
 		changedValuesByRow: Map<string, Map<string, { oldValue: unknown; newValue: unknown }>>;
-		changedNodes: RowNode<TRowData>[];
-		addedNodes?: RowNode<TRowData>[];
-		removedNodes?: RowNode<TRowData>[];
+		changedNodes: GridRowNode<TRowData>[];
+		addedNodes?: GridRowNode<TRowData>[];
+		removedNodes?: GridRowNode<TRowData>[];
 	};
 	[GridEventName.paginationChanged]: {
 		page: number;
@@ -135,10 +135,11 @@ export interface GridEventPayloadMap<TRowData = unknown> {
 		endRow: number;
 		message: string;
 	};
-	[GridEventName.serverPageLoadingStarted]: { page: number; pageSize: number };
-	[GridEventName.serverPageLoaded]: { page: number; pageSize: number; pageCount: number; totalRowCount: number };
-	[GridEventName.serverPageLoadFailed]: { page: number; pageSize: number; message: string };
-	[GridEventName.serverPageChanged]: { page: number; pageSize: number; pageCount: number; totalRowCount: number };
+	[GridEventName.serverSideStateChanged]: {
+		loading: boolean;
+		error: string | null;
+		storeStates: readonly import('../serverSideRowModel.js').ServerSideStoreSnapshot[];
+	};
 	[GridEventName.showGroupFooterChanged]: { showGroupFooter: boolean | undefined };
 	[GridEventName.sortChanged]: { sortModel: SortModel | null };
 	[GridEventName.cellValidationChanged]: { rowId: string; colField: string; error: string | null };

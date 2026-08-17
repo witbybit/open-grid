@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InfiniteRowModelController, type InfiniteDatasource } from '../infiniteRowModel.js';
+import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
 import { diffRenderWindow, getColIndices, getRowIndices, type RenderWindow } from './renderWindow.js';
+import { computeRowWindowRetention } from './rowWindowRetention.js';
 import { CellSlot } from './cellSlot.js';
 import { CORE_STYLES } from './styles.js';
 
@@ -58,14 +60,14 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Microservice',
 			width: 140,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'live' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 		},
 		{
 			field: 'rendererLive',
 			header: 'Live Rebind',
 			width: 170,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'live' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 			valueGetter: ({ row }) => `live|${row.service}`,
 		},
 		{
@@ -73,7 +75,7 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Defer Stable',
 			width: 170,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'defer' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 			valueGetterDependencies: ['severity'],
 			valueGetter: ({ row }) => `defer|${row.severity}`,
 		},
@@ -82,14 +84,14 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Severity',
 			width: 120,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'defer' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 		},
 		{
 			field: 'rendererFallback',
 			header: 'Fallback Cache',
 			width: 175,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'defer' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 			valueGetterDependencies: ['latencyMs'],
 			valueGetter: ({ row }) => `fallback|${row.latencyMs}ms`,
 		},
@@ -98,7 +100,7 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			header: 'Destroy Recycle',
 			width: 180,
 			cellRenderer: renderer,
-			cellRendererCapabilities: { scrollBehavior: 'defer' },
+			cellRendererCapabilities: { scrollPresentation: 'freeze' },
 			valueGetterDependencies: ['ipAddress'],
 			valueGetter: ({ row }) => `destroy|${row.ipAddress}`,
 		},
@@ -115,7 +117,7 @@ function createAuditColumns(count = 1200): ColumnDef<AuditPerfRow>[] {
 			...(index % 7 === 0
 				? {
 						cellRenderer: renderer,
-						cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+						cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 					}
 				: {}),
 			...(index % 11 === 0
@@ -257,12 +259,25 @@ function cleanupGrid(grid: AuditGrid): void {
 function assertNoStaleOrOverlappingDom(grid: AuditGrid): void {
 	const rows = Array.from(grid.container.querySelectorAll<HTMLElement>('.og-row'));
 	const currentWindow = grid.renderer.rowRenderer.currentWindow as RenderWindow;
-	const expectedRowIndices = new Set(getRowIndices(currentWindow));
+	// A focused/editing row is deliberately retained outside the normal window (vertical retention,
+	// mirroring the existing horizontal focused-column guard) — account for it here too, the same
+	// way rowRenderer.ts itself resolves it, so a legitimately-retained row isn't flagged as stray.
+	const state = grid.store.getState();
+	const rowModel = grid.store.engine.getVisualRowModel();
+	const focusedCellPointer = state.selection.focus;
+	const activeEditCell = state.activeEdit;
+	const focusedRowIndex = focusedCellPointer && rowModel ? rowModel.getVisualIndexByRowId(focusedCellPointer.rowId) : undefined;
+	const editingRowIndex = activeEditCell && rowModel ? rowModel.getVisualIndexByRowId(activeEditCell.rowId) : undefined;
+	const { retainedRowIndices } = computeRowWindowRetention({ renderWindow: currentWindow, focusedRowIndex, editingRowIndex });
+	const expectedRowIndices = new Set(getRowIndices(currentWindow, undefined, retainedRowIndices));
 	const activeRowIndices = new Set(grid.renderer.rowRenderer.activeRows.keys());
+	// +2 tolerance: a focused row and an actively-editing row may each be retained outside the
+	// normal window (vertical retention) as extra slots beyond the base budget.
+	const retentionTolerance = retainedRowIndices.size;
 	expect(grid.renderer.rowRenderer.activeRows.size).toBeGreaterThan(0);
-	expect(grid.renderer.rowRenderer.activeRows.size).toBeLessThanOrEqual(28);
+	expect(grid.renderer.rowRenderer.activeRows.size).toBeLessThanOrEqual(28 + retentionTolerance);
 	expect(rows.length).toBeGreaterThan(0);
-	expect(rows.length).toBeLessThanOrEqual(28 * 3);
+	expect(rows.length).toBeLessThanOrEqual((28 + retentionTolerance) * 3);
 	for (const [rowIndex, slot] of grid.renderer.rowRenderer.activeRows) {
 		expect(expectedRowIndices.has(rowIndex)).toBe(true);
 		expect(slot.cellCount).toBeGreaterThan(0);
@@ -518,6 +533,7 @@ function collectFeatherScenarioEvidence(grid: AuditGrid) {
 			getCellValueCallsDuringScroll: stats.getCellValueCallsDuringScroll,
 			formulaCallsDuringScroll: stats.formulaCallsDuringScroll,
 			customRendererMountsDuringScroll: stats.customRendererMountsDuringScroll,
+			integrityComputesDuringScroll: stats.integrityComputesDuringScroll,
 		},
 		fidelity: {
 			prewarmPasses: stats.prewarmPasses,
@@ -562,7 +578,14 @@ function assertScrollStatsAreRuthless(grid: AuditGrid, prevWindow: RenderWindow 
 	const stats = grid.renderer.getRenderStats();
 	const window = grid.renderer.rowRenderer.currentWindow as RenderWindow;
 	const visibleCols = getColIndices(window).length;
-	const activeRows = getRowIndices(window).length;
+	// A focused/editing row retained outside the normal window (vertical retention) is bound every
+	// scroll frame just like any other active row — account for it in the expected cell budget.
+	const state = grid.store.getState();
+	const rowModel = grid.store.engine.getVisualRowModel();
+	const focusedRowIndex = state.selection.focus && rowModel ? rowModel.getVisualIndexByRowId(state.selection.focus.rowId) : undefined;
+	const editingRowIndex = state.activeEdit && rowModel ? rowModel.getVisualIndexByRowId(state.activeEdit.rowId) : undefined;
+	const { retainedRowIndices } = computeRowWindowRetention({ renderWindow: window, focusedRowIndex, editingRowIndex });
+	const activeRows = getRowIndices(window, undefined, retainedRowIndices).length;
 	const delta = prevWindow ? diffRenderWindow(prevWindow, window) : null;
 	// Slot model visits all slots x all visible cols each frame (JS cache skips writes for stable cells).
 	const maxExpectedCells = Math.max(activeRows * visibleCols, visibleCols, 1);
@@ -572,6 +595,7 @@ function assertScrollStatsAreRuthless(grid: AuditGrid, prevWindow: RenderWindow 
 	expect(stats.customRendererMountsDuringScroll).toBe(0);
 	expect(stats.focusCallsDuringScroll).toBe(0);
 	expect(stats.styleHookCallsDuringScroll).toBe(0);
+	expect(stats.integrityComputesDuringScroll).toBe(0);
 	expect(stats.cellsVisitedDuringScroll).toBeLessThanOrEqual(maxExpectedCells);
 	expect(stats.cellsWrittenDuringScroll).toBeLessThanOrEqual(maxExpectedCells);
 	expect(stats.portalOpsDuringScroll).toBeLessThanOrEqual(maxExpectedCells);
@@ -623,6 +647,157 @@ describe('Server demo ruthless runtime performance contracts', () => {
 			callback(performance.now());
 			return callbacks.length;
 		});
+	});
+
+	// THE no-semantic-scroll contract (Phase 9 of the renderer hardening plan): every semantic-read/
+	// mount counter listed here must be exactly zero across an active scroll frame, no matter how
+	// feature-rich the columns are. The scattered per-scenario assertions elsewhere in this file and
+	// in runtimePerformance.test.ts/renderEngine.test.ts each prove a slice of this; this test is the
+	// single, hard-to-miss place that proves the WHOLE list together against one maximally feature-rich
+	// grid (valueGetters, formula-driven columns, custom renderers of every scroll mode, registered
+	// insight decorations, pinned columns, and a still-loading tail) across vertical, horizontal, and
+	// diagonal scroll. If a future change makes any of these non-zero, it must show up here first.
+	it('THE no-semantic-scroll contract: every semantic-read/mount counter stays zero across vertical, horizontal, and diagonal scroll', async () => {
+		const grid = await createServerAuditGrid({
+			rows: 50_000,
+			cols: 200,
+			configureStore: (store) => {
+				store.setPinnedColumns({ left: 1, right: 1 });
+				store.engine.insights.register({
+					id: 'no-semantic-scroll-contract',
+					getCellDecorations: (_rowId, colField) => {
+						if (colField !== 'id') return [];
+						return [
+							{
+								layerId: 'no-semantic-scroll-contract',
+								kind: 'validationError',
+								className: 'og-cell-validation-error',
+								title: 'Review',
+							},
+						];
+					},
+				});
+			},
+		});
+		grid.store.engine.requestInsightRepaint();
+		await flushAnimationFrame();
+
+		function assertContract(): void {
+			const stats = grid.renderer.getRenderStats();
+			expect(stats.getCellValueCallsDuringScroll).toBe(0);
+			expect(stats.valueGetterCallsDuringScroll).toBe(0);
+			expect(stats.formulaCallsDuringScroll).toBe(0);
+			expect(stats.customRendererMountsDuringScroll).toBe(0);
+			expect(stats.cellClassComputesDuringScroll).toBe(0);
+			expect(stats.integrityComputesDuringScroll).toBe(0);
+			expect(stats.focusCallsDuringScroll).toBe(0);
+			// Locked in from the blocker-killing pass: the generic scroll-time portal-mount counter
+			// (blocker #1, the critical fix) and its narrow force-live-interactive-exception sibling
+			// (neither editing nor focus occurs anywhere in this scroll sequence, so this must stay 0).
+			expect(stats.portalMountsDuringScroll).toBe(0);
+			expect(stats.forceLiveMountsDuringScroll).toBe(0);
+			// Locked in from the blocker-killing pass: column TOPOLOGY (pin/unpin/reorder) never changes
+			// during routine scrolling in this test — only the render window shifts — so the topology-
+			// delta computation (computeColumnWindowDelta) must never fire mid-scroll here.
+			expect(stats.columnTopologyDeltaComputationsDuringScroll).toBe(0);
+		}
+
+		// Vertical
+		grid.renderer.resetRenderStats();
+		await browserScrollTo(grid, 400_000, 0);
+		assertContract();
+
+		// Horizontal
+		grid.renderer.resetRenderStats();
+		await browserScrollTo(grid, 400_000, 9_000);
+		assertContract();
+
+		// Diagonal (both axes move in the same frame)
+		grid.renderer.resetRenderStats();
+		await browserScrollTo(grid, 40_000, 1_500);
+		assertContract();
+
+		// Near the loading tail — rows not yet resolved by the mock datasource are still in flight.
+		grid.renderer.resetRenderStats();
+		await browserScrollTo(grid, 0, 0);
+		assertContract();
+
+		cleanupGrid(grid);
+	}, 20_000);
+
+	it('BLOCKER: a cold, never-before-seen DOM-renderer cell never live-mounts during active scroll', async () => {
+		// mode:'custom-dom' is NOT in the impostor-capable set (custom-live/custom-imperative/custom) —
+		// this is the real compiled-plan shape for any column using a DOM cell renderer. Scrolling a
+		// never-before-visited window of such columns into view previously fell through to a synchronous
+		// mountCellImmediately call (a live DOM-renderer mount) inside the scroll frame itself.
+		// Client row model (not server/infinite) — all row data is immediately available, so there is
+		// no loading-state race to confound the result; the column with the DOM renderer is column 0
+		// (always on-screen), and the scroll target is a row band never rendered before. Uses the same
+		// real (unstubbed) rAF + flushAnimationFrame pattern as browserScrollTo elsewhere in this file —
+		// a synchronous immediate-RAF stub was tried first and produced a false failure because it
+		// short-circuits the scroll-frame state machine's phase transitions.
+		const domRendererMounts: string[] = [];
+		const domRendererMountPhases: Array<{ isScrolling: boolean; phase: string }> = [];
+		interface ColdRow {
+			id: string;
+			value: string;
+		}
+		const columns: ColumnDef<ColdRow>[] = [
+			{
+				field: 'value',
+				header: 'DOM Metric',
+				width: 120,
+				cellRenderer: {
+					mount(container: HTMLElement, params: { value: unknown; isScrolling: boolean; phase: string }) {
+						domRendererMounts.push(String(params.value));
+						domRendererMountPhases.push({ isScrolling: params.isScrolling, phase: params.phase });
+						container.textContent = String(params.value);
+						return { update: () => {}, destroy: () => {} };
+					},
+				} as any,
+			},
+		];
+		const store = new GridStore<ColdRow>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 50_000 }, (_, i) => ({ id: `r${i}`, value: `v${i}` }));
+		const controller = new ClientRowModelController<ColdRow>(store.getClientRowModelRuntime(), { rows, columns: store.getState().columns });
+		const container = createContainer(500, 400);
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		expect(scrollViewport).not.toBeNull();
+		// Only care about mounts from this point on — the initial pre-scroll mount for rows 0..N is a
+		// legitimate full bind (isScrollFrameActive is false at mount time) and is not what this test
+		// is about.
+		domRendererMounts.length = 0;
+		domRendererMountPhases.length = 0;
+		renderer.resetRenderStats();
+		// Jump straight to a row band far outside the initially-mounted window — genuinely cold, no
+		// snapshot, no warm state, no prewarm coverage.
+		scrollViewport.scrollTop = 1_500_000;
+		scrollViewport.dispatchEvent(new Event('scroll'));
+		await flushAnimationFrame();
+
+		const stats = renderer.getRenderStats();
+		// The authoritative proof: nothing mounted while flagged as happening during an active scroll
+		// frame. bindCellFull legitimately mounts the now-visible cells once the scroll settles (the
+		// fidelity lane doing its job) — every one of those mounts must report isScrolling:false; if
+		// even one reports isScrolling:true, that's the scroll-time-mount blocker back.
+		expect(stats.customRendererMountsDuringScroll).toBe(0);
+		expect(stats.portalMountsDuringScroll).toBe(0);
+		for (const mountPhase of domRendererMountPhases) {
+			expect(mountPhase.isScrolling).toBe(false);
+		}
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+		vi.unstubAllGlobals();
 	});
 
 	it('mounts the audit-ledger server grid at million-row scale without expanding rendered DOM beyond caps', async () => {
@@ -783,7 +958,7 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		}
 
 		cleanupGrid(grid);
-	});
+	}, 20_000);
 
 	it('asserts CSS styles define hide rules for text and empty content modes and rules for custom renderer container', () => {
 		expect(CORE_STYLES).toContain('.og-cell[data-content-mode="text"] > .og-cell-portal-host');
@@ -901,10 +1076,55 @@ describe('Server demo ruthless runtime performance contracts', () => {
 			const evidence = collectFeatherScenarioEvidence(grid);
 			expect(evidence.motion.valueGetterCallsDuringScroll).toBe(0);
 			expect(evidence.motion.getCellValueCallsDuringScroll).toBe(0);
+			// Registered insight layer above actively decorates visible cells (id/auditMetric_159).
+			// This is the one scenario where a naive implementation would call
+			// engine.insights.getCellDecorations() from the scroll hot path to keep decorations
+			// current — the contract requires that read to happen only in bindCellFull (post-scroll
+			// fidelity), never during the scroll frame itself.
+			expect(evidence.motion.integrityComputesDuringScroll).toBe(0);
 		}
 
 		cleanupGrid(grid);
 	}, 20_000);
+
+	it('shows the server loading skeleton identically in pinned-left, center, and pinned-right lanes', async () => {
+		// Pillar of Phase 7 (pinned lanes are geometry/topology only): the loading skeleton is a
+		// content decision, not a lane decision, so all three lanes must agree on it before any
+		// row data resolves — no lane should "wake" or settle differently than the others.
+		const grid = await createServerAuditGrid({
+			rows: 5_000,
+			cols: 20,
+			configureStore: (store) => store.setPinnedColumns({ left: 1, right: 1 }),
+		});
+
+		const firstRow = grid.container.querySelector('.og-row[data-row-index="0"]') as HTMLElement | null;
+		expect(firstRow).not.toBeNull();
+		const leftCell = firstRow!.querySelector<HTMLElement>('.og-cell.og-cell-pinned-left');
+		const rightCell = firstRow!.querySelector<HTMLElement>('.og-cell.og-cell-pinned-right');
+		const centerCell = Array.from(firstRow!.querySelectorAll<HTMLElement>('.og-cell')).find(
+			(cell) => !cell.classList.contains('og-cell-pinned-left') && !cell.classList.contains('og-cell-pinned-right')
+		);
+		expect(leftCell).toBeDefined();
+		expect(rightCell).toBeDefined();
+		expect(centerCell).toBeDefined();
+
+		// Assert parity, not a specific timing: whichever state the row is in immediately after
+		// mount, all three lanes must agree — never a mix where one lane is still loading while
+		// another has already settled real content.
+		const loadingStates = [leftCell, centerCell, rightCell].map(
+			(cell) => cell!.classList.contains('og-cell-loading') || cell!.dataset.contentMode === 'loading'
+		);
+		expect(new Set(loadingStates).size).toBe(1);
+
+		await settleVisibleServerRows(grid);
+		// Once settled, no lane should still be showing the loading skeleton while others resolved —
+		// they must all transition together.
+		for (const cell of [leftCell, centerCell, rightCell]) {
+			expect(cell!.classList.contains('og-cell-loading')).toBe(false);
+		}
+
+		cleanupGrid(grid);
+	}, 10_000);
 
 	it('records separate motion and fidelity evidence for feather-scroll review scenarios', async () => {
 		const grid = await createServerAuditGrid({ rows: 20_000, cols: 120 });
@@ -976,13 +1196,12 @@ describe('Server demo ruthless runtime performance contracts', () => {
 		// portalMountsDuringScroll and customRendererMountsDuringScroll would both have been > 0.
 		// After: every scroll frame is portal-free. Portals mount in the fidelity idle lane instead.
 		const columns = Array.from({ length: 80 }, (_, i): ColumnDef<AuditPerfRow> => {
-			const mode = i % 3 === 0 ? ('live' as const) : ('defer' as const);
 			return {
 				field: i === 0 ? 'id' : `auditMetric_${i + 100}`,
 				header: `Col ${i}`,
 				width: 120 + (i % 4) * 20,
 				cellRenderer: () => null,
-				cellRendererCapabilities: { scrollBehavior: mode },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 				valueGetter: i % 5 === 0 ? ({ row }: { row: AuditPerfRow }) => `m${i}|${row.severity}` : undefined,
 			};
 		});

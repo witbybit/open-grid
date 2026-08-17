@@ -1,5 +1,5 @@
-import { GridApi, GridNavigationHandle, GridNavigationOptions, GridStateSnapshot, registerGridNavigation } from '@open-grid/core';
-import { useCallback, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
+import { GridApi, GridStateSnapshot } from '@open-grid/core';
+import { useCallback, useContext, useRef, useSyncExternalStore } from 'react';
 import { GridApiContext } from './gridContext.js';
 
 export function useGridApi<TRowData = unknown>(): GridApi<TRowData> {
@@ -118,52 +118,4 @@ function useGridKeySelectorWithEquality<T, TRowData = unknown>(
 	}, [api]);
 
 	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-}
-
-/**
- * Controller integration hook mapping standard interaction event handlers.
- */
-export function useGridNavigationController<TRowData = unknown>(options: GridNavigationOptions = {}, enabled = true) {
-	const api = useGridApi<TRowData>();
-	const optionsRef = useRef(options);
-	optionsRef.current = options;
-	const controllerRef = useRef<GridNavigationHandle | null>(null);
-	const facadeRef = useRef<GridNavigationHandle | null>(null);
-
-	if (enabled && facadeRef.current == null) {
-		facadeRef.current = {
-			handleKeyDown: (event) => controllerRef.current?.handleKeyDown(event),
-			handleMouseDown: (rowId, colField, event) => controllerRef.current?.handleMouseDown(rowId, colField, event),
-			handleClick: (rowId, colField, event) => controllerRef.current?.handleClick(rowId, colField, event),
-			handleMouseEnter: (rowId, colField) => controllerRef.current?.handleMouseEnter(rowId, colField),
-			handleMouseUp: () => controllerRef.current?.handleMouseUp(),
-			setCellEditing: (rowId, colField, isEditing) => controllerRef.current?.setCellEditing(rowId, colField, isEditing),
-			dispose: () => controllerRef.current?.dispose(),
-		};
-	}
-
-	useEffect(() => {
-		if (!enabled) {
-			controllerRef.current = null;
-			return;
-		}
-		const nav = registerGridNavigation<TRowData>(api, {
-			get editTrigger() {
-				return optionsRef.current.editTrigger;
-			},
-			get arrowKeyNavigationEdit() {
-				return optionsRef.current.arrowKeyNavigationEdit;
-			},
-		});
-		controllerRef.current = nav;
-
-		return () => {
-			if (controllerRef.current === nav) {
-				controllerRef.current = null;
-			}
-			nav.dispose();
-		};
-	}, [api, enabled]);
-
-	return enabled ? facadeRef.current : null;
 }

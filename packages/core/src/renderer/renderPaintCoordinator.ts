@@ -46,7 +46,8 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		this.refreshRendererEpochs();
 		const frame = this.deps.engine.invalidation.consume();
 		// Arm a layout transition for discrete structural changes only — never while
-		// scrolling. Sort reorders rows; group/tree expansion ('group expansion') and
+		// scrolling. Sort reorders rows; that same reason also covers live sort-key
+		// reorders emitted from data writes. Group/tree expansion ('group expansion') and
 		// master-detail ('detail') reveal/hide them. All animate via the
 		// LayoutTransitionController; scroll/data-tick frames are excluded so the hot path
 		// never sets an animation.
@@ -60,6 +61,7 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		} finally {
 			this.deps.portalMountManager.endCellReleaseTransaction();
 		}
+		this.deps.rowRenderer.syncInteractionAccessibility();
 		// Play the armed transition once the slots hold their NEW positions. A `full` frame
 		// (e.g. sort) is handled inside `fullPaintInternal`, which consumes the flag — so this
 		// only fires for the `viewport` path (group/tree/detail expansion → invalidateViewport),
@@ -111,6 +113,7 @@ export class RenderPaintCoordinator<TRowData = unknown> {
 		this.deps.headerRenderer.repaintHeaders(layoutPlan);
 		this.deps.floatingFilterRenderer.repaint(layoutPlan);
 		this.deps.overlayRenderer.repaintOverlay();
+		this.deps.rowRenderer.syncInteractionAccessibility(state);
 		this.deps.onAfterViewportPaint?.();
 	}
 }

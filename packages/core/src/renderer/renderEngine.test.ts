@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ClientRowModelController } from '../rowModel.js';
 import { GridStore, type VisualRow } from '../store.js';
+import { GridEventName } from '../api/GridEvents.js';
 import { createMinimalRowModel } from '../testUtils/createMinimalRowModel.js';
 import { RecordingGridInstrumentation } from '../diagnostics/GridInstrumentation.js';
 import { RenderEngine } from './renderEngine.js';
 import { InfiniteRowModelController } from '../infiniteRowModel.js';
+import { ServerSideRowModelController } from '../serverSideRowModel.js';
 
 /**
  * Count the row-slot DOM children of the rows container, excluding the `.og-layer-exiting`
@@ -23,6 +25,43 @@ describe('RenderEngine', () => {
 		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
 		vi.useRealTimers();
+	});
+
+	it('wraps paint and post-scroll work in recorder timing without changing causes or error propagation', () => {
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name' }],
+			getRowId: (row) => row.id,
+		});
+		const renderer = new RenderEngine(store.engine, store);
+		const recorder = store.engine.flightRecorder;
+		recorder.start();
+		const begin = vi.spyOn(recorder, 'beginExecutingFrame');
+		const finish = vi.spyOn(recorder, 'finishExecutingFrame');
+		const flush = vi.spyOn(renderer as unknown as { flushPaint: () => void }, 'flushPaint').mockImplementation(() => {});
+		const coordinator = (renderer as unknown as { frameCoordinator: object }).frameCoordinator as {
+			onPaintFrame: (changeIds: readonly number[]) => void;
+			onPostScrollWork: (changeIds: readonly number[]) => void;
+		};
+
+		coordinator.onPaintFrame([11, 12]);
+		coordinator.onPostScrollWork([21]);
+		expect(begin.mock.calls).toEqual([[[11, 12]], [[21]]]);
+		expect(finish.mock.calls.map(([, kind]) => kind)).toEqual(['full', 'post-scroll']);
+		expect(flush).toHaveBeenCalledTimes(2);
+		expect(recorder.snapshot().events.map((entry) => entry.event)).toEqual([
+			expect.objectContaining({ type: 'frame', kind: 'full', changeIds: [11, 12] }),
+			expect.objectContaining({ type: 'frame', kind: 'post-scroll', changeIds: [21] }),
+		]);
+
+		flush.mockImplementationOnce(() => {
+			throw new Error('paint failure');
+		});
+		expect(() => coordinator.onPaintFrame([31])).toThrow('paint failure');
+		expect(finish).toHaveBeenLastCalledWith(expect.anything(), 'full');
+		expect(recorder.getExecutingFrameChangeIds()).toEqual([]);
+
+		renderer.unmount();
+		store.destroy();
 	});
 
 	it('syncs state-driven paints from the real scroll viewport position', () => {
@@ -131,6 +170,58 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('animates visible row moves when a live sort-key update reorders the current viewport', () => {
+		const animateMock = vi.fn(() => ({ cancel: vi.fn(), finish: vi.fn(), onfinish: null, oncancel: null }) as unknown as Animation);
+		(HTMLElement.prototype as unknown as { animate: unknown }).animate = animateMock;
+
+		const store = new GridStore<{ id: string; name: string; price: number }>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 120 },
+				{ field: 'price', header: 'Price', width: 120 },
+			],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'A', price: 10 },
+				{ id: '2', name: 'B', price: 20 },
+				{ id: '3', name: 'C', price: 30 },
+			],
+			columns: store.getState().columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 420,
+			bottom: 220,
+			width: 420,
+			height: 220,
+			toJSON: () => ({}),
+		} as DOMRect);
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.fullPaint();
+
+		animateMock.mockClear();
+		store.setCellValue('1', 'price', 25);
+		(renderer as unknown as { flushPaint: () => void }).flushPaint();
+
+		expect(animateMock).toHaveBeenCalled();
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('exposes ARIA grid semantics (roles, counts, indices, sort, selection)', () => {
 		const store = new GridStore<{ id: string; name: string; val: string }>({
 			columns: [
@@ -194,6 +285,59 @@ describe('RenderEngine', () => {
 		renderer.fullPaint();
 		const selCell = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="name"]') as HTMLElement;
 		expect(selCell.getAttribute('aria-selected')).toBe('true');
+		expect(selCell.getAttribute('tabindex')).toBe('-1');
+
+		store.selectCell(null);
+		renderer.fullPaint();
+		expect(selCell.hasAttribute('tabindex')).toBe(false);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('syncs aria-activedescendant from the kernel-owned focused cell and clears it when focus is removed', () => {
+		const store = new GridStore<{ id: string; name: string; val: string }>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 100 },
+				{ field: 'val', header: 'Val', width: 100 },
+			],
+			defaultRowHeight: 30,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+		});
+		const rows = Array.from({ length: 8 }, (_, i) => ({ id: `row-${i}`, name: `N${i}`, val: `V${i}` }));
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), { rows, columns: store.getState().columns });
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 400,
+			bottom: 300,
+			width: 400,
+			height: 300,
+			toJSON: () => ({}),
+		} as DOMRect);
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.fullPaint();
+
+		store.selectCell({ rowId: 'row-2', colField: 'val' }, 'keyboard');
+		renderer.fullPaint();
+
+		const focusedCell = container.querySelector('.og-cell[data-row-id="row-2"][data-col-field="val"]') as HTMLElement;
+		expect(focusedCell.getAttribute('tabindex')).toBe('-1');
+		expect(focusedCell.id).toMatch(/^og-cell-/);
+		expect(container.getAttribute('aria-activedescendant')).toBe(focusedCell.id);
+
+		store.selectCell(null, 'keyboard');
+		renderer.fullPaint();
+		expect(container.hasAttribute('aria-activedescendant')).toBe(false);
 
 		renderer.unmount();
 		controller.dispose();
@@ -242,6 +386,155 @@ describe('RenderEngine', () => {
 
 		expect(container.querySelector('.og-cell[data-col-field="col_999"]')).toBeNull();
 		expect(container.querySelector('.og-cell[data-col-field="risk"]')?.textContent).toBe('LOW');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('moves body cells live during header drag reorder preview before drop commit', () => {
+		const columns = [
+			{ field: 'a', header: 'A', width: 100 },
+			{ field: 'b', header: 'B', width: 100 },
+			{ field: 'c', header: 'C', width: 100 },
+		];
+		const store = new GridStore<{ id: string; a: string; b: string; c: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+			enableColumnReorder: true,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-0', a: 'A0', b: 'B0', c: 'C0' }],
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 420,
+			bottom: 220,
+			width: 420,
+			height: 220,
+			toJSON: () => ({}),
+		} as DOMRect);
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.fullPaint();
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		vi.spyOn(scrollViewport, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 420,
+			bottom: 220,
+			width: 420,
+			height: 220,
+			toJSON: () => ({}),
+		} as DOMRect);
+
+		const headerA = container.querySelector('.og-header-cell[data-col-field="a"]') as HTMLElement;
+		const bodyA = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="a"]') as HTMLElement;
+		const bodyB = container.querySelector('.og-cell[data-row-id="row-0"][data-col-field="b"]') as HTMLElement;
+
+		headerA.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+		window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, button: 0, clientX: 250, clientY: 12 }));
+
+		expect(container.querySelector('.og-grid-container, .og-col-reordering') ?? container.closest('.og-grid-container')).not.toBeNull();
+		expect(bodyA.style.transform).toContain('translateX');
+		expect(bodyB.style.transform).toContain('translateX');
+
+		window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: 250, clientY: 12 }));
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('auto-scrolls horizontally while a header drag stays parked at the viewport edge', () => {
+		const columns = Array.from({ length: 10 }, (_, index) => ({
+			field: `c${index}`,
+			header: `C${index}`,
+			width: 100,
+		}));
+		const store = new GridStore<Record<string, string>>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 100,
+			getRowId: (row) => row.id,
+			enableColumnReorder: true,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-0', ...Object.fromEntries(columns.map((col, index) => [col.field, `V${index}`])) }],
+			columns,
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 260,
+			bottom: 220,
+			width: 260,
+			height: 220,
+			toJSON: () => ({}),
+		} as DOMRect);
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.fullPaint();
+
+		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
+		vi.spyOn(scrollViewport, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 260,
+			bottom: 220,
+			width: 260,
+			height: 220,
+			toJSON: () => ({}),
+		} as DOMRect);
+		Object.defineProperty(scrollViewport, 'clientWidth', { value: 260, configurable: true });
+		Object.defineProperty(scrollViewport, 'scrollWidth', { value: 1000, configurable: true });
+		scrollViewport.scrollLeft = 0;
+
+		const rafCallbacks: FrameRequestCallback[] = [];
+		const raf = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+			rafCallbacks.push(cb);
+			return rafCallbacks.length;
+		});
+		const cancelRaf = vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => undefined);
+
+		const header = container.querySelector('.og-header-cell[data-col-field="c0"]') as HTMLElement;
+		header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+		window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, button: 0, clientX: 255, clientY: 12 }));
+
+		expect(raf).toHaveBeenCalled();
+		expect(rafCallbacks.length).toBeGreaterThan(0);
+
+		rafCallbacks.shift()?.(0);
+		const afterFirstFrame = scrollViewport.scrollLeft;
+		expect(afterFirstFrame).toBeGreaterThan(0);
+		expect(store.engine.viewport.scrollLeft).toBe(afterFirstFrame);
+
+		rafCallbacks.shift()?.(16);
+		expect(scrollViewport.scrollLeft).toBeGreaterThan(afterFirstFrame);
+
+		window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: 255, clientY: 12 }));
+		expect(cancelRaf).toHaveBeenCalled();
 
 		renderer.unmount();
 		controller.dispose();
@@ -358,6 +651,88 @@ describe('RenderEngine', () => {
 		expect(renderer.getRenderStats().fullPaints).toBeGreaterThanOrEqual(before.fullPaints);
 		expect(inst.snapshot().fallbacks).toEqual([]);
 
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('batches visible auto-row-height measurements into one commit and geometry rebuild', async () => {
+		const paintCallbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			paintCallbacks.push(callback);
+			return paintCallbacks.length;
+		});
+		vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+			if (id >= 1 && id <= paintCallbacks.length) paintCallbacks[id - 1] = () => {};
+		});
+
+		const columns = [{ field: 'name', header: 'Name', width: 120 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+			rowOverscanPx: 0,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: Array.from({ length: 10_000 }, (_, index) => ({ id: `row-${index}`, name: `Row ${index}` })),
+			columns,
+		});
+		// The bulk commit must merge its measurements rather than replacing unrelated explicit heights.
+		store.setRowHeight('explicit-offscreen', 88);
+		store.engine.commandHistory.clear();
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		renderer.setAutoRowHeight(true);
+		renderer.resetRenderStats();
+
+		const measuredSlots = renderer.rowRenderer
+			.rowSlotPool!.getSlots()
+			.filter((slot) => slot.rowKind === 'data' && slot.visualRowId.startsWith('row:'));
+		expect(measuredSlots.length).toBeGreaterThan(4);
+		for (const [index, slot] of measuredSlots.entries()) {
+			const cell = slot.element.querySelector<HTMLElement>('.og-cell');
+			expect(cell).not.toBeNull();
+			Object.defineProperty(cell!, 'scrollHeight', { configurable: true, value: 60 + index });
+		}
+
+		let resizedEvents = 0;
+		const removeResizeListener = store.engine.eventBus.addEventListener(GridEventName.rowResized, () => {
+			resizedEvents++;
+		});
+		const stateCommits = vi.spyOn(store.engine.stateManager, 'commitState');
+		const projectionGeometryRebuilds = vi.spyOn(store.engine.geometry, 'updateRows');
+
+		// Drive one measurement delivery directly: work assertions use commits/rebuilds, never time.
+		(renderer as unknown as { measureAndUpdateRowHeights(): void }).measureAndUpdateRowHeights();
+
+		expect(stateCommits).toHaveBeenCalledTimes(1);
+		expect(projectionGeometryRebuilds).toHaveBeenCalledTimes(1);
+		expect(resizedEvents).toBe(measuredSlots.length);
+		expect(store.getState().rowHeights['explicit-offscreen']).toBe(88);
+		expect(store.canUndo()).toBe(false);
+
+		// The one scheduled renderer flush performs one geometry recompute for the whole batch.
+		await Promise.resolve();
+		while (paintCallbacks.length > 0) paintCallbacks.shift()!(0);
+		expect(renderer.getRenderStats().geometryRecomputes).toBe(1);
+
+		removeResizeListener();
 		renderer.unmount();
 		controller.dispose();
 		store.destroy();
@@ -550,7 +925,7 @@ describe('RenderEngine', () => {
 		renderer.mount(container);
 
 		store.selectCell({ rowId: 'row-1', colField: 'status' });
-		store.engine.stateManager.setState({ activeEdit: { rowId: 'row-1', colField: 'status' } });
+		store.startEditing('row-1', 'status');
 		renderer.fullPaint();
 
 		const cell = container.querySelector('.og-cell[data-col-field="status"]') as HTMLDivElement;
@@ -720,6 +1095,43 @@ describe('RenderEngine', () => {
 		store.destroy();
 	});
 
+	it('renders failed visual rows as explicit failed rows instead of inferring from missing data', () => {
+		const columns: ColumnDef<{ id: string; name: string }>[] = [{ field: 'name', header: 'Name', width: 120 }];
+		const store = new GridStore<{ id: string; name: string }>({
+			columns,
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const rowModel = createMinimalRowModel({
+			visualRows: [{ kind: 'failed', id: 'failed:0', rowIndex: 0, error: 'load failed', retryable: true }],
+		});
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		store.registerRowModel(rowModel);
+		renderer.mount(container);
+
+		const row = container.querySelector('.og-row[data-row-id="failed:0"]') as HTMLDivElement;
+		expect(row.className).toContain('og-row-failed');
+
+		renderer.unmount();
+		store.destroy();
+	});
+
 	it('records granular invalidation stats for cell edit and focus movement', async () => {
 		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
 			callback(0);
@@ -826,13 +1238,14 @@ describe('RenderEngine', () => {
 		await Promise.resolve();
 		await Promise.resolve();
 
-		console.log('FOCUS STATE:', store.getState().selection.focus);
-		console.log('ROW HEIGHTS:', store.engine.geometry.rowHeights.slice(0, 20));
-		console.log('ROW TOPS:', store.engine.geometry.rowTops.slice(0, 20));
-		console.log('VIEWPORT HEIGHT:', store.engine.viewport.viewportHeight);
-
-		expect(store.getState().selection.focus).toEqual({ rowId: 'row-15', colField: 'name' });
+		expect(store.getState().selection.focus).toEqual(
+			expect.objectContaining({ rowId: 'row-15', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+		);
 		expect(store.engine.viewport.scrollTop).toBe(440);
+		const focusedCell = container.querySelector('.og-cell[data-row-id="row-15"][data-col-field="name"]') as HTMLElement;
+		expect(focusedCell.getAttribute('tabindex')).toBe('-1');
+		expect(focusedCell.id).toMatch(/^og-cell-/);
+		expect(container.getAttribute('aria-activedescendant')).toBe(focusedCell.id);
 
 		renderer.unmount();
 		controller.dispose();
@@ -881,6 +1294,130 @@ describe('RenderEngine', () => {
 		expect(invalidateCell).toHaveBeenCalledWith('row-1', 'name', 'cell');
 		expect(invalidateRow).toHaveBeenCalledTimes(1);
 		expect(invalidateRow).toHaveBeenCalledWith('row-1', 'cell');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('repaints every displayed duplicate-field cell when a shared field invalidates', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [
+				{ field: 'name', header: 'Name A', width: 120, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 120, colId: 'name-b' },
+			],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-1', name: 'Before' }],
+			columns: store.getState().columns,
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		const before = renderer.getRenderStats();
+		store.setCellValue('row-1', 'name', 'After');
+		store.flushCellUpdatesSync();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const nameCells = Array.from(container.querySelectorAll<HTMLDivElement>('.og-cell[data-row-id="row-1"][data-col-field="name"]'));
+		expect(nameCells).toHaveLength(2);
+		expect(nameCells.map((cell) => cell.textContent)).toEqual(['After', 'After']);
+
+		const after = renderer.getRenderStats();
+		expect(after.cellPaints - before.cellPaints).toBeGreaterThan(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('repaints only the old and new duplicate-field focus cells when focus moves by column instance', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [
+				{ field: 'name', header: 'Name A', width: 120, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 120, colId: 'name-b' },
+				{ field: 'name', header: 'Name C', width: 120, colId: 'name-c' },
+			],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'row-1', name: 'Alpha' }],
+			columns: store.getState().columns,
+		});
+		const displayedColumns = store.engine.columns.getDisplayedColumns() as Array<{ field: string; colId?: string; instanceId?: string }>;
+		const firstPointer = {
+			rowId: 'row-1',
+			colField: displayedColumns[0]!.field,
+			colId: displayedColumns[0]!.colId,
+			columnInstanceId: displayedColumns[0]!.instanceId,
+		};
+		const secondPointer = {
+			rowId: 'row-1',
+			colField: displayedColumns[1]!.field,
+			colId: displayedColumns[1]!.colId,
+			columnInstanceId: displayedColumns[1]!.instanceId,
+		};
+
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		store.selectCell(firstPointer, 'keyboard');
+		await Promise.resolve();
+		await Promise.resolve();
+		renderer.resetRenderStats();
+
+		store.selectCell(secondPointer, 'keyboard');
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const nameCells = Array.from(container.querySelectorAll<HTMLDivElement>('.og-cell[data-row-id="row-1"][data-col-field="name"]'));
+		expect(nameCells).toHaveLength(3);
+		expect(nameCells[0]?.className).not.toContain('og-cell-focused');
+		expect(nameCells[1]?.className).toContain('og-cell-focused');
+		expect(nameCells[2]?.className).not.toContain('og-cell-focused');
+		expect(renderer.getRenderStats().cellPaints).toBe(2);
 
 		renderer.unmount();
 		controller.dispose();
@@ -1064,6 +1601,150 @@ describe('RenderEngine', () => {
 		expect(afterViewport.viewportPaints - afterData.viewportPaints).toBe(1);
 		expect(afterViewport.headerPaints - afterData.headerPaints).toBe(0);
 		expect(afterViewport.overlayPaints - afterData.overlayPaints).toBe(1);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('repaints visible infinite rows after an async sort response without an incidental scroll', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			columns: store.getState().columns,
+			blockSize: 10,
+			datasource: {
+				getRows: async ({ sortModel }) => {
+					if ((sortModel as Array<{ colId: string; sort: string }> | null)?.[0]?.sort === 'desc') {
+						return {
+							rows: [
+								{ id: '2', name: 'Zulu' },
+								{ id: '1', name: 'Alpha' },
+							],
+							totalCount: 2,
+						};
+					}
+					return {
+						rows: [
+							{ id: '1', name: 'Alpha' },
+							{ id: '2', name: 'Zulu' },
+						],
+						totalCount: 2,
+					};
+				},
+			},
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		await vi.waitFor(() => {
+			expect(container.querySelector('[data-row-index="0"] .og-cell[data-col-field="name"]')?.textContent).toBe('Alpha');
+		});
+
+		renderer.resetRenderStats();
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+
+		await vi.waitFor(() => {
+			expect(container.querySelector('[data-row-index="0"] .og-cell[data-col-field="name"]')?.textContent).toBe('Zulu');
+		});
+
+		const stats = renderer.getRenderStats();
+		expect(stats.scrollFrames).toBe(0);
+		expect(stats.viewportPaints).toBeGreaterThan(0);
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('repaints visible server-side rows after an async sort response without an incidental scroll', async () => {
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+			return 1;
+		});
+		const store = new GridStore<{ id: string; name: string }>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			getRowId: (row) => row.id,
+		});
+		const controller = new ServerSideRowModelController(store.getServerSideRowModelRuntime(), {
+			columns: store.getState().columns,
+			blockSize: 10,
+			datasource: {
+				getRows: async ({ sortModel }) => {
+					if ((sortModel as Array<{ colId: string; sort: string }> | null)?.[0]?.sort === 'desc') {
+						return {
+							rows: [
+								{ id: '2', name: 'Zulu' },
+								{ id: '1', name: 'Alpha' },
+							],
+							rowCount: 2,
+						};
+					}
+					return {
+						rows: [
+							{ id: '1', name: 'Alpha' },
+							{ id: '2', name: 'Zulu' },
+						],
+						rowCount: 2,
+					};
+				},
+			},
+		});
+		const container = document.createElement('div');
+		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			right: 500,
+			bottom: 220,
+			width: 500,
+			height: 220,
+			toJSON: () => ({}),
+		});
+		document.body.appendChild(container);
+
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+
+		await vi.waitFor(() => {
+			expect(container.querySelector('[data-row-index="0"] .og-cell[data-col-field="name"]')?.textContent).toBe('Alpha');
+		});
+
+		renderer.resetRenderStats();
+		store.setSortModel([{ colId: 'name', sort: 'desc' }]);
+
+		await vi.waitFor(() => {
+			expect(container.querySelector('[data-row-index="0"] .og-cell[data-col-field="name"]')?.textContent).toBe('Zulu');
+		});
+
+		const stats = renderer.getRenderStats();
+		expect(stats.scrollFrames).toBe(0);
+		expect(stats.viewportPaints).toBeGreaterThan(0);
 
 		renderer.unmount();
 		controller.dispose();
@@ -1684,7 +2365,7 @@ describe('RenderEngine', () => {
 				header: 'A',
 				width: 120,
 				cellRenderer: () => null,
-				cellRendererCapabilities: { scrollBehavior: 'live' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 		];
 		const store = new GridStore<{ id: string; a: string }>({
@@ -1925,7 +2606,13 @@ describe('RenderEngine', () => {
 
 		const columns = [
 			{ field: 'id', header: 'ID', width: 120 },
-			{ field: 'name', header: 'Name', width: 120, cellRenderer: () => null, cellRendererCapabilities: { scrollBehavior: 'live' as const } },
+			{
+				field: 'name',
+				header: 'Name',
+				width: 120,
+				cellRenderer: () => null,
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
+			},
 		];
 		const store = new GridStore<{ id: string; name: string }>({
 			columns,
@@ -3034,6 +3721,8 @@ describe('RenderEngine', () => {
 			expect(decoratedCell.className).toContain('og-cell-validation-error');
 			expect(decoratedCell.className).toContain('og-cell-readonly');
 			expect(decoratedCell.dataset.validationError).toBe('Needs review');
+			expect(decoratedCell.getAttribute('aria-invalid')).toBe('true');
+			expect(decoratedCell.getAttribute('aria-readonly')).toBe('true');
 			expect(decoratedCell.title).toContain('Tip:row-10');
 			expect(decoratedCell.title).toContain('Needs review');
 			const stats = renderer.getRenderStats();
@@ -3318,7 +4007,7 @@ describe('RenderEngine', () => {
 			...(index === 2
 				? {
 						cellRenderer: ({ value }: { value: string }) => `Portal ${value}`,
-						cellRendererCapabilities: { scrollBehavior: 'live' as const },
+						cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 					}
 				: {}),
 		}));
@@ -3553,11 +4242,14 @@ describe('RenderEngine', () => {
 			defaultRowHeight: 40,
 			defaultColWidth: 120,
 			getRowId: (row) => row.id,
-			loading: true,
 		});
-		const controller = new ClientRowModelController(store.getClientRowModelRuntime(), {
-			rows: [],
-			columns,
+		const rowModelState: { visualRows: Array<any> } = {
+			visualRows: [{ kind: 'loading', id: 'loading:0', rowIndex: 0, editable: false }],
+		};
+		const rowModel = createMinimalRowModel({
+			get visualRows() {
+				return rowModelState.visualRows;
+			},
 		});
 		const container = document.createElement('div');
 		vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
@@ -3574,15 +4266,28 @@ describe('RenderEngine', () => {
 		document.body.appendChild(container);
 
 		const renderer = new RenderEngine(store.engine, store);
+		store.registerRowModel(rowModel);
 		renderer.mount(container);
 
 		// Cell should be in loading mode initially
 		let cell = container.querySelector('.og-cell') as HTMLDivElement;
 		expect(cell.className).toContain('og-cell-loading');
 
-		// Transition loading to false and supply rows
-		store.setRows([{ id: 'row-0', a: 'A0' }]);
-		store.engine.setRowModelLoadingState(false);
+		// Transition from an explicit loading visual row to a data row.
+		rowModelState.visualRows = [
+			{
+				kind: 'data',
+				id: 'row:row-0',
+				rowId: 'row-0',
+				rowIndex: 0,
+				node: {
+					id: 'row-0',
+					data: { id: 'row-0', a: 'A0' },
+					getCellValue: (_field: string) => 'A0',
+				},
+			},
+		];
+		store.registerRowModel(rowModel);
 
 		// Wait for render scheduler frame
 		await Promise.resolve();
@@ -3593,7 +4298,6 @@ describe('RenderEngine', () => {
 		expect(cell.querySelector('.og-cell-content')?.textContent).toBe('A0');
 
 		renderer.unmount();
-		controller.dispose();
 		store.destroy();
 	});
 
@@ -3827,14 +4531,14 @@ describe('RenderEngine', () => {
 				header: 'Col 2',
 				width: 100,
 				cellRenderer: () => 'Col2Rendered',
-				cellRendererCapabilities: { scrollBehavior: 'live' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 			{
 				field: 'col3',
 				header: 'Col 3',
 				width: 100,
 				cellRenderer: () => 'Col3Rendered',
-				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 		];
 
@@ -3917,14 +4621,14 @@ describe('RenderEngine', () => {
 				header: 'Live',
 				width: 100,
 				cellRenderer: () => 'LiveRendered',
-				cellRendererCapabilities: { scrollBehavior: 'live' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 			{
 				field: 'defer',
 				header: 'Defer',
 				width: 100,
 				cellRenderer: () => 'DeferRendered',
-				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 				valueGetterDependencies: ['defer'],
 				valueGetter: ({ row }: any) => `Snapshot ${row.defer}`,
 			},
@@ -3933,7 +4637,7 @@ describe('RenderEngine', () => {
 				header: 'Fallback',
 				width: 100,
 				cellRenderer: () => 'FallbackRendered',
-				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 		];
 
@@ -4013,7 +4717,7 @@ describe('RenderEngine', () => {
 				header: 'Defer',
 				width: 120,
 				cellRenderer: () => 'DeferRendered',
-				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 		];
 

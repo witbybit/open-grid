@@ -31,7 +31,7 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@open-grid/core": "0.1.0-alpha.0"
+		"@open-grid/core": "workspace:*"
 	},
 	"peerDependencies": {
 		"react": "^18.0.0 || ^19.0.0",

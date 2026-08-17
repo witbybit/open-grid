@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClientRowModelController } from '../rowModel.js';
+import { InfiniteRowModelController } from '../infiniteRowModel.js';
 import { GridStore, type ColumnDef } from '../store.js';
 import { RenderEngine } from './renderEngine.js';
 import { RenderRuntimeState } from './renderRuntimeState.js';
@@ -47,7 +48,7 @@ function createWideGrid(options: { rows?: number; cols?: number; custom?: boolea
 		...(options.custom && index % 4 === 0
 			? {
 					cellRenderer: () => `Rendered ${index}`,
-					cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+					cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 				}
 			: {}),
 		...(options.valueGetter && index % 5 === 0
@@ -186,6 +187,23 @@ describe('Runtime Performance & Granular Versioning', () => {
 		renderer.unmount();
 		controller.dispose();
 		store.destroy();
+	});
+
+	it('drives active-scroll row loading through ensureRange on the shared row-model contract', () => {
+		const grid = createWideGrid({ rows: 200, cols: 8 });
+		try {
+			const rowModel = grid.store.engine.getRowModel();
+			expect(rowModel).not.toBeNull();
+			const ensureRangeSpy = vi.spyOn(rowModel!, 'ensureRange');
+
+			grid.store.engine.viewport.setScrollPosition(120, 0);
+			grid.renderer.rowRenderer.recycleViewport(true, makeScrollCtx(grid.store) as any);
+
+			const window = grid.renderer.rowRenderer.currentWindow as RenderWindow;
+			expect(ensureRangeSpy).toHaveBeenCalledWith(window.rowStart, window.rowEnd, 'viewport-render');
+		} finally {
+			cleanupGrid(grid);
+		}
 	});
 
 	it('tests stable-slot virtualization does not remove/re-append row elements during scroll', () => {
@@ -386,7 +404,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(stats.customRendererMountsDuringScroll).toBe(0);
 
 		cleanupGrid(grid);
-	});
+	}, 15_000); // 100k x 1000 synthetic grid setup can exceed 5s under full-suite load even when the bounded-work assertions hold.
 
 	it('avoids row-model lookups for stayed rows during a one-row vertical scroll', () => {
 		const store = new GridStore<{ id: string; name: string }>({
@@ -439,7 +457,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 				header: 'Name',
 				width: 120,
 				cellRenderer: () => 'Rendered',
-				cellRendererCapabilities: { scrollBehavior: 'defer' as const },
+				cellRendererCapabilities: { scrollPresentation: 'freeze' as const },
 			},
 		];
 		const store = new GridStore<{ id: string; name: string }>({
@@ -531,6 +549,30 @@ describe('Runtime Performance & Granular Versioning', () => {
 		cleanupGrid(grid);
 	});
 
+	it('BLOCKER: pinning a column mid-session drives real column-topology-change delta telemetry via computeColumnWindowDelta', () => {
+		// Distinct from the routine-scroll cols{Entered,Exited,Stayed}DuringScroll counters (which
+		// track the render WINDOW shifting over a static topology) — this proves a genuine topology
+		// CHANGE (pin/unpin) is diffed via computeColumnWindowDelta, not silently dropped.
+		const grid = createWideGrid({ rows: 1000, cols: 20 });
+		grid.renderer.fullPaint();
+		grid.renderer.resetRenderStats();
+
+		grid.store.setPinnedColumns({ left: 2, right: 1 });
+		grid.renderer.fullPaint();
+
+		const stats = grid.renderer.getRenderStats();
+		expect(stats.columnTopologyDeltaComputations).toBeGreaterThan(0);
+		// Pinning relocates existing columns to a different lane — they remain in the column SET, so
+		// they show up as laneMoves (relocated), never as entered/exited (those track columns
+		// added/removed from the topology entirely, which pinning does not do).
+		expect(stats.columnTopologyLaneMoves).toBe(3); // 2 newly-pinned-left + 1 newly-pinned-right
+		expect(stats.columnTopologyEnteredColumns).toBe(0);
+		expect(stats.columnTopologyExitedColumns).toBe(0);
+		expect(stats.columnTopologyStayedColumns).toBe(17); // 20 columns - 3 relocated
+
+		cleanupGrid(grid);
+	});
+
 	it('caps rendered rows and cells through runtime limits', () => {
 		const grid = createWideGrid({ rows: 100000, cols: 1000 });
 		const window = grid.renderer.rowRenderer.currentWindow as RenderWindow;
@@ -539,7 +581,7 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(getRowIndices(window).length * getColIndices(window).length).toBeLessThanOrEqual(220);
 
 		cleanupGrid(grid);
-	});
+	}, 15_000); // Large synthetic grid mount can exceed the default 5s suite timeout under full-load CI/local runs.
 
 	it('never leaves stale cell DOM attached to hot-recycled rows after violent custom-renderer scrolls', () => {
 		const grid = createWideGrid({ rows: 1000, cols: 24, custom: true, valueGetter: true });
@@ -662,5 +704,56 @@ describe('Runtime Performance & Granular Versioning', () => {
 		expect(stats.compiledPlanVersion).toBe(initialPlan.version);
 
 		cleanupGrid(grid);
+	});
+
+	it('queues a scroll-idle viewport flush when an async row model hits the same-window fast-scroll bailout', async () => {
+		const store = new GridStore<RuntimePerfRow>({
+			columns: [{ field: 'name', header: 'Name', width: 120 }],
+			defaultRowHeight: 40,
+			defaultColWidth: 120,
+			rowOverscanPx: 400,
+			getRowId: (row) => row.id,
+		});
+		const controller = new InfiniteRowModelController(store.getInfiniteRowModelRuntime(), {
+			blockSize: 50,
+			columns: store.getState().columns,
+			datasource: {
+				getRows: async ({ startRow, endRow }) => ({
+					rows: Array.from({ length: endRow - startRow }, (_, index) => ({
+						id: `row-${startRow + index}`,
+						name: `Row ${startRow + index}`,
+						status: 'Active',
+					})),
+					totalCount: 1000,
+				}),
+			},
+		});
+		const container = createContainer();
+		const renderer = new RenderEngine(store.engine, store);
+		renderer.mount(container);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const scrollViewport = renderer.viewportRenderer.scrollViewport!;
+		vi.spyOn(store.engine.viewport, 'isScrollingFast', 'get').mockReturnValue(true);
+		store.engine.viewport.setScrollPosition(100, 0);
+		Object.defineProperty(scrollViewport, 'scrollTop', { value: 100, writable: true, configurable: true });
+		Object.defineProperty(scrollViewport, 'scrollLeft', { value: 0, writable: true, configurable: true });
+
+		(renderer as any).rowRenderer.currentWindow = { ...computeRenderWindow(store.engine) };
+		renderer.resetRenderStats();
+		store.engine.invalidation.consume();
+
+		(renderer as any).flushScrollFrame();
+
+		expect(renderer.getRenderStats().sameWindowBailouts).toBe(1);
+		expect(((renderer as any).scrollCoordinator as any).state.flushPendingAfterScroll).toBe(true);
+		const frame = store.engine.invalidation.consume();
+		expect(frame.viewport).toBe(true);
+		expect(frame.reasons).toContain('scroll-idle');
+
+		renderer.unmount();
+		controller.dispose();
+		store.destroy();
 	});
 });

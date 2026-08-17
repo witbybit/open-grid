@@ -1,17 +1,28 @@
 /**
  * Column definition types, cell renderer interfaces, and path utilities.
  */
-import type { RowNode } from './rowNode.js';
 import type { CellEditorProps, CellRendererProps, HeaderMenuRendererProps, GridSelectionState } from './api/GridApi.js';
 import type { GroupVisualRow, DetailVisualRow } from './visualRow.js';
 import type { GridCapabilityCallback } from './capabilities/capabilityTypes.js';
+import type { GridRowDataRef } from './publicRowRef.js';
 
 // ─── Value getter / setter / validator params ─────────────────────────────────
 
 export interface ValueGetterParams<TRowData = unknown> {
-	node: RowNode<TRowData>;
+	node: GridRowDataRef<TRowData>;
 	row: TRowData;
 	colField: string;
+}
+
+/**
+ * Public row reference for DOM cell renderers.
+ *
+ * This intentionally exposes only stable identity and row data, not the internal mutable RowNode
+ * implementation or its helper methods/caches.
+ */
+export interface DomCellRendererRowRef<TRowData = unknown> {
+	id: string;
+	data: TRowData;
 }
 
 export interface TooltipParams<TRowData = unknown> {
@@ -32,59 +43,110 @@ export interface ValueSetterParams<TRowData = unknown> {
 
 // ─── Cell renderer phase + capabilities ──────────────────────────────────────
 
-export type CellRendererPhase = 'initial' | 'scroll' | 'scroll-idle' | 'interaction' | 'edit' | 'destroy';
+/**
+ * 'scroll-force-live' and 'scroll-live' are both distinct from 'scroll': they mark mounts that
+ * genuinely happen during an active scroll frame — unlike ordinary 'scroll'-phase mounts, which
+ * never occur mid-motion. The renderer callback is told `isScrolling: true` honestly for both.
+ *
+ * - 'scroll-force-live' — the narrow force-live-interactive-exception mount: an actively editing/
+ *   focused cell on a `'freeze'`-mode column that must mount live despite not opting into
+ *   `scrollPresentation: 'live'` (see scrollCellPresentation.ts's ScrollCellPresentation union).
+ * - 'scroll-live' — an ordinary `scrollPresentation: 'live'` column's mount/update on this scroll
+ *   frame. Expected to fire on every scroll frame for these columns, unlike the rare force-live
+ *   exception above.
+ */
+export type CellRendererPhase = 'initial' | 'scroll' | 'scroll-force-live' | 'scroll-live' | 'scroll-idle' | 'interaction' | 'edit' | 'destroy';
+
+/**
+ * What a renderer's cell shows while the grid is actively scrolling. This is the ONE field that
+ * chooses the scroll presentation mode — mode-specific config lives in the matching sub-object
+ * below and is only valid alongside its own mode (enforced at column normalization time).
+ *
+ * - `'primitive'`    — Fast text/class presentation. Default for non-renderer cells.
+ * - `'live'`         — The real renderer is mounted/updated during active scroll. Highest
+ *                       fidelity, highest cost. No text fallback, no HTML snapshot fallback, no
+ *                       stale previous portal, no blank cell.
+ * - `'freeze'`       — An existing live renderer may remain visually frozen during scroll. New/
+ *                       cold cells show a shell/loading placeholder until fidelity catches up.
+ *                       Default for columns with a renderer but no explicit scrollPresentation.
+ * - `'text-impostor'`— Shows an explicit cheap text/chip stand-in (`textImpostor.render`) during
+ *                       scroll.
+ * - `'html-snapshot'`— Replays a captured inert HTML clone during scroll. Missing HTML shows a
+ *                       shell/pending placeholder, not raw text, unless explicitly allowed.
+ */
+export type CellScrollPresentation = 'primitive' | 'live' | 'freeze' | 'text-impostor' | 'html-snapshot';
 
 export interface CellRendererCapabilities {
-	/**
-	 * Controls how the portal is updated while the grid is actively scrolling.
-	 *
-	 * - `'live'`  — Re-render with fresh data on every scroll frame (great for real-time feeds,
-	 *               cheap components). The portal is kept alive and updated in-place.
-	 * - `'defer'` — Keep the portal alive and frozen during scroll; refresh only when the row's
-	 *               data version changes (default for most static or expensive renderers).
-	 *
-	 * Both modes always show the full React component — the grid never strips content during scroll.
-	 */
-	scrollBehavior?: 'live' | 'defer';
-	/**
-	 * When true, the grid calls ref.current.update() directly — bypasses React's scheduler entirely.
-	 * Cell renderer must be a forwardRef component exposing ImperativeCellHandle.
-	 * Ideal for real-time feeds (tick data, live prices) where even setState latency is too high.
-	 */
-	imperativeUpdate?: boolean;
-	/**
-	 * Returns a cheap plain-text representation of the cell value for use as a scroll impostor.
-	 *
-	 * Called during the pre-scroll prewarm pass and at scroll-frame synthesis time when the grid
-	 * needs a text stand-in for a not-yet-mounted portal (scrollBehavior:'live' or imperativeUpdate
-	 * columns). The string is shown in place of the full renderer while the grid is in motion;
-	 * the real renderer is mounted in the post-scroll fidelity lane.
-	 *
-	 * Return an empty string to fall back to the generic display-value text.
-	 * Leave undefined to skip the impostor contract entirely (renderer is mounted synchronously).
-	 */
-	scrollImpostor?: (params: { value: unknown; formattedValue: string }) => string;
-	/**
-	 * Controls what the scroll impostor looks like when the cell is not live during scroll.
-	 *
-	 * - `'html'` — After each fidelity render the grid captures the portal host's innerHTML and
-	 *              stores it in the cell display snapshot. During the next scroll, that static HTML
-	 *              is injected as an inert visual clone rather than plain text. The cell looks
-	 *              identical to its settled state while the grid is in motion.
-	 *
-	 * Leave undefined (default) for the standard plain-text impostor — fastest, but shows only
-	 * the raw display value string during scroll (no badge styling, colors, or icons).
-	 *
-	 * Only meaningful for columns that also have scrollImpostor defined (or a scrollBehavior that
-	 * activates the impostor path). Cells that have never completed a fidelity render fall back
-	 * to plain text until their first post-scroll upgrade.
-	 */
-	scrollSnapshot?: 'html';
+	/** Chooses what this column's cells show while the grid is actively scrolling. */
+	scrollPresentation?: CellScrollPresentation;
+
+	/** Only valid for `scrollPresentation: 'live'`. */
+	live?: {
+		/**
+		 * `'react'` (default) updates through React's scheduler. `'imperative'` calls
+		 * `ref.current.update()` directly, bypassing React's scheduler entirely — the cell
+		 * renderer must be a forwardRef component exposing `ImperativeCellHandle`. Ideal for
+		 * real-time feeds (tick data, live prices) where even setState latency is too high.
+		 */
+		update?: 'react' | 'imperative';
+		priority?: 'high' | 'normal' | 'low';
+		allowEmergencyShell?: boolean;
+	};
+
+	/** Only valid for `scrollPresentation: 'text-impostor'`. */
+	textImpostor?: {
+		/** Returns a cheap plain-text/chip representation of the cell value to show during scroll. */
+		render: (params: { value: unknown; formattedValue: string }) => string;
+	};
+
+	/** Only valid for `scrollPresentation: 'html-snapshot'`. */
+	htmlSnapshot?: {
+		strict?: boolean;
+		freshness?: 'row-version-only' | 'visual';
+		allowShellWhenMissing?: boolean;
+		allowTextFallbackWhenMissing?: boolean;
+		invalidateOnWidthChange?: boolean;
+		invalidateOnHeightChange?: boolean;
+	};
+}
+
+/**
+ * @internal Normalized form of CellRendererCapabilities produced by ColumnModel.normalizeColumn —
+ * scrollPresentation is always resolved to a concrete mode (never undefined).
+ */
+export interface NormalizedCellRendererCapabilities extends CellRendererCapabilities {
+	scrollPresentation: CellScrollPresentation;
+}
+
+/**
+ * Grid-level renderer policy — global virtualization behavior, budgets, and caches for the scroll
+ * presentation modes. Deliberately NOT part of ColumnDef: windowing/budget/cache policy is a grid-
+ * wide concern, not a per-column one.
+ */
+export interface GridRendererOptions {
+	liveReact?: {
+		rowOverscan?: number;
+		columnOverscan?: number;
+		maxMountsPerFrame?: number;
+		maxUpdatesPerFrame?: number;
+		allowEmergencyShell?: boolean;
+	};
+	htmlSnapshot?: {
+		maxSnapshots?: number;
+		maxTotalBytes?: number;
+		maxSingleSnapshotBytes?: number;
+		defaultStrict?: boolean;
+		allowShellWhenMissing?: boolean;
+		allowTextFallbackWhenMissing?: boolean;
+	};
+	textImpostor?: {
+		allowRawValueFallback?: boolean;
+	};
 }
 
 // ─── Imperative handle ────────────────────────────────────────────────────────
 
-/** Exposed via forwardRef on renderers with cellRendererCapabilities.imperativeUpdate = true */
+/** Exposed via forwardRef on renderers with capabilities.live.update === 'imperative' */
 export interface ImperativeCellHandle<TRowData = unknown> {
 	update(params: CellRendererProps<TRowData>): void;
 }
@@ -95,7 +157,7 @@ export interface ImperativeCellHandle<TRowData = unknown> {
 export interface DomCellRendererParams<TRowData = unknown> {
 	container: HTMLElement;
 	value: unknown;
-	node: RowNode<TRowData>;
+	node: DomCellRendererRowRef<TRowData>;
 	col: ColumnDef<TRowData>;
 	isEditing: boolean;
 	isScrolling: boolean;
@@ -134,6 +196,26 @@ export function isDomCellRenderer<TRowData = unknown>(renderer: unknown): render
 	return typeof renderer === 'object' && renderer !== null && typeof (renderer as DomCellRenderer).mount === 'function';
 }
 
+// ─── Column instance identity ─────────────────────────────────────────────────
+
+/**
+ * Opaque, monotonic identity for a column DEFINITION INSTANCE — distinct from `field` (data access
+ * identity) and `colId` (user/API column identity), which both name a logical column slot that may
+ * be re-populated by a semantically different definition over time (e.g. a column removed and
+ * re-added with a different renderer, same field). `instanceId` never changes for a column that is
+ * merely re-normalized with an equivalent shape, and never gets reused after a column is replaced —
+ * this is what lets renderer lifecycle (CellSlot/CellCtrl ownership, HTML/portal caches) key off
+ * "is this semantically the same column" rather than "does this field string match."
+ */
+export type ColumnInstanceId = string & { readonly __brand: 'ColumnInstanceId' };
+
+let _columnInstanceCounter = 0;
+
+/** @internal Only ColumnModel.normalizeColumn() should call this. */
+export function createColumnInstanceId(): ColumnInstanceId {
+	return `coli${++_columnInstanceCounter}` as ColumnInstanceId;
+}
+
 // ─── Column renderer spec ─────────────────────────────────────────────────────
 
 export type ColumnRendererSpec<TRowData = unknown> =
@@ -147,14 +229,16 @@ export type ColumnRendererSpec<TRowData = unknown> =
 export type ColumnRenderMode =
 	| 'primitive' // No renderer; raw/text value only
 	| 'primitive-formatted' // No renderer; value goes through a getter or formatter
-	| 'custom-live' // React portal refreshed every scroll frame (scrollBehavior:'live')
-	| 'custom' // React portal frozen during scroll; refreshed only on data change
+	| 'custom-live' // React portal mounted/updated every scroll frame (scrollPresentation:'live')
+	| 'custom' // React portal frozen/impostor'd during scroll; refreshed only on data change
 	| 'custom-dom' // DomCellRenderer — direct DOM manipulation, no React overhead
-	| 'custom-imperative' // React portal with imperativeUpdate protocol
+	| 'custom-imperative' // React portal with scrollPresentation:'live', live.update:'imperative'
 	| 'loading'; // Loading skeleton row
 
 export interface ColumnRenderPlan<TData = unknown> {
-	colId: string;
+	/** Renderer/topology lifecycle identity — see ColumnInstanceId. Previously just an alias for
+	 *  `field`; now a real distinct identity assigned by ColumnModel. */
+	colId: ColumnInstanceId;
 	field: string;
 	mode: ColumnRenderMode;
 	/** True when the column uses a custom cell renderer (mode starts with 'custom'). Pre-computed to avoid string.startsWith on the hot scroll path. */
@@ -215,6 +299,7 @@ export interface ValueFormatterParams<TRowData = unknown> {
 
 export interface ColumnDef<TRowData = unknown> {
 	field: string;
+	colId?: string;
 	header: string;
 	width?: number;
 	/** Named column type registered via `columnTypes` on the grid options. Resolved in the React layer. */
@@ -344,7 +429,17 @@ export interface ColumnDef<TRowData = unknown> {
  */
 export interface InternalColumnDef<TRowData = unknown> extends ColumnDef<TRowData> {
 	cellRenderer?: ((props: CellRendererProps<TRowData>) => unknown) | DomCellRenderer<TRowData>;
-	cellRendererCapabilities?: CellRendererCapabilities;
+	cellRendererCapabilities?: NormalizedCellRendererCapabilities;
+	/** @internal Assigned by ColumnModel.normalizeColumn/updateColumns; never set by user-authored
+	 *  ColumnDef. Stable across re-normalization of an equivalent column, minted fresh when a field
+	 *  is semantically replaced (different renderer/valueGetter) — see ColumnInstanceId. */
+	instanceId: ColumnInstanceId;
+}
+
+export function getColumnInstanceIdentity<TRowData = unknown>(
+	column: Pick<ColumnDef<TRowData>, 'field'> & Partial<Pick<InternalColumnDef<TRowData>, 'instanceId'>>
+): ColumnInstanceId {
+	return (column.instanceId ?? column.field) as ColumnInstanceId;
 }
 
 // ─── Style slots ──────────────────────────────────────────────────────────────
@@ -486,10 +581,6 @@ export function validateColumns<TRowData>(columns: ColumnDef<TRowData>[]): void 
 
 		if (!id) {
 			throw new Error('Open Grid: every column must have a non-empty field.');
-		}
-
-		if (seen.has(id)) {
-			throw new Error(`Open Grid: duplicate column field "${id}". Each column must have a unique field.`);
 		}
 
 		seen.add(id);

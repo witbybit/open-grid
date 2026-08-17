@@ -1,5 +1,6 @@
-import type { RowModel } from '../../rowModel.js';
+import { asServerSideControllableRowModel, type RowModel } from '../../rowModel.js';
 import type { InternalGridState } from '../../state/GridState.js';
+import { readInteractionState } from '../../interaction/interactionState.js';
 import type {
 	GridIntegrityCapabilityMatrix,
 	GridIntegrityRowRef,
@@ -36,6 +37,7 @@ export class CapabilityDrivenGridIntegrityRowProvider<TRowData> implements GridI
 		const capability = this.getScopeCapability(scope);
 		const rowModel = this.options.getRowModel();
 		const state = this.options.getState();
+		const effectiveKind = this.getEffectiveKind(rowModel);
 
 		if (!rowModel) {
 			return {
@@ -62,9 +64,9 @@ export class CapabilityDrivenGridIntegrityRowProvider<TRowData> implements GridI
 			case 'allRows':
 				return this.scanAllRows(rowModel, capability);
 			case 'loadedRows':
-				return this.options.rowModelKind === 'client'
+				return effectiveKind === 'client'
 					? this.scanAllRows(rowModel, capability)
-					: this.scanVisualRows(rowModel, scope, capability, sourceForLoaded(this.options.rowModelKind));
+					: this.scanVisualRows(rowModel, scope, capability, sourceForLoaded(effectiveKind));
 			case 'filteredRows':
 				return this.scanFilteredRows(rowModel, capability);
 			case 'selectedRows':
@@ -132,7 +134,7 @@ export class CapabilityDrivenGridIntegrityRowProvider<TRowData> implements GridI
 		capability: GridIntegrityScopeCapability
 	): GridIntegrityRowsResult<TRowData> {
 		const refs: GridIntegrityRowRef<TRowData>[] = [];
-		for (const rowId of state.selectedRowIds ?? []) {
+		for (const rowId of readInteractionState(state).rowSelection.selectedRowIds) {
 			const node = rowModel.getRowNodeById?.(rowId) ?? null;
 			if (!node || node.data == null) continue;
 			refs.push({ rowId, row: node.data as TRowData, source: 'selected' });
@@ -163,11 +165,12 @@ export class CapabilityDrivenGridIntegrityRowProvider<TRowData> implements GridI
 
 	private getEffectiveKind(rowModel: RowModel<TRowData> | null): GridIntegrityRowModelKind {
 		if (rowModel) {
+			if (asServerSideControllableRowModel(rowModel)) return 'server';
 			const capable = asCapabilityReadableRowModel(rowModel);
 			if (capable) {
 				const capabilities = capable.getCapabilities();
 				if (capabilities.serverPagination) return 'server';
-				if (capabilities.blockLoading) return 'infinite';
+				if (capabilities.blockLoading) return this.options.rowModelKind === 'server' ? 'server' : 'infinite';
 				if (capabilities.fullDataset) return 'client';
 			}
 			if (asAllDataNodeCapable(rowModel) && asFilteredDataNodeCapable(rowModel)) return 'client';
@@ -258,21 +261,21 @@ function createCapabilityMatrix(kind: GridIntegrityRowModelKind): GridIntegrityC
 			level: 'unsupported',
 			complete: false,
 			source: 'none',
-			reason: 'Server-page row model cannot authoritatively scan allRows without a serverProvided report.',
+			reason: 'server-side row model cannot authoritatively scan allRows without a serverProvided report.',
 		},
 		loadedRows: {
 			scope: 'loadedRows',
 			level: 'partial',
 			complete: false,
 			source: 'loadedRows',
-			message: 'loadedRows scans only the currently loaded page.',
+			message: 'loadedRows scans only the currently loaded server-side stores.',
 		},
 		filteredRows: {
 			scope: 'filteredRows',
 			level: 'unsupported',
 			complete: false,
 			source: 'none',
-			reason: 'Server-page row model cannot authoritatively expose filteredRows outside the current page.',
+			reason: 'server-side row model cannot authoritatively expose filteredRows outside the loaded server-side stores.',
 		},
 		selectedRows: { scope: 'selectedRows', level: 'authoritative', complete: true, source: 'selectedRows' },
 		visibleRows: {
@@ -284,10 +287,10 @@ function createCapabilityMatrix(kind: GridIntegrityRowModelKind): GridIntegrityC
 		},
 		currentPage: {
 			scope: 'currentPage',
-			level: 'partial',
+			level: 'unsupported',
 			complete: false,
-			source: 'currentPageDataNodes',
-			message: 'currentPage scans only the active server page.',
+			source: 'none',
+			reason: 'currentPage is not defined for the server-side row model.',
 		},
 		serverProvided: {
 			scope: 'serverProvided',
@@ -300,11 +303,11 @@ function createCapabilityMatrix(kind: GridIntegrityRowModelKind): GridIntegrityC
 }
 
 function sourceForLoaded(kind: GridIntegrityRowModelKind): GridIntegrityRowRef<unknown>['source'] {
-	return kind === 'server' ? 'serverPage' : 'infiniteLoaded';
+	return kind === 'server' ? 'serverLoaded' : 'infiniteLoaded';
 }
 
 function sourceForCurrentPage(kind: GridIntegrityRowModelKind): GridIntegrityRowRef<unknown>['source'] {
-	return kind === 'server' ? 'serverPage' : 'client';
+	return kind === 'server' ? 'serverLoaded' : 'client';
 }
 
 function okResult<TRowData>(

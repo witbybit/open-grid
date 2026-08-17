@@ -1,4 +1,4 @@
-import type { CompiledGridPlan, InternalColumnDef } from '../columnDef.js';
+import type { ColumnInstanceId, CompiledGridPlan, InternalColumnDef } from '../columnDef.js';
 
 // ── Public interfaces ──────────────────────────────────────────────────────────
 
@@ -9,7 +9,11 @@ import type { CompiledGridPlan, InternalColumnDef } from '../columnDef.js';
  * coordinates are required (e.g. body rows that place cells in the full-width row).
  */
 export interface ColumnPlacement {
-	readonly columnId: string;
+	/** Renderer/topology lifecycle identity — see ColumnInstanceId. Stable across pin/unpin/reorder
+	 *  of an equivalent column; changes only when the column at this field is semantically replaced. */
+	readonly columnId: ColumnInstanceId;
+	/** Logical field name — for consumers that need the display/DOM name (headers, floating filters). */
+	readonly field: string;
 	readonly lane: 'left' | 'center' | 'right';
 	readonly laneIndex: number;
 	readonly absoluteIndex: number;
@@ -49,8 +53,8 @@ export interface CompiledColumnTopology {
 	readonly version: number;
 	/** All placements in display order. */
 	readonly placements: readonly ColumnPlacement[];
-	/** O(1) lookup by column field. */
-	readonly byColumnId: ReadonlyMap<string, ColumnPlacement>;
+	/** O(1) lookup by column instance id. */
+	readonly byColumnId: ReadonlyMap<ColumnInstanceId, ColumnPlacement>;
 	readonly left: readonly ColumnPlacement[];
 	readonly center: readonly ColumnPlacement[];
 	readonly right: readonly ColumnPlacement[];
@@ -159,7 +163,7 @@ export function compileColumnTopology<TRowData>(plan: CompiledGridPlan<TRowData>
 		plan;
 
 	const placements: ColumnPlacement[] = [];
-	const byColumnId = new Map<string, ColumnPlacement>();
+	const byColumnId = new Map<ColumnInstanceId, ColumnPlacement>();
 	const leftPlacements: ColumnPlacement[] = [];
 	const centerPlacements: ColumnPlacement[] = [];
 	const rightPlacements: ColumnPlacement[] = [];
@@ -191,10 +195,19 @@ export function compileColumnTopology<TRowData>(plan: CompiledGridPlan<TRowData>
 			laneOffset = absoluteLeft - pinLeftWidth;
 		}
 
-		const placement: ColumnPlacement = { columnId: col.field, lane, laneIndex, absoluteIndex: i, absoluteLeft, laneOffset, width };
+		const placement: ColumnPlacement = {
+			columnId: col.instanceId,
+			field: col.field,
+			lane,
+			laneIndex,
+			absoluteIndex: i,
+			absoluteLeft,
+			laneOffset,
+			width,
+		};
 
 		placements.push(placement);
-		byColumnId.set(col.field, placement);
+		byColumnId.set(col.instanceId, placement);
 		if (lane === 'left') leftPlacements.push(placement);
 		else if (lane === 'center') centerPlacements.push(placement);
 		else rightPlacements.push(placement);
@@ -249,4 +262,99 @@ export function diffColumnTopologies(prev: CompiledColumnTopology, next: Compile
 	}
 
 	return { prevVersion: prev.version, nextVersion: next.version, retained, relocated, entered, exited };
+}
+
+// ── Lane-segmented window delta ──────────────────────────────────────────────────
+
+/** Column field lists, segmented by lane, plus cross-lane moves — for scroll/resize-driven reconciliation. */
+export interface ColumnWindowDelta {
+	readonly enteredCenterColumns: readonly ColumnInstanceId[];
+	readonly exitedCenterColumns: readonly ColumnInstanceId[];
+	readonly stayedCenterColumns: readonly ColumnInstanceId[];
+	readonly enteredPinnedLeftColumns: readonly ColumnInstanceId[];
+	readonly exitedPinnedLeftColumns: readonly ColumnInstanceId[];
+	readonly enteredPinnedRightColumns: readonly ColumnInstanceId[];
+	readonly exitedPinnedRightColumns: readonly ColumnInstanceId[];
+	readonly laneMoves: ReadonlyArray<{
+		readonly columnInstanceId: ColumnInstanceId;
+		readonly from: 'left' | 'center' | 'right';
+		readonly to: 'left' | 'center' | 'right';
+	}>;
+	readonly structural: boolean;
+}
+
+/**
+ * Lane-segmented view of `diffColumnTopologies`, for callers that reconcile each lane
+ * independently (the normal horizontal-scroll case: only the center window shifts, pinned
+ * lanes are untouched). Column pin/unpin/reorder naturally shows up here as `laneMoves` —
+ * callers that need to handle that structurally are free to fall back to full reconciliation
+ * for those events (see `reconcileTopology` vs `reconcileCellTopologyForScroll` in
+ * `rowCellBindingLanes.ts`); this helper does not make that choice for them.
+ */
+export function computeColumnWindowDelta(prev: CompiledColumnTopology, next: CompiledColumnTopology): ColumnWindowDelta {
+	const diff = diffColumnTopologies(prev, next);
+
+	const enteredCenterColumns: ColumnInstanceId[] = [];
+	const enteredPinnedLeftColumns: ColumnInstanceId[] = [];
+	const enteredPinnedRightColumns: ColumnInstanceId[] = [];
+	for (const placement of diff.entered) {
+		if (placement.lane === 'left') enteredPinnedLeftColumns.push(placement.columnId);
+		else if (placement.lane === 'right') enteredPinnedRightColumns.push(placement.columnId);
+		else enteredCenterColumns.push(placement.columnId);
+	}
+
+	const exitedCenterColumns: ColumnInstanceId[] = [];
+	const exitedPinnedLeftColumns: ColumnInstanceId[] = [];
+	const exitedPinnedRightColumns: ColumnInstanceId[] = [];
+	for (const placement of diff.exited) {
+		if (placement.lane === 'left') exitedPinnedLeftColumns.push(placement.columnId);
+		else if (placement.lane === 'right') exitedPinnedRightColumns.push(placement.columnId);
+		else exitedCenterColumns.push(placement.columnId);
+	}
+
+	const stayedCenterColumns: ColumnInstanceId[] = [];
+	const relocatedIds = new Set(diff.relocated.map((r) => r.next.columnId));
+	for (const { next: nextPlacement } of diff.retained) {
+		if (nextPlacement.lane === 'center' && !relocatedIds.has(nextPlacement.columnId)) {
+			stayedCenterColumns.push(nextPlacement.columnId);
+		}
+	}
+
+	const laneMoves = diff.relocated.map((r) => ({ columnInstanceId: r.next.columnId, from: r.prev.lane, to: r.next.lane }));
+
+	return {
+		enteredCenterColumns,
+		exitedCenterColumns,
+		stayedCenterColumns,
+		enteredPinnedLeftColumns,
+		exitedPinnedLeftColumns,
+		enteredPinnedRightColumns,
+		exitedPinnedRightColumns,
+		laneMoves,
+		structural: true,
+	};
+}
+
+export function computeRoutineColumnWindowDelta(
+	prevRenderedCenterColumns: readonly ColumnInstanceId[],
+	nextRenderedCenterColumns: readonly ColumnInstanceId[]
+): ColumnWindowDelta {
+	const prevSet = new Set(prevRenderedCenterColumns);
+	const nextSet = new Set(nextRenderedCenterColumns);
+
+	const enteredCenterColumns = nextRenderedCenterColumns.filter((id) => !prevSet.has(id));
+	const exitedCenterColumns = prevRenderedCenterColumns.filter((id) => !nextSet.has(id));
+	const stayedCenterColumns = nextRenderedCenterColumns.filter((id) => prevSet.has(id));
+
+	return {
+		enteredCenterColumns,
+		exitedCenterColumns,
+		stayedCenterColumns,
+		enteredPinnedLeftColumns: [],
+		exitedPinnedLeftColumns: [],
+		enteredPinnedRightColumns: [],
+		exitedPinnedRightColumns: [],
+		laneMoves: [],
+		structural: false,
+	};
 }

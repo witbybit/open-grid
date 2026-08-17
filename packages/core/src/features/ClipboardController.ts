@@ -1,18 +1,21 @@
 import type { ColumnDef } from '../columnDef.js';
-import type { GridWriteResult } from '../api/GridApi.js';
+import { getColumnInstanceIdentity } from '../columnDef.js';
+import type { CanonicalGridCellPointer, GridWriteResult } from '../api/GridApi.js';
 import type { VisualRow } from '../visualRow.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import { GridEventName } from '../api/GridEvents.js';
+import { findColumnByCanonicalCellPointer, findColumnIndexByCanonicalCellPointer } from '../interaction/cellPointer.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult } from '../capabilities/capabilityTypes.js';
 import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
 import { dispatchWriteBlockedEvent, isWriteBlockedResult } from './writeBlockedEvent.js';
 
 interface ClipboardContext<TRowData> {
 	getState(): InternalGridState<TRowData>;
+	getDisplayedColumns(): readonly ColumnDef<TRowData>[];
 	getVisualRow(rowIdx: number): VisualRow<TRowData> | null;
 	getVisualIndexByRowId(rowId: string): number | null;
-	getColumnIndex(colField: string): number;
 	getCellValue(rowId: string, colField: string): unknown;
 	getCheapDisplayValue(rowId: string, colField: string): string;
 	getRawRowById(rowId: string): TRowData | null;
@@ -23,6 +26,7 @@ interface ClipboardContext<TRowData> {
 		source: 'paste' | 'api' | 'fill' | 'edit' | 'undo' | 'redo'
 	) => Promise<readonly GridIntegrityIssue[]>;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
+	recordRejectedWrite?: (reason: string, cell?: { rowId: string; colField: string }) => void;
 }
 
 interface CopyResult {
@@ -35,15 +39,48 @@ interface CopyResult {
 export class ClipboardController<TRowData = unknown> {
 	constructor(private readonly c: ClipboardContext<TRowData>) {}
 
+	private getLiveSelectionBounds(
+		selection: ReturnType<typeof readInteractionState<TRowData>>['cellSelection']['selection'],
+		state: InternalGridState<TRowData>
+	): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null {
+		const range = selection.range;
+		if (!range) return null;
+		const startRow = this.c.getVisualIndexByRowId(range.start.rowId) ?? -1;
+		const endRow = this.c.getVisualIndexByRowId(range.end.rowId) ?? -1;
+		const startCol = this.getColumnIndexFromPointer(range.start, state);
+		const endCol = this.getColumnIndexFromPointer(range.end, state);
+		if (startRow === -1 || endRow === -1 || startCol === -1 || endCol === -1) return null;
+		return {
+			minRow: Math.min(startRow, endRow),
+			maxRow: Math.max(startRow, endRow),
+			minCol: Math.min(startCol, endCol),
+			maxCol: Math.max(startCol, endCol),
+		};
+	}
+
+	private resolveColumnFromPointer(pointer: CanonicalGridCellPointer, state: InternalGridState<TRowData>) {
+		return findColumnByCanonicalCellPointer(this.c.getDisplayedColumns(), pointer) as ColumnDef<TRowData> | undefined;
+	}
+
+	private getColumnIndexFromPointer(pointer: CanonicalGridCellPointer, state: InternalGridState<TRowData>): number {
+		return findColumnIndexByCanonicalCellPointer(this.c.getDisplayedColumns(), pointer);
+	}
+
+	private getDisplayedColumnAtIndex(index: number): ColumnDef<TRowData> | undefined {
+		return this.c.getDisplayedColumns()[index];
+	}
+
 	public async copySelectedRange(): Promise<void> {
 		const state = this.c.getState();
-		const selection = state.selection;
-		const bounds = selection.bounds;
+		const selection = readInteractionState(state).cellSelection.selection;
+		const bounds = this.getLiveSelectionBounds(selection, state);
 
 		if (!bounds) {
 			const focus = selection.focus;
 			if (!focus) return;
-			const text = this._getCellText(focus.rowId, focus.colField, state);
+			const column = this.resolveColumnFromPointer(focus, state);
+			if (!column) return;
+			const text = this._getCellText(focus.rowId, column, state);
 			await this._writeToClipboard(text);
 			this.c.dispatchEvent(GridEventName.cellsCopied, {
 				cells: [{ rowId: focus.rowId, colField: focus.colField }],
@@ -64,16 +101,17 @@ export class ClipboardController<TRowData = unknown> {
 	public async pasteFromClipboard(): Promise<void> {
 		if (typeof navigator === 'undefined' || !navigator.clipboard) return;
 		const state = this.c.getState();
-		const selection = state.selection;
+		const selection = readInteractionState(state).cellSelection.selection;
 		const focus = selection.focus;
 		if (!focus) return;
+		const liveBounds = this.getLiveSelectionBounds(selection, state);
 
 		const focusRowIdx = this.c.getVisualIndexByRowId(focus.rowId) ?? -1;
-		const focusColIdx = this.c.getColumnIndex(focus.colField);
+		const focusColIdx = this.getColumnIndexFromPointer(focus, state);
 		if (focusRowIdx === -1 || focusColIdx === -1) return;
 
-		const startRow = selection.bounds ? selection.bounds.minRow : focusRowIdx;
-		const startCol = selection.bounds ? selection.bounds.minCol : focusColIdx;
+		const startRow = liveBounds ? liveBounds.minRow : focusRowIdx;
+		const startCol = liveBounds ? liveBounds.minCol : focusColIdx;
 
 		try {
 			const text = await navigator.clipboard.readText();
@@ -94,7 +132,7 @@ export class ClipboardController<TRowData = unknown> {
 				const cells = lines[r].split('\t');
 				let colsPasted = 0;
 				for (let c = 0; c < cells.length; c++) {
-					const col = state.columns[startCol + c] as ColumnDef<TRowData> | undefined;
+					const col = this.getDisplayedColumnAtIndex(startCol + c);
 					if (!col) break;
 					let value: unknown = cells[c];
 					if (col.onPaste) {
@@ -124,6 +162,8 @@ export class ClipboardController<TRowData = unknown> {
 					'paste'
 				);
 				if ((issues?.length ?? 0) > 0) {
+					const exactCell = this.getExactRejectedCell(updates, issues!);
+					this.c.recordRejectedWrite?.('clipboard:validation', exactCell);
 					dispatchWriteBlockedEvent(
 						this.c.dispatchEvent,
 						'paste',
@@ -164,6 +204,16 @@ export class ClipboardController<TRowData = unknown> {
 		}
 	}
 
+	private getExactRejectedCell(
+		updates: readonly { rowId: string; colField: string }[],
+		issues: readonly GridIntegrityIssue[]
+	): { rowId: string; colField: string } | undefined {
+		if (updates.length === 1) return { rowId: updates[0]!.rowId, colField: updates[0]!.colField };
+		if (issues.some((issue) => issue.rowId === undefined || issue.colField === undefined)) return undefined;
+		const first = { rowId: issues[0]!.rowId!, colField: issues[0]!.colField! };
+		return issues.every((issue) => issue.rowId === first.rowId && issue.colField === first.colField) ? first : undefined;
+	}
+
 	private async _copyRange(minRow: number, maxRow: number, minCol: number, maxCol: number): Promise<void> {
 		const state = this.c.getState();
 		const result = this._buildTsv(minRow, maxRow, minCol, maxCol, state);
@@ -186,13 +236,13 @@ export class ClipboardController<TRowData = unknown> {
 			if (!vr || vr.kind !== 'data') continue;
 			const rowCells: string[] = [];
 			for (let c = minCol; c <= maxCol; c++) {
-				const col = state.columns[c] as ColumnDef<TRowData> | undefined;
+				const col = this.getDisplayedColumnAtIndex(c);
 				if (!col) continue;
 				if (this.c.checkCapability) {
 					const res = this.c.checkCapability('copy', { rowId: vr.rowId, colField: col.field });
 					if (!res.allowed) continue;
 				}
-				rowCells.push(this._getCellText(vr.rowId, col.field, state));
+				rowCells.push(this._getCellText(vr.rowId, col, state));
 				cells.push({ rowId: vr.rowId, colField: col.field });
 			}
 			rows.push(rowCells.join('\t'));
@@ -207,8 +257,8 @@ export class ClipboardController<TRowData = unknown> {
 		};
 	}
 
-	private _getCellText(rowId: string, colField: string, state: InternalGridState<TRowData>): string {
-		const col = state.columns.find((c) => c.field === colField) as ColumnDef<TRowData> | undefined;
+	private _getCellText(rowId: string, col: ColumnDef<TRowData>, state: InternalGridState<TRowData>): string {
+		const colField = col.field;
 		if (col?.onCopy) {
 			const row = this.c.getRawRowById(rowId);
 			if (row !== null) {

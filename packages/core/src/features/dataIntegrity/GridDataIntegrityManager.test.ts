@@ -6,7 +6,7 @@ import { createGridIntegrityRowProvider } from './GridIntegrityRowProvider.js';
 import { defaultGridScheduler } from '../../renderer/gridScheduler.js';
 import type { GridDataIntegrityConfig, GridApi } from './integrityTypes.js';
 import { InfiniteRowModelController } from '../../infiniteRowModel.js';
-import { ServerPageRowModelController } from '../../serverPageRowModel.js';
+import { ServerSideRowModelController } from '../../serverSideRowModel.js';
 
 interface TestRow {
 	id: string;
@@ -223,6 +223,36 @@ describe('GridDataIntegrityManager authoritative state', () => {
 		store.stopEditing(true);
 	});
 
+	it('treats a duplicate-field active editor as dirty for integrity streams', () => {
+		const store = new GridStore<TestRow>(
+			{
+				getRowId: (row) => row.id,
+				columns: [{ field: 'name', colId: 'name-a' }, { field: 'name', colId: 'name-b' }, { field: 'score' }],
+			},
+			{ dataIntegrity: INTEGRITY_CONFIG }
+		);
+		new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Local Name', score: 1 },
+				{ id: '2', name: 'Beta', score: 2 },
+			],
+			columns: store.getState().columns,
+		});
+		const secondNameColumn = store.engine.columns.getDisplayedColumns()[1] as { instanceId?: string };
+
+		store.startEditing('1', secondNameColumn.instanceId!);
+		const skipStream = store.integrity.createStream({ dirtyCellPolicy: 'skip', flashChanges: false });
+		skipStream.pushCells([{ rowId: '1', colField: 'name', value: 'Remote Name' }]);
+		skipStream.flush();
+
+		expect(store.getCellValue('1', 'name')).toBe('Local Name');
+		expect(store.engine.getState().integrity.liveStream.issues).toEqual(
+			expect.arrayContaining([expect.objectContaining({ type: 'streamSkipped', rowId: '1', colField: 'name' })])
+		);
+
+		store.stopEditing(true);
+	});
+
 	it('integrity row patches surface the same write result protocol as other canonical writes', () => {
 		const store = createStore();
 		const manager = recreateManager(store);
@@ -289,36 +319,33 @@ describe('GridDataIntegrityManager authoritative state', () => {
 		store.destroy();
 	});
 
-	it('reports partial but explicit currentPage semantics on server-page row models', async () => {
-		const store = new GridStore<TestRow>(
-			{ getRowId: (row) => row.id, columns: [...COLUMNS], pagination: { pageSize: 25 } },
-			{ dataIntegrity: { validation: true } }
-		);
-		new ServerPageRowModelController<TestRow>(store.getServerPageRowModelRuntime(), {
+	it('reports partial but explicit loaded-row semantics on server-side row models', async () => {
+		const store = new GridStore<TestRow>({ getRowId: (row) => row.id, columns: [...COLUMNS] }, { dataIntegrity: { validation: true } });
+		new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
 			columns: store.getState().columns,
 			getRowId: (row) => row.id,
-			pagination: { pageSize: 25 },
+			blockSize: 25,
 			datasource: {
-				getPage: async () => ({
+				getRows: async () => ({
 					rows: [
 						{ id: '1', name: 'Alpha', score: 1 },
 						{ id: '2', name: 'Beta', score: 2 },
 					],
-					totalRowCount: 2,
+					rowCount: 2,
 				}),
 			},
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		const result = await store.integrity.run({ scope: 'currentPage' });
+		const result = await store.integrity.run({ scope: 'loadedRows' });
 
 		expect(result).toMatchObject({
 			status: 'completed',
-			scope: 'currentPage',
+			scope: 'loadedRows',
 			complete: false,
 			capability: {
 				level: 'partial',
-				scope: 'currentPage',
+				scope: 'loadedRows',
 			},
 		});
 		expect(store.integrity.getScopeCapability('filteredRows')).toMatchObject({

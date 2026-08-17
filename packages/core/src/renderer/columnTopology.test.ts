@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { compileColumnTopology, diffColumnTopologies, type CompiledColumnTopology } from './columnTopology.js';
+import { compileColumnTopology, computeColumnWindowDelta, diffColumnTopologies, type CompiledColumnTopology } from './columnTopology.js';
 import type { CompiledGridPlan, InternalColumnDef } from '../columnDef.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+// instanceId defaults to the field string itself — these tests exercise lane/topology logic, not
+// the field-vs-instance-id distinction, so using the field as a stand-in instanceId keeps every
+// existing `.columnId`/`.get(field)` assertion valid unchanged.
 function makeCol(field: string, width = 100, opts: Partial<InternalColumnDef<unknown>> = {}): InternalColumnDef<unknown> {
-	return { field, width, ...opts } as unknown as InternalColumnDef<unknown>;
+	return { field, width, instanceId: field, ...opts } as unknown as InternalColumnDef<unknown>;
 }
 
 function makePlan(cols: InternalColumnDef<unknown>[], pinLeftCount: number, pinRightCount: number, version = 1): CompiledGridPlan<unknown> {
@@ -362,5 +365,74 @@ describe('diffColumnTopologies', () => {
 
 		const diff = diffColumnTopologies(prev, next);
 		expect(diff.relocated).toHaveLength(0);
+	});
+});
+
+describe('computeColumnWindowDelta', () => {
+	function compilePlan(cols: InternalColumnDef<unknown>[], pinLeft: number, pinRight: number, version: number): CompiledColumnTopology {
+		return compileColumnTopology(makePlan(cols, pinLeft, pinRight, version));
+	}
+
+	it('horizontal-only scroll: entered/exited/stayed center columns, no lane moves', () => {
+		// A pure horizontal window shift: 'a' scrolls out, 'd' scrolls in, 'b'/'c' stay.
+		const prev = compilePlan([makeCol('a'), makeCol('b'), makeCol('c')], 0, 0, 1);
+		const next = compilePlan([makeCol('b'), makeCol('c'), makeCol('d')], 0, 0, 2);
+
+		const delta = computeColumnWindowDelta(prev, next);
+		expect(delta.enteredCenterColumns).toEqual(['d']);
+		expect(delta.exitedCenterColumns).toEqual(['a']);
+		expect(delta.stayedCenterColumns.sort()).toEqual(['b', 'c']);
+		expect(delta.laneMoves).toHaveLength(0);
+		expect(delta.enteredPinnedLeftColumns).toHaveLength(0);
+		expect(delta.exitedPinnedRightColumns).toHaveLength(0);
+	});
+
+	it('identical topology: everything stayed, nothing entered/exited/moved', () => {
+		const cols = [makeCol('a'), makeCol('b'), makeCol('c')];
+		const prev = compilePlan(cols, 0, 0, 1);
+		const next = compilePlan(cols, 0, 0, 2);
+
+		const delta = computeColumnWindowDelta(prev, next);
+		expect(delta.stayedCenterColumns.sort()).toEqual(['a', 'b', 'c']);
+		expect(delta.enteredCenterColumns).toHaveLength(0);
+		expect(delta.exitedCenterColumns).toHaveLength(0);
+		expect(delta.laneMoves).toHaveLength(0);
+	});
+
+	it('column pinned left: reported as a laneMove, not entered+exited', () => {
+		const cols = [makeCol('a'), makeCol('b'), makeCol('c')];
+		const prev = compilePlan(cols, 0, 0, 1); // all center
+		const next = compilePlan(cols, 1, 0, 2); // 'a' pinned left
+
+		const delta = computeColumnWindowDelta(prev, next);
+		expect(delta.laneMoves).toEqual([{ columnInstanceId: 'a', from: 'center', to: 'left' }]);
+		// A lane move is a relocation, not an enter/exit, and must not appear in stayed either.
+		expect(delta.enteredCenterColumns).toHaveLength(0);
+		expect(delta.exitedCenterColumns).toHaveLength(0);
+		expect(delta.enteredPinnedLeftColumns).toHaveLength(0);
+		expect(delta.stayedCenterColumns).not.toContain('a');
+		expect(delta.stayedCenterColumns.sort()).toEqual(['b', 'c']);
+	});
+
+	it('mixed diagonal scroll: a horizontal window shift combined with a pin change in the same step', () => {
+		const prev = compilePlan([makeCol('a'), makeCol('b'), makeCol('c'), makeCol('d')], 0, 0, 1);
+		// 'a' and 'd' exit entirely, 'b' gets pinned left, 'c' stays center, 'e' enters center.
+		const next = compilePlan([makeCol('b'), makeCol('c'), makeCol('e')], 1, 0, 2);
+
+		const delta = computeColumnWindowDelta(prev, next);
+		expect(delta.laneMoves).toEqual([{ columnInstanceId: 'b', from: 'center', to: 'left' }]);
+		expect(delta.exitedCenterColumns.sort()).toEqual(['a', 'd']);
+		expect(delta.enteredCenterColumns).toEqual(['e']);
+		expect(delta.stayedCenterColumns).toEqual(['c']);
+		expect(delta.enteredPinnedLeftColumns).toHaveLength(0); // 'b' was retained+relocated, not newly entered
+	});
+
+	it('pinned-right column exiting is reported under exitedPinnedRightColumns, not exitedCenterColumns', () => {
+		const prev = compilePlan([makeCol('a'), makeCol('b'), makeCol('c')], 0, 1, 1); // 'c' pinned right
+		const next = compilePlan([makeCol('a'), makeCol('b')], 0, 0, 2);
+
+		const delta = computeColumnWindowDelta(prev, next);
+		expect(delta.exitedPinnedRightColumns).toEqual(['c']);
+		expect(delta.exitedCenterColumns).toHaveLength(0);
 	});
 });

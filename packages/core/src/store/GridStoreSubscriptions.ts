@@ -1,7 +1,7 @@
 import type {
 	ActiveEditState,
+	CanonicalGridCellPointer,
 	CellSubscription,
-	GridCellPointer,
 	GridSnapshotKeyListener,
 	GridSnapshotListener,
 	GridSnapshotSelector,
@@ -13,6 +13,9 @@ import type { InternalGridState } from '../state/GridState.js';
 import type { VisualRow } from '../visualRow.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { SortModel } from '../rowModel.js';
+import type { GridDomainVersions } from '../state/GridDomainVersions.js';
+import { areCanonicalCellPointersEqual } from '../interaction/cellPointer.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 
 export interface GridStoreSubscriptionsFacade<TRowData = unknown> {
 	subscribe(listener: GridSnapshotListener<TRowData>): () => void;
@@ -43,12 +46,14 @@ export interface GridStoreSubscriptionsDeps<TRowData = unknown> {
 		listener: (value: TValue) => void,
 		isEqual?: (left: TValue, right: TValue) => boolean
 	): () => void;
+	subscribeDomain(domain: keyof GridDomainVersions, listener: (version: number) => void): () => void;
 	getState(): InternalGridState<TRowData>;
 	getStateSnapshot(): GridStateSnapshot<TRowData>;
 	getVisualIndexByRowId(rowId: string): number | null;
 	getVisualRow(index: number): VisualRow<TRowData> | null;
 	registerCellSubscription(sub: CellSubscription): void;
 	unregisterCellSubscription(sub: CellSubscription): void;
+	subscribeToRowChanges(rowId: string, listener: () => void): () => void;
 	rowVersions: ReadonlyMap<string, number>;
 }
 
@@ -82,6 +87,23 @@ export function createGridStoreSubscriptions<TRowData>(deps: GridStoreSubscripti
 		};
 	};
 
+	const subscribeDomainProjection = <TValue>(
+		domains: readonly (keyof GridDomainVersions)[],
+		selector: () => TValue,
+		listener: GridSnapshotListener<TRowData>,
+		isEqual: (left: TValue, right: TValue) => boolean = Object.is
+	): (() => void) => {
+		let current = selector();
+		const notifyIfChanged = () => {
+			const next = selector();
+			if (isEqual(current, next)) return;
+			current = next;
+			listener(deps.getStateSnapshot());
+		};
+		const unsubscribers = domains.map((domain) => deps.subscribeDomain(domain, notifyIfChanged));
+		return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+	};
+
 	return {
 		subscribe: (listener) => deps.subscribe(() => listener(deps.getStateSnapshot())),
 		subscribeToKey: (key, listener) => deps.subscribeToKey(key as string, () => listener(deps.getStateSnapshot()[key])),
@@ -92,31 +114,54 @@ export function createGridStoreSubscriptions<TRowData>(deps: GridStoreSubscripti
 			subscribeSnapshotProjection(['visibleRowRange'], (state) => state.visibleRowRange, listener, areViewportRangesEqual),
 		subscribeToSelection: (listener) => subscribeSnapshotProjection(['selection'], (state) => state.selection, listener),
 		subscribeToFocusedCell: (listener) =>
-			subscribeSnapshotProjection(['selection'], (state) => state.selection.focus, listener, areCellPointersEqual),
-		subscribeToEditingCell: (listener) => subscribeSnapshotProjection(['activeEdit'], (state) => state.activeEdit, listener, areActiveEditsEqual),
+			subscribeSnapshotProjection(
+				['selection', 'interaction'],
+				(state) => readInteractionState(state).focus.cell,
+				listener,
+				areFocusedCellsEqual
+			),
+		subscribeToEditingCell: (listener) =>
+			subscribeSnapshotProjection(
+				['activeEdit', 'interaction'],
+				(state) => readInteractionState(state).activeEdit.active,
+				listener,
+				areActiveEditsEqual
+			),
 		subscribeToCell: (rowId, colField, listener) => {
 			const sub: CellSubscription = { rowId, colField, onStoreChange: listener };
 			deps.registerCellSubscription(sub);
 			return () => deps.unregisterCellSubscription(sub);
 		},
-		subscribeToRow: (rowId, listener) =>
-			subscribeSnapshotProjection(
-				['globalVersion', 'rowHeights'],
-				() => getRowSubscriptionProjection(rowId),
-				listener,
-				areRowSubscriptionProjectionsEqual
-			),
+		subscribeToRow: (rowId, listener) => {
+			const getProjection = () => getRowSubscriptionProjection(rowId);
+			let current = getProjection();
+			const notifyIfChanged = () => {
+				const next = getProjection();
+				if (areRowSubscriptionProjectionsEqual(current, next)) return;
+				current = next;
+				listener(deps.getStateSnapshot());
+			};
+			const unsubscribeRowChanges = deps.subscribeToRowChanges(rowId, notifyIfChanged);
+			const unsubscribeDomains = (['rows', 'geometry'] as const).map((domain) => deps.subscribeDomain(domain, notifyIfChanged));
+			return () => {
+				unsubscribeRowChanges();
+				unsubscribeDomains.forEach((unsubscribe) => unsubscribe());
+			};
+		},
 		subscribeToColumn: (colField, listener) =>
-			subscribeSnapshotProjection(
-				['columns', 'columnWidths', 'sortModel'],
-				(state) => getColumnSubscriptionProjection(state, colField),
+			subscribeDomainProjection(
+				['columns', 'sorting'],
+				() => getColumnSubscriptionProjection(deps.getState(), colField),
 				listener,
 				areColumnSubscriptionProjectionsEqual
 			),
 		subscribeToHeaders: (listener) =>
-			subscribeSnapshotProjection(
-				['columns', 'columnWidths', 'sortModel'],
-				(state) => ({ columns: state.columns, columnWidths: state.columnWidths, sortModel: state.sortModel }),
+			subscribeDomainProjection(
+				['columns', 'sorting'],
+				() => {
+					const state = deps.getState();
+					return { columns: state.columns, columnWidths: state.columnWidths, sortModel: state.sortModel };
+				},
 				listener,
 				areHeaderSubscriptionProjectionsEqual
 			),
@@ -127,14 +172,18 @@ function areViewportRangesEqual(left: ViewportRange, right: ViewportRange): bool
 	return left.startIdx === right.startIdx && left.endIdx === right.endIdx;
 }
 
-function areCellPointersEqual(left: GridCellPointer | null, right: GridCellPointer | null): boolean {
-	return left === right || (!!left && !!right && left.rowId === right.rowId && left.colField === right.colField);
+function areFocusedCellsEqual(left: CanonicalGridCellPointer | null, right: CanonicalGridCellPointer | null): boolean {
+	return areCanonicalCellPointersEqual(left, right);
 }
 
 function areActiveEditsEqual(left: ActiveEditState | null, right: ActiveEditState | null): boolean {
 	return (
-		left === right ||
-		(!!left && !!right && left.rowId === right.rowId && left.colField === right.colField && left.validationError === right.validationError)
+		areCanonicalCellPointersEqual(left, right) &&
+		(left?.validationError ?? null) === (right?.validationError ?? null) &&
+		Object.is(left?.draftValue, right?.draftValue) &&
+		Object.is(left?.originalValue, right?.originalValue) &&
+		(left?.startedBy ?? null) === (right?.startedBy ?? null) &&
+		(left?.version ?? null) === (right?.version ?? null)
 	);
 }
 

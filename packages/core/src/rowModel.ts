@@ -1,10 +1,13 @@
 import { type ColumnDef, setValueByPath, compilePathGetter } from './columnDef.js';
 import { GridEventName } from './api/GridEvents.js';
-import type { RowDataTransaction, RowNodeTransaction, RowSelectionScope } from './api/GridApi.js';
+import type { RowDataTransaction, RowSelectionScope } from './api/GridApi.js';
 import type { ClientRowModelRuntime } from './engine/runtimePorts.js';
 import { GridMetric } from './diagnostics/GridInstrumentation.js';
 import { getFieldRoot } from './ids.js';
+import { createGridRowDataRef } from './publicRowRef.js';
 import { RowNode } from './rowNode.js';
+import type { InternalRowNodeTransaction } from './rowTransactions.js';
+import type { AsyncRowModelRequestIdentity } from './asyncRowModelRequestIdentity.js';
 import { RowPipeline, type RowModelConfig, type RowPipelineOutput } from './rows/RowPipeline.js';
 import { RowDependencyRegistry, classifyMutation, type RowMutationImpact } from './rows/rowMutationClassifier.js';
 import type { PageWindow } from './rows/pageModel.js';
@@ -45,6 +48,48 @@ export interface SortModelItem {
 }
 
 export type SortModel = SortModelItem[];
+
+/**
+ * Internal row-model identity. Keep this explicit so the public `server`
+ * alias maps to the real server-side row model (SSRM).
+ */
+export type InternalRowModelKind = 'client' | 'infinite' | 'server-side';
+
+/**
+ * Public/visual row-node kind surface. This is intentionally broader than the current
+ * flat client-row implementation because async row models need first-class loading and
+ * failure rows, and future grouped/detail rows must not overload plain data nodes.
+ */
+export type RowNodeKind = 'data' | 'loading' | 'failed' | 'placeholder' | 'group' | 'detail';
+
+export type RowCountKind = 'known' | 'estimated' | 'unknown';
+
+export interface RowModelQueryState {
+	readonly datasourceGeneration: number;
+	readonly queryVersion: number;
+}
+
+export interface RowModelRequestToken extends AsyncRowModelRequestIdentity {
+	readonly kind: 'infinite-block' | 'server-side-block';
+	readonly startRow?: number;
+	readonly endRow?: number;
+	readonly blockIndex?: number;
+}
+
+export type RowLoadState =
+	| { kind: 'loaded'; rowId: string }
+	| { kind: 'loading'; reason?: string }
+	| { kind: 'failed'; error: string; retryable: boolean }
+	| { kind: 'placeholder'; reason?: string }
+	| { kind: 'missing' };
+
+export interface RowRangeLoadState {
+	loaded: number;
+	loading: number;
+	failed: number;
+	placeholder: number;
+	missing: number;
+}
 
 export interface ClientRowModelOptions<TData = unknown> {
 	rows: TData[];
@@ -120,7 +165,7 @@ export class UnsupportedRowModelOperationError extends Error {
 // ── Row model contract types ──────────────────────────────────────────────────
 // Defined here to avoid a circular import with store.ts. store.ts re-exports these.
 
-export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit' | 'row-order';
+export type RowRefreshReason = 'sort' | 'filter' | 'group' | 'tree' | 'expansion' | 'detail' | 'flatten' | 'bulk' | 'edit' | 'row-order' | 'refresh';
 
 /**
  * The renderer-facing read contract for the row model.
@@ -156,6 +201,27 @@ export interface VisualRowModel<TRowData = unknown> {
 	getGroupMetaByVisualIndex?(visualIndex: number): GroupRowMeta | null;
 }
 
+/**
+ * Renderer-facing viewport contract for all row models. The renderer should be able to ask
+ * for rows, counts, and load/range state without knowing whether the backing model is client,
+ * infinite, or server-side.
+ */
+export interface RowModelViewportAccess<TRowData = unknown> extends VisualRowModel<TRowData> {
+	getKnownRowCount(): number | null;
+	getEstimatedRowCount(): number;
+	getRowCountKind(): RowCountKind;
+
+	getRowLoadState(index: number): RowLoadState;
+	isRowLoaded(index: number): boolean;
+	isRowLoading(index: number): boolean;
+	isRowFailed(index: number): boolean;
+
+	isRangeLoaded(startRow: number, endRow: number): boolean;
+	getRangeLoadState(startRow: number, endRow: number): RowRangeLoadState;
+
+	ensureRange(startRow: number, endRow: number, reason?: string): void;
+}
+
 export interface StickyGroupMetaCapableVisualRowModel {
 	getStickyGroupMeta(): Map<number, number>;
 }
@@ -163,6 +229,7 @@ export interface StickyGroupMetaCapableVisualRowModel {
 export interface RowModelRefreshResult {
 	changed: boolean;
 	reason?: RowRefreshReason;
+	layoutTransitionHint?: 'live-reorder';
 	previousRowCount?: number;
 	nextRowCount?: number;
 	changedStartIndex?: number;
@@ -215,10 +282,6 @@ export interface RowOrderCapableModel {
 	setRowOrder(rowIds: string[]): void;
 }
 
-export interface CellValueWritableRowModel<TRowData = unknown> {
-	setCellValue(rowId: string, colField: string, value: unknown, options?: { bypassValueSetter?: boolean }): boolean;
-}
-
 // ── Structural write contract ─────────────────────────────────────────────────
 
 /**
@@ -244,11 +307,15 @@ export interface RowModelWriteResult<TRowData = unknown> {
  * dispatch events, invalidate formulas, or bump versions.
  */
 export interface ClientStructuralRowModel<TRowData = unknown> extends RowOrderCapableModel {
+	captureTransactionSnapshot(
+		mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TRowData>
+	): RowModelTransactionSnapshot<TRowData>;
+	restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;
 	replaceRowsStructurally(rows: readonly TRowData[]): RowModelWriteResult<TRowData>;
 	updateRowsStructurally(updater: (rows: TRowData[]) => TRowData[]): RowModelWriteResult<TRowData>;
 	applyTransactionStructurally(
 		transaction: import('./api/GridApi.js').RowDataTransaction<TRowData>
-	): RowModelWriteResult<TRowData> & import('./api/GridApi.js').RowNodeTransaction<TRowData>;
+	): RowModelWriteResult<TRowData> & InternalRowNodeTransaction<TRowData>;
 	writeCellValueStructurally(
 		rowId: string,
 		colField: string,
@@ -278,6 +345,8 @@ export function classifyWriteImpact(rowModel: RowModel<unknown> | null, changedF
 
 export function asClientStructuralRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): ClientStructuralRowModel<TRowData> | null {
 	return hasFunctions(rowModel, [
+		'captureTransactionSnapshot',
+		'restoreTransactionSnapshot',
 		'replaceRowsStructurally',
 		'updateRowsStructurally',
 		'applyTransactionStructurally',
@@ -314,13 +383,12 @@ export interface InfiniteControllableRowModel<TRowData = unknown> {
 	setDatasource(datasource: import('./infiniteRowModel.js').InfiniteDatasource<TRowData>, blockSize?: number): void;
 }
 
-/** Capability interface for the server-page row model. */
-export interface ServerPageControllableRowModel<TRowData = unknown> {
-	goToPage(page: number): void;
-	setPageSize(pageSize: number): void;
-	reloadPage(reason?: string): void;
-	getPageState(): import('./serverPageRowModel.js').ServerPageState;
-	setDatasource(datasource: import('./serverPageRowModel.js').ServerDatasource<TRowData>): void;
+/** Capability interface for the real server-side row model (SSRM). */
+export interface ServerSideControllableRowModel<TRowData = unknown> {
+	setServerSideDatasource(datasource: import('./serverSideRowModel.js').ServerSideDatasource<TRowData>): void;
+	refreshServerSide(options?: import('./serverSideRowModel.js').ServerSideRefreshOptions): void;
+	purgeServerSide(options?: Omit<import('./serverSideRowModel.js').ServerSideRefreshOptions, 'purge'>): void;
+	getServerSideStoreState(): readonly import('./serverSideRowModel.js').ServerSideStoreSnapshot[];
 }
 
 export interface VisibleBlockLoadCapableRowModel {
@@ -332,16 +400,8 @@ export interface RowModelTransactionSnapshot<TRowData = unknown> {
 	readonly snapshot: unknown;
 }
 
-export interface TransactionalRowModel<TRowData = unknown> {
-	captureTransactionSnapshot(
-		mutation: import('./engine/GridDomainMutation.js').RowTransactionMutation<TRowData>
-	): RowModelTransactionSnapshot<TRowData>;
-	applyTransaction(mutation: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData>;
-	restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;
-}
-
 /** Shared row-model contract used across engine and rendering code. */
-export interface RowModel<TRowData = unknown> extends VisualRowModel<TRowData> {
+export interface RowModel<TRowData = unknown> extends RowModelViewportAccess<TRowData> {
 	refresh(reason?: RowRefreshReason): RowModelRefreshResult;
 }
 
@@ -385,10 +445,6 @@ export function asRowOrderCapableModel(rowModel: RowModel<unknown> | null): RowO
 	return hasFunctions(rowModel, ['getRowOrder', 'setRowOrder']) ? (rowModel as unknown as RowOrderCapableModel) : null;
 }
 
-export function asCellValueWritableRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): CellValueWritableRowModel<TRowData> | null {
-	return hasFunctions(rowModel, ['setCellValue']) ? (rowModel as unknown as CellValueWritableRowModel<TRowData>) : null;
-}
-
 export function asInfiniteControllableRowModel<TRowData = unknown>(
 	rowModel: RowModel<TRowData> | null
 ): InfiniteControllableRowModel<TRowData> | null {
@@ -397,21 +453,11 @@ export function asInfiniteControllableRowModel<TRowData = unknown>(
 		: null;
 }
 
-export function asServerPageControllableRowModel<TRowData = unknown>(
+export function asServerSideControllableRowModel<TRowData = unknown>(
 	rowModel: RowModel<TRowData> | null
-): ServerPageControllableRowModel<TRowData> | null {
-	return hasFunctions(rowModel, ['goToPage', 'setPageSize', 'reloadPage', 'getPageState'])
-		? (rowModel as unknown as ServerPageControllableRowModel<TRowData>)
-		: null;
-}
-
-export function asVisibleBlockLoadCapableRowModel(rowModel: RowModel<unknown> | null): VisibleBlockLoadCapableRowModel | null {
-	return hasFunctions(rowModel, ['loadVisibleBlocks']) ? (rowModel as unknown as VisibleBlockLoadCapableRowModel) : null;
-}
-
-export function asTransactionalRowModel<TRowData = unknown>(rowModel: RowModel<TRowData> | null): TransactionalRowModel<TRowData> | null {
-	return hasFunctions(rowModel, ['captureTransactionSnapshot', 'applyTransaction', 'restoreTransactionSnapshot'])
-		? (rowModel as unknown as TransactionalRowModel<TRowData>)
+): ServerSideControllableRowModel<TRowData> | null {
+	return hasFunctions(rowModel, ['setServerSideDatasource', 'refreshServerSide', 'purgeServerSide', 'getServerSideStoreState'])
+		? (rowModel as unknown as ServerSideControllableRowModel<TRowData>)
 		: null;
 }
 
@@ -545,7 +591,7 @@ function compareValues(a: unknown, b: unknown): number {
 
 export function getColumnValue<TData>(node: RowNode<TData>, column: ColumnDef<TData> | undefined): unknown {
 	if (!column) return undefined;
-	if (column.valueGetter) return column.valueGetter({ node, row: node.data, colField: column.field });
+	if (column.valueGetter) return column.valueGetter({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: column.field });
 	const getter = compilePathGetter(column.field);
 	return node.getCellValue(column.field, getter);
 }
@@ -714,7 +760,7 @@ function describeVisualRowDiff<TData>(
 function makeGetter<TData>(column: ColumnDef<TData>): (node: RowNode<TData>) => unknown {
 	if (column.valueGetter) {
 		const vg = column.valueGetter;
-		return (node) => vg({ node, row: node.data, colField: column.field });
+		return (node) => vg({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: column.field });
 	}
 	const pg = compilePathGetter(column.field);
 	return (node) => node.getCellValue(column.field, pg);
@@ -845,7 +891,8 @@ export function applyClientSortAndFilter<TData>(
 			if (column) {
 				if (column.valueGetter) {
 					const colValGetter = column.valueGetter;
-					getter = (node: RowNode<TData>) => colValGetter({ node, row: node.data, colField: column.field });
+					getter = (node: RowNode<TData>) =>
+						colValGetter({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: column.field });
 				} else {
 					const pathGetter = compilePathGetter(column.field);
 					getter = (node: RowNode<TData>) => node.getCellValue(column.field, pathGetter);
@@ -1134,7 +1181,8 @@ export class ClientRowModelController<TData = unknown>
 			if (col) {
 				if (col.valueGetter) {
 					const vg = col.valueGetter;
-					return (node: RowNode<TData>): unknown => vg({ node, row: node.data, colField: col.field });
+					return (node: RowNode<TData>): unknown =>
+						vg({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: col.field });
 				}
 				const pg = compilePathGetter(col.field);
 				return (node: RowNode<TData>): unknown => node.getCellValue(col.field, pg);
@@ -1222,7 +1270,7 @@ export class ClientRowModelController<TData = unknown>
 
 	public applyTransactionStructurally(
 		transaction: import('./api/GridApi.js').RowDataTransaction<TData>
-	): RowModelWriteResult<TData> & import('./api/GridApi.js').RowNodeTransaction<TData> {
+	): RowModelWriteResult<TData> & InternalRowNodeTransaction<TData> {
 		const result = this.dataStore.applyTransaction(transaction);
 		const hasStructural = result.added.length > 0 || result.removed.length > 0;
 		return {
@@ -1307,6 +1355,7 @@ export class ClientRowModelController<TData = unknown>
 				return {
 					changed: true,
 					reason: 'sort',
+					layoutTransitionHint: 'live-reorder',
 					changedStartIndex,
 					changedEndIndex: Math.max(changedStartIndex, this.visualRows.length - 1),
 				};
@@ -1322,37 +1371,6 @@ export class ClientRowModelController<TData = unknown>
 		}
 		inst.increment(GridMetric.ROW_MUTATION_INCREMENTAL);
 		return { changed: false };
-	}
-
-	private collectCommittedCellChanges(writeResult: RowModelWriteResult<TData>): Map<string, Set<string>> {
-		const changes = new Map<string, Set<string>>();
-		if (!writeResult.changedFieldsByRow || writeResult.changedFieldsByRow.size === 0) return changes;
-
-		const addCell = (rowId: string, colField: string): void => {
-			let fields = changes.get(rowId);
-			if (!fields) {
-				fields = new Set<string>();
-				changes.set(rowId, fields);
-			}
-			fields.add(colField);
-		};
-
-		for (const [rowId, fields] of writeResult.changedFieldsByRow) {
-			const changedValues = writeResult.changedValuesByRow?.get(rowId);
-			for (const field of fields) {
-				const newRawValue = changedValues?.get(field)?.newValue ?? this.runtime.getCellValue(rowId, field);
-				this.runtime.syncFormulaForCell(rowId, field, newRawValue);
-				addCell(rowId, field);
-				for (const dep of this.runtime.getValueGetterDependents(field)) {
-					if (dep !== field) addCell(rowId, dep);
-				}
-				for (const formulaCell of this.runtime.invalidateFormulaCell(rowId, field)) {
-					addCell(formulaCell.rowId, formulaCell.colField);
-				}
-			}
-		}
-
-		return changes;
 	}
 
 	/**
@@ -1443,7 +1461,8 @@ export class ClientRowModelController<TData = unknown>
 					if (col) {
 						if (col.valueGetter) {
 							const vg = col.valueGetter;
-							return (node: RowNode<TData>): unknown => vg({ node, row: node.data, colField: col.field });
+							return (node: RowNode<TData>): unknown =>
+								vg({ node: createGridRowDataRef(node.id, node.data), row: node.data, colField: col.field });
 						}
 						const pg = compilePathGetter(col.field);
 						return (node: RowNode<TData>): unknown => node.getCellValue(col.field, pg);
@@ -1528,52 +1547,24 @@ export class ClientRowModelController<TData = unknown>
 		this.refresh('bulk');
 	};
 
-	// Compatibility shell only: structural writes and post-write lifecycle ownership stay centralized
-	// in applyTransactionStructurally(...) + reconcileAfterDataWrite(...) so transaction updates cannot
-	// diverge from setCellValue, batchCellValues, updateRows, or integrity-driven writes.
-	public applyTransaction = (transaction: RowDataTransaction<TData>): RowNodeTransaction<TData> => {
-		const writeResult = this.applyTransactionStructurally(transaction);
-		const notifyCells = this.collectCommittedCellChanges(writeResult);
-		if (notifyCells.size > 0) {
-			this.runtime.notifyBulkCellChange(notifyCells);
-		}
-		const hasStructural = (writeResult.addedNodes?.length ?? 0) > 0 || (writeResult.removedNodes?.length ?? 0) > 0;
-		const allChangedFields = new Set<string>();
-		if (!hasStructural && writeResult.changedFieldsByRow) {
-			for (const fields of writeResult.changedFieldsByRow.values()) {
-				for (const field of fields) allChangedFields.add(field);
-			}
-		}
-		const impact = hasStructural
-			? ('insert' as RowWriteImpact)
-			: allChangedFields.size > 0
-				? this.classifyFieldMutation(allChangedFields)
-				: ('value-only' as RowWriteImpact);
-		// Guardrail note: row mutation instrumentation remains centralized in reconcileAfterDataWrite via runtime.getInstrumentation().increment(...).
-		this.reconcileAfterDataWrite(writeResult, impact);
-
-		if ((writeResult.add?.length ?? 0) > 0 || (writeResult.remove?.length ?? 0) > 0 || (writeResult.update?.length ?? 0) > 0) {
-			this.runtime.dispatchRowsUpdated({
-				changedValuesByRow: writeResult.changedValuesByRow ?? new Map(),
-				changedNodes: writeResult.update ?? [],
-				addedNodes: writeResult.add ?? [],
-				removedNodes: writeResult.remove ?? [],
-			});
-		}
-
-		return {
-			add: writeResult.add ?? [],
-			remove: writeResult.remove ?? [],
-			update: writeResult.update ?? [],
-		};
-	};
-
 	public getVisualRow = (index: number): VisualRow<TData> | null => {
 		return this.visualRows[index] ?? null;
 	};
 
 	public getVisualRowCount = (): number => {
 		return this.visualRows.length;
+	};
+
+	public getKnownRowCount = (): number | null => {
+		return this.visualRows.length;
+	};
+
+	public getEstimatedRowCount = (): number => {
+		return this.visualRows.length;
+	};
+
+	public getRowCountKind = (): RowCountKind => {
+		return 'known';
 	};
 
 	public getVisualIndexById = (visualRowId: string): number => {
@@ -1599,6 +1590,45 @@ export class ClientRowModelController<TData = unknown>
 	public getRowIndexById = (rowId: string): number => {
 		return this.getVisualIndexByRowId(rowId);
 	};
+
+	public getRowLoadState = (index: number): RowLoadState => {
+		const row = this.getVisualRow(index);
+		if (!row) return { kind: 'missing' };
+		if (row.kind === 'data') return { kind: 'loaded', rowId: row.rowId };
+		return { kind: 'loaded', rowId: row.id };
+	};
+
+	public isRowLoaded = (index: number): boolean => {
+		return this.getRowLoadState(index).kind === 'loaded';
+	};
+
+	public isRowLoading = (_index: number): boolean => {
+		return false;
+	};
+
+	public isRowFailed = (_index: number): boolean => {
+		return false;
+	};
+
+	public isRangeLoaded = (startRow: number, endRow: number): boolean => {
+		if (startRow > endRow) return true;
+		for (let index = startRow; index <= endRow; index++) {
+			if (!this.isRowLoaded(index)) return false;
+		}
+		return true;
+	};
+
+	public getRangeLoadState = (startRow: number, endRow: number): RowRangeLoadState => {
+		const state: RowRangeLoadState = { loaded: 0, loading: 0, failed: 0, placeholder: 0, missing: 0 };
+		if (startRow > endRow) return state;
+		for (let index = startRow; index <= endRow; index++) {
+			const rowState = this.getRowLoadState(index);
+			state[rowState.kind]++;
+		}
+		return state;
+	};
+
+	public ensureRange = (_startRow: number, _endRow: number, _reason?: string): void => {};
 
 	public getDataRowById = (rowId: string): TData | null => {
 		return this.getRawRowById(rowId);

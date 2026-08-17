@@ -1,0 +1,211 @@
+{
+	"schemaVersion": 2,
+	"capturedAt": "2026-07-28",
+	"captureScope": "live worktree after the Plan 165 verification run; source metrics are capture evidence and the gate records below are root-authoritative live results",
+	"plannedCommit": "faf29558",
+	"environment": {
+		"node": "v24.8.0",
+		"packageManager": {
+			"requested": "pnpm via corepack",
+			"liveProbe": "blocked: corepack EPERM opendir C:/Users/rishi/AppData/Local/node/corepack/v1/pnpm"
+		}
+	},
+	"source": {
+		"productionTypeScriptFiles": 220,
+		"productionLines": 50166,
+		"testTypeScriptFiles": 121,
+		"testLines": 42678,
+		"topLevelProductionFiles": {
+			"root": 29,
+			"analysis": 1,
+			"api": 4,
+			"calculations": 1,
+			"capabilities": 2,
+			"commands": 1,
+			"diagnostics": 5,
+			"engine": 15,
+			"events": 1,
+			"export": 1,
+			"features": 25,
+			"filters": 1,
+			"insights": 4,
+			"interaction": 5,
+			"internal": 2,
+			"models": 7,
+			"persistence": 1,
+			"plugins": 2,
+			"query": 3,
+			"renderer": 84,
+			"rows": 13,
+			"spreadsheet": 1,
+			"state": 4,
+			"store": 3,
+			"styling": 1,
+			"testUtils": 1,
+			"workspace": 3
+		},
+		"topLevelProductionLines": {
+			"root": 7952,
+			"analysis": 30,
+			"api": 885,
+			"calculations": 414,
+			"capabilities": 189,
+			"commands": 109,
+			"diagnostics": 1372,
+			"engine": 4824,
+			"events": 51,
+			"export": 79,
+			"features": 5526,
+			"filters": 191,
+			"insights": 126,
+			"interaction": 1038,
+			"internal": 312,
+			"models": 1374,
+			"persistence": 584,
+			"plugins": 233,
+			"query": 398,
+			"renderer": 21029,
+			"rows": 1506,
+			"spreadsheet": 328,
+			"state": 567,
+			"store": 563,
+			"styling": 158,
+			"testUtils": 50,
+			"workspace": 278
+		},
+		"topLevelImportEdges": {
+			"totalCrossDirectoryEdges": 752,
+			"method": "deterministic relative-import scan of non-test TypeScript source; an edge is one import declaration crossing the first src directory boundary",
+			"byImporter": {
+				"analysis": 3,
+				"api": 50,
+				"capabilities": 2,
+				"commands": 2,
+				"diagnostics": 5,
+				"engine": 134,
+				"events": 2,
+				"features": 99,
+				"filters": 1,
+				"insights": 5,
+				"interaction": 12,
+				"internal": 18,
+				"models": 23,
+				"persistence": 5,
+				"plugins": 4,
+				"query": 5,
+				"renderer": 161,
+				"root": 147,
+				"rows": 24,
+				"store": 24,
+				"state": 11,
+				"spreadsheet": 7,
+				"styling": 2,
+				"testUtils": 3,
+				"workspace": 3
+			}
+		},
+		"entrypointExports": {
+			"coreStableIndex": 284,
+			"coreExperimental": 47,
+			"reactStableIndex": 170,
+			"reactExperimental": 21,
+			"method": "TypeScript compiler API getExportsOfModule against each source entrypoint; counts exported module symbols, not export statements"
+		},
+		"namedBoundaryClassDefinitions": {
+			"total": 45,
+			"Controller": 21,
+			"Coordinator": 7,
+			"Manager": 12,
+			"Registry": 3,
+			"Bridge": 2,
+			"Port": 0,
+			"Runtime": 0,
+			"method": "exact production class declaration suffix regex from Plan 164"
+		},
+		"largestProductionFilesByLines": [
+			"renderer/styles.ts:1864",
+			"rowModel.ts:1603",
+			"engine/GridEngine.ts:1471",
+			"engine/GridDomainMutation.ts:1455",
+			"serverSideRowModel.ts:1070",
+			"infiniteRowModel.ts:1053",
+			"store.ts:1041",
+			"renderer/rowCellBinder.ts:769",
+			"diagnostics/GridTraceReplay.ts:739",
+			"renderer/rowRenderer.ts:722",
+			"renderer/rowCellBindingLanes.ts:719",
+			"renderer/floatingFilterRenderer.ts:705",
+			"renderer/renderEngine.ts:685",
+			"renderer/renderScrollCoordinator.ts:685",
+			"renderer/scrollCellPresentation.ts:651",
+			"renderer/renderWindow.ts:647",
+			"renderer/portalMountManager.ts:626",
+			"renderer/themes.ts:624",
+			"interaction/GridInteractionController.ts:601",
+			"features/dataIntegrity/GridDataIntegrityManager.ts:595",
+			"engine/GridChangeApplier.ts:591",
+			"persistence/statePersistence.ts:584",
+			"renderer/cellSlot.ts:534",
+			"columnDef.ts:533",
+			"features/dataIntegrity/modules/ValidationIntegrityModule.ts:517"
+		]
+	},
+	"artifacts": {
+		"coreDist": { "files": 440, "bytes": 2404710, "authority": "fresh build:packages output inspected after root verification" },
+		"reactDist": { "files": 66, "bytes": 432911, "authority": "fresh build:packages output inspected after root verification" },
+		"tarball": { "status": "pack:verify passed", "authority": "authoritative root verification" }
+	},
+	"gates": {
+		"build": {
+			"command": "corepack pnpm run build:packages",
+			"status": "PASS: core and React packages",
+			"authority": "authoritative root verification"
+		},
+		"full": {
+			"command": "corepack pnpm --filter @open-grid/core exec vitest run",
+			"status": "PASS: 121/121 files, 1982/1982 tests",
+			"detail": "The existing 100k-row/10k-scroll test has a test-only 15s timeout to accommodate parallel contention; workload, assertions, and budgets are unchanged.",
+			"authority": "authoritative root verification"
+		},
+		"react": {
+			"command": "corepack pnpm --filter @open-grid/react test",
+			"status": "PASS: 10/10 files, 124/124 tests",
+			"authority": "authoritative root verification"
+		},
+		"architecture": {
+			"command": "corepack pnpm run test:architecture",
+			"status": "PASS: 317/317 checks",
+			"detail": "The narrow test-only allowlist now verifies GridTraceReplay's injected deterministic scheduler seam.",
+			"authority": "authoritative root verification"
+		},
+		"adversarial": {
+			"command": "corepack pnpm run test:adversarial",
+			"status": "prior focused row-model observation 7/7",
+			"authority": "informational; rerun required"
+		},
+		"bench": {
+			"command": "corepack pnpm run bench",
+			"status": "PASS: 11/11",
+			"authority": "authoritative root verification"
+		},
+		"longSession": {
+			"command": "corepack pnpm run bench:long-session",
+			"status": "PASS: core 6/6; React 8/8",
+			"authority": "authoritative root verification"
+		},
+		"api": {
+			"command": "corepack pnpm run api:check",
+			"status": "stable and internal hashes unchanged; experimental mismatch is pre-existing replay exports",
+			"detail": "stable expected/current 1a83099...; internal expected/current da9e811...; experimental current 1bea93... versus expected 559029...",
+			"authority": "authoritative root verification"
+		},
+		"package": { "command": "corepack pnpm run pack:verify", "status": "PASS", "authority": "authoritative root verification" },
+		"format": { "command": "corepack pnpm run format:check", "status": "PASS", "authority": "authoritative root verification" },
+		"diff": {
+			"command": "git diff --check -- docs/architecture",
+			"status": "PASS: scoped documentation diff",
+			"authority": "authoritative local verification; root owns final whole-worktree check"
+		}
+	},
+	"interpretation": "Counts, import edges, exports and sizes are drift evidence, not goals. A successful simplification deletes a duplicate authority, obsolete path or needless dependency edge without converting a safety boundary into a god object."
+}

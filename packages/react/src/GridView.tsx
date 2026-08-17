@@ -2,19 +2,24 @@ import {
 	GridApi,
 	GridEventName,
 	GridCellClickParams,
-	GridCellPointer,
 	GridContextMenuOptions,
 	GridContextMenuHandle,
 	type GridEventPayloadMap,
 	registerGridContextMenu,
 	VisualRow,
 } from '@open-grid/core';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { GridAdapterContext } from './gridContext.js';
-import { GridHostWithAdapter, GridAdapterHandle, hasImperativeRendererCapability, mountGridHost } from './reactHostBridge.js';
+import {
+	GridHostWithAdapter,
+	GridAdapterHandle,
+	bindGridInteractionSurface,
+	hasImperativeRendererCapability,
+	mountGridHost,
+	type GridInteractionSurfaceBinding,
+} from './reactHostBridge.js';
 import { PortalManager, createPortalStore } from './GridPortal.js';
 import { flashCopiedCells } from './cellFlash.js';
-import { useGridNavigationController } from './hooks.js';
 import { GridSidebar, GridSidebarConfig } from './sidebar/GridSidebar.js';
 import { GridChartOverlay } from './chart/GridChartOverlay.js';
 
@@ -74,10 +79,7 @@ export function GridView<TRowData = unknown>({
 	const portalStore = useMemo(() => createPortalStore<TRowData>(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const hostRef = useRef<GridHostWithAdapter<TRowData> | null>(null);
-	const apiRef = useRef(api);
-	apiRef.current = api;
 	const [adapterHandle, setAdapterHandle] = useState<GridAdapterHandle<unknown> | null>(null);
-	const isGridActiveRef = useRef(false);
 	const warnedInitialOnlyPropsRef = useRef(new Set<string>());
 	const sidebarDefaultOpenRef = useRef(sidebar?.defaultOpen);
 	const sidebarInitialApiRef = useRef(api);
@@ -195,11 +197,31 @@ export function GridView<TRowData = unknown>({
 		});
 		hostRef.current = host;
 		setAdapterHandle(host.adapterHandle as GridAdapterHandle<unknown>);
+		const interactionBinding = bindGridInteractionSurface(api, {
+			container,
+			adapterHandle: host.adapterHandle,
+			getNavigationEnabled: () => !!enableNavigationRef.current,
+			isContextMenuEnabled: () => !!enableContextMenuRef.current && !!contextMenuRef.current,
+			showContextMenu: (pointer, clientX, clientY) => {
+				contextMenuRef.current?.showPointer(pointer, clientX, clientY);
+			},
+			onCellClick: (params) => {
+				onCellClickRef.current?.(params);
+			},
+		});
+		interactionBindingRef.current = interactionBinding;
+		interactionBinding.updateOptions({
+			editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
+			arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
+		});
 
 		return () => {
+			if (interactionBindingRef.current === interactionBinding) {
+				interactionBindingRef.current = null;
+			}
+			interactionBinding.destroy();
 			hostRef.current = null;
 			setAdapterHandle(null);
-			isGridActiveRef.current = false;
 			host.destroy();
 			portalStore.clear(true);
 		};
@@ -229,205 +251,20 @@ export function GridView<TRowData = unknown>({
 		contextMenuRef.current?.setOptions(contextMenuOptionsRef.current ?? {});
 	}, [contextMenuOptions]);
 
-	const navigation = useGridNavigationController<TRowData>(
-		{
-			editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
-			arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
-		},
-		enableNavigation
-	);
-	const navigationRef = useRef(navigation);
-	navigationRef.current = navigation;
+	const interactionBindingRef = useRef<GridInteractionSurfaceBinding | null>(null);
 	const onCellClickRef = useRef(onCellClick);
 	onCellClickRef.current = onCellClick;
+	const enableNavigationRef = useRef(enableNavigation);
+	enableNavigationRef.current = enableNavigation;
 	const enableContextMenuRef = useRef(enableContextMenu);
 	enableContextMenuRef.current = enableContextMenu;
 
 	useEffect(() => {
-		if (!enableNavigation) return;
-		const isWithinThisGrid = (target: EventTarget | null): boolean => {
-			const container = containerRef.current;
-			if (!container || !(target instanceof HTMLElement)) return false;
-			return target.closest('.og-grid-container') === container;
-		};
-		const handleGlobalKeyDown = (e: KeyboardEvent) => {
-			const activeEl = document.activeElement;
-			const isInside = isWithinThisGrid(activeEl) || isGridActiveRef.current;
-			if (isInside) {
-				navigationRef.current?.handleKeyDown(e);
-			}
-		};
-		const handleGlobalMouseUp = () => {
-			navigationRef.current?.handleMouseUp();
-		};
-		const handlePointerDown = (e: MouseEvent) => {
-			isGridActiveRef.current = isWithinThisGrid(e.target);
-		};
-		const handleFocusIn = (e: FocusEvent) => {
-			if (isWithinThisGrid(e.target)) {
-				isGridActiveRef.current = true;
-			}
-		};
-		const handleFocusOut = (e: FocusEvent) => {
-			const related = e.relatedTarget;
-			if (related instanceof HTMLElement && !isWithinThisGrid(related)) {
-				isGridActiveRef.current = false;
-			}
-		};
-		const container = containerRef.current;
-		if (container) {
-			container.addEventListener('focusin', handleFocusIn);
-			container.addEventListener('focusout', handleFocusOut);
-		}
-		window.addEventListener('keydown', handleGlobalKeyDown);
-		window.addEventListener('mouseup', handleGlobalMouseUp);
-		document.addEventListener('mousedown', handlePointerDown, true);
-		return () => {
-			window.removeEventListener('keydown', handleGlobalKeyDown);
-			window.removeEventListener('mouseup', handleGlobalMouseUp);
-			document.removeEventListener('mousedown', handlePointerDown, true);
-			if (container) {
-				container.removeEventListener('focusin', handleFocusIn);
-				container.removeEventListener('focusout', handleFocusOut);
-			}
-		};
-	}, [enableNavigation]);
-
-	const getCellPointerFromEvent = useCallback((e: MouseEvent): { cellEl: HTMLElement; pointer: GridCellPointer } | null => {
-		const cellEl = (e.target as HTMLElement).closest('.og-cell') as HTMLElement;
-		if (!cellEl) return null;
-		if (cellEl.closest('.og-grid-container') !== containerRef.current) return null;
-		const pointer = hostRef.current?.adapterHandle.getCellPointerFromElement(cellEl) ?? null;
-		if (!pointer) return null;
-		return { cellEl, pointer };
-	}, []);
-
-	const handleMouseDown = useCallback(
-		(e: MouseEvent) => {
-			const nav = navigationRef.current;
-			if (!nav) return;
-			const target = getCellPointerFromEvent(e);
-			if (!target) return;
-			const { cellEl, pointer } = target;
-
-			isGridActiveRef.current = true;
-			const state = apiRef.current.getStateSnapshot();
-			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
-			if (isEditing) return;
-
-			// Skip range selection for columns that have canDrag (drag handle) or disableCellRangeSelection set.
-			const colDef = apiRef.current.getColumnDef(pointer.colField);
-			if (colDef && (colDef.canDrag !== undefined || colDef.disableCellRangeSelection)) return;
-
-			cellEl.tabIndex = -1;
-			cellEl.focus();
-			nav.handleMouseDown(pointer.rowId, pointer.colField, e);
-		},
-		[getCellPointerFromEvent]
-	);
-
-	const handleMouseOver = useCallback(
-		(e: MouseEvent) => {
-			const nav = navigationRef.current;
-			if (!nav) return;
-			const target = getCellPointerFromEvent(e);
-			if (!target) return;
-			const { cellEl, pointer } = target;
-
-			if (e.relatedTarget && cellEl.contains(e.relatedTarget as Node)) return;
-
-			nav.handleMouseEnter(pointer.rowId, pointer.colField);
-		},
-		[getCellPointerFromEvent]
-	);
-
-	const handleClick = useCallback(
-		(e: MouseEvent) => {
-			const target = getCellPointerFromEvent(e);
-			if (!target) return;
-			const { pointer } = target;
-
-			const access = hostRef.current?.adapterHandle.getCellAccess(pointer.rowId, pointer.colField) ?? null;
-			const clickParams = access
-				? {
-						rowId: access.rowId,
-						rowIndex: access.rowIndex,
-						row: access.row,
-						node: access.node,
-						colField: access.colField,
-						colIndex: access.colIndex,
-						column: access.column,
-						value: access.value,
-						api: apiRef.current,
-						event: e,
-					}
-				: null;
-			if (clickParams) {
-				onCellClickRef.current?.(clickParams as GridCellClickParams<TRowData>);
-				apiRef.current.dispatchEvent(GridEventName.cellClicked, clickParams as GridCellClickParams<TRowData>);
-			}
-
-			const nav = navigationRef.current;
-			if (!nav) return;
-
-			const state = apiRef.current.getStateSnapshot();
-			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
-			if (isEditing) return;
-
-			nav.handleClick(pointer.rowId, pointer.colField, e);
-		},
-		[getCellPointerFromEvent]
-	);
-
-	const handleDoubleClick = useCallback(
-		(e: MouseEvent) => {
-			const nav = navigationRef.current;
-			if (!nav) return;
-			const target = getCellPointerFromEvent(e);
-			if (!target) return;
-			const { pointer } = target;
-
-			const state = apiRef.current.getStateSnapshot();
-			const isEditing = state.activeEdit?.rowId === pointer.rowId && state.activeEdit?.colField === pointer.colField;
-			if (isEditing) return;
-
-			nav.setCellEditing(pointer.rowId, pointer.colField, true);
-		},
-		[getCellPointerFromEvent]
-	);
-
-	const handleContextMenu = useCallback(
-		(e: MouseEvent) => {
-			if (!enableContextMenuRef.current || !contextMenuRef.current) return;
-
-			const target = getCellPointerFromEvent(e);
-			if (!target) return;
-			const { pointer } = target;
-
-			e.preventDefault();
-			contextMenuRef.current.show(pointer.rowId, pointer.colField, e.clientX, e.clientY);
-		},
-		[getCellPointerFromEvent]
-	);
-
-	useEffect(() => {
-		const container = containerRef.current;
-		if (!container) return;
-
-		container.addEventListener('mousedown', handleMouseDown);
-		container.addEventListener('mouseover', handleMouseOver);
-		container.addEventListener('click', handleClick);
-		container.addEventListener('dblclick', handleDoubleClick);
-		container.addEventListener('contextmenu', handleContextMenu);
-
-		return () => {
-			container.removeEventListener('mousedown', handleMouseDown);
-			container.removeEventListener('mouseover', handleMouseOver);
-			container.removeEventListener('click', handleClick);
-			container.removeEventListener('dblclick', handleDoubleClick);
-			container.removeEventListener('contextmenu', handleContextMenu);
-		};
-	}, [handleMouseDown, handleMouseOver, handleClick, handleDoubleClick, handleContextMenu]);
+		interactionBindingRef.current?.updateOptions({
+			editTrigger: navigationOptions.editTrigger ?? 'doubleClick',
+			arrowKeyNavigationEdit: navigationOptions.arrowKeyNavigationEdit ?? false,
+		});
+	}, [navigationOptions.arrowKeyNavigationEdit, navigationOptions.editTrigger]);
 
 	useEffect(() => {
 		let cancelFlash: (() => void) | undefined;

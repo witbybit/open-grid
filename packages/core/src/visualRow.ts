@@ -64,19 +64,40 @@ export interface LoadingVisualRow {
 	editable?: false;
 }
 
+export interface FailedVisualRow {
+	kind: 'failed';
+	id: string;
+	rowIndex: number;
+	error: string;
+	retryable: boolean;
+	height?: number;
+	editable?: false;
+}
+
+export interface PlaceholderVisualRow {
+	kind: 'placeholder';
+	id: string;
+	rowIndex: number;
+	reason?: string;
+	height?: number;
+	editable?: false;
+}
+
 export type VisualRow<TRowData = unknown> =
 	| DataVisualRow<TRowData>
 	| GroupVisualRow<TRowData>
 	| DetailVisualRow<TRowData>
 	| FooterVisualRow<TRowData>
-	| LoadingVisualRow;
+	| LoadingVisualRow
+	| FailedVisualRow
+	| PlaceholderVisualRow;
 
 export function isDataVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): row is DataVisualRow<TRowData> {
 	return row?.kind === 'data';
 }
 
 export function isFullWidthVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
-	return row?.kind === 'detail' || row?.kind === 'loading';
+	return row?.kind === 'detail' || row?.kind === 'failed' || row?.kind === 'placeholder';
 }
 
 export function isSelectableVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
@@ -97,7 +118,7 @@ export function canEditCell<TRowData>(row: VisualRow<TRowData> | null | undefine
 }
 
 export function canFocusVisualRow<TRowData>(row: VisualRow<TRowData> | null | undefined): boolean {
-	return !!row && row.kind !== 'loading';
+	return !!row && row.kind !== 'loading' && row.kind !== 'failed' && row.kind !== 'placeholder';
 }
 
 export function isDataCellSelectable<TRowData>(row: VisualRow<TRowData> | null | undefined, column: ColumnDef<TRowData> | null | undefined): boolean {

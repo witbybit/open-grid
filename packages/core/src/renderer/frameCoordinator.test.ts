@@ -114,7 +114,7 @@ describe('DefaultFrameCoordinator', () => {
 
 		coordinator.requestPaintFrame();
 		coordinator.requestPaintFrame();
-		capturedRaf?.();
+		(capturedRaf as unknown as () => void)();
 
 		expect(onPaintFrame).toHaveBeenCalledTimes(1);
 	});
@@ -133,7 +133,7 @@ describe('DefaultFrameCoordinator', () => {
 
 		coordinator.requestPostScrollWork();
 		coordinator.requestPostScrollWork();
-		capturedRaf?.();
+		(capturedRaf as unknown as () => void)();
 
 		expect(onPostScrollWork).toHaveBeenCalledTimes(1);
 	});
@@ -248,6 +248,51 @@ describe('DefaultFrameCoordinator', () => {
 });
 
 describe('DefaultFrameCoordinator – post-scroll epoch semantics (Plan 080)', () => {
+	it('coalesces commit causes and drains them only into the executing paint', () => {
+		const onPaintFrame = vi.fn();
+		let capturedRaf: (() => void) | null = null;
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				onPaintFrame,
+				gridScheduler: {
+					...makeSyncScheduler(),
+					raf: (cb) => {
+						capturedRaf = cb;
+						return 1;
+					},
+				},
+			})
+		);
+		coordinator.requestPaintFrame([11]);
+		coordinator.requestPaintFrame([12, 11]);
+		expect(onPaintFrame).not.toHaveBeenCalled();
+		capturedRaf?.();
+		expect(onPaintFrame).toHaveBeenCalledWith([11, 12]);
+		coordinator.flushNowForTests();
+		expect(onPaintFrame).toHaveBeenLastCalledWith([]);
+	});
+
+	it('clears cancelled causes on destroy without attributing a frame', () => {
+		const onPaintFrame = vi.fn();
+		let capturedRaf: (() => void) | null = null;
+		const coordinator = new DefaultFrameCoordinator(
+			makeBaseDeps({
+				onPaintFrame,
+				gridScheduler: {
+					...makeSyncScheduler(),
+					raf: (cb) => {
+						capturedRaf = cb;
+						return 1;
+					},
+				},
+			})
+		);
+		coordinator.requestPaintFrame([21]);
+		coordinator.destroy();
+		capturedRaf?.();
+		expect(onPaintFrame).not.toHaveBeenCalled();
+	});
+
 	it('post-scroll work fires when scroll epoch matches', () => {
 		const rs = new RenderRuntimeState();
 		const onPostScrollWork = vi.fn();
@@ -271,13 +316,16 @@ describe('DefaultFrameCoordinator – post-scroll epoch semantics (Plan 080)', (
 		};
 		const coordinator = new DefaultFrameCoordinator(makeBaseDeps({ onPostScrollWork, gridScheduler: gs, runtimeState: rs }));
 
-		coordinator.requestPostScrollWork();
+		coordinator.requestPostScrollWork([31]);
 		// Simulate new scroll session starting before the RAF fires (advances scrollEpoch).
 		rs.transitionTo('scroll-pending');
 		rs.transitionTo('idle');
 		capturedRaf?.();
 
 		expect(onPostScrollWork).not.toHaveBeenCalled();
+		coordinator.requestPostScrollWork();
+		(capturedRaf as unknown as () => void)();
+		expect(onPostScrollWork).toHaveBeenCalledWith([]);
 	});
 
 	it('post-scroll work is dropped when scroll is still active when RAF fires', () => {

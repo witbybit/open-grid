@@ -1,6 +1,9 @@
 export type CellContentMode = 'text' | 'portal' | 'loading' | 'empty' | 'fallback' | 'pending' | 'custom';
 
 import type { CellRendererHandle, CellPlacement } from './cellRendererHandle.js';
+import { isMountedCellVisuallyFresh } from './visualFreshness.js';
+import type { ColumnInstanceId } from '../columnDef.js';
+import type { CellCtrlAccessibilityState } from './controllers/CellCtrl.js';
 
 export interface CellSlotMountedVisualVersions {
 	insightVersion: number;
@@ -78,11 +81,14 @@ export function matchesCellSlotMountedFreshness(
 		visualVersions: CellSlotMountedVisualVersions;
 	}
 ): boolean {
-	return (
-		cellSlot.lastMountedRowVersion === request.rowVersion &&
-		cellSlot.lastMountedGlobalVersion === request.globalVersion &&
-		matchesCellSlotMountedVisualVersions(cellSlot, request.visualVersions)
-	);
+	return isMountedCellVisuallyFresh(cellSlot, {
+		rowVersion: request.rowVersion,
+		globalVersion: request.globalVersion,
+		insightVersion: request.visualVersions.insightVersion,
+		styleVersion: request.visualVersions.styleVersion,
+		loadingVersion: request.visualVersions.loadingVersion,
+		selectionVersion: request.visualVersions.selectionVersion,
+	});
 }
 
 export class CellSlot<TRowData = unknown> {
@@ -116,9 +122,11 @@ export class CellSlot<TRowData = unknown> {
 	/**
 	 * Stable column association. Set once by reconcileTopology when the cell is first
 	 * created for a column. Never changes across row rebinds or lane relocations —
-	 * this cell is permanently associated with this column field for its lifetime.
+	 * this cell is permanently associated with this column instance for its lifetime.
+	 * Renderer/topology lifecycle identity — see ColumnInstanceId. `colField` (below) mirrors the
+	 * display/DOM field name; this is the identity that decides cell reuse.
 	 */
-	public columnId = '';
+	public columnInstanceId: ColumnInstanceId | '' = '';
 	/**
 	 * Active renderer handle. Null when the cell is unbound or showing no content.
 	 * Set by the bind loop when content mode changes; destroy() is called on the
@@ -152,6 +160,8 @@ export class CellSlot<TRowData = unknown> {
 	public lastWidth = -1; // column width px
 	public lastShift = 0; // live column-reorder preview offset px; 0 = none
 	public lastAriaSelected: boolean | undefined = undefined; // ARIA selection state cache
+	public lastAriaReadOnly: boolean | undefined = undefined;
+	public lastAriaInvalid: boolean | undefined = undefined;
 	public lastClassName = '';
 	public lastContentMode: CellContentMode = 'empty';
 	public lastPortalKey: string | undefined = undefined;
@@ -171,6 +181,7 @@ export class CellSlot<TRowData = unknown> {
 		this.cellInstanceId = `ci${++_cellInstanceCounter}`;
 		this.portalHostId = `${this.cellInstanceId}-ph`;
 		this.element = element;
+		if (!element.id) element.id = `og-cell-${this.cellInstanceId}`;
 		(element as any).__cellSlot = this;
 		// ARIA grid semantics — role is static per element; positional/state attrs are
 		// written (guarded) in update().
@@ -221,6 +232,17 @@ export class CellSlot<TRowData = unknown> {
 			this.lastAriaSelected = undefined;
 			this.element.removeAttribute('aria-selected');
 		}
+		if (this.lastAriaReadOnly !== undefined) {
+			this.lastAriaReadOnly = undefined;
+			this.element.removeAttribute('aria-readonly');
+		}
+		if (this.lastAriaInvalid !== undefined) {
+			this.lastAriaInvalid = undefined;
+			this.element.removeAttribute('aria-invalid');
+		}
+		if (this.hasTabIndex) {
+			this.element.removeAttribute('tabindex');
+		}
 		if (this.element.style.visibility) {
 			this.element.style.visibility = '';
 		}
@@ -238,6 +260,45 @@ export class CellSlot<TRowData = unknown> {
 		this.colField = '';
 		this.rowIndex = -1;
 		this.rowId = '';
+	}
+
+	public syncAccessibilityState(input: CellCtrlAccessibilityState): boolean {
+		let domUpdated = false;
+
+		if (this.lastAriaSelected !== input.selected) {
+			this.lastAriaSelected = input.selected;
+			if (input.selected) this.element.setAttribute('aria-selected', 'true');
+			else this.element.removeAttribute('aria-selected');
+			domUpdated = true;
+		}
+
+		if (this.lastAriaReadOnly !== input.readOnly) {
+			this.lastAriaReadOnly = input.readOnly;
+			if (input.readOnly) this.element.setAttribute('aria-readonly', 'true');
+			else this.element.removeAttribute('aria-readonly');
+			domUpdated = true;
+		}
+
+		if (this.lastAriaInvalid !== input.invalid) {
+			this.lastAriaInvalid = input.invalid;
+			if (input.invalid) this.element.setAttribute('aria-invalid', 'true');
+			else this.element.removeAttribute('aria-invalid');
+			domUpdated = true;
+		}
+
+		if (input.focused) {
+			if (!this.hasTabIndex || this.element.getAttribute('tabindex') !== '-1') {
+				this.element.tabIndex = -1;
+				this.hasTabIndex = true;
+				domUpdated = true;
+			}
+		} else if (this.hasTabIndex) {
+			this.element.removeAttribute('tabindex');
+			this.hasTabIndex = false;
+			domUpdated = true;
+		}
+
+		return domUpdated;
 	}
 
 	/**
@@ -259,8 +320,7 @@ export class CellSlot<TRowData = unknown> {
 		rawValue: unknown,
 		formattedValue: string,
 		portalKey?: string,
-		dragShift = 0,
-		ariaSelected?: boolean
+		dragShift = 0
 	): boolean {
 		let domUpdated = false;
 
@@ -268,17 +328,13 @@ export class CellSlot<TRowData = unknown> {
 			this.colIndex = colIndex;
 			this.element.setAttribute('aria-colindex', String(colIndex + 1)); // ARIA: 1-based
 		}
-		// ARIA selection state — undefined means "leave unchanged" (the scroll bind path does
-		// not recompute selection, so it must not clobber it).
-		if (ariaSelected !== undefined && ariaSelected !== this.lastAriaSelected) {
-			this.lastAriaSelected = ariaSelected;
-			if (ariaSelected) this.element.setAttribute('aria-selected', 'true');
-			else this.element.removeAttribute('aria-selected');
-			domUpdated = true;
-		}
 		if (this.colField !== colField) {
 			this.colField = colField;
 			this.element.dataset.colField = colField;
+			domUpdated = true;
+		}
+		if (this.element.dataset.columnInstanceId !== this.columnInstanceId) {
+			this.element.dataset.columnInstanceId = this.columnInstanceId;
 			domUpdated = true;
 		}
 		if (this.rowIndex !== rowIndex) {
@@ -441,10 +497,21 @@ export class CellSlot<TRowData = unknown> {
 		this.lastMountedStyleVersion = -1;
 		this.lastMountedLoadingVersion = -1;
 		this.lastMountedSelectionVersion = -1;
-		// Use JS-side flag to skip DOM read in hot path.
+		if (this.lastAriaSelected !== undefined) {
+			this.lastAriaSelected = undefined;
+			this.element.removeAttribute('aria-selected');
+		}
 		if (this.hasTabIndex) {
 			this.element.removeAttribute('tabindex');
 			this.hasTabIndex = false;
+		}
+		if (this.lastAriaReadOnly !== undefined) {
+			this.lastAriaReadOnly = undefined;
+			this.element.removeAttribute('aria-readonly');
+		}
+		if (this.lastAriaInvalid !== undefined) {
+			this.lastAriaInvalid = undefined;
+			this.element.removeAttribute('aria-invalid');
 		}
 		if (this.element.style.visibility) {
 			this.element.style.visibility = '';
@@ -471,6 +538,14 @@ export class CellSlot<TRowData = unknown> {
 			this.lastAriaSelected = undefined;
 			this.element.removeAttribute('aria-selected');
 		}
+		if (this.lastAriaReadOnly !== undefined) {
+			this.lastAriaReadOnly = undefined;
+			this.element.removeAttribute('aria-readonly');
+		}
+		if (this.lastAriaInvalid !== undefined) {
+			this.lastAriaInvalid = undefined;
+			this.element.removeAttribute('aria-invalid');
+		}
 		this.lastClassName = '';
 		this.lastContentMode = 'empty';
 		this.lastPortalKey = undefined;
@@ -490,6 +565,7 @@ export class CellSlot<TRowData = unknown> {
 		this.element.className = '';
 		this.element.removeAttribute('style');
 		delete this.element.dataset.colField;
+		delete this.element.dataset.columnInstanceId;
 		delete this.element.dataset.rowIndex;
 		delete this.element.dataset.rowId;
 		delete this.element.dataset.cellKey;

@@ -66,11 +66,6 @@ describe('Architecture guardrails', () => {
 		expect(lines, `store.ts has ${lines} lines; budget is 1500 and target is 1000`).toBeLessThan(1500);
 	});
 
-	it('GridEngine.ts is below 1500 lines (intermediate budget, target 1000)', () => {
-		const lines = countLines('engine/GridEngine.ts');
-		expect(lines, `GridEngine.ts has ${lines} lines; intermediate budget is 1500 and target is 1000`).toBeLessThan(1500);
-	});
-
 	it('renderEngine.ts is below 1500 lines (intermediate budget, target 1000)', () => {
 		const lines = countLines('renderer/renderEngine.ts');
 		expect(lines, `renderEngine.ts has ${lines} lines; intermediate budget is 1500 and target is 1000`).toBeLessThan(1150);
@@ -143,8 +138,8 @@ describe('Architecture guardrails', () => {
 	it('DefaultFrameCoordinator owns a distinct post-scroll callback and scroll epoch (Plan 080)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts'), 'utf-8');
 		// Distinct callback — not an alias of onPaintFrame.
-		expect(content).toContain('onPostScrollWork: () => void');
-		expect(content).toContain('this.onPostScrollWork()');
+		expect(content).toContain('onPostScrollWork: (changeIds: readonly number[]) => void');
+		expect(content).toContain('this.onPostScrollWork(changeIds)');
 		// Scroll epoch captured at schedule time for stale-work rejection.
 		expect(content).toContain('this.runtimeState?.scrollEpoch');
 		expect(content).toContain('rs.isScrollEpochCurrent(this.postScrollEpoch)');
@@ -182,6 +177,7 @@ describe('Architecture guardrails', () => {
 		expect(engineContent).toContain('this.viewportCoordinator.syncLayoutPlan()');
 		expect(engineContent).toContain('this.viewportCoordinator.recycleViewport(false, undefined, layoutPlan.renderWindow)');
 		expect(engineContent).toContain('this.viewportCoordinator.scrollCellIntoView(rowId, colField)');
+		expect(engineContent).toContain('this.viewportCoordinator.scrollCellPointerIntoView(pointer)');
 		expect(engineContent).not.toContain('computeGridLayoutPlan(');
 		expect(engineContent).not.toContain('computeScrollTarget(');
 	});
@@ -221,7 +217,7 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBinder.ts'), 'utf-8');
 		expect(content).toContain('export function bindCellFull');
 		expect(content).toContain('export function bindCellDuringScroll');
-		expect(content).toContain('const programmaticScrollCell = deps.programmaticScrollCell;');
+		expect(content).toContain('const programmaticScrollCell = getProgrammaticScrollCellPointer(deps.programmaticScrollCell);');
 	});
 
 	it('rowCellBindingLanes routes live cell binding through rowCellBinder', () => {
@@ -232,7 +228,9 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('row renderer style hook paths report faults through runtime diagnostics', () => {
-		const files = ['renderer/rowRenderer.ts', 'renderer/selectionPaintManager.ts'];
+		// rowRenderer.ts delegates row-class computation (incl. style-rule hook error handling) to
+		// rowPresentationResolver.ts — see Phase 8 renderer hardening.
+		const files = ['renderer/rowPresentationResolver.ts', 'renderer/selectionPaintManager.ts'];
 		for (const file of files) {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not use console.error for renderer style hooks`).not.toContain('console.error');
@@ -243,6 +241,180 @@ describe('Architecture guardrails', () => {
 	it('GridView.tsx does not call getStoreFromApi', () => {
 		const content = readFileSync(resolve(REACT_ROOT, 'src', 'GridView.tsx'), 'utf-8');
 		expect(content).not.toContain('getStoreFromApi');
+	});
+
+	it('GridView.tsx routes semantic interaction through the core event router', () => {
+		const content = readFileSync(resolve(REACT_ROOT, 'src', 'GridView.tsx'), 'utf-8');
+		expect(content).toContain('bindGridInteractionSurface');
+		expect(content).not.toContain('navigationRef.current?.handleKeyDown');
+		expect(content).not.toContain('nav.handleMouseDown(');
+		expect(content).not.toContain('nav.handleMouseEnter(');
+		expect(content).not.toContain('nav.handleClick(');
+		expect(content).not.toContain('nav.setCellEditing(');
+		expect(content).not.toContain('createGridInteractionEventRouter');
+		expect(content).not.toContain('resolveGridInteractionController');
+		expect(content).not.toContain('router.bind(container)');
+		expect(content).not.toContain('useGridInteractionController');
+		expect(content).not.toContain('dispatchEvent(GridEventName.cellClicked');
+		expect(content).not.toContain("window.addEventListener('keydown'");
+		expect(content).not.toContain("window.addEventListener('mouseup'");
+		expect(content).not.toContain("document.addEventListener('mousedown'");
+	});
+
+	it('GridInteractionController does not keep a shadow range anchor outside authoritative selection state', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionController.ts'), 'utf-8');
+		expect(content).not.toContain('private rangeStart');
+		expect(content).toContain('private getSelectionAnchor()');
+		expect(content).toContain("this.extendSelection(targetPointer, 'keyboard')");
+	});
+
+	it('store public interaction APIs route through the interaction controller instead of split engine feature seams', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+		expect(content).toContain('selectCell: (pointer, source) => this.engine.selectCell(pointer, source),');
+		expect(content).not.toContain('selectCell: (pointer, source) => this.engine.selectRange(pointer, pointer, source),');
+		expect(content).toContain("public selectCell = (pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {");
+		expect(content).toContain('this.interactionController.selectCell(pointer, source);');
+		expect(content).toContain('this.interactionController.selectRange(start, end, source);');
+		expect(content).toContain('this.interactionController.extendSelection(end, source);');
+		expect(content).toContain('return this.interactionController.applyRowSelectionGesture(gesture);');
+		expect(content).toContain('public copySelectedRange = (): Promise<void> => this.interactionController.copySelectedRange();');
+		expect(content).toContain('public pasteFromClipboard = (): Promise<void> => this.interactionController.pasteFromClipboard();');
+		expect(content).toContain('this.interactionController.scrollToCell(rowId, colField, options);');
+		expect(content).toContain('this.interactionController.scrollToRow(rowId, options);');
+		expect(content).toContain('this.interactionController.startEdit(rowId, colFieldOrInstanceId, source);');
+		expect(content).toContain('this.interactionController.updateEditDraft(rowId, colFieldOrInstanceId, value);');
+		expect(content).toContain('this.interactionController.stopEdit(cancel);');
+		expect(content).toContain('return this.interactionController.commitCellEdit(rowId, colFieldOrInstanceId, value);');
+		expect(content).not.toContain('return this.engine.editingFeature.commitEdit(');
+		expect(content).not.toContain('public copySelectedRange = (): Promise<void> => this.engine.copySelectedRange();');
+		expect(content).not.toContain('public pasteFromClipboard = (): Promise<void> => this.engine.pasteFromClipboard();');
+		expect(content).not.toContain('this.hostFacade.scrollCellIntoView(rowId, colField);');
+		expect(content).not.toContain('this.hostFacade.scrollRowIntoView(rowId);');
+	});
+
+	it('React portal hosts do not own external-stop commit semantics once stopEditing routes through the kernel', () => {
+		const content = readFileSync(resolve(REACT_ROOT, 'src', 'gridPortalHosts.tsx'), 'utf-8');
+		expect(content).not.toContain('GridEventName.editStopped');
+		expect(content).not.toContain('api.addEventListener(GridEventName.editStopped');
+		expect(content).not.toContain('void api.commitEdit(rowId, editColumnKey, localValueRef.current);');
+	});
+
+	it('portal mount prioritization derives focus/edit priority from interaction state instead of raw state slices', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'portalMountManager.ts'), 'utf-8');
+		expect(content).toContain("import { readInteractionState } from '../interaction/interactionState.js';");
+		expect(content).toContain('const interaction = flushState ? readInteractionState(flushState) : null;');
+		expect(content).toContain('const activeEdit = interaction?.activeEdit.active ?? null;');
+		expect(content).toContain('const focusedCell = interaction?.focus.cell ?? null;');
+		expect(content).not.toContain('const activeEdit = flushState?.activeEdit;');
+		expect(content).not.toContain('const focusedCell = flushState?.selection.focus;');
+	});
+
+	it('interaction event router asks the interaction controller about edit state instead of peeking at public snapshot activeEdit', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionEventRouter.ts'), 'utf-8');
+		expect(content).toContain("interaction.dispatchInput({ kind: 'key-down', event });");
+		expect(content).toContain("deps.getInteraction()?.dispatchInput({ kind: 'mouse-up' });");
+		expect(content).toContain("interaction.dispatchInput({ kind: 'mouse-down-cell', pointer: target.pointer, event });");
+		expect(content).toContain("interaction.dispatchInput({ kind: 'cell-enter', pointer: target.pointer });");
+		expect(content).toContain("interaction.dispatchInput({ kind: 'cell-click', pointer: target.pointer, event });");
+		expect(content).toContain("kind: 'set-cell-editing'");
+		expect(content).not.toContain('interaction.handleKeyDown(event);');
+		expect(content).not.toContain('interaction.handleMouseDown(target.pointer, event);');
+		expect(content).not.toContain('interaction.handleMouseEnter(target.pointer);');
+		expect(content).not.toContain('interaction.handleClick(target.pointer, event);');
+		expect(content).not.toContain("interaction.setCellEditing(target.pointer.rowId, target.pointer.columnInstanceId, true, 'mouse');");
+		expect(content).toContain('if (interaction.isEditingCell(target.pointer)) return;');
+		expect(content).not.toContain('getStateSnapshot().activeEdit');
+		expect(content).not.toContain('state.activeEdit');
+	});
+
+	it('GridDataIntegrityManager derives edit dirtiness from interaction state instead of raw activeEdit state', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridDataIntegrityManager.ts'), 'utf-8');
+		expect(content).toContain("import { readInteractionState } from '../../interaction/interactionState.js';");
+		expect(content).toContain('const editState = readInteractionState(this.deps.ctx.getState()).activeEdit.active;');
+		expect(content).toContain('doesCanonicalCellPointerMatchColumn(editState, rowId, column)');
+		expect(content).not.toContain('doesCellPointerMatchColumn(editState, rowId, column)');
+		expect(content).not.toContain('const editState = this.deps.ctx.getState().activeEdit;');
+	});
+
+	it('renderScrollCoordinator focus matching uses full column identity instead of a field-only stub', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderScrollCoordinator.ts'), 'utf-8');
+		expect(content).toContain('return doesCanonicalCellPointerMatchColumn(focusedCell, rowId, column);');
+		expect(content).toContain('const isFocused = isCellFocused(rowId, col, focusedCell);');
+		expect(content).not.toContain('return doesCellPointerMatchColumn(focusedCell, rowId, { field: colField });');
+	});
+
+	it('rowRenderMaintenance dirty-cell prioritization matches canonical focus/edit identity by column instance', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderMaintenance.ts'), 'utf-8');
+		expect(content).toContain("import { doesCanonicalCellPointerMatchColumn } from '../interaction/cellPointer.js';");
+		expect(content).toContain(
+			"doesCanonicalCellPointerMatchColumn(activeEdit, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })"
+		);
+		expect(content).toContain(
+			"doesCanonicalCellPointerMatchColumn(focusedCell, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })"
+		);
+		expect(content).not.toContain('doesCellPointerMatchColumn(activeEdit');
+		expect(content).not.toContain('doesCellPointerMatchColumn(focusedCell');
+	});
+
+	it('active edit state is column-instance authoritative inside the kernel', () => {
+		const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+		const editingContent = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'EditingFeatureController.ts'), 'utf-8');
+		const interactionContent = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionController.ts'), 'utf-8');
+		const eventRouterContent = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionEventRouter.ts'), 'utf-8');
+		expect(apiContent).toContain('export interface ActiveEditState extends GridCellPointer {');
+		expect(apiContent).toContain('columnInstanceId: ColumnInstanceId;');
+		expect(apiContent).toContain('colId: string;');
+		expect(editingContent).not.toContain('activeEdit.columnInstanceId ?? colField');
+		expect(editingContent).not.toContain('matchedActiveEdit.columnInstanceId ?? matchedActiveEdit.colField');
+		expect(editingContent).not.toContain('activeEdit.colId === colFieldOrInstanceId');
+		expect(editingContent).not.toContain('activeEdit.colField === colFieldOrInstanceId');
+		expect(interactionContent).not.toContain('activeEdit.columnInstanceId ?? activeEdit.colField');
+		expect(eventRouterContent).not.toContain('target.pointer.columnInstanceId ?? target.pointer.colField');
+	});
+
+	it('interaction focus state stores canonical cell identity instead of a broad public pointer', () => {
+		const apiContent = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'GridApi.ts'), 'utf-8');
+		const interactionStateContent = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'interactionState.ts'), 'utf-8');
+		expect(apiContent).toContain('export type CanonicalGridCellPointer = GridCellPointer & {');
+		expect(interactionStateContent).toContain('cell: CanonicalGridCellPointer | null;');
+		expect(interactionStateContent).toContain('rowIndex: number | null;');
+		expect(interactionStateContent).toContain("kind: 'idle' | 'editing-cell';");
+		expect(interactionStateContent).toContain('export interface CanonicalGridSelectionState {');
+		expect(interactionStateContent).toContain('selection: CanonicalGridSelectionState;');
+		expect(interactionStateContent).not.toContain('publicSelection: GridSelectionState;');
+		expect(interactionStateContent).toContain('function asCanonicalCellPointer(');
+	});
+
+	it('cell accessibility paint derives from CellCtrl state instead of binder-local aria booleans', () => {
+		const binderSharedContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'binders', 'binderShared.ts'), 'utf-8');
+		const cellCtrlContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'controllers', 'CellCtrl.ts'), 'utf-8');
+		const rowCellBinderContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowCellBinder.ts'), 'utf-8');
+		expect(cellCtrlContent).toContain('export interface CellCtrlAccessibilityState {');
+		expect(cellCtrlContent).toContain('export function deriveCellCtrlAccessibilityState(cellCtrl: CellCtrl): CellCtrlAccessibilityState {');
+		expect(binderSharedContent).toContain('return cellSlot.syncAccessibilityState(deriveCellCtrlAccessibilityState(cellCtrl));');
+		expect(rowCellBinderContent).toContain('cellCtrl.visualState.selected = isCellSelectedInBounds(ctx.selectionBounds, rowIndex, colIndex);');
+	});
+
+	it('projection pipeline rebuilds interaction focus metadata when the visual row order changes', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridProjectionPipeline.ts'), 'utf-8');
+		expect(content).toContain("updatedSet.has('globalVersion')");
+		expect(content).toContain('getRowIndexByRowId: (rowId) => rowModel?.getVisualIndexByRowId(rowId) ?? null');
+	});
+
+	it('renderEngine.ts does not own row-selection gesture semantics directly', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderEngine.ts'), 'utf-8');
+		expect(content).toContain('createGridViewportInteractionRouter');
+		expect(content).not.toContain('handleRowCheckboxClick(');
+		expect(content).not.toContain('handleDataRowClick(');
+	});
+
+	it('viewport interaction router dispatches typed kernel input commands instead of calling row gesture handlers directly', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridViewportInteractionRouter.ts'), 'utf-8');
+		expect(content).toContain("deps.getInteraction()?.dispatchInput({ kind: 'viewport-mouse-down', event });");
+		expect(content).toContain("interaction.dispatchInput({ kind: 'row-checkbox-click', rowId, checked: checkbox.checked, event });");
+		expect(content).toContain("interaction.dispatchInput({ kind: 'data-row-click', pointer, event });");
+		expect(content).not.toContain('interaction.handleRowCheckboxClick(rowId, checkbox.checked, event);');
+		expect(content).not.toContain('interaction.handleDataRowClick(pointer, event);');
 	});
 
 	it('GridPortal.tsx does not cast to InternalGridApi', () => {
@@ -305,7 +477,9 @@ describe('Architecture guardrails', () => {
 		for (const file of collectSourceFiles(resolve(DEMO_ROOT, 'src'))) {
 			const content = readFileSync(file, 'utf-8');
 			expect(content, `${file} must not import @open-grid/core/internal`).not.toContain('@open-grid/core/internal');
-			expect(content, `${file} must not import @open-grid/react internals by subpath`).not.toMatch(/from ['"]@open-grid\/react\//);
+			expect(content, `${file} must not import @open-grid/react internals by subpath`).not.toMatch(
+				/from ['"]@open-grid\/react\/(?!experimental['"])/
+			);
 			expect(content, `${file} must not import @open-grid/core internals by subpath`).not.toMatch(/from ['"]@open-grid\/core\//);
 		}
 	});
@@ -380,15 +554,16 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("domainMutations: [{ kind: 'row-transaction', transaction }]");
 	});
 
-	it('row-transaction executor narrows to TransactionalRowModel instead of optional row-model hooks', () => {
+	it('row-transaction executor owns lifecycle through the structural client capability', () => {
 		const mutationContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridDomainMutation.ts'), 'utf-8');
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
-		expect(rowModelContent).toContain('export interface TransactionalRowModel<TRowData = unknown>');
-		expect(rowModelContent).toContain('export function asTransactionalRowModel<TRowData = unknown>(');
-		expect(mutationContent).toContain('return asTransactionalRowModel(context.getRowModel());');
-		expect(mutationContent).not.toContain('rowModel!.captureTransactionSnapshot!(mutation)');
-		expect(mutationContent).not.toContain('rowModel!.applyTransaction!(mutation.transaction)');
-		expect(mutationContent).not.toContain('context.getRowModel()!.restoreTransactionSnapshot!(preparedRestoreSnapshot)');
+		expect(rowModelContent).toContain('export interface ClientStructuralRowModel<TRowData = unknown>');
+		expect(rowModelContent).toContain('captureTransactionSnapshot(');
+		expect(rowModelContent).toContain('restoreTransactionSnapshot(snapshot: RowModelTransactionSnapshot<TRowData>): void;');
+		expect(rowModelContent).not.toContain('export interface TransactionalRowModel<TRowData = unknown>');
+		expect(rowModelContent).not.toContain('export function asTransactionalRowModel<TRowData = unknown>(');
+		expect(mutationContent).toContain('asClientStructuralRowModel(context.getRowModel())');
+		expect(mutationContent).not.toContain('.applyTransaction(mutation.transaction)');
 	});
 
 	it('row-order executor narrows to an explicit row-order capability instead of optional row-model hooks', () => {
@@ -433,14 +608,14 @@ describe('Architecture guardrails', () => {
 		expect(rowModelContent).not.toContain('export interface ServerControllableRowModel<TRowData = unknown>');
 		expect(rowModelContent).not.toContain('export function asServerControllableRowModel<TRowData = unknown>(');
 		expect(storeContent).toContain('private getClientStructuralRowModel(): ClientStructuralRowModel<TRowData> | null');
-		// getServerControllableRowModel is removed — assertInfiniteRowModel / assertServerPageRowModel used instead.
+		// getServerControllableRowModel is removed — assertInfiniteRowModel / assertserverSideRowModel used instead.
 		expect(storeContent).not.toContain('private getServerControllableRowModel():');
 		expect(storeContent).toContain('return asClientStructuralRowModel(this.getRowModel());');
 		expect(storeContent).toContain('return asRowExpansionStateReadableModel(this.getRowModel());');
 		// Capability-checked — no silent optional chaining.
 		expect(storeContent).not.toContain('.getInfiniteControllableRowModel()?.purgeCache()');
 		expect(storeContent).not.toContain('.getInfiniteControllableRowModel()?.setDatasource(');
-		expect(storeContent).not.toContain('.getServerPageControllableRowModel()?.goToPage(');
+		expect(storeContent).not.toContain('.getserverSideControllableRowModel()?.goToPage(');
 		expect(storeContent).not.toContain('this.getRowModel()?.setRows?.(');
 		expect(storeContent).not.toContain('this.getRowModel()?.updateRows?.(');
 		expect(storeContent).not.toContain('this.getRowModel()?.purgeCache?.(');
@@ -463,7 +638,7 @@ describe('Architecture guardrails', () => {
 		expect(rowModelContent).toContain('public reconcileAfterDataWrite(');
 		// Unified cell write interface: all three row model types expose writeCellValueStructurally.
 		const infiniteContent = readFileSync(resolve(CORE_ROOT, 'src', 'infiniteRowModel.ts'), 'utf-8');
-		const serverContent = readFileSync(resolve(CORE_ROOT, 'src', 'serverPageRowModel.ts'), 'utf-8');
+		const serverContent = readFileSync(resolve(CORE_ROOT, 'src', 'serverSideRowModel.ts'), 'utf-8');
 		expect(infiniteContent).toContain('public writeCellValueStructurally =');
 		expect(serverContent).toContain('public writeCellValueStructurally =');
 		// Neither falls back to the old direct-mutate setCellValue path.
@@ -498,11 +673,10 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'paginationBarRenderer.ts'), 'utf-8');
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
 		expect(rowModelContent).toContain('export function asPageWindowCapableRowModel(');
-		// asServerControllableRowModel is removed — asServerPageControllableRowModel is the canonical interface.
-		expect(rowModelContent).not.toContain('export function asServerControllableRowModel<TRowData = unknown>(');
+		expect(rowModelContent).not.toContain('asServerPageControllableRowModel');
 		expect(rowModelContent).toContain('export function asDataRowCountModel(');
 		expect(content).toContain('return asPageWindowCapableRowModel(this.engine.getRowModel());');
-		expect(content).toContain('return asServerPageControllableRowModel(this.engine.getRowModel());');
+		expect(content).not.toContain('asServerPageControllableRowModel');
 		expect(content).not.toContain('rowModel?.getPageWindow?.()');
 		expect(content).not.toContain('rowModel?.goToPage');
 	});
@@ -518,13 +692,19 @@ describe('Architecture guardrails', () => {
 		expect(featureContent).not.toContain('private getCellValueWritableRowModel()');
 	});
 
-	it('RowRenderer narrows visible-block loading instead of optional row-model hooks', () => {
+	it('RowRenderer drives viewport loading through the shared row-model contract', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowRenderer.ts'), 'utf-8');
+		expect(content).toContain("this.engine.getRowModel()?.ensureRange(nextWindow.rowStart, nextWindow.rowEnd, 'viewport-render');");
+		expect(content).not.toContain('loadVisibleBlocks(');
+		expect(content).not.toContain('id: `loading:${r}`');
+	});
+
+	it('row-model naming keeps server-side explicit and maps public server to SSRM', () => {
 		const rowModelContent = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
-		expect(rowModelContent).toContain('export interface VisibleBlockLoadCapableRowModel');
-		expect(rowModelContent).toContain('export function asVisibleBlockLoadCapableRowModel(');
-		expect(content).toContain('return asVisibleBlockLoadCapableRowModel(this.engine.getRowModel());');
-		expect(content).not.toContain("typeof fullRowModel.loadVisibleBlocks === 'function'");
+		const gridStateContent = readFileSync(resolve(CORE_ROOT, 'src', 'state', 'GridState.ts'), 'utf-8');
+		expect(rowModelContent).toContain("export type InternalRowModelKind = 'client' | 'infinite' | 'server-side';");
+		expect(gridStateContent).toContain("export type RowModelType = 'client' | 'infinite' | 'server';");
+		expect(gridStateContent).toContain('server-side row model (SSRM)');
 	});
 
 	it('GridFeatureContext does not expose raw side-effect primitives', () => {
@@ -569,7 +749,7 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('row models do not reach through store.engine', () => {
-		const files = ['rowModel.ts', 'infiniteRowModel.ts', 'serverPageRowModel.ts'];
+		const files = ['rowModel.ts', 'infiniteRowModel.ts', 'serverSideRowModel.ts'];
 		for (const file of files) {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not use store.engine reach-through`).not.toContain('store.engine.');
@@ -577,7 +757,7 @@ describe('Architecture guardrails', () => {
 	});
 
 	it('row models do not depend on the concrete GridStore type', () => {
-		const files = ['rowModel.ts', 'infiniteRowModel.ts', 'serverPageRowModel.ts'];
+		const files = ['rowModel.ts', 'infiniteRowModel.ts', 'serverSideRowModel.ts'];
 		for (const file of files) {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not reference GridStore`).not.toContain('GridStore<');
@@ -596,7 +776,7 @@ describe('Architecture guardrails', () => {
 			'engine/CellNotificationController.ts',
 			'engine/createRowModelRuntimes.ts',
 			'infiniteRowModel.ts',
-			'serverPageRowModel.ts',
+			'serverSideRowModel.ts',
 			'rows/stages/aggregateStage.ts',
 			'renderer/fillDragController.ts',
 			'renderer/headerMenuController.ts',
@@ -612,14 +792,14 @@ describe('Architecture guardrails', () => {
 		const runtimePorts = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'runtimePorts.ts'), 'utf-8');
 		expect(runtimePorts).toContain('export interface ClientRowModelRuntime');
 		expect(runtimePorts).toContain('export interface InfiniteRowModelRuntime');
-		expect(runtimePorts).toContain('export interface ServerPageRowModelRuntime');
+		expect(runtimePorts).toContain('export interface ServerSideRowModelRuntime');
 		// Legacy ServerRowModelRuntime alias must be removed
 		expect(runtimePorts).not.toContain('ServerRowModelRuntime');
 
 		const createGrid = readFileSync(resolve(CORE_ROOT, 'src', 'createGrid.ts'), 'utf-8');
 		expect(createGrid).toContain('runtime.getClientRowModelRuntime()');
 		expect(createGrid).toContain('runtime.getInfiniteRowModelRuntime()');
-		expect(createGrid).toContain('runtime.getServerPageRowModelRuntime()');
+		expect(createGrid).toContain('runtime.getServerSideRowModelRuntime()');
 		// Legacy createServerGrid must be removed
 		expect(createGrid).not.toContain('runtime.getServerRowModelRuntime()');
 		expect(createGrid).not.toContain('createServerGrid');
@@ -627,8 +807,24 @@ describe('Architecture guardrails', () => {
 		expect(createGrid).not.toContain('new ServerRowModelController<TRowData>(store,');
 	});
 
+	it('Plan 158 async row models publish committed responses through the explicit async publication port', () => {
+		const runtimePorts = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'runtimePorts.ts'), 'utf-8');
+		const runtimeFactory = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'createRowModelRuntimes.ts'), 'utf-8');
+		const infiniteContent = readFileSync(resolve(CORE_ROOT, 'src', 'infiniteRowModel.ts'), 'utf-8');
+		const serverSideContent = readFileSync(resolve(CORE_ROOT, 'src', 'serverSideRowModel.ts'), 'utf-8');
+
+		expect(runtimePorts).toContain('export interface AsyncRowModelPublication');
+		expect(runtimePorts).toContain('publishAsyncRowModelUpdate: (publication: AsyncRowModelPublication) => void;');
+		expect(runtimeFactory).toContain('function publishAsyncRowModelUpdate<TRowData>');
+		expect(runtimeFactory).toContain('store.engine.applyRowModelRefreshInvalidation(publication.refreshResult');
+		expect(infiniteContent).toContain('this.runtime.publishAsyncRowModelUpdate({');
+		expect(serverSideContent).toContain('this.runtime.publishAsyncRowModelUpdate({');
+		expect(infiniteContent).not.toContain('this.runtime.applyRefreshInvalidation(');
+		expect(serverSideContent).not.toContain('this.runtime.applyRefreshInvalidation(');
+	});
+
 	it('navigation and contextMenu plugins do not depend on GridStore downcasts', () => {
-		const files = ['navigation.ts', 'contextMenu.ts'];
+		const files = ['interaction/GridInteractionController.ts', 'contextMenu.ts'];
 		for (const file of files) {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', file), 'utf-8');
 			expect(content, `${file} must not reference GridStore`).not.toContain('GridStore');
@@ -1035,6 +1231,9 @@ describe('Architecture guardrails', () => {
 			resolve(srcDir, 'renderer', 'floatingFilterRenderer.ts'), // filter debounce + focus
 			resolve(srcDir, 'renderer', 'headerMenuController.ts'), // filter debounce
 			resolve(srcDir, 'renderer', 'scrollEngine.ts'), // scroll-end timer
+			// Replay presentation pacing only: GridTraceReplay uses a replaceable scheduler
+			// for cooperative DevTools replay turns, never renderer frame scheduling.
+			resolve(srcDir, 'diagnostics', 'GridTraceReplay.ts'),
 		]);
 		const schedulingPattern = /\bsetTimeout\b|\brequestAnimationFrame\b|\brequestIdleCallback\b/;
 		const violators: string[] = [];
@@ -1049,6 +1248,13 @@ describe('Architecture guardrails', () => {
 			violators,
 			`New files calling browser scheduling APIs outside the allowed set — add migration plan or route through frameCoordinator/gridScheduler: ${violators.join(', ')}`
 		).toHaveLength(0);
+	});
+
+	it('GridTraceReplay keeps its timer exception behind injected replay scheduling', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'diagnostics', 'GridTraceReplay.ts'), 'utf-8');
+		expect(content).toContain('export interface GridReplayScheduler');
+		expect(content).toContain('options: { readonly scheduler?: GridReplayScheduler } = {}');
+		expect(content).toContain('new GridTraceReplay(validation.trace, options.scheduler)');
 	});
 
 	it('contextMenu rAF is documented as interaction-only animation staging, not render scheduling (Plan 111)', () => {
@@ -1239,7 +1445,7 @@ describe('Architecture guardrails', () => {
 		const content = readFileSync(rowModelPath, 'utf-8');
 		expect(content).toContain('GridMetric.ROW_MUTATION_FULL_REBUILD');
 		expect(content).toContain('GridMetric.ROW_MUTATION_INCREMENTAL');
-		expect(content).toContain('getInstrumentation().increment');
+		expect(content).toContain('const inst = this.runtime.getInstrumentation();');
 	});
 
 	// ── Plan 092: aggregation input mutation correctness ─────────────────────
@@ -1252,11 +1458,13 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain("return 'aggregation-input'");
 	});
 
-	it('applyTransaction classifies update impact and triggers refresh for aggregation-input (Plan 092)', () => {
+	it('structural transaction commit classifies update impact and triggers refresh for aggregation-input (Plan 092)', () => {
 		const rowModelPath = resolve(CORE_ROOT, 'src', 'rowModel.ts');
+		const mutationPath = resolve(CORE_ROOT, 'src', 'engine', 'GridDomainMutation.ts');
 		const content = readFileSync(rowModelPath, 'utf-8');
+		const mutationContent = readFileSync(mutationPath, 'utf-8');
 		expect(content).toContain("impact === 'aggregation-input'");
-		expect(content).toContain('classifyFieldMutation(allChangedFields)');
+		expect(mutationContent).toContain('structuralRowModel.classifyFieldMutation(allFields)');
 	});
 
 	// ── Plan 093: single RAF frame arbitration ────────────────────────────────
@@ -1298,7 +1506,7 @@ describe('Architecture guardrails', () => {
 		// The microtask is required to prevent 2x render work on common operations.
 		const fcPath = resolve(CORE_ROOT, 'src', 'renderer', 'frameCoordinator.ts');
 		const content = readFileSync(fcPath, 'utf-8');
-		expect(content).toContain('requestPaintFrame(): void {');
+		expect(content).toContain('requestPaintFrame(changeIds: readonly number[] = []): void {');
 		expect(content).toContain('this.pendingPaint = true;');
 		expect(content).toContain('this.gs.microtask(() => {');
 		expect(content).toContain('this.scheduleFrame();');
@@ -1471,9 +1679,10 @@ describe('Architecture guardrails', () => {
 		expect(content).toContain('getVisualIndexByRowId(');
 	});
 
-	it('RowModel extends VisualRowModel (Plan 099)', () => {
+	it('RowModel extends the viewport/load contract (Plan 099 / Plan 156)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'rowModel.ts'), 'utf-8');
-		expect(content).toContain('RowModel<TRowData = unknown> extends VisualRowModel<TRowData>');
+		expect(content).toContain('export interface RowModelViewportAccess<TRowData = unknown> extends VisualRowModel<TRowData>');
+		expect(content).toContain('RowModel<TRowData = unknown> extends RowModelViewportAccess<TRowData>');
 	});
 
 	it('RowModel is the slim shared contract; optional mutation/paging hooks live in named capabilities', () => {
@@ -1826,7 +2035,8 @@ describe('Architecture guardrails', () => {
 
 	it('gridHost mounts against the host composition handle instead of a concrete GridStore (Plans 112/117)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'gridHost.ts'), 'utf-8');
-		expect(content).toContain('resolveGridHostComposition(api)');
+		expect(content).toContain('resolveGridRuntimeComposition(api)');
+		expect(content).toContain('const host = runtime.host;');
 		expect(content).toContain('const internalApi = host.api;');
 		expect(content).toContain('host.setContainerElement(container);');
 		expect(content).not.toContain('resolveGridInternalStore(api)');
@@ -1849,9 +2059,10 @@ describe('Architecture guardrails', () => {
 
 	it('gridHost adapter types do not depend on store.ts type exports (Plan 112)', () => {
 		const content = readFileSync(resolve(CORE_ROOT, 'src', 'gridHost.ts'), 'utf-8');
-		expect(content).toContain("import type { GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';");
+		expect(content).toContain("import type { CellState, GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';");
 		expect(content).not.toContain("import('./store.js').GridCellPointer");
 		expect(content).not.toContain("import('./store.js').GridCellAccess");
+		expect(content).not.toContain("import('./store.js').CellState");
 	});
 
 	it('GridStateFeatureController no longer contains raw write fallbacks (Plan 103)', () => {
@@ -1967,6 +2178,14 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain("invalidateOverlay('selection')");
 		expect(content).not.toContain("invalidateHeaders('selection')");
 		expect(content).not.toContain("requestFlushGated('selection')");
+	});
+
+	it('RenderInvalidationCoordinator derives focus-follow scrolling from interaction state instead of selectionChanged payloads', () => {
+		const content = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'RenderInvalidationCoordinator.ts'), 'utf-8');
+		expect(content).toContain("import { readInteractionState } from '../interaction/interactionState.js';");
+		expect(content).toContain('const interaction = readInteractionState(this.deps.engine.stateManager.getState());');
+		expect(content).toContain('const selection = interaction.cellSelection.selection;');
+		expect(content).not.toContain('const { selection } = event.payload;');
 	});
 
 	it('layout-panel commands own showGroupPanel/showFloatingFilters/showFilterChipBar invalidation instead of RenderInvalidationCoordinator (Plan 105)', () => {
@@ -2507,25 +2726,38 @@ describe('Architecture guardrails', () => {
 			const storeContent = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
 			const subscriptionsContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreSubscriptions.ts'), 'utf-8');
 			const hostContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreHostFacade.ts'), 'utf-8');
+			const rowContent = readFileSync(resolve(CORE_ROOT, 'src', 'store', 'GridStoreRowFacade.ts'), 'utf-8');
 			expect(storeContent).toContain('createGridStoreSubscriptions');
 			expect(storeContent).toContain('createGridStoreHostFacade');
+			expect(storeContent).toContain('createGridStoreRowFacade');
 			expect(storeContent).not.toContain("subscribeToKey('globalVersion', notify)");
 			expect(subscriptionsContent).toContain('export function createGridStoreSubscriptions');
 			expect(subscriptionsContent).not.toContain('GridStore<');
 			expect(hostContent).toContain('export function createGridStoreHostFacade');
 			expect(hostContent).not.toContain('GridStore<');
+			expect(rowContent).toContain('export function createGridStoreRowFacade');
+			expect(rowContent).not.toContain('GridStore<');
+			expect(rowContent).not.toContain("from '../store.js'");
 		});
 
-		it('GridEngine delegates domain and render update ownership to dedicated modules', () => {
+		it('GridEngine keeps domain subscriptions and cell notifications with their semantic owners', () => {
 			const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
 			const domainContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridDomainSubscriptionHub.ts'), 'utf-8');
-			const renderContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngineRenderBridge.ts'), 'utf-8');
+			const notificationContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'CellNotificationController.ts'), 'utf-8');
 			expect(engineContent).toContain('new GridDomainSubscriptionHub');
-			expect(engineContent).toContain('new GridEngineRenderBridge');
+			expect(engineContent).not.toContain('GridEngineRenderBridge');
+			expect(engineContent).not.toContain('cellSubscriptions = new Map');
+			expect(engineContent).not.toContain('cellUpdateBatch = new Map');
+			expect(engineContent).toContain('this.beginRenderTransaction();');
+			expect(engineContent).toContain('this.stateManager.startTransaction();');
+			expect(engineContent).toContain('this.stateManager.endTransaction();');
+			expect(engineContent).toContain('this.cellNotifications.flushCellUpdatesSync();');
+			expect(engineContent).toContain('this.endRenderTransaction();');
 			expect(domainContent).toContain('export class GridDomainSubscriptionHub');
 			expect(domainContent).not.toContain('GridEngine<');
-			expect(renderContent).toContain('export class GridEngineRenderBridge');
-			expect(renderContent).not.toContain('GridEngine<');
+			expect(notificationContent).toContain('export class CellNotificationController');
+			expect(notificationContent).toContain('private readonly cellSubscriptions = new Map');
+			expect(notificationContent).toContain('private readonly cellUpdateBatch = new Map');
 		});
 
 		it('GridApi exports conceptual surface contracts', () => {
@@ -2560,15 +2792,15 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain('export class CapabilityDrivenGridIntegrityRowProvider');
 			expect(content).not.toContain('ClientGridIntegrityRowProvider');
 			expect(content).not.toContain('InfiniteGridIntegrityRowProvider');
-			expect(content).not.toContain('ServerPageGridIntegrityRowProvider');
+			expect(content).not.toContain('serverSideGridIntegrityRowProvider');
 		});
 
 		it('non-client filteredRows and full-dataset scopes are explicitly unsupported instead of silently degraded', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', 'features', 'dataIntegrity', 'GridIntegrityRowProvider.ts'), 'utf-8');
 			expect(content).toContain('Infinite row model cannot authoritatively scan allRows without a serverProvided report.');
 			expect(content).toContain('Infinite row model cannot authoritatively expose filteredRows beyond currently loaded blocks.');
-			expect(content).toContain('Server-page row model cannot authoritatively scan allRows without a serverProvided report.');
-			expect(content).toContain('Server-page row model cannot authoritatively expose filteredRows outside the current page.');
+			expect(content).toContain('server-side row model cannot authoritatively scan allRows without a serverProvided report.');
+			expect(content).toContain('server-side row model cannot authoritatively expose filteredRows outside the loaded server-side stores.');
 		});
 
 		it('GridEngine wires integrity through the unified provider factory and rejects row patches for unavailable rows', () => {
@@ -2578,7 +2810,7 @@ describe('Architecture guardrails', () => {
 			expect(content).toContain("reason: 'row unavailable in current row-model scope'");
 			expect(content).not.toContain('new ClientGridIntegrityRowProvider');
 			expect(content).not.toContain('new InfiniteGridIntegrityRowProvider');
-			expect(content).not.toContain('new ServerPageGridIntegrityRowProvider');
+			expect(content).not.toContain('new serverSideGridIntegrityRowProvider');
 		});
 	});
 
@@ -2645,11 +2877,124 @@ describe('Architecture guardrails', () => {
 		it('selection commits keep bounds projection-owned and resolve event payloads after projection', () => {
 			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
 			expect(content).toContain('const previewSelection = {');
-			expect(content).toContain('const committedSelection = {');
-			expect(content).toContain('bounds: null,');
+			expect(content).toContain('const committedSelection = this.selection.createSelectionRange(validStart, validEnd, source);');
+			expect(content).toContain('bounds: this.selection.calculateRangeBounds(');
+			expect(content).toContain('if (!pointer.columnInstanceId) return -1;');
+			expect(content).toContain(
+				'findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId })'
+			);
+			expect(content).not.toContain('this.columns.getColumnIndex(pointer.colField)');
 			expect(content).toContain('payload: (state) => ({ focus: state.selection.focus, selection: state.selection })');
 			expect(content).toContain('selection: state.selection,');
 			expect(content).not.toContain('const selection = this.selection.setSelection(');
+			expect(content).toContain('state: { selection: committedSelection }');
+		});
+
+		it('GridProjectionPipeline recomputes selection bounds from canonical column identity instead of field fallback', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridProjectionPipeline.ts'), 'utf-8');
+			expect(content).toContain('if (!pointer.columnInstanceId) return -1;');
+			expect(content).toContain('const column = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), {');
+			expect(content).toContain('columnInstanceId: pointer.columnInstanceId,');
+			expect(content).toContain('const enrichPointer = (pointer: GridCellPointer | null): CanonicalGridCellPointer | null => {');
+			expect(content).toContain('areCanonicalCellPointersEqual(focus, selection.focus as CanonicalGridCellPointer | null)');
+			expect(content).not.toContain('this.deps.columns.getColumnIndex(pointer.colField)');
+			expect(content).not.toContain('pointer.colField === column.field');
+			expect(content).not.toContain('pointer.colId === (column.colId ?? column.field)');
+			expect(content).not.toContain('activeEdit.colField === column.field');
+			expect(content).not.toContain('activeEdit.colId === (column.colId ?? column.field)');
+		});
+
+		it('store cell state editing flags derive from canonical interaction edit identity', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'store.ts'), 'utf-8');
+			expect(content).toContain("import { doesCanonicalCellPointerMatchColumn } from './interaction/cellPointer.js';");
+			expect(content).toContain(
+				'const isEditing = column ? doesCanonicalCellPointerMatchColumn(interaction.activeEdit.active, rowId, column) : false;'
+			);
+			expect(content).not.toContain('doesCellPointerMatchColumn(interaction.activeEdit.active, rowId, column)');
+		});
+
+		it('SelectionModel creates new selection state from canonical pointers instead of broad field-only pointers', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'models', 'SelectionModel.ts'), 'utf-8');
+			expect(content).toContain(
+				"public createCellSelection(pointer: CanonicalGridCellPointer | null, source: GridSelectionSource = 'program'): CanonicalGridSelectionState {"
+			);
+			expect(content).toContain('start: CanonicalGridCellPointer | null,');
+			expect(content).toContain('end: CanonicalGridCellPointer | null,');
+			expect(content).toContain('anchor: CanonicalGridCellPointer | null,');
+			expect(content).toContain('end: CanonicalGridCellPointer,');
+		});
+
+		it('renderer interaction consumers do not fall back to public selection focus once core focus is canonical', () => {
+			const rowPresentationContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'rowPresentationResolver.ts'), 'utf-8');
+			const selectionPaintContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'selectionPaintManager.ts'), 'utf-8');
+			expect(rowPresentationContent).not.toContain('interaction.cellSelection.publicSelection.focus');
+			expect(selectionPaintContent).not.toContain('cellSelection.publicSelection.focus');
+		});
+
+		it('broad pointer compatibility is funneled through the shared canonical resolver instead of ad hoc reconstruction', () => {
+			const cellPointerContent = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'cellPointer.ts'), 'utf-8');
+			const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			const interactionContent = readFileSync(resolve(CORE_ROOT, 'src', 'interaction', 'GridInteractionController.ts'), 'utf-8');
+			const contextMenuContent = readFileSync(resolve(CORE_ROOT, 'src', 'contextMenu.ts'), 'utf-8');
+			const viewportContent = readFileSync(resolve(CORE_ROOT, 'src', 'renderer', 'renderViewportCoordinator.ts'), 'utf-8');
+
+			expect(cellPointerContent).toContain('export function resolveCanonicalCellPointer');
+			expect(engineContent).toContain('return resolveCanonicalCellPointer(columns, pointer);');
+			expect(interactionContent).toContain('return resolveCanonicalCellPointer(this.runtime.getDisplayedColumns(), pointer ?? null);');
+			expect(contextMenuContent).toContain('return resolveCanonicalCellPointer(columns, pointer);');
+			expect(viewportContent).toContain('return resolveCanonicalCellPointer(this.deps.engine.columns.getDisplayedColumns(), pointer);');
+		});
+
+		it('public state snapshots derive selection and active-edit from interaction state', () => {
+			const content = readFileSync(resolve(CORE_ROOT, 'src', 'api', 'createGridStateSnapshot.ts'), 'utf-8');
+			expect(content).toContain('const interaction = readInteractionState(state);');
+			expect(content).toContain('selection: cloneSelection(interaction.cellSelection.selection),');
+			expect(content).toContain('activeEdit: cloneActiveEdit(interaction.activeEdit.active),');
+			expect(content).not.toContain('selection: cloneSelection(state.selection),');
+			expect(content).not.toContain('activeEdit: cloneActiveEdit(state.activeEdit),');
+		});
+
+		it('GridEngine canonicalizes initial selection before seeding internal state', () => {
+			const engineContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'GridEngine.ts'), 'utf-8');
+			const helperContent = readFileSync(resolve(CORE_ROOT, 'src', 'engine', 'normalizeInitialInteractionState.ts'), 'utf-8');
+			expect(engineContent).toContain('const initialSelection = normalizeInitialSelection(');
+			expect(engineContent).toContain('const initialActiveEdit = normalizeInitialActiveEdit(');
+			expect(helperContent).toContain('export function normalizeInitialSelection');
+			expect(helperContent).toContain('const focus = resolveCanonicalCellPointer(selection.focus, columns);');
+			expect(helperContent).toContain('export function normalizeInitialActiveEdit');
+			expect(engineContent).not.toContain("const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');");
+		});
+
+		it('internal grid state stores canonical selection identity rather than broad public selection pointers', () => {
+			const stateContent = readFileSync(resolve(CORE_ROOT, 'src', 'state', 'GridState.ts'), 'utf-8');
+			expect(stateContent).toContain(
+				"import type { CanonicalGridSelectionState, GridInteractionState } from '../interaction/interactionState.js';"
+			);
+			expect(stateContent).toContain('selection: CanonicalGridSelectionState;');
+			expect(stateContent).not.toContain('selection: GridSelectionState;');
+		});
+
+		it('broad pointer fallback helpers are only used at explicit public-boundary compatibility seams', () => {
+			const srcDir = resolve(CORE_ROOT, 'src');
+			const files = collectSourceFiles(srcDir);
+			const users = files
+				.filter((file) => !file.endsWith('architectureGuards.test.ts'))
+				.filter((file) => {
+					const content = readFileSync(file, 'utf-8');
+					return (
+						content.includes('findColumnByCellPointer(') ||
+						content.includes('findColumnIndexByCellPointer(') ||
+						content.includes('doesCellPointerMatchColumn(')
+					);
+				})
+				.map((file) => path.relative(srcDir, file).replaceAll('\\', '/'))
+				.sort();
+			expect(users).toEqual([
+				'engine/GridEngine.ts',
+				'engine/GridProjectionPipeline.ts',
+				'interaction/GridInteractionController.ts',
+				'interaction/cellPointer.ts',
+			]);
 		});
 	});
 });

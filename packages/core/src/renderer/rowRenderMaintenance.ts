@@ -1,5 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
-import type { CellRendererPhase, ColumnDef } from '../columnDef.js';
+import type { CellRendererPhase, ColumnDef, InternalColumnDef } from '../columnDef.js';
 import type { InternalGridState } from '../state/GridState.js';
 import type { RowNode } from '../rowNode.js';
 import type { CellRenderer } from './cellRenderer.js';
@@ -9,6 +9,8 @@ import type { RowSlot } from './rowSlot.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { compileColumnTopology } from './columnTopology.js';
+import { doesCanonicalCellPointerMatchColumn } from '../interaction/cellPointer.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 
 export interface RowCellBindRequest<TRowData = unknown> {
 	cellSlot: {
@@ -52,6 +54,26 @@ export interface DecorateDirtyCellsAfterScrollResult {
 	remainingFidelity: number;
 }
 
+/**
+ * Explicitly order repairs within a priority bucket. Set insertion order reflects whichever
+ * scroll frame happened to dirty a cell first, so it must not decide which visible cell settles
+ * first. Keeping the tie-break entirely on physical binding identity makes repeated runs and
+ * lane changes deterministic without introducing a new queue owner.
+ */
+export function sortDirtyCellsForRepair(cells: HTMLDivElement[], getPriority: (cell: HTMLDivElement) => number): void {
+	cells.sort((a, b) => {
+		const priorityDelta = getPriority(b) - getPriority(a);
+		if (priorityDelta !== 0) return priorityDelta;
+		const aSlot = (a as unknown as { __cellSlot?: { rowIndex?: number; colIndex?: number; cellInstanceId?: string } }).__cellSlot;
+		const bSlot = (b as unknown as { __cellSlot?: { rowIndex?: number; colIndex?: number; cellInstanceId?: string } }).__cellSlot;
+		const rowDelta = (aSlot?.rowIndex ?? Number.MAX_SAFE_INTEGER) - (bSlot?.rowIndex ?? Number.MAX_SAFE_INTEGER);
+		if (rowDelta !== 0) return rowDelta;
+		const colDelta = (aSlot?.colIndex ?? Number.MAX_SAFE_INTEGER) - (bSlot?.colIndex ?? Number.MAX_SAFE_INTEGER);
+		if (colDelta !== 0) return colDelta;
+		return (aSlot?.cellInstanceId ?? '').localeCompare(bSlot?.cellInstanceId ?? '');
+	});
+}
+
 function classifyDirtyCellLane<TRowData>(cell: HTMLDivElement, columns: readonly ColumnDef<TRowData>[]): Exclude<PostScrollRepairLane, 'all'> {
 	const cs = (
 		cell as unknown as {
@@ -67,18 +89,38 @@ function classifyDirtyCellLane<TRowData>(cell: HTMLDivElement, columns: readonly
 	return 'motion';
 }
 
-export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
+function getDisplayedColumnIndexesForField<TRowData>(columns: readonly ColumnDef<TRowData>[], colField: string): number[] {
+	const indexes: number[] = [];
+	for (let index = 0; index < columns.length; index++) {
+		if (columns[index]?.field === colField) indexes.push(index);
+	}
+	return indexes;
+}
+
+function getDisplayedColumnIndexesForInvalidation<TRowData>(columns: readonly ColumnDef<TRowData>[], colIdOrField: string): number[] {
+	const exactIndexes: number[] = [];
+	for (let index = 0; index < columns.length; index++) {
+		const column = columns[index] as InternalColumnDef<TRowData> | undefined;
+		if (!column) continue;
+		if (column.instanceId === colIdOrField || column.colId === colIdOrField) exactIndexes.push(index);
+	}
+	if (exactIndexes.length > 0) return exactIndexes;
+	return getDisplayedColumnIndexesForField(columns, colIdOrField);
+}
+
+export function repaintInvalidatedRows<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
 	const rowModel = deps.engine.getVisualRowModel();
 	if (!rowModel) return;
 
 	const state = deps.engine.stateManager.getState();
+	const interaction = readInteractionState(state);
 	const columns = deps.engine.columns.getDisplayedColumns();
 	const plan = deps.engine.columns.getCompiledPlan();
 	const columnTopology = compileColumnTopology(plan);
 	const colCount = columns.length;
 	const pinRightBaseLeft = plan.pinRightBaseLeft;
 
-	deps.selectionPaint.rebuildSelection(state.selectedRowIds);
+	deps.selectionPaint.rebuildSelection(interaction.rowSelection.selectedRowIds);
 
 	for (const rowId of frame.rows) {
 		const rowIndex = rowModel.getVisualIndexByRowId(rowId);
@@ -91,7 +133,7 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 			if (!columns[c].checkboxSelection) continue;
 			const cellSlot = slot.getCellForCol(c);
 			if (!cellSlot) continue;
-			const lane = columnTopology.byColumnId.get(columns[c].field)?.lane ?? 'center';
+			const lane = columnTopology.byColumnId.get((columns[c] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
 			deps.bindCellFull({
 				cellSlot,
 				slotId: slot.id,
@@ -109,6 +151,18 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 			});
 		}
 	}
+}
+
+export function repaintInvalidatedCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
+	const rowModel = deps.engine.getVisualRowModel();
+	if (!rowModel) return;
+
+	const state = deps.engine.stateManager.getState();
+	const interaction = readInteractionState(state);
+	const columns = deps.engine.columns.getDisplayedColumns();
+	const plan = deps.engine.columns.getCompiledPlan();
+	const columnTopology = compileColumnTopology(plan);
+	const pinRightBaseLeft = plan.pinRightBaseLeft;
 
 	for (const [rowId, colFields] of frame.cellsByRowId) {
 		const rowIndex = rowModel.getVisualIndexByRowId(rowId);
@@ -117,57 +171,62 @@ export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintena
 		const row = rowModel.getVisualRow(rowIndex);
 		if (!slot || row?.kind !== 'data') continue;
 
-		for (const colField of colFields) {
-			const colIndex = deps.engine.columns.getColumnIndex(colField);
-			if (colIndex < 0) continue;
-			const cellSlot = slot.getCellForCol(colIndex);
-			if (!cellSlot) continue;
-			const lane = columnTopology.byColumnId.get(colField)?.lane ?? 'center';
-			deps.bindCellFull({
-				cellSlot,
-				slotId: slot.id,
-				slotGeneration: slot.generation,
-				node: row.node,
-				rowIndex,
-				colIndex,
-				col: columns[colIndex],
-				lane,
-				pinRightBaseLeft,
-				plan,
-				state,
-				isScrollFrameActive: false,
-				phase: 'initial',
-			});
+		for (const colIdOrField of colFields) {
+			for (const colIndex of getDisplayedColumnIndexesForInvalidation(columns, colIdOrField)) {
+				const cellSlot = slot.getCellForCol(colIndex);
+				if (!cellSlot) continue;
+				const lane = columnTopology.byColumnId.get((columns[colIndex] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
+				deps.bindCellFull({
+					cellSlot,
+					slotId: slot.id,
+					slotGeneration: slot.generation,
+					node: row.node,
+					rowIndex,
+					colIndex,
+					col: columns[colIndex],
+					lane,
+					pinRightBaseLeft,
+					plan,
+					state,
+					isScrollFrameActive: false,
+					phase: 'initial',
+				});
+			}
 		}
 	}
 
-	for (const colField of frame.columns) {
-		const colIndex = deps.engine.columns.getColumnIndex(colField);
-		if (colIndex < 0) continue;
-		const lane = columnTopology.byColumnId.get(colField)?.lane ?? 'center';
-		for (const [rowIndex, slot] of deps.activeRows) {
-			const row = rowModel.getVisualRow(rowIndex);
-			if (row?.kind !== 'data') continue;
+	for (const colIdOrField of frame.columns) {
+		for (const colIndex of getDisplayedColumnIndexesForInvalidation(columns, colIdOrField)) {
+			const lane = columnTopology.byColumnId.get((columns[colIndex] as InternalColumnDef<TRowData>).instanceId)?.lane ?? 'center';
+			for (const [rowIndex, slot] of deps.activeRows) {
+				const row = rowModel.getVisualRow(rowIndex);
+				if (row?.kind !== 'data') continue;
 
-			const cellSlot = slot.getCellForCol(colIndex);
-			if (!cellSlot) continue;
-			deps.bindCellFull({
-				cellSlot,
-				slotId: slot.id,
-				slotGeneration: slot.generation,
-				node: row.node,
-				rowIndex,
-				colIndex,
-				col: columns[colIndex],
-				lane,
-				pinRightBaseLeft,
-				plan,
-				state,
-				isScrollFrameActive: false,
-				phase: 'initial',
-			});
+				const cellSlot = slot.getCellForCol(colIndex);
+				if (!cellSlot) continue;
+				deps.bindCellFull({
+					cellSlot,
+					slotId: slot.id,
+					slotGeneration: slot.generation,
+					node: row.node,
+					rowIndex,
+					colIndex,
+					col: columns[colIndex],
+					lane,
+					pinRightBaseLeft,
+					plan,
+					state,
+					isScrollFrameActive: false,
+					phase: 'initial',
+				});
+			}
 		}
 	}
+}
+
+export function repaintInvalidatedRowsAndCells<TRowData>(deps: RowRenderMaintenanceDeps<TRowData>, frame: InvalidationFrame): void {
+	repaintInvalidatedRows(deps, frame);
+	repaintInvalidatedCells(deps, frame);
 }
 
 export function decorateDirtyCellsAfterScroll<TRowData>(
@@ -188,6 +247,7 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 	}
 
 	const state = deps.engine.stateManager.getState();
+	const interaction = readInteractionState(state);
 	const columns = deps.engine.columns.getDisplayedColumns();
 	const plan = deps.engine.columns.getCompiledPlan();
 	const columnTopology = compileColumnTopology(plan);
@@ -199,14 +259,26 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 	const rowRange = deps.engine.viewport.getVisibleRowRange(rowCount);
 	const rowCenter = (rowRange.startIdx + rowRange.endIdx) / 2;
 	const colCenter = (colRange.startIdx + colRange.endIdx) / 2;
-	const activeEdit = state.activeEdit;
-	const focusedCell = state.selection.focus;
+	const activeEdit = interaction.activeEdit.active;
+	const focusedCell = interaction.focus.cell;
 
 	const getCellPriority = (cell: HTMLDivElement): number => {
-		const cs = (cell as unknown as { __cellSlot?: { rowIndex: number; colField?: string; rowId?: string; colIndex: number } }).__cellSlot;
+		const cs = (
+			cell as unknown as {
+				__cellSlot?: { rowIndex: number; colField?: string; rowId?: string; colIndex: number; columnInstanceId?: string };
+			}
+		).__cellSlot;
 		if (!cs || cs.rowIndex < 0 || !cs.colField) return 0;
-		if (activeEdit && cs.rowId === activeEdit.rowId && cs.colField === activeEdit.colField) return 6;
-		if (focusedCell && cs.rowId === focusedCell.rowId && cs.colField === focusedCell.colField) return 5;
+		if (
+			activeEdit &&
+			doesCanonicalCellPointerMatchColumn(activeEdit, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })
+		)
+			return 6;
+		if (
+			focusedCell &&
+			doesCanonicalCellPointerMatchColumn(focusedCell, cs.rowId ?? '', { field: cs.colField, instanceId: cs.columnInstanceId as any })
+		)
+			return 5;
 
 		const isRowVisible = cs.rowIndex >= rowRange.startIdx && cs.rowIndex <= rowRange.endIdx;
 		const isColVisible = cs.colIndex >= colRange.startIdx && cs.colIndex <= colRange.endIdx;
@@ -228,6 +300,7 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 		else if (p > 1) b2.push(cell);
 		else b3.push(cell);
 	}
+	for (const bucket of deps.dirtyBuckets) sortDirtyCellsForRepair(bucket, getCellPriority);
 
 	let processed = 0;
 	for (let bi = 0; bi < 4 && processed < maxCells; bi++) {
@@ -259,7 +332,8 @@ export function decorateDirtyCellsAfterScroll<TRowData>(
 				const cellSlot = slot.getCellForCol(colIndex);
 				if (!cellSlot || cellSlot.element !== cell) continue;
 
-				const lane = columnTopology.byColumnId.get(columns[colIndex]?.field ?? '')?.lane ?? 'center';
+				const laneCol = columns[colIndex] as InternalColumnDef<TRowData> | undefined;
+				const lane = (laneCol ? columnTopology.byColumnId.get(laneCol.instanceId) : undefined)?.lane ?? 'center';
 				deps.bindCellFull({
 					cellSlot,
 					slotId: slot.id,

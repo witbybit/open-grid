@@ -1,4 +1,11 @@
-import { hasImperativeRendererCapability, mountGridHost, type GridAdapterHandle, type GridHostWithAdapter } from '@open-grid/core/internal';
+import {
+	bindGridInteractionSurface,
+	hasImperativeRendererCapability,
+	mountGridHost,
+	type GridAdapterHandle,
+	type GridHostWithAdapter,
+	type GridInteractionSurfaceBinding,
+} from '@open-grid/core/internal';
 
-export { hasImperativeRendererCapability, mountGridHost };
-export type { GridAdapterHandle, GridHostWithAdapter };
+export { bindGridInteractionSurface, hasImperativeRendererCapability, mountGridHost };
+export type { GridAdapterHandle, GridHostWithAdapter, GridInteractionSurfaceBinding };

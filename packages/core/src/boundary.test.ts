@@ -2,8 +2,16 @@ import { describe, it, expect, vi } from 'vitest';
 import * as publicApi from './index.js';
 import * as experimentalApi from './experimental.js';
 import * as internalApi from './internal.js';
-import { createClientGrid } from './createGrid.js';
+import { createClientGrid, createInfiniteGrid, createServerSideGrid } from './createGrid.js';
 import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((resolvePromise) => {
+		resolve = resolvePromise;
+	});
+	return { promise, resolve };
+}
 
 describe('Public/internal boundary', () => {
 	describe('Public entry (@open-grid/core)', () => {
@@ -78,12 +86,14 @@ describe('Public/internal boundary', () => {
 				'LIGHT_THEME',
 				'MINIMAL_MONOCHROME_THEME',
 				'NUMBER_OPS',
-				'RowNode',
 				'TEXT_OPS',
 				'ThemeManager',
 				'WARM_ORANGE_THEME',
 				'applyFilterToModel',
 				'applyQueryModelFilter',
+				'areCanonicalCellPointersEqual',
+				'areCellPointersEqual',
+				'areServerSideRoutesEqual',
 				'buildFilterByValue',
 				'countQueryNodes',
 				'createClientGrid',
@@ -92,15 +102,20 @@ describe('Public/internal boundary', () => {
 				'createLocalStorageAdapter',
 				'createLocalStorageWorkspaceAdapter',
 				'createQueryEvaluationContext',
-				'createServerPageGrid',
+				'createServerSideGetRowsRequest',
+				'createServerSideGrid',
+				'createServerSideRouteKey',
 				'createWorkspaceController',
 				'customCellRule',
 				'date',
 				'defaultOpForType',
+				'doesCanonicalCellPointerMatchColumn',
+				'doesCellPointerMatchColumn',
 				'duplicateValueRule',
 				'email',
 				'evaluateQueryModel',
 				'getBuiltInTheme',
+				'getCellPointerColumnKey',
 				'getFilterChipText',
 				'getOpMeta',
 				'getOpsForType',
@@ -110,17 +125,20 @@ describe('Public/internal boundary', () => {
 				'isDomCellRenderer',
 				'isFilterableColumn',
 				'isQueryModelActive',
+				'isRootServerSideRoute',
 				'max',
 				'min',
 				'missingRequiredRule',
 				'normalizeCapabilityResult',
+				'normalizeServerSideGetRowsResult',
+				'normalizeServerSideRoute',
 				'number',
 				'oneOf',
 				'regex',
 				'registerGridContextMenu',
-				'registerGridNavigation',
 				'required',
 				'resolveColumnFilterDef',
+				'resolveServerSideRowCountState',
 				'summarizeAnalysisState',
 				'themeToCSSVariables',
 				'validateSchemaVersion',
@@ -129,6 +147,7 @@ describe('Public/internal boundary', () => {
 
 		it('does not export experimental style-rule compiler or concrete instrumentation helpers', () => {
 			for (const name of [
+				'RowNode',
 				'compileStyleRules',
 				'NoopGridInstrumentation',
 				'RecordingGridInstrumentation',
@@ -167,27 +186,38 @@ describe('Public/internal boundary', () => {
 			expect(typeof (experimentalApi as Record<string, unknown>)['isDataVisualRow']).toBe('function');
 			expect(typeof (experimentalApi as Record<string, unknown>)['parseVisualRowId']).toBe('function');
 			expect(typeof (experimentalApi as Record<string, unknown>)['toDataVisualRowId']).toBe('function');
+			expect(typeof (experimentalApi as Record<string, unknown>)['createGridTraceReplay']).toBe('function');
 		});
 
 		it('matches the reviewed experimental runtime export snapshot', () => {
 			expect(Object.keys(experimentalApi).sort()).toEqual([
+				'GRID_TRACE_REPLAY_LIMITS',
+				'GRID_TRACE_REPLAY_VERSION',
+				'GridTraceReplay',
 				'NOOP_INSTRUMENTATION',
 				'NoopGridInstrumentation',
 				'RecordingGridInstrumentation',
 				'canEditCell',
 				'canFocusVisualRow',
+				'clearFlightRecorder',
 				'compileStyleRules',
+				'createGridTraceReplay',
+				'explainFlightRecorderCell',
+				'getFlightRecorderSnapshot',
 				'isDataCellSelectable',
 				'isDataVisualRow',
 				'isEditableVisualRow',
 				'isFullWidthVisualRow',
 				'isSelectableVisualRow',
 				'parseVisualRowId',
+				'startFlightRecorder',
+				'stopFlightRecorder',
 				'toDataVisualRowId',
 				'toDetailVisualRowId',
 				'toFooterVisualRowId',
 				'toGroupVisualRowId',
 				'toLoadingVisualRowId',
+				'validateGridReplayTrace',
 			]);
 		});
 	});
@@ -232,7 +262,7 @@ describe('Public/internal boundary', () => {
 		});
 
 		it('matches the reviewed adapter-only runtime export snapshot', () => {
-			expect(Object.keys(internalApi).sort()).toEqual(['hasImperativeRendererCapability', 'mountGridHost']);
+			expect(Object.keys(internalApi).sort()).toEqual(['bindGridInteractionSurface', 'hasImperativeRendererCapability', 'mountGridHost']);
 		});
 
 		it('does not export runtime bridge escape hatches', () => {
@@ -259,7 +289,6 @@ describe('Public/internal boundary', () => {
 				'resetRenderStats',
 				'getVisualRow',
 				'getCellAccess',
-				'subscribeToCell',
 				'subscribeToRow',
 				'subscribeToViewport',
 				'getCachedDisplayValue',
@@ -352,6 +381,41 @@ describe('Public/internal boundary', () => {
 				])
 			);
 			expect(adapter.save).not.toHaveBeenCalled();
+		});
+
+		it.each([
+			['client', (persistence: object) => createClientGrid({ columns: [{ field: 'id', width: 100 }], rows: [{ id: '1' }], persistence })],
+			[
+				'infinite',
+				(persistence: object) =>
+					createInfiniteGrid({
+						columns: [{ field: 'id', width: 100 }],
+						datasource: { getRows: vi.fn().mockResolvedValue({ rows: [], totalCount: 0 }) },
+						persistence,
+					}),
+			],
+			[
+				'SSRM',
+				(persistence: object) =>
+					createServerSideGrid({
+						columns: [{ field: 'id', width: 100 }],
+						datasource: { getRows: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) },
+						persistence,
+					}),
+			],
+		] as const)('does not hydrate async persistence after %s destroy', async (_mode, create) => {
+			const load = deferred<{
+				v: number;
+				state: { columnWidths: Record<string, number> };
+			}>();
+			const api = create({ load: vi.fn(() => load.promise), save: vi.fn() });
+
+			api.destroy();
+			load.resolve({ v: GRID_STATE_SCHEMA_VERSION, state: { columnWidths: { id: 180 } } });
+			await Promise.resolve();
+			await Promise.resolve();
+
+			expect(api.getGridState().state.columnWidths?.id).toBe(100);
 		});
 	});
 });

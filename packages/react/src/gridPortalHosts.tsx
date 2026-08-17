@@ -1,9 +1,8 @@
 import { useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, memo, createElement, type ComponentType } from 'react';
 import {
 	ColumnDef,
+	doesCanonicalCellPointerMatchColumn,
 	GridApi,
-	GridEventName,
-	RowNode,
 	VisualRow,
 	type ActiveEditState,
 	type CellRendererPhase,
@@ -23,36 +22,22 @@ import type { PortalCellProps, PortalData, PortalStore } from './gridPortalTypes
 interface ActiveCellEditorProps<TRowData = unknown> {
 	rowId: string;
 	colField: string;
+	colId: string;
+	columnInstanceId?: string;
 	value: unknown;
 	col: ColumnDef<TRowData>;
 	api: GridApi<TRowData>;
 }
 
-function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col, api }: ActiveCellEditorProps<TRowData>) {
+function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, colId, columnInstanceId, value, col, api }: ActiveCellEditorProps<TRowData>) {
 	const [localValue, setLocalValue] = useState<unknown>(value);
 	const localValueRef = useRef(localValue);
 	localValueRef.current = localValue;
-
-	const isCommittedRef = useRef(false);
+	const editColumnKey = columnInstanceId ?? colId ?? colField;
 
 	useEffect(() => {
-		isCommittedRef.current = false;
 		setLocalValue(value);
 	}, [value]);
-
-	useEffect(() => {
-		const unsubscribe = api.addEventListener(GridEventName.editStopped, (event) => {
-			if (event.payload.rowId === rowId && event.payload.colField === colField) {
-				if (!event.payload.cancel && !isCommittedRef.current) {
-					// External stop (e.g. navigation) without a prior commitEdit — run the full
-					// commit path (validation + valueSetter) rather than bypassing with setCellValue.
-					isCommittedRef.current = true;
-					void api.commitEdit(rowId, colField, localValueRef.current);
-				}
-			}
-		});
-		return () => unsubscribe();
-	}, [api, rowId, colField]);
 
 	// activeEdit subscription lives here — only this mounted instance subscribes, not every cell
 	// Memoize the getSnapshot function to cache the activeEdit state and avoid infinite loops
@@ -86,16 +71,17 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 		}, [api])
 	);
 	const validationError =
-		activeEditState?.rowId === rowId && activeEditState?.colField === colField ? (activeEditState.validationError ?? null) : null;
+		activeEditState != null && doesCanonicalCellPointerMatchColumn(activeEditState, rowId, col)
+			? (activeEditState.validationError ?? null)
+			: null;
 
 	const handleCommit = useCallback(
 		(finalValue?: unknown) => {
-			isCommittedRef.current = true;
 			const isEvent = finalValue && typeof finalValue === 'object' && ('nativeEvent' in finalValue || 'target' in finalValue);
 			const valToCommit = finalValue !== undefined && !isEvent ? finalValue : localValueRef.current;
-			void api.commitEdit(rowId, colField, valToCommit);
+			void api.commitEdit(rowId, editColumnKey, valToCommit);
 		},
-		[api, rowId, colField]
+		[api, rowId, editColumnKey]
 	);
 
 	const handleCancel = useCallback(() => {
@@ -125,10 +111,13 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 					{createElement(CustomEditor, {
 						rowId,
 						colField,
+						colId,
+						columnInstanceId,
 						value: localValue,
 						onChange: (val: unknown) => {
 							setLocalValue(val);
 							localValueRef.current = val;
+							api.updateEditDraft(rowId, editColumnKey, val);
 						},
 						api,
 						onCommit: handleCommit,
@@ -143,6 +132,7 @@ function ActiveCellEditorInner<TRowData = unknown>({ rowId, colField, value, col
 					onChange={(e) => {
 						setLocalValue(e.target.value);
 						localValueRef.current = e.target.value;
+						api.updateEditDraft(rowId, editColumnKey, e.target.value);
 					}}
 					onMouseDown={(e) => e.stopPropagation()}
 					onDoubleClick={(e) => e.stopPropagation()}
@@ -222,11 +212,21 @@ function PortalCellInner<TRowData = unknown>({
 		iCol?.cellRenderer && !isDomCellRenderer(iCol.cellRenderer)
 			? (iCol.cellRenderer as unknown as ComponentType<Record<string, unknown>>)
 			: undefined;
+	const colId = col.colId ?? col.field;
+	const columnInstanceId = 'instanceId' in col ? (col.instanceId as string | undefined) : undefined;
 
 	return (
 		<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', position: 'relative' }}>
 			{isEditing ? (
-				<ActiveCellEditor<TRowData> rowId={rowId} colField={colField} value={value} col={col} api={api} />
+				<ActiveCellEditor<TRowData>
+					rowId={rowId}
+					colField={colField}
+					colId={colId}
+					columnInstanceId={columnInstanceId}
+					value={value}
+					col={col}
+					api={api}
+				/>
 			) : CustomRenderer && rowData ? (
 				createElement(CustomRenderer, {
 					value,
@@ -234,7 +234,8 @@ function PortalCellInner<TRowData = unknown>({
 					row: rowData,
 					rowId,
 					colField,
-					colId: colField,
+					colId,
+					columnInstanceId,
 					isScrolling: !!isScrolling,
 					phase: phase ?? 'initial',
 					isFocused: !!isFocused,
@@ -386,6 +387,28 @@ function DefaultFooterRowRendererInner<TRowData = unknown>({ visualRow }: { visu
 }
 
 export const DefaultFooterRowRenderer = memo(DefaultFooterRowRendererInner) as typeof DefaultFooterRowRendererInner;
+
+function DefaultFailedRowRendererInner<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
+	if (visualRow.kind !== 'failed') return null;
+	return (
+		<div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingLeft: 12, color: '#fca5a5', fontWeight: 600 }}>
+			{visualRow.error}
+		</div>
+	);
+}
+
+export const DefaultFailedRowRenderer = memo(DefaultFailedRowRendererInner) as typeof DefaultFailedRowRendererInner;
+
+function DefaultPlaceholderRowRendererInner<TRowData = unknown>({ visualRow }: { visualRow: VisualRow<TRowData>; api: GridApi<TRowData> }) {
+	if (visualRow.kind !== 'placeholder') return null;
+	return (
+		<div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingLeft: 12, color: '#94a3b8', fontWeight: 500 }}>
+			{visualRow.reason ?? 'Unavailable'}
+		</div>
+	);
+}
+
+export const DefaultPlaceholderRowRenderer = memo(DefaultPlaceholderRowRendererInner) as typeof DefaultPlaceholderRowRendererInner;
 
 // ─── PortalCellWrapper ────────────────────────────────────────────────────────
 

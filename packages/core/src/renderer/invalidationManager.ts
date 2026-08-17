@@ -1,4 +1,5 @@
 import type { GridCellPointer } from '../api/GridApi.js';
+import { getCellPointerColumnKey } from '../interaction/cellPointer.js';
 
 export type GridInvalidationReason =
 	| 'aggDefs'
@@ -365,7 +366,7 @@ export class InvalidationManager {
 
 	public invalidateCells(cells: GridCellPointer[], reason?: GridInvalidationReason): void {
 		for (const cell of cells) {
-			this.invalidateCell(cell.rowId, cell.colField, reason);
+			this.invalidateCell(cell.rowId, getCellPointerColumnKey(cell), reason);
 		}
 	}
 

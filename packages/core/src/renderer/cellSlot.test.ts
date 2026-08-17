@@ -110,28 +110,28 @@ describe('CellSlot.rowBindingGeneration — Plan 118 WS1 per-cell row binding tr
 	});
 });
 
-describe('CellSlot WS2 — columnId stable column ownership', () => {
+describe('CellSlot WS2 — columnInstanceId stable column ownership', () => {
 	it('starts empty — set by reconcileTopology at construction time', () => {
 		const slot = new CellSlot(document.createElement('div'));
-		expect(slot.columnId).toBe('');
+		expect(slot.columnInstanceId).toBe('');
 	});
 
 	it('is stable across unbindHot() — column assignment survives row recycling', () => {
 		const slot = new CellSlot(document.createElement('div'));
-		slot.columnId = 'price';
+		slot.columnInstanceId = 'price' as any;
 		slot.unbindHot();
-		expect(slot.columnId).toBe('price');
+		expect(slot.columnInstanceId).toBe('price');
 	});
 
 	it('is cleared by unbindCold() — cold destroy resets all ownership', () => {
 		const slot = new CellSlot(document.createElement('div'));
-		slot.columnId = 'price';
+		slot.columnInstanceId = 'price' as any;
 		slot.unbindCold();
-		// columnId is not cleared by unbindCold (physical column association persists
+		// columnInstanceId is not cleared by unbindCold (physical column association persists
 		// until the element is destroyed — cleared only when cell is fully released)
-		// This matches the plan: columnId is set at construction and stable for the
+		// This matches the plan: columnInstanceId is set at construction and stable for the
 		// cell's lifetime, which ends at destroyCold().
-		expect(slot.columnId).toBe('price');
+		expect(slot.columnInstanceId).toBe('price');
 	});
 });
 
@@ -281,5 +281,41 @@ describe('CellSlot transient style reset', () => {
 		expect(slot.element.dataset.contentMode).toBe('portal');
 		expect(slot.element.dataset.cellKey).toBe('portal-key');
 		expect(slot.lastPortalKey).toBe('portal-key');
+	});
+});
+
+describe('CellSlot accessibility sync - Plan 157 kernel-derived cell ARIA state', () => {
+	it('syncs focus, readonly, and invalid state without binder-local DOM ownership', () => {
+		const slot = new CellSlot(document.createElement('div'));
+
+		expect(slot.syncAccessibilityState({ focused: true, selected: true, readOnly: true, invalid: true })).toBe(true);
+		expect(slot.element.getAttribute('tabindex')).toBe('-1');
+		expect(slot.element.getAttribute('aria-selected')).toBe('true');
+		expect(slot.element.getAttribute('aria-readonly')).toBe('true');
+		expect(slot.element.getAttribute('aria-invalid')).toBe('true');
+
+		expect(slot.syncAccessibilityState({ focused: false, selected: false, readOnly: false, invalid: false })).toBe(true);
+		expect(slot.element.hasAttribute('tabindex')).toBe(false);
+		expect(slot.element.hasAttribute('aria-selected')).toBe(false);
+		expect(slot.element.hasAttribute('aria-readonly')).toBe(false);
+		expect(slot.element.hasAttribute('aria-invalid')).toBe(false);
+	});
+
+	it('clears synced accessibility attributes on hot unbind and reset', () => {
+		const slot = new CellSlot(document.createElement('div'));
+		slot.syncAccessibilityState({ focused: true, selected: true, readOnly: true, invalid: true });
+
+		slot.unbindHot();
+		expect(slot.element.hasAttribute('tabindex')).toBe(false);
+		expect(slot.element.hasAttribute('aria-selected')).toBe(false);
+		expect(slot.element.hasAttribute('aria-readonly')).toBe(false);
+		expect(slot.element.hasAttribute('aria-invalid')).toBe(false);
+
+		slot.syncAccessibilityState({ focused: true, selected: true, readOnly: true, invalid: true });
+		slot.reset();
+		expect(slot.element.hasAttribute('tabindex')).toBe(false);
+		expect(slot.element.hasAttribute('aria-selected')).toBe(false);
+		expect(slot.element.hasAttribute('aria-readonly')).toBe(false);
+		expect(slot.element.hasAttribute('aria-invalid')).toBe(false);
 	});
 });

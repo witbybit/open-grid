@@ -1,7 +1,8 @@
 import type { GridCellRange, GridRowsAccessor } from './api/GridApi.js';
 import type { VisualRow } from './visualRow.js';
-import type { RowNode } from './rowNode.js';
 import type { RowModel } from './rowModel.js';
+import type { GridRowNode } from './publicRowNode.js';
+import type { GridInteractionState } from './interaction/interactionState.js';
 
 /** Minimal interface required to build a GridRowsAccessor from a GridStore. */
 export interface RowsAccessorSource<TRowData> {
@@ -10,9 +11,23 @@ export interface RowsAccessorSource<TRowData> {
 	getDataRowAtVisualIndex(index: number): TRowData | null;
 	getVisualIndexByRowId(rowId: string): number | null;
 	getRawRowById(rowId: string): TRowData | null;
-	getRowNodeById(rowId: string): RowNode<TRowData> | null;
+	getRowNode(rowId: string): GridRowNode<TRowData> | undefined;
 	getRowModel(): RowModel<TRowData> | null;
-	getState(): { selection: { bounds: { minRow: number; maxRow: number } | null }; selectedRowIds: string[] };
+	getState(): {
+		selection: { bounds: { minRow: number; maxRow: number } | null };
+		selectedRowIds: string[];
+		interaction?: GridInteractionState;
+	};
+}
+
+function readSelectionBounds<TRowData>(src: RowsAccessorSource<TRowData>): { minRow: number; maxRow: number } | null {
+	const state = src.getState();
+	return state.interaction?.cellSelection.selection.bounds ?? state.selection.bounds;
+}
+
+function readSelectedRowIds<TRowData>(src: RowsAccessorSource<TRowData>): readonly string[] {
+	const state = src.getState();
+	return state.interaction?.rowSelection.selectedRowIds ?? state.selectedRowIds;
 }
 
 export function createRowsAccessor<TRowData>(src: RowsAccessorSource<TRowData>): GridRowsAccessor<TRowData> {
@@ -39,7 +54,7 @@ export function createRowsAccessor<TRowData>(src: RowsAccessorSource<TRowData>):
 			return rows;
 		},
 		getSelected: () => {
-			const bounds = src.getState().selection.bounds;
+			const bounds = readSelectionBounds(src);
 			if (!bounds) return [];
 			const rows: TRowData[] = [];
 			for (let i = bounds.minRow; i <= bounds.maxRow; i++) {
@@ -51,7 +66,7 @@ export function createRowsAccessor<TRowData>(src: RowsAccessorSource<TRowData>):
 			return rows;
 		},
 		getSelectedIds: () => {
-			const bounds = src.getState().selection.bounds;
+			const bounds = readSelectionBounds(src);
 			if (!bounds) return [];
 			const ids: string[] = [];
 			for (let i = bounds.minRow; i <= bounds.maxRow; i++) {
@@ -66,7 +81,7 @@ export function createRowsAccessor<TRowData>(src: RowsAccessorSource<TRowData>):
 			return src.getRawRowById(id);
 		},
 		getNodeById: (id) => {
-			return src.getRowNodeById(id);
+			return src.getRowNode(id);
 		},
 		getCount: () => {
 			const count = src.getVisualRowCount();
@@ -131,7 +146,7 @@ export function createRowsAccessor<TRowData>(src: RowsAccessorSource<TRowData>):
 			};
 		},
 		getChecked: (): TRowData[] => {
-			const checkedSet = new Set(src.getState().selectedRowIds);
+			const checkedSet = new Set(readSelectedRowIds(src));
 			const result: TRowData[] = [];
 			const rowModel = src.getRowModel();
 			if (rowModel) {
@@ -139,15 +154,15 @@ export function createRowsAccessor<TRowData>(src: RowsAccessorSource<TRowData>):
 				for (let i = 0; i < count; i++) {
 					const vr = rowModel.getVisualRow(i);
 					if (vr?.kind === 'data' && checkedSet.has(vr.rowId)) {
-						const node = rowModel.getRowNodeById(vr.rowId);
-						if (node) result.push(node.data);
+						const row = src.getRawRowById(vr.rowId);
+						if (row) result.push(row);
 					}
 				}
 			}
 			return result;
 		},
 		getCheckedIds: (): string[] => {
-			return [...src.getState().selectedRowIds];
+			return [...readSelectedRowIds(src)];
 		},
 	};
 }

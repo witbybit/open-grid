@@ -38,10 +38,13 @@ import { RenderPaintCoordinator, type RenderPaintCoordinatorState } from './rend
 import { RenderScrollCoordinator, type RenderScrollCoordinatorState } from './renderScrollCoordinator.js';
 import { RenderViewportCoordinator } from './renderViewportCoordinator.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import type { ColumnInstanceId } from '../columnDef.js';
 import type { GridApi, InternalGridApi } from '../api/GridApi.js';
 import { RowDragController } from '../features/RowDragController.js';
 import { RenderRuntimeState } from './renderRuntimeState.js';
 import { defaultGridScheduler } from './gridScheduler.js';
+import type { GridInteractionHandle } from '../interaction/GridInteractionController.js';
+import { createGridViewportInteractionRouter } from '../interaction/GridViewportInteractionRouter.js';
 
 /**
  * Owns the grid DOM, coordinating ViewportRenderer, RowRenderer, and other sub-renderers.
@@ -76,9 +79,11 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	public readonly stickyGroupRenderer: StickyGroupRenderer<TRowData>;
 	private readonly invalidationCoordinator: RenderInvalidationCoordinator<TRowData>;
 	private readonly headerMenu: HeaderMenuController<TRowData>;
+	private readonly viewportInteractionRouter: ReturnType<typeof createGridViewportInteractionRouter>;
 
 	private readonly layoutTransition: LayoutTransitionController<TRowData>;
 	private readonly rowDrag: RowDragController<TRowData>;
+	private readonly interactionController: GridInteractionHandle | null;
 	private _pendingTransition = false;
 
 	// Authoritative render lifecycle phase. Initialized first in constructor.
@@ -163,9 +168,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.portalMountManager.onUnmountHeaderMenu = callback;
 	}
 
-	constructor(engine: GridEngine<TRowData>, api?: InternalGridApi<TRowData>) {
+	constructor(engine: GridEngine<TRowData>, api?: InternalGridApi<TRowData>, interactionController: GridInteractionHandle | null = null) {
 		this.engine = engine;
 		this.api = api;
+		this.interactionController =
+			interactionController ??
+			(api as (InternalGridApi<TRowData> & { interactionController?: GridInteractionHandle | null }) | undefined)?.interactionController ??
+			null;
 		this._scrollCtx = {
 			isScrolling: true,
 			stateVersion: 0,
@@ -204,8 +213,22 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		this.scrollEngine = new ScrollEngine<TRowData>(engine);
 		this.frameCoordinator = new DefaultFrameCoordinator({
 			onScrollFrame: () => this.flushScrollFrame(),
-			onPaintFrame: () => this.flushPaint(),
-			onPostScrollWork: () => this.flushPaint(),
+			onPaintFrame: (changeIds) => {
+				const frameToken = engine.flightRecorder.beginExecutingFrame(changeIds);
+				try {
+					this.flushPaint();
+				} finally {
+					engine.flightRecorder.finishExecutingFrame(frameToken, 'full');
+				}
+			},
+			onPostScrollWork: (changeIds) => {
+				const frameToken = engine.flightRecorder.beginExecutingFrame(changeIds);
+				try {
+					this.flushPaint();
+				} finally {
+					engine.flightRecorder.finishExecutingFrame(frameToken, 'post-scroll');
+				}
+			},
 			onScrollEnd: () => this.scrollCoordinator.finishScrolling(),
 			onFault: (msg) => engine.runtimeFaults.report({ source: 'renderer', operation: 'frame-reentry', error: new Error(msg) }),
 			runtimeState: this.runtimeState,
@@ -266,8 +289,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			},
 			syncHeaders: (frame) => this.headerRenderer.sync(frame),
 			syncOverlay: (frame) => this.overlayRenderer.sync(frame),
-			syncRows: (frame) => this.rowRenderer.repaintInvalidatedRowsAndCells(frame),
-			syncCells: (frame) => this.rowRenderer.repaintInvalidatedRowsAndCells(frame),
+			syncRows: (frame) => this.rowRenderer.repaintInvalidatedRows(frame),
+			syncCells: (frame) => this.rowRenderer.repaintInvalidatedCells(frame),
 			fullPaint: () => this.fullPaint(),
 		});
 
@@ -276,10 +299,12 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			getOverlayLayer: () => this.viewportRenderer.overlayLayer,
 			getScrollViewport: () => this.viewportRenderer.scrollViewport,
 			getLayoutPlan: () => this.viewportRenderer.getLayoutPlan(),
-			// Full paint (not header-only): the live-reorder preview slides body cells too,
-			// so header + body must re-bind with the new per-column shifts on each insertion
-			// change. Bounded to discrete insertion changes during a drag, not per pixel.
-			schedulePaint: () => this.scheduleFullPaint('column interaction'),
+			// Live reorder preview must move the body lanes immediately with the header insertion
+			// change; routing through the normal scheduler can defer the row rebind and leave only
+			// the dragged header ghost moving until drop. This path is already bounded to discrete
+			// insertion-index changes during a drag, not every pointer pixel.
+			schedulePaint: () => this.fullPaint(),
+			gridScheduler: defaultGridScheduler,
 		});
 		// Feed the live column-reorder preview offset into the body bind path.
 		this.rowRenderer.columnShiftSource = (colIndex) => this.columnInteractions.getColumnShift(colIndex);
@@ -312,8 +337,10 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			lastPrewarmRequest: null,
 			postScrollDecorationScheduled: false,
 			postScrollDecorationTimer: null,
+			postScrollDecorationGeneration: 0,
 			postScrollFidelityScheduled: false,
 			postScrollFidelityTimer: null,
+			postScrollFidelityGeneration: 0,
 			fidelityEpoch: 0,
 			cachedMaxScrollLeft: this.cachedMaxScrollLeft,
 			cachedTotalWidth: this.cachedTotalWidth,
@@ -397,15 +424,19 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 			syncLayoutPlan: () => {
 				this.viewportCoordinator.syncLayoutPlan();
 			},
-			scrollCellIntoView: (rowId, colField) => this.viewportCoordinator.scrollCellIntoView(rowId, colField),
+			scrollCellIntoView: (pointer) => this.viewportCoordinator.scrollCellPointerIntoView(pointer),
 			resetScroll: () => this.scrollEngine.scrollTo(0, this.engine.viewport.scrollLeft),
 			updateCachedGeometryBounds: () => this.updateCachedGeometryBounds(),
-			markFlushPendingAfterScroll: () => {
-				this.scrollCoordinator.markFlushPendingAfterScroll();
+			markFlushPendingAfterScroll: (changeIds) => {
+				this.scrollCoordinator.markFlushPendingAfterScroll(changeIds);
 			},
 			markViewportDirtyAfterScroll: () => {
 				this.scrollCoordinator.markViewportDirtyAfterScroll();
 			},
+		});
+		this.viewportInteractionRouter = createGridViewportInteractionRouter({
+			getInteraction: () => this.interactionController,
+			resolveCellPointer: (target) => this.resolveViewportInteractionPointer(target),
 		});
 	}
 
@@ -419,6 +450,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (scrollViewport) {
 			scrollViewport.addEventListener('mouseover', this.onRowMouseOver);
 			scrollViewport.addEventListener('mouseleave', this.onRowMouseLeave);
+			scrollViewport.addEventListener('click', this.onViewportInteractionClick);
+			scrollViewport.addEventListener('mousedown', this.onViewportInteractionMouseDown);
 			this.scrollEngine.bind(scrollViewport, this.onScroll);
 		}
 
@@ -508,6 +541,8 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 		if (scrollViewport) {
 			scrollViewport.removeEventListener('mouseover', this.onRowMouseOver);
 			scrollViewport.removeEventListener('mouseleave', this.onRowMouseLeave);
+			scrollViewport.removeEventListener('click', this.onViewportInteractionClick);
+			scrollViewport.removeEventListener('mousedown', this.onViewportInteractionMouseDown);
 		}
 		this.columnInteractions.cleanup();
 		this.columnInteractions.setGroupPanel(null);
@@ -569,6 +604,7 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 		const state = this.engine.stateManager.getState();
 		const slots = this.rowRenderer.rowSlotPool?.getSlots() ?? [];
+		const measuredHeights = new Map<string, number>();
 
 		for (const slot of slots) {
 			if (slot.rowKind !== 'data') continue;
@@ -586,9 +622,13 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 
 			const currentHeight = state.rowHeights[rawRowId] ?? state.defaultRowHeight;
 			if (Math.abs(measuredHeight - currentHeight) > 1) {
-				this.engine.resizeRow(rawRowId, measuredHeight, false);
+				measuredHeights.set(rawRowId, measuredHeight);
 			}
 		}
+
+		// All DOM reads above finish before the state/geometry write below. A visible
+		// batch therefore yields at most one commit and one projection geometry rebuild.
+		this.engine.applyAutoRowHeightBatch(measuredHeights);
 	}
 
 	public schedulePaint(): void {
@@ -677,6 +717,42 @@ export class RenderEngine<TRowData = unknown> implements IGridRenderer<TRowData>
 	private onRowMouseLeave = (): void => {
 		this.setHoveredRowIndex(null);
 	};
+
+	private onViewportInteractionMouseDown = (event: MouseEvent): void => {
+		this.viewportInteractionRouter.handleViewportMouseDown(event);
+	};
+
+	private onViewportInteractionClick = (event: MouseEvent): void => {
+		this.viewportInteractionRouter.handleViewportClick(event);
+	};
+
+	private resolveViewportInteractionPointer(target: Element): {
+		rowId: string;
+		colField: string;
+		columnInstanceId?: ColumnInstanceId;
+		colId?: string;
+	} | null {
+		const cellEl = target.closest<HTMLDivElement>('.og-cell');
+		if (!cellEl) return null;
+		const cellSlot = (
+			cellEl as HTMLDivElement & {
+				__cellSlot?: {
+					binding?: { rowId: string; colId: string } | null;
+					colField?: string;
+					columnInstanceId?: ColumnInstanceId;
+				};
+			}
+		).__cellSlot;
+		const rowId = cellSlot?.binding?.rowId ?? cellEl.dataset.rowId;
+		const colField = cellSlot?.colField ?? cellEl.dataset.colField;
+		if (!rowId || !colField) return null;
+		return {
+			rowId,
+			colField,
+			columnInstanceId: cellSlot?.columnInstanceId,
+			colId: cellSlot?.binding?.colId ?? colField,
+		};
+	}
 
 	private setHoveredRowIndex(rowIndex: number | null): void {
 		if (this.rowRenderer.hoveredRowIndex === rowIndex) return;

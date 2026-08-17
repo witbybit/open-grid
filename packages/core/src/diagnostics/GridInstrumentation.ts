@@ -52,6 +52,9 @@ export interface GridInstrumentationSnapshot {
 	readonly counters: Readonly<Partial<Record<GridMetric, number>>>;
 	readonly frames: readonly FrameMetrics[];
 	readonly fallbacks: readonly FallbackMetric[];
+	/** Events omitted because their bounded diagnostic history was full. */
+	readonly droppedFrames: number;
+	readonly droppedFallbacks: number;
 }
 
 /**
@@ -76,6 +79,8 @@ const EMPTY_SNAPSHOT: GridInstrumentationSnapshot = Object.freeze({
 	counters: Object.freeze({} as Partial<Record<GridMetric, number>>),
 	frames: Object.freeze([] as FrameMetrics[]),
 	fallbacks: Object.freeze([] as FallbackMetric[]),
+	droppedFrames: 0,
+	droppedFallbacks: 0,
 });
 
 /** Minimal-overhead sink. All methods are no-ops; snapshot() returns a stable empty object. */
@@ -92,42 +97,119 @@ export class NoopGridInstrumentation implements GridInstrumentation {
 	reset(): void {}
 }
 
-/** Accumulates counters, frames, and fallbacks. Intended for tests and perf demos. */
+export interface RecordingGridInstrumentationOptions {
+	/** Retained frame history. Zero disables frame history while preserving counters. */
+	frameCapacity?: number;
+	/** Retained fallback history. Zero disables fallback history while preserving counters. */
+	fallbackCapacity?: number;
+}
+
+const DEFAULT_FRAME_CAPACITY = 512;
+const DEFAULT_FALLBACK_CAPACITY = 128;
+
+/**
+ * Accumulates counters and bounded diagnostic histories for tests and devtools.
+ * Histories are fixed-size ring buffers: a long session retains the newest events
+ * without allocating proportionally to its lifetime.
+ */
 export class RecordingGridInstrumentation implements GridInstrumentation {
 	private counters: Partial<Record<GridMetric, number>> = {};
-	private frames: FrameMetrics[] = [];
-	private fallbacks: FallbackMetric[] = [];
+	private readonly frameCapacity: number;
+	private readonly fallbackCapacity: number;
+	private frames: Array<FrameMetrics | undefined>;
+	private fallbacks: Array<FallbackMetric | undefined>;
+	private frameStart = 0;
+	private frameSize = 0;
+	private fallbackStart = 0;
+	private fallbackSize = 0;
+	private droppedFrames = 0;
+	private droppedFallbacks = 0;
+
+	constructor(options: RecordingGridInstrumentationOptions = {}) {
+		this.frameCapacity = normalizeCapacity(options.frameCapacity, DEFAULT_FRAME_CAPACITY);
+		this.fallbackCapacity = normalizeCapacity(options.fallbackCapacity, DEFAULT_FALLBACK_CAPACITY);
+		this.frames = new Array(this.frameCapacity);
+		this.fallbacks = new Array(this.fallbackCapacity);
+	}
 
 	increment(metric: GridMetric, amount = 1): void {
 		this.counters[metric] = (this.counters[metric] ?? 0) + amount;
 	}
 
 	recordFrame(frame: FrameMetrics): void {
-		this.frames.push(frame);
+		this.recordBounded(this.frames, this.frameCapacity, frame, true);
 	}
 
 	recordFallback(event: FallbackMetric): void {
-		this.fallbacks.push(event);
+		this.recordBounded(this.fallbacks, this.fallbackCapacity, event, false);
 	}
 
 	snapshot(): GridInstrumentationSnapshot {
 		return {
 			counters: { ...this.counters },
-			frames: [...this.frames],
-			fallbacks: [...this.fallbacks],
+			frames: this.snapshotBuffer(this.frames, this.frameStart, this.frameSize, this.frameCapacity),
+			fallbacks: this.snapshotBuffer(this.fallbacks, this.fallbackStart, this.fallbackSize, this.fallbackCapacity),
+			droppedFrames: this.droppedFrames,
+			droppedFallbacks: this.droppedFallbacks,
 		};
 	}
 
 	reset(): void {
 		this.counters = {};
-		this.frames = [];
-		this.fallbacks = [];
+		this.frames.fill(undefined);
+		this.fallbacks.fill(undefined);
+		this.frameStart = 0;
+		this.frameSize = 0;
+		this.fallbackStart = 0;
+		this.fallbackSize = 0;
+		this.droppedFrames = 0;
+		this.droppedFallbacks = 0;
 	}
 
 	/** Convenience: read a single counter (returns 0 if never incremented). */
 	get(metric: GridMetric): number {
 		return this.counters[metric] ?? 0;
 	}
+
+	private recordBounded<T>(buffer: Array<T | undefined>, capacity: number, item: T, isFrame: boolean): void {
+		if (capacity === 0) {
+			if (isFrame) this.droppedFrames++;
+			else this.droppedFallbacks++;
+			return;
+		}
+		const start = isFrame ? this.frameStart : this.fallbackStart;
+		const size = isFrame ? this.frameSize : this.fallbackSize;
+		const index = (start + size) % capacity;
+		if (size < capacity) {
+			buffer[index] = item;
+			if (isFrame) this.frameSize++;
+			else this.fallbackSize++;
+			return;
+		}
+		buffer[start] = item;
+		if (isFrame) {
+			this.frameStart = (start + 1) % capacity;
+			this.droppedFrames++;
+		} else {
+			this.fallbackStart = (start + 1) % capacity;
+			this.droppedFallbacks++;
+		}
+	}
+
+	private snapshotBuffer<T>(buffer: readonly (T | undefined)[], start: number, size: number, capacity: number): T[] {
+		const snapshot: T[] = [];
+		for (let index = 0; index < size; index++) {
+			const entry = buffer[(start + index) % capacity];
+			if (entry !== undefined) snapshot.push(entry);
+		}
+		return snapshot;
+	}
+}
+
+function normalizeCapacity(value: number | undefined, fallback: number): number {
+	if (value === undefined) return fallback;
+	if (!Number.isFinite(value) || value < 0) throw new Error('Instrumentation history capacity must be a non-negative finite integer');
+	return Math.floor(value);
 }
 
 /** Shared no-op instance. Components that don't need recording can use this directly. */

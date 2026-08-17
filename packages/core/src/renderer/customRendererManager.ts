@@ -1,4 +1,4 @@
-import type { ColumnDef, CellRendererPhase } from '../columnDef.js';
+import { getColumnInstanceIdentity, type ColumnDef, type CellRendererPhase } from '../columnDef.js';
 import type { RowNode } from '../rowNode.js';
 import type { GridCellContentMount, GridCellContentUnmount, RendererLifecycleOperation } from './IGridRenderer.js';
 import type { GridEngine } from '../engine/GridEngine.js';
@@ -48,6 +48,7 @@ export type ReleaseReason = 'scrolled-out' | 'destroyed' | 'edited' | 'invalidat
 export interface CustomRendererStats {
 	activeCount: number;
 	warmCount: number;
+	pendingWarmMoveCount: number;
 	totalAcquires: number;
 	warmHits: number;
 	warmMisses: number;
@@ -72,13 +73,27 @@ export class CustomRendererManager<TRowData = unknown> {
 	private lruCounter = 0;
 
 	// Limits
-	private maxWarm = 50;
+	/** Explicit override set via setLimits(); takes precedence over the live runtimeLimits config. */
+	private maxWarmOverride: number | null = null;
 	private ttlMs = 30000; // 30s TTL
+
+	/**
+	 * Live-read from runtimeLimits so a config change takes effect immediately without needing
+	 * an explicit setLimits() call. Falls back to 300 if unset/no engine (e.g. in isolated tests).
+	 * Undersizing this relative to how many distinct custom-renderer cells a user scrolls past
+	 * before reversing direction causes cold-mount thrashing — see customRendererManager.test.ts.
+	 */
+	private get maxWarm(): number {
+		if (this.maxWarmOverride !== null) return this.maxWarmOverride;
+		const configured = this.engine?.stateManager.getState().runtimeLimits?.maxWarmCustomRenderers;
+		return typeof configured === 'number' && configured > 0 ? configured : 300;
+	}
 
 	// Stats
 	private stats: CustomRendererStats = {
 		activeCount: 0,
 		warmCount: 0,
+		pendingWarmMoveCount: 0,
 		totalAcquires: 0,
 		warmHits: 0,
 		warmMisses: 0,
@@ -114,6 +129,7 @@ export class CustomRendererManager<TRowData = unknown> {
 	public getStats(): CustomRendererStats {
 		this.stats.activeCount = this.activeRenderersByRendererKey.size;
 		this.stats.warmCount = this.warmRenderersByRendererKey.size;
+		this.stats.pendingWarmMoveCount = this.pendingWarmMoves.length;
 		return { ...this.stats };
 	}
 
@@ -121,6 +137,7 @@ export class CustomRendererManager<TRowData = unknown> {
 		this.stats = {
 			activeCount: this.activeRenderersByRendererKey.size,
 			warmCount: this.warmRenderersByRendererKey.size,
+			pendingWarmMoveCount: this.pendingWarmMoves.length,
 			totalAcquires: 0,
 			warmHits: 0,
 			warmMisses: 0,
@@ -133,25 +150,30 @@ export class CustomRendererManager<TRowData = unknown> {
 	}
 
 	public setLimits(maxWarm: number, ttlMs: number): void {
-		this.maxWarm = maxWarm;
+		this.maxWarmOverride = maxWarm;
 		this.ttlMs = ttlMs;
 		this.pruneWarmCache();
 	}
 
 	public getRendererKey(col: ColumnDef<TRowData>, rowId: string, rowIndex: number, colIndex: number, isEditing: boolean): string {
+		const columnInstanceId = getColumnInstanceIdentity(col);
 		if (isEditing) {
-			return createEditRendererKey(rowId, col.field);
+			return createEditRendererKey(rowId, columnInstanceId);
 		}
 		const pooledRow = (this.engine as any)?.rowRenderer?.activeRows.get(rowIndex);
 		if (pooledRow?.id) {
-			return createSlotRendererKey(pooledRow.id, col.field);
+			return createSlotRendererKey(pooledRow.id, columnInstanceId);
 		}
-		return createIndexRendererKey(rowIndex, colIndex, col.field);
+		return createIndexRendererKey(rowIndex, colIndex, columnInstanceId);
 	}
 
 	public acquire(params: AcquireRendererParams<TRowData>): RendererInstance<TRowData> {
 		this.stats.totalAcquires++;
-		if (params.isScrolling && this.engine) {
+		// The force-live-interactive-exception phase is the ONE mount deliberately permitted during
+		// active scroll (editing/focus mid-gesture) — it is counted separately via
+		// forceLiveMountsDuringScroll (see rowCellBinder.ts), never folded into this generic counter,
+		// so a regression that makes ordinary cells mount here stays visible.
+		if (params.isScrolling && params.phase !== 'scroll-force-live' && this.engine) {
 			this.engine.customRendererMountsDuringScroll++;
 		}
 		if (!params.isScrolling && !this.engine?.isScrolling) {

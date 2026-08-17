@@ -36,6 +36,7 @@ export interface RuntimeFaultReporterOptions<TRowData = unknown> {
 	capacity?: number;
 	emit?: (payload: GridEventPayloadMap<TRowData>[GridEventName.runtimeFault]) => void;
 	log?: (fault: RuntimeFault) => void;
+	observe?: (fault: RuntimeFault) => void;
 }
 
 function defaultRuntimeFaultLogger(fault: RuntimeFault): void {
@@ -56,6 +57,7 @@ export class RuntimeFaultReporter<TRowData = unknown> {
 	private readonly capacity: number;
 	private readonly emit?: (payload: GridEventPayloadMap<TRowData>[GridEventName.runtimeFault]) => void;
 	private readonly log: (fault: RuntimeFault) => void;
+	private readonly observe?: (fault: RuntimeFault) => void;
 	private readonly faults: RuntimeFault[] = [];
 	private nextId = 1;
 
@@ -63,6 +65,7 @@ export class RuntimeFaultReporter<TRowData = unknown> {
 		this.capacity = Math.max(1, options.capacity ?? 50);
 		this.emit = options.emit;
 		this.log = options.log ?? defaultRuntimeFaultLogger;
+		this.observe = options.observe;
 	}
 
 	public report(input: RuntimeFaultInput, options: { emitEvent?: boolean } = {}): RuntimeFault {
@@ -82,6 +85,7 @@ export class RuntimeFaultReporter<TRowData = unknown> {
 		}
 
 		this.log(fault);
+		this.observe?.(fault);
 		if (options.emitEvent !== false) {
 			this.emit?.(fault);
 		}

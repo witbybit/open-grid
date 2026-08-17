@@ -110,4 +110,35 @@ describe('RecordingGridInstrumentation', () => {
 		inst.increment(GridMetric.STATE_READS, 99);
 		expect(snap.counters[GridMetric.STATE_READS]).toBe(1);
 	});
+
+	it('keeps bounded histories in oldest-to-newest order and reports dropped events', () => {
+		const inst = new RecordingGridInstrumentation({ frameCapacity: 2, fallbackCapacity: 1 });
+		for (let index = 0; index < 4; index++) {
+			inst.recordFrame({ kind: 'scroll', durationMs: index, rowsVisited: index, cellsWritten: index });
+		}
+		inst.recordFallback({ reason: 'first', component: 'test' });
+		inst.recordFallback({ reason: 'second', component: 'test' });
+
+		const snapshot = inst.snapshot();
+		expect(snapshot.frames.map((frame) => frame.durationMs)).toEqual([2, 3]);
+		expect(snapshot.fallbacks.map((fallback) => fallback.reason)).toEqual(['second']);
+		expect(snapshot.droppedFrames).toBe(2);
+		expect(snapshot.droppedFallbacks).toBe(1);
+	});
+
+	it('supports disabled histories, resets ring state, and stays bounded over a long session', () => {
+		const disabled = new RecordingGridInstrumentation({ frameCapacity: 0, fallbackCapacity: 0 });
+		disabled.recordFrame({ kind: 'scroll', durationMs: 0, rowsVisited: 0, cellsWritten: 0 });
+		disabled.recordFallback({ reason: 'ignored', component: 'test' });
+		expect(disabled.snapshot()).toMatchObject({ frames: [], fallbacks: [], droppedFrames: 1, droppedFallbacks: 1 });
+
+		const inst = new RecordingGridInstrumentation({ frameCapacity: 3, fallbackCapacity: 2 });
+		for (let index = 0; index < 100_000; index++) {
+			inst.recordFrame({ kind: 'scroll', durationMs: index, rowsVisited: index, cellsWritten: index });
+		}
+		expect(inst.snapshot().frames.map((frame) => frame.durationMs)).toEqual([99_997, 99_998, 99_999]);
+		expect(inst.snapshot().droppedFrames).toBe(99_997);
+		inst.reset();
+		expect(inst.snapshot()).toMatchObject({ frames: [], fallbacks: [], droppedFrames: 0, droppedFallbacks: 0 });
+	});
 });

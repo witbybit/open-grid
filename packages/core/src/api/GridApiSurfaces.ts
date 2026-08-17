@@ -3,11 +3,12 @@ import type { GridQueryModel } from '../query/GridQueryModel.js';
 import type { GridDomainVersions } from '../state/GridDomainVersions.js';
 import type { RuntimePortBinding, RuntimePortBindResult, GridRuntimePorts } from '../engine/rendererPorts.js';
 import type { InfiniteDatasource } from '../infiniteRowModel.js';
-import type { ServerDatasource, ServerPageState } from '../serverPageRowModel.js';
+import type { ServerSideDatasource, ServerSideRefreshOptions, ServerSideStoreSnapshot } from '../serverSideRowModel.js';
 import type { RowModelType, ColumnState, GridIntegrityState } from '../state/GridState.js';
 import type { ColumnDef, GridStyleRule } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
-import type { RowNode } from '../rowNode.js';
+import type { GridRowNode } from '../publicRowNode.js';
+import type { RowLoadState } from '../rowModel.js';
 import type { RenderStats } from '../renderer/renderOrchestrator.js';
 import type { PersistenceStatus, PersistedGridState } from '../persistence/statePersistence.js';
 import type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from '../workspace/workspaceTypes.js';
@@ -39,19 +40,18 @@ import type {
 	GridStateSnapshot,
 	GridWriteResult,
 	RowDataTransaction,
-	RowNodeTransaction,
 	RowSelectionChangeResult,
 	RowSelectionGesture,
 	SelectAllRowsOptions,
 	SelectRowsOptions,
 } from './GridApi.js';
+import type { RowNodeTransaction } from '../rowTransactions.js';
 
 export interface GridDataApi<TRowData = unknown> {
 	getStateSnapshot(): GridStateSnapshot<TRowData>;
 	getRowId(row: TRowData): string;
 	isRowLoading(rowId: string): boolean;
 	getDataRowAtVisualIndex(index: number): TRowData | null;
-	getDataRowNodeAtVisualIndex(index: number): RowNode<TRowData> | null;
 	setRows(rows: TRowData[]): GridWriteResult;
 	updateRows(updater: (rows: TRowData[]) => TRowData[]): GridWriteResult;
 	applyTransaction(transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null;
@@ -65,13 +65,10 @@ export interface GridDataApi<TRowData = unknown> {
 	supportsRowModelCapability(capability: RowModelCapability): boolean;
 	purgeCache(): void;
 	setInfiniteDatasource(datasource: InfiniteDatasource<TRowData>, blockSize?: number): void;
-	setServerPageDatasource(datasource: ServerDatasource<TRowData>): void;
-	goToServerPage(page: number): void;
-	nextServerPage(): void;
-	previousServerPage(): void;
-	setServerPageSize(pageSize: number): void;
-	refreshServerPage(reason?: string): void;
-	getServerPageState(): ServerPageState | null;
+	setServerSideDatasource(datasource: ServerSideDatasource<TRowData>): void;
+	refreshServerSide(options?: ServerSideRefreshOptions): void;
+	purgeServerSide(options?: Omit<ServerSideRefreshOptions, 'purge'>): void;
+	getServerSideStoreState(): readonly ServerSideStoreSnapshot[];
 	getCellValue(rowId: string, colField: string): unknown;
 	getFormula(rowId: string, colField: string): string | undefined;
 	hasFormula(rowId: string, colField: string): boolean;
@@ -81,7 +78,12 @@ export interface GridDataApi<TRowData = unknown> {
 	setCellValueAsync(rowId: string, colField: string, value: unknown): Promise<GridWriteResult>;
 	batchCellValues(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): GridWriteResult;
 	batchCellValuesAsync(updates: BatchCellValueUpdate[], source?: 'paste' | 'api' | 'fill'): Promise<GridWriteResult>;
-	getRowNodeById(rowId: string): RowNode<TRowData> | null;
+	getRowNode(rowId: string): GridRowNode<TRowData> | undefined;
+	getDisplayedRowAtIndex(index: number): GridRowNode<TRowData> | undefined;
+	getRowIndexById(rowId: string): number | undefined;
+	forEachNode(callback: (node: GridRowNode<TRowData>, index: number) => void): void;
+	forEachDisplayedNode(callback: (node: GridRowNode<TRowData>, index: number) => void): void;
+	getRowLoadState(index: number): RowLoadState;
 	getRawRowById(rowId: string): TRowData | null;
 	rows(): GridRowsAccessor<TRowData>;
 }
@@ -99,9 +101,10 @@ export interface GridSelectionEditingApi<TRowData = unknown> {
 	getSelectedRowIds(): string[];
 	isRowNodeSelected(rowId: string): boolean;
 	getSelectedRowCount(): number;
-	startEditing(rowId: string, colField: string): void;
+	startEditing(rowId: string, colFieldOrInstanceId: string, source?: 'keyboard' | 'mouse' | 'api'): void;
+	updateEditDraft(rowId: string, colFieldOrInstanceId: string, value: unknown): void;
 	stopEditing(cancel?: boolean): void;
-	commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean>;
+	commitEdit(rowId: string, colFieldOrInstanceId: string, value: unknown): Promise<boolean>;
 }
 
 export interface GridStructureApi<TRowData = unknown> {
@@ -191,6 +194,7 @@ export interface GridRuntimeSubscriptionApi<TRowData = unknown> {
 		isEqual?: GridSnapshotSelectorEquality<TValue>
 	): () => void;
 	subscribeToIntegrity(listener: (integrity: GridIntegrityState<TRowData>) => void): () => void;
+	subscribeToCell(rowId: string, colField: string, listener: () => void): () => void;
 	subscribeToDomainVersions(listener: (v: GridDomainVersions) => void): () => void;
 	subscribeDomain(domain: keyof GridDomainVersions, listener: (version: number) => void): () => void;
 	getRuntimeFaults(): RuntimeFault[];
@@ -265,10 +269,12 @@ export interface GridApi<TRowData = unknown>
 
 export interface GridPluginRuntime<TRowData = unknown> extends GridApi<TRowData> {
 	getCellState(rowId: string, colField: string): CellState;
+	getCellAccessByPointer(pointer: GridCellPointer): GridCellAccess<TRowData> | null;
 	getCheapDisplayValue(rowId: string, colField: string): string;
 	getVisualRow(index: number): VisualRow<TRowData> | null;
 	getVisualRowCount(): number;
 	getVisualIndexByRowId(rowId: string): number | null;
+	getVisibleRowRange(): { startIdx: number; endIdx: number };
 	getColumnIndex(colField: string): number;
 	getColumnField(colIndex: number): string | null;
 	getRowModel(): import('../rowModel.js').RowModel<TRowData> | null;
@@ -286,7 +292,9 @@ export interface GridRendererApi<TRowData = unknown> extends GridApi<TRowData> {
 	getCheapDisplayValue(rowId: string, colField: string): string;
 	getComputedCellValue(rowId: string, colField: string): unknown;
 	getCellState(rowId: string, colField: string): CellState;
+	getCellStateByPointer(pointer: GridCellPointer): CellState | null;
 	getCellAccess(rowId: string, colField: string): GridCellAccess<TRowData> | null;
+	getCellAccessByPointer(pointer: GridCellPointer): GridCellAccess<TRowData> | null;
 	getRowOverscanPx(): number;
 	setRowOverscanPx(px: number): void;
 	getVisualRow(index: number): VisualRow<TRowData> | null;

@@ -8,7 +8,11 @@ import type { GeometryModel } from '../models/GeometryModel.js';
 import type { ViewportModel } from '../models/ViewportModel.js';
 import type { SelectionModel } from '../models/SelectionModel.js';
 import type { CellNotificationController } from './CellNotificationController.js';
-import type { GridSelectionState } from '../api/GridApi.js';
+import type { CanonicalGridCellPointer } from '../api/GridApi.js';
+import type { GridCellPointer } from '../api/GridApi.js';
+import { areCanonicalCellPointersEqual, findColumnByCanonicalCellPointer, findColumnByCellPointer } from '../interaction/cellPointer.js';
+import { buildInteractionState, isInteractionStateCurrent, type CanonicalGridSelectionState } from '../interaction/interactionState.js';
+import { getColumnInstanceIdentity } from '../columnDef.js';
 
 interface RangeBounds {
 	minRow: number;
@@ -26,7 +30,7 @@ export interface GridProjectionPipelineDeps<TRowData = unknown> {
 	cellNotifications: CellNotificationController<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	getRowHeightsList: (rowModel: RowModel<TRowData>, rowHeightsRecord: Record<string, number>, defaultRowHeight: number) => number[];
-	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
+	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean, renderColId?: string) => void;
 }
 
 export interface GridProjectionRunInput<TRowData = unknown> {
@@ -37,6 +41,17 @@ export class GridProjectionPipeline<TRowData = unknown> {
 	constructor(private readonly deps: GridProjectionPipelineDeps<TRowData>) {}
 
 	private pendingStructuralBoundsUpdate = false;
+
+	private resolvePointerColumn(pointer: GridCellPointer | null | undefined) {
+		if (!pointer) return undefined;
+		if (pointer.columnInstanceId) {
+			const canonicalColumn = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), {
+				columnInstanceId: pointer.columnInstanceId,
+			});
+			if (canonicalColumn) return canonicalColumn;
+		}
+		return findColumnByCellPointer(this.deps.columns.getDisplayedColumns(), pointer);
+	}
 
 	public run({ phase }: GridProjectionRunInput<TRowData>): void {
 		let currState = phase.getState();
@@ -99,7 +114,13 @@ export class GridProjectionPipeline<TRowData = unknown> {
 			const rangeBounds = this.deps.selection.calculateRangeBounds(
 				currState.selection.range,
 				(id) => this.deps.getRowModel()?.getVisualIndexByRowId(id) ?? -1,
-				(field) => this.deps.columns.getColumnIndex(field)
+				(pointer) => {
+					if (!pointer.columnInstanceId) return -1;
+					const column = findColumnByCanonicalCellPointer(this.deps.columns.getDisplayedColumns(), {
+						columnInstanceId: pointer.columnInstanceId,
+					});
+					return column ? this.deps.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId) : -1;
+				}
 			);
 			const nextBounds = this.areRangeBoundsEqual(currState.selection.bounds, rangeBounds) ? currState.selection.bounds : rangeBounds;
 			const selection = this.deps.selection.setSelection({
@@ -115,6 +136,21 @@ export class GridProjectionPipeline<TRowData = unknown> {
 
 		if (updatedSet.has('selection')) {
 			this.deps.selection.setSelection(currState.selection);
+		}
+
+		if (
+			(updatedSet.has('selection') || updatedSet.has('activeEdit') || updatedSet.has('selectedRowIds') || updatedSet.has('globalVersion')) &&
+			!isInteractionStateCurrent(currState, { getRowIndexByRowId: (rowId) => rowModel?.getVisualIndexByRowId(rowId) ?? null })
+		) {
+			const interaction = buildInteractionState({
+				selection: currState.selection,
+				activeEdit: currState.activeEdit,
+				selectedRowIds: currState.selectedRowIds,
+				getRowIndexByRowId: (rowId) => rowModel?.getVisualIndexByRowId(rowId) ?? null,
+			});
+			const affectedKeys = phase.setDerivedState({ interaction });
+			for (const key of affectedKeys) updatedSet.add(key);
+			currState = phase.getState();
 		}
 
 		const needsRangeUpdate =
@@ -160,21 +196,24 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		updatedSet: ReadonlySet<string>
 	): void {
 		const notifiedCells = new Set<string>();
-		const notifyCellOnce = (rowId: string, colField: string): void => {
-			const key = `${rowId}:${colField}`;
+		const notifyCellOnce = (cell: GridCellPointer): void => {
+			const column = this.resolvePointerColumn(cell);
+			const renderColId = column ? getColumnInstanceIdentity(column) : null;
+			if (!renderColId) return;
+			const key = `${cell.rowId}:${renderColId}`;
 			if (notifiedCells.has(key)) return;
 			notifiedCells.add(key);
-			this.deps.notifyCellChange(rowId, colField, false);
+			this.deps.notifyCellChange(cell.rowId, cell.colField, false, renderColId);
 		};
 
 		if (updatedSet.has('selection')) {
-			if (prevState.selection.focus) notifyCellOnce(prevState.selection.focus.rowId, prevState.selection.focus.colField);
-			if (currState.selection.focus) notifyCellOnce(currState.selection.focus.rowId, currState.selection.focus.colField);
+			if (prevState.selection.focus) notifyCellOnce(prevState.selection.focus);
+			if (currState.selection.focus) notifyCellOnce(currState.selection.focus);
 		}
 
 		if (updatedSet.has('activeEdit')) {
-			if (prevState.activeEdit) notifyCellOnce(prevState.activeEdit.rowId, prevState.activeEdit.colField);
-			if (currState.activeEdit) notifyCellOnce(currState.activeEdit.rowId, currState.activeEdit.colField);
+			if (prevState.activeEdit) notifyCellOnce(prevState.activeEdit);
+			if (currState.activeEdit) notifyCellOnce(currState.activeEdit);
 		}
 
 		if (updatedSet.has('selection')) {
@@ -190,7 +229,12 @@ export class GridProjectionPipeline<TRowData = unknown> {
 						const visualRow = activeRowModel.getVisualRow(rowIdx);
 						const col = displayedColumns[colIdx];
 						if (visualRow?.kind === 'data' && col) {
-							notifyCellOnce(visualRow.rowId, col.field);
+							notifyCellOnce({
+								rowId: visualRow.rowId,
+								colField: col.field,
+								colId: col.colId ?? col.field,
+								columnInstanceId: getColumnInstanceIdentity(col),
+							});
 						}
 					}
 				);
@@ -213,33 +257,60 @@ export class GridProjectionPipeline<TRowData = unknown> {
 		}
 	}
 
-	private normalizeSelectionState(selection: GridSelectionState, rowModel: RowModel<TRowData>): GridSelectionState {
-		const hasPointer = (pointer: { rowId: string; colField: string } | null): boolean => {
-			if (!pointer) return false;
-			return rowModel.getVisualIndexByRowId(pointer.rowId) >= 0 && this.deps.columns.getColumnIndex(pointer.colField) >= 0;
+	private normalizeSelectionState(selection: CanonicalGridSelectionState, rowModel: RowModel<TRowData>): CanonicalGridSelectionState {
+		const enrichPointer = (pointer: GridCellPointer | null): CanonicalGridCellPointer | null => {
+			if (!pointer) return null;
+			if (rowModel.getVisualIndexByRowId(pointer.rowId) < 0) return null;
+			const column = this.resolvePointerColumn(pointer);
+			if (!column) return null;
+			const columnInstanceId = getColumnInstanceIdentity(column);
+			if (!columnInstanceId || this.deps.columns.getIndexMapper().idToVisualIndex(columnInstanceId) < 0) return null;
+			return {
+				rowId: pointer.rowId,
+				colField: column.field,
+				colId: pointer.colId ?? column.colId ?? column.field,
+				columnInstanceId,
+			};
 		};
 
 		if (!selection.focus) return selection;
 
-		if (!hasPointer(selection.focus)) {
+		const focus = enrichPointer(selection.focus);
+		if (!focus) {
 			return {
 				focus: null,
 				anchor: null,
 				range: null,
 				bounds: null,
 				source: selection.source,
+				focusOrigin: null,
+				version: selection.version,
 			};
 		}
 
-		const anchorValid = hasPointer(selection.anchor);
-		const rangeStartValid = hasPointer(selection.range?.start ?? null);
-		const rangeEndValid = hasPointer(selection.range?.end ?? null);
+		const anchor = enrichPointer(selection.anchor);
+		const rangeStart = enrichPointer(selection.range?.start ?? null);
+		const rangeEnd = enrichPointer(selection.range?.end ?? null);
 
-		if (anchorValid && rangeStartValid && rangeEndValid) {
+		if (
+			areCanonicalCellPointersEqual(focus, selection.focus as CanonicalGridCellPointer | null) &&
+			areCanonicalCellPointersEqual(anchor, selection.anchor as CanonicalGridCellPointer | null) &&
+			areCanonicalCellPointersEqual(rangeStart, (selection.range?.start ?? null) as CanonicalGridCellPointer | null) &&
+			areCanonicalCellPointersEqual(rangeEnd, (selection.range?.end ?? null) as CanonicalGridCellPointer | null)
+		) {
 			return selection;
 		}
 
-		return this.deps.selection.createCellSelection(selection.focus, selection.source);
+		if (anchor && rangeStart && rangeEnd) {
+			return {
+				...selection,
+				focus,
+				anchor,
+				range: { start: rangeStart, end: rangeEnd },
+			};
+		}
+
+		return this.deps.selection.createCellSelection(focus, selection.source);
 	}
 
 	private normalizeActiveEdit(
@@ -248,8 +319,19 @@ export class GridProjectionPipeline<TRowData = unknown> {
 	): InternalGridState<TRowData>['activeEdit'] {
 		if (!activeEdit) return activeEdit;
 		if (rowModel.getVisualIndexByRowId(activeEdit.rowId) < 0) return null;
-		if (this.deps.columns.getColumnIndex(activeEdit.colField) < 0) return null;
-		return activeEdit;
+		const column = this.resolvePointerColumn(activeEdit);
+		if (!column) return null;
+		const columnInstanceId = getColumnInstanceIdentity(column);
+		if (this.deps.columns.getIndexMapper().idToVisualIndex(columnInstanceId) < 0) return null;
+		if (activeEdit.columnInstanceId === columnInstanceId) {
+			return activeEdit;
+		}
+		return {
+			...activeEdit,
+			colField: column.field,
+			colId: column.colId ?? column.field,
+			columnInstanceId,
+		};
 	}
 
 	private normalizeSelectedRowIds(selectedRowIds: string[], rowModel: RowModel<TRowData>): string[] {

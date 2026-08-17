@@ -60,6 +60,18 @@ export interface RenderStats {
 	colsEnteredDuringScroll: number;
 	colsExitedDuringScroll: number;
 	colsStayedDuringScroll: number;
+	/**
+	 * The 6 counters below are populated only when the column TOPOLOGY itself changes (pin/unpin/
+	 * reorder/resize — plan.version bump), via `computeColumnWindowDelta`. Distinct from
+	 * cols{Entered,Exited,Stayed}DuringScroll above, which track the render WINDOW shifting over a
+	 * static topology (the routine horizontal-scroll case, via `diffRenderWindow`).
+	 */
+	columnTopologyDeltaComputations?: number;
+	columnTopologyDeltaComputationsDuringScroll?: number;
+	columnTopologyStayedColumns?: number;
+	columnTopologyEnteredColumns?: number;
+	columnTopologyExitedColumns?: number;
+	columnTopologyLaneMoves?: number;
 	cellsSkippedDuringScroll: number;
 	sameWindowBailouts: number;
 	stateReadsDuringScroll: number;
@@ -77,6 +89,15 @@ export interface RenderStats {
 	lastInvalidationReasons: string[];
 	lastInvalidations: GridInvalidation[];
 	portalMounts?: { cells: number; rows: number; menus: number; custom?: any };
+	/** Controller-layer lifecycle counts — see renderer/controllers/RowCtrlStore.ts. Read live from
+	 *  the store at snapshot time (same pattern as portalMounts above), not accumulated separately. */
+	controllers?: {
+		rowCtrlsCreated: number;
+		rowCtrlsReused: number;
+		rowCtrlsEvicted: number;
+		cellCtrlsCreated: number;
+		cellCtrlsReused: number;
+	};
 	getCellValueCallsDuringScroll?: number;
 	valueGetterCallsDuringScroll?: number;
 	formulaCallsDuringScroll?: number;
@@ -87,6 +108,20 @@ export interface RenderStats {
 	prewarmedDisplayValues?: number;
 	prewarmPasses?: number;
 	prewarmedCellSnapshots?: number;
+	integrityComputesDuringScroll?: number;
+	forceLiveMountsDuringScroll?: number;
+	liveReactMountsDuringScroll?: number;
+	liveReactOverscanMounts?: number;
+	liveReactUpdatesDuringScroll?: number;
+	liveReactEmergencyShellsDuringScroll?: number;
+	htmlSnapshotHitsDuringScroll?: number;
+	htmlSnapshotMissesDuringScroll?: number;
+	textImpostorUsesDuringScroll?: number;
+	cellSlotsRetained?: number;
+	cellSlotsEvictedDuringTopology?: number;
+	cellSlotsCreatedDuringTopology?: number;
+	cellSlotsReusedDuringTopology?: number;
+	maxCellsByColumnIdPerRowSlot?: number;
 }
 
 /** Returns a zero-value RenderStats object. Used by GridStore.getRenderStats() when no render engine is mounted. */
@@ -150,6 +185,12 @@ export function createEmptyRenderStats(): RenderStats {
 		colsEnteredDuringScroll: 0,
 		colsExitedDuringScroll: 0,
 		colsStayedDuringScroll: 0,
+		columnTopologyDeltaComputations: 0,
+		columnTopologyDeltaComputationsDuringScroll: 0,
+		columnTopologyStayedColumns: 0,
+		columnTopologyEnteredColumns: 0,
+		columnTopologyExitedColumns: 0,
+		columnTopologyLaneMoves: 0,
 		cellsSkippedDuringScroll: 0,
 		sameWindowBailouts: 0,
 		stateReadsDuringScroll: 0,
@@ -161,6 +202,13 @@ export function createEmptyRenderStats(): RenderStats {
 		lastInvalidationReasons: [],
 		lastInvalidations: [],
 		portalMounts: { cells: 0, rows: 0, menus: 0, custom: { active: 0, warm: 0, cold: 0, hydrationQueue: 0, completedChunks: 0 } },
+		controllers: {
+			rowCtrlsCreated: 0,
+			rowCtrlsReused: 0,
+			rowCtrlsEvicted: 0,
+			cellCtrlsCreated: 0,
+			cellCtrlsReused: 0,
+		},
 		getCellValueCallsDuringScroll: 0,
 		valueGetterCallsDuringScroll: 0,
 		formulaCallsDuringScroll: 0,
@@ -177,6 +225,20 @@ export function createEmptyRenderStats(): RenderStats {
 		postScrollDirtyCellsDecorated: 0,
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
+		integrityComputesDuringScroll: 0,
+		forceLiveMountsDuringScroll: 0,
+		liveReactMountsDuringScroll: 0,
+		liveReactOverscanMounts: 0,
+		liveReactUpdatesDuringScroll: 0,
+		liveReactEmergencyShellsDuringScroll: 0,
+		htmlSnapshotHitsDuringScroll: 0,
+		htmlSnapshotMissesDuringScroll: 0,
+		textImpostorUsesDuringScroll: 0,
+		cellSlotsRetained: 0,
+		cellSlotsEvictedDuringTopology: 0,
+		cellSlotsCreatedDuringTopology: 0,
+		cellSlotsReusedDuringTopology: 0,
+		maxCellsByColumnIdPerRowSlot: 0,
 	};
 }
 
@@ -252,6 +314,12 @@ export class RenderOrchestrator {
 		colsEnteredDuringScroll: 0,
 		colsExitedDuringScroll: 0,
 		colsStayedDuringScroll: 0,
+		columnTopologyDeltaComputations: 0,
+		columnTopologyDeltaComputationsDuringScroll: 0,
+		columnTopologyStayedColumns: 0,
+		columnTopologyEnteredColumns: 0,
+		columnTopologyExitedColumns: 0,
+		columnTopologyLaneMoves: 0,
 		cellsSkippedDuringScroll: 0,
 		sameWindowBailouts: 0,
 		stateReadsDuringScroll: 0,
@@ -261,6 +329,20 @@ export class RenderOrchestrator {
 		postScrollDirtyCellsDecorated: 0,
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
+		integrityComputesDuringScroll: 0,
+		forceLiveMountsDuringScroll: 0,
+		liveReactMountsDuringScroll: 0,
+		liveReactOverscanMounts: 0,
+		liveReactUpdatesDuringScroll: 0,
+		liveReactEmergencyShellsDuringScroll: 0,
+		htmlSnapshotHitsDuringScroll: 0,
+		htmlSnapshotMissesDuringScroll: 0,
+		textImpostorUsesDuringScroll: 0,
+		cellSlotsRetained: 0,
+		cellSlotsEvictedDuringTopology: 0,
+		cellSlotsCreatedDuringTopology: 0,
+		cellSlotsReusedDuringTopology: 0,
+		maxCellsByColumnIdPerRowSlot: 0,
 		hotDomReleases: 0,
 		coldDomReleases: 0,
 		cellsPatchedPerScrollFrame: [],
@@ -387,6 +469,12 @@ export class RenderOrchestrator {
 		this.stats.colsEnteredDuringScroll = 0;
 		this.stats.colsExitedDuringScroll = 0;
 		this.stats.colsStayedDuringScroll = 0;
+		this.stats.columnTopologyDeltaComputations = 0;
+		this.stats.columnTopologyDeltaComputationsDuringScroll = 0;
+		this.stats.columnTopologyStayedColumns = 0;
+		this.stats.columnTopologyEnteredColumns = 0;
+		this.stats.columnTopologyExitedColumns = 0;
+		this.stats.columnTopologyLaneMoves = 0;
 		this.stats.cellsSkippedDuringScroll = 0;
 		this.stats.sameWindowBailouts = 0;
 		this.stats.cellAccessReadsDuringScroll = 0;
@@ -395,6 +483,20 @@ export class RenderOrchestrator {
 		this.stats.postScrollDirtyCellsDecorated = 0;
 		this.stats.reusableCellsSkippedDuringScroll = 0;
 		this.stats.styleHookCallsDuringScroll = 0;
+		this.stats.integrityComputesDuringScroll = 0;
+		this.stats.forceLiveMountsDuringScroll = 0;
+		this.stats.liveReactMountsDuringScroll = 0;
+		this.stats.liveReactOverscanMounts = 0;
+		this.stats.liveReactUpdatesDuringScroll = 0;
+		this.stats.liveReactEmergencyShellsDuringScroll = 0;
+		this.stats.htmlSnapshotHitsDuringScroll = 0;
+		this.stats.htmlSnapshotMissesDuringScroll = 0;
+		this.stats.textImpostorUsesDuringScroll = 0;
+		this.stats.cellSlotsRetained = 0;
+		this.stats.cellSlotsEvictedDuringTopology = 0;
+		this.stats.cellSlotsCreatedDuringTopology = 0;
+		this.stats.cellSlotsReusedDuringTopology = 0;
+		this.stats.maxCellsByColumnIdPerRowSlot = 0;
 		this.stats.hotDomReleases = 0;
 		this.stats.coldDomReleases = 0;
 		this.stats.cellsPatchedPerScrollFrame = [];

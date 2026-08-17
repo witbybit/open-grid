@@ -152,8 +152,8 @@ describe('Plan 142 - cross-feature composition gauntlets', () => {
 		expect(filterFrame.overlay).toBe(true);
 
 		expect(store.getSelectedRowIds()).toEqual(['r4']);
-		expect(store.getState().selection.focus).toEqual({ rowId: 'r4', colField: 'score' });
-		expect(store.getState().selection.anchor).toEqual({ rowId: 'r4', colField: 'score' });
+		expect(store.getState().selection.focus).toEqual(expect.objectContaining({ rowId: 'r4', colField: 'score' }));
+		expect(store.getState().selection.anchor).toEqual(expect.objectContaining({ rowId: 'r4', colField: 'score' }));
 		expect(store.getVisualIndexByRowId('r4')).toBe(1);
 		expect(store.getVisualRow(1)?.kind).toBe('data');
 		expect(store.getVisualRow(1)?.node.data.id).toBe('r4');
@@ -387,7 +387,7 @@ describe('Plan 142 - cross-feature composition gauntlets', () => {
 		const beforeMoveIndex = store.getVisualIndexByRowId('child-b');
 		store.updateRows((rows) => rows.map((row) => (row.id === 'child-b' ? { ...row, parentId: 'other' } : row)));
 
-		expect(store.getState().selection.focus).toEqual({ rowId: 'child-b', colField: 'name' });
+		expect(store.getState().selection.focus).toEqual(expect.objectContaining({ rowId: 'child-b', colField: 'name' }));
 		expect(store.getSelectedRowIds()).toEqual(['child-b']);
 		expect(store.getVisualIndexByRowId('child-b')).not.toBe(beforeMoveIndex);
 		expect(store.getVisualIndexByRowId('child-b')).toBeGreaterThan(store.getVisualIndexByRowId('other'));
@@ -395,16 +395,16 @@ describe('Plan 142 - cross-feature composition gauntlets', () => {
 		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'Child' } });
 		expect(store.getVisualIndexByRowId('other')).toBeGreaterThanOrEqual(0);
 		expect(store.getVisualIndexByRowId('child-b')).toBeGreaterThan(store.getVisualIndexByRowId('other'));
-		expect(store.getState().selection.focus).toEqual({ rowId: 'child-b', colField: 'name' });
+		expect(store.getState().selection.focus).toEqual(expect.objectContaining({ rowId: 'child-b', colField: 'name' }));
 
 		store.selectCell({ rowId: 'other', colField: 'name' });
 		store.toggleGroupExpanded('other');
-		expect(store.getState().selection.focus).toEqual({ rowId: 'other', colField: 'name' });
+		expect(store.getState().selection.focus).toEqual(expect.objectContaining({ rowId: 'other', colField: 'name' }));
 		expect(store.getSelectedRowIds()).toEqual(['child-b']);
 		expect(store.getVisualIndexByRowId('child-b')).toBeNull();
 
 		store.toggleGroupExpanded('other');
-		expect(store.getState().selection.focus).toEqual({ rowId: 'other', colField: 'name' });
+		expect(store.getState().selection.focus).toEqual(expect.objectContaining({ rowId: 'other', colField: 'name' }));
 		expect(store.getSelectedRowIds()).toEqual(['child-b']);
 		expect(store.getVisualIndexByRowId('child-b')).toBeGreaterThan(store.getVisualIndexByRowId('other'));
 
@@ -471,7 +471,7 @@ describe('Plan 142 - cross-feature composition gauntlets', () => {
 		expect(rowIndexAfterSort).not.toBe(rowIndexBeforeSort);
 		expect(store.getVisualRow(rowIndexAfterSort + 1)?.kind).toBe('detail');
 		expect(Array.from(store.engine.geometry.rowHeights)[rowIndexAfterSort + 1]).toBe(120);
-		expect(store.getState().selection.focus).toEqual({ rowId: 'row-12', colField: 'name' });
+		expect(store.getState().selection.focus).toEqual(expect.objectContaining({ rowId: 'row-12', colField: 'name' }));
 
 		const scrollViewport = container.querySelector('.og-scroll-viewport') as HTMLDivElement;
 		scrollViewport.scrollTop = Math.max(0, rowIndexAfterSort * 40 - 80);

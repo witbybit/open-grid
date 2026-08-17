@@ -8,12 +8,13 @@ import type { GridCapabilityAction, GridCapabilityParams, GridCapabilityResult }
 import type { GridIntegrityIssue } from './dataIntegrity/integrityTypes.js';
 import type { GridEventPayloadMap } from '../api/GridEvents.js';
 import { dispatchWriteBlockedEvent } from './writeBlockedEvent.js';
+import type { ActiveEditState } from '../api/GridApi.js';
 
 export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	ctx: GridFeatureContext<TRowData>;
 	getRowModel: () => RowModel<TRowData> | null;
 	data: DataModel<TRowData>;
-	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
+	notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean, renderColId?: string) => void;
 	validateCommittedCells?: (
 		cells: readonly { rowId: string; colField: string }[],
 		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
@@ -24,13 +25,15 @@ export interface EditingFeatureControllerDeps<TRowData = unknown> {
 	) => Promise<readonly GridIntegrityIssue[]>;
 	checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 	dispatchEvent: <K extends keyof GridEventPayloadMap<TRowData>>(type: K, payload: GridEventPayloadMap<TRowData>[K]) => void;
+	recordRejectedWrite?: (reason: string, cell: { rowId: string; colField: string }) => void;
 }
 
 export class EditingFeatureController<TRowData = unknown> {
+	private editVersion = 0;
 	private readonly ctx: GridFeatureContext<TRowData>;
 	private readonly getRowModel: () => RowModel<TRowData> | null;
 	private readonly data: DataModel<TRowData>;
-	private readonly notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean) => void;
+	private readonly notifyCellChange: (rowId: string, colField: string, includeRenderInvalidation?: boolean, renderColId?: string) => void;
 	private readonly validateCommittedCells?: (
 		cells: readonly { rowId: string; colField: string }[],
 		source: 'edit' | 'api' | 'fill' | 'paste' | 'undo' | 'redo'
@@ -41,6 +44,7 @@ export class EditingFeatureController<TRowData = unknown> {
 	) => Promise<readonly GridIntegrityIssue[]>;
 	private readonly checkCapability?: (action: GridCapabilityAction, params: Partial<GridCapabilityParams<TRowData>>) => GridCapabilityResult;
 	private readonly dispatchEvent: EditingFeatureControllerDeps<TRowData>['dispatchEvent'];
+	private readonly recordRejectedWrite?: EditingFeatureControllerDeps<TRowData>['recordRejectedWrite'];
 
 	constructor(deps: EditingFeatureControllerDeps<TRowData>) {
 		this.ctx = deps.ctx;
@@ -51,32 +55,80 @@ export class EditingFeatureController<TRowData = unknown> {
 		this.validateWriteProposal = deps.validateWriteProposal;
 		this.checkCapability = deps.checkCapability;
 		this.dispatchEvent = deps.dispatchEvent;
+		this.recordRejectedWrite = deps.recordRejectedWrite;
 	}
 
-	private canEditCell(rowId: string, colField: string): boolean {
+	private canEditCell(rowId: string, colFieldOrInstanceId: string): boolean {
+		const column = this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId);
+		if (!column) return false;
 		const rowModel = this.getRowModel();
 		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(rowId) : -1;
 		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
-		return canEditCell(visualRow, this.ctx.columns.getColumnDef(colField));
+		return canEditCell(visualRow, column);
 	}
 
-	public startEdit(rowId: string, colField: string): void {
-		if (!this.canEditCell(rowId, colField)) return;
+	private doesEditIdentityMatch(activeEdit: ActiveEditState, rowId: string, colFieldOrInstanceId: string): boolean {
+		if (activeEdit.rowId !== rowId) return false;
+		const column = this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId);
+		return !!column && activeEdit.columnInstanceId === column.instanceId;
+	}
+
+	private isCurrentEdit(activeEdit: ActiveEditState): boolean {
+		const current = this.ctx.getState().activeEdit;
+		return (
+			current?.rowId === activeEdit.rowId && current.columnInstanceId === activeEdit.columnInstanceId && current.version === activeEdit.version
+		);
+	}
+
+	public startEdit(rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
+		if (!this.canEditCell(rowId, colFieldOrInstanceId)) return;
+		const column = this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId);
+		if (!column) return;
+		const colField = column.field;
+		const originalValue = this.data.getRawCellValue(rowId, colField);
+		const version = ++this.editVersion;
 		if (this.checkCapability) {
-			const result = this.checkCapability('edit', { rowId, colField, source: 'api' });
+			const result = this.checkCapability('edit', { rowId, colField, source });
 			if (!result.allowed) return;
 		}
 		this.ctx.applyChange({
 			reason: 'editing:start',
-			state: { activeEdit: { rowId, colField } },
+			state: {
+				activeEdit: {
+					rowId,
+					colField: column.field,
+					colId: column.colId ?? column.field,
+					columnInstanceId: column.instanceId,
+					originalValue,
+					draftValue: originalValue,
+					startedBy: source,
+					version,
+				},
+			},
 			invalidations: [
-				{ kind: 'cell', rowId, colId: colField, reason: 'edit started' },
+				{ kind: 'cell', rowId, colId: column.instanceId, reason: 'edit started' },
 				{ kind: 'overlay', reason: 'edit started' },
 			],
 			domains: ['editing'],
 			events: [{ type: GridEventName.editStarted, payload: { rowId, colField } }],
 		});
-		this.notifyCellChange(rowId, colField, false);
+		this.notifyCellChange(rowId, colField, false, column.instanceId);
+	}
+
+	public updateEditDraft(rowId: string, colFieldOrInstanceId: string, value: unknown): void {
+		const activeEdit = this.ctx.getState().activeEdit;
+		if (!activeEdit || !this.doesEditIdentityMatch(activeEdit, rowId, colFieldOrInstanceId)) return;
+		if (Object.is(activeEdit.draftValue, value)) return;
+		this.ctx.applyChange({
+			reason: 'editing:update-draft',
+			state: {
+				activeEdit: {
+					...activeEdit,
+					draftValue: value,
+				},
+			},
+			domains: ['editing'],
+		});
 	}
 
 	public stopEdit(cancel = false): void {
@@ -88,18 +140,30 @@ export class EditingFeatureController<TRowData = unknown> {
 			reason: 'editing:stop',
 			state: { activeEdit: null },
 			invalidations: [
-				{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
+				{ kind: 'cell', rowId, colId: activeEdit.columnInstanceId, reason: 'edit stopped' },
 				{ kind: 'overlay', reason: 'edit stopped' },
 			],
 			domains: ['editing'],
 			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel } }],
 		});
-		this.notifyCellChange(rowId, colField, false);
+		this.notifyCellChange(rowId, colField, false, activeEdit.columnInstanceId);
 	}
 
-	public async commitEdit(rowId: string, colField: string, value: unknown): Promise<boolean> {
+	public async commitEdit(rowId: string, colFieldOrInstanceId: string, value: unknown): Promise<boolean> {
+		const activeEdit = this.ctx.getState().activeEdit;
+		const matchedActiveEdit = activeEdit && this.doesEditIdentityMatch(activeEdit, rowId, colFieldOrInstanceId) ? activeEdit : null;
+		if (activeEdit && activeEdit.rowId === rowId && !matchedActiveEdit) return false;
+
+		const resolvedColumn =
+			(matchedActiveEdit
+				? this.ctx.columns.getColumnByFieldOrInstanceId(matchedActiveEdit.columnInstanceId)
+				: this.ctx.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId)) ?? null;
+		if (!resolvedColumn) return false;
+		const colField = resolvedColumn.field;
+		const renderColId = matchedActiveEdit?.columnInstanceId ?? resolvedColumn.instanceId;
+
 		if (this.checkCapability) {
-			const result = this.checkCapability('edit', { rowId, colField });
+			const result = this.checkCapability('edit', { rowId, colField, source: matchedActiveEdit?.startedBy ?? 'api' });
 			if (!result.allowed) {
 				dispatchWriteBlockedEvent(
 					this.dispatchEvent,
@@ -110,8 +174,7 @@ export class EditingFeatureController<TRowData = unknown> {
 				return false;
 			}
 		}
-		const col = this.ctx.columns.getColumnDef(colField);
-		if (!col) return false;
+		const col = resolvedColumn;
 		const oldValue = this.data.getRawCellValue(rowId, colField);
 		const node = this.getRowModel()?.getRowNodeById(rowId);
 		if (!node) return false;
@@ -132,6 +195,7 @@ export class EditingFeatureController<TRowData = unknown> {
 			} catch {
 				success = false;
 			}
+			if (matchedActiveEdit && !this.isCurrentEdit(matchedActiveEdit)) return false;
 			if (!success || didAbort) {
 				return false;
 			}
@@ -140,7 +204,9 @@ export class EditingFeatureController<TRowData = unknown> {
 		}
 
 		const proposalIssues = await this.validateWriteProposal?.([{ rowId, colField, proposedValue: committedValue }], 'edit');
+		if (matchedActiveEdit && !this.isCurrentEdit(matchedActiveEdit)) return false;
 		if ((proposalIssues?.length ?? 0) > 0) {
+			this.recordRejectedWrite?.('editing:validation', { rowId, colField });
 			dispatchWriteBlockedEvent(
 				this.dispatchEvent,
 				'edit',
@@ -152,7 +218,7 @@ export class EditingFeatureController<TRowData = unknown> {
 
 		const result = this.ctx.applyChange({
 			reason: 'data:set-cell-value',
-			state: { activeEdit: null },
+			state: matchedActiveEdit ? { activeEdit: null } : undefined,
 			domainMutations: [
 				{
 					kind: 'cell-value',
@@ -164,11 +230,11 @@ export class EditingFeatureController<TRowData = unknown> {
 				},
 			],
 			invalidations: [
-				{ kind: 'cell', rowId, colId: colField, reason: 'edit stopped' },
-				{ kind: 'overlay', reason: 'edit stopped' },
+				{ kind: 'cell', rowId, colId: renderColId, reason: matchedActiveEdit ? 'edit stopped' : 'cell value changed' },
+				...(matchedActiveEdit ? [{ kind: 'overlay' as const, reason: 'edit stopped' }] : []),
 			],
 			domains: ['editing'],
-			events: [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel: false } }],
+			events: matchedActiveEdit ? [{ type: GridEventName.editStopped, payload: { rowId, colField, cancel: false } }] : undefined,
 		});
 
 		if (result.status === 'rejected') {
@@ -180,7 +246,7 @@ export class EditingFeatureController<TRowData = unknown> {
 			return false;
 		}
 
-		this.notifyCellChange(rowId, colField, false);
+		this.notifyCellChange(rowId, colField, false, renderColId);
 		await this.validateCommittedCells?.([{ rowId, colField }], 'edit');
 		return true;
 	}

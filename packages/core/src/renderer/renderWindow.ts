@@ -166,7 +166,15 @@ function countPinnedTrailing(count: number, total: number, leading: number): num
  * Row indices rendered for this window. Pass `out` to reuse a scratch array on hot
  * paths (it is cleared and refilled; valid until the next call with the same array).
  */
-export function getRowIndices(w: RenderWindow, out?: number[]): number[] {
+/**
+ * `extraRowIndices` — additional row indices to force into the result beyond the normal
+ * pinned/rowStart..rowEnd/pinned ranges (see rowWindowRetention.ts's vertical focus/edit
+ * retention). Purely additive: every existing zero-arg call site is unaffected. Merged in
+ * ascending order alongside the rest of the array — callers historically treat the result as
+ * sorted (it drives 1:1 slot-index assignment), so this preserves that invariant rather than
+ * just appending at the end.
+ */
+export function getRowIndices(w: RenderWindow, out?: number[], extraRowIndices?: ReadonlySet<number>): number[] {
 	const pinTop = Math.min(w.pinTopRows, w.rowCount);
 	const pinBottomStart = Math.max(pinTop, w.rowCount - w.pinBottomRows);
 
@@ -174,8 +182,17 @@ export function getRowIndices(w: RenderWindow, out?: number[]): number[] {
 	indices.length = 0;
 
 	for (let r = 0; r < pinTop; r++) indices.push(r);
+	if (extraRowIndices && extraRowIndices.size > 0) {
+		// Merge extras that fall before rowStart, in ascending order, ahead of the center range.
+		const before = [...extraRowIndices].filter((r) => r < w.rowStart && r >= pinTop).sort((a, b) => a - b);
+		for (const r of before) indices.push(r);
+	}
 	for (let r = w.rowStart; r <= w.rowEnd; r++) {
 		if (r >= pinTop && r < pinBottomStart) indices.push(r);
+	}
+	if (extraRowIndices && extraRowIndices.size > 0) {
+		const after = [...extraRowIndices].filter((r) => r > w.rowEnd && r < pinBottomStart).sort((a, b) => a - b);
+		for (const r of after) indices.push(r);
 	}
 	for (let r = pinBottomStart; r < w.rowCount; r++) indices.push(r);
 	return indices;

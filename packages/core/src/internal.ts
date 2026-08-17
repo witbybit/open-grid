@@ -3,6 +3,7 @@
 // Keep this surface narrow: framework adapters should depend on the host
 // contract, not on raw store, engine, model, or renderer implementation classes.
 export {
+	bindGridInteractionSurface,
 	hasImperativeRendererCapability,
 	mountGridHost,
 	type GridAdapterHandle,
@@ -11,5 +12,7 @@ export {
 	type GridHost,
 	type GridHostOptions,
 	type GridHostWithAdapter,
+	type GridInteractionSurfaceBinding,
+	type GridInteractionSurfaceOptions,
 	type GridRowContentAdapter,
 } from './gridHost.js';

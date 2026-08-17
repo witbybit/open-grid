@@ -22,3 +22,40 @@ export {
 	toLoadingVisualRowId,
 } from './rows/visualRowIds.js';
 export type { GroupPathItem } from './rows/visualRowIds.js';
+export {
+	startFlightRecorder,
+	stopFlightRecorder,
+	getFlightRecorderSnapshot,
+	explainFlightRecorderCell,
+	clearFlightRecorder,
+} from './flightRecorderExperimental.js';
+export type {
+	GridCausalEvent,
+	GridCausalTraceEnvelope,
+	GridCausalTraceSnapshot,
+	GridCellExplanation,
+	GridFlightRecorderOptions,
+} from './diagnostics/GridCausalTrace.js';
+export {
+	GRID_TRACE_REPLAY_LIMITS,
+	GRID_TRACE_REPLAY_VERSION,
+	GridTraceReplay,
+	createGridTraceReplay,
+	validateGridReplayTrace,
+} from './diagnostics/GridTraceReplay.js';
+export type {
+	GridReplayCheckpoint,
+	GridReplayCheckpointExpectation,
+	GridReplayCommand,
+	GridReplayDivergence,
+	GridReplayExpectedFacts,
+	GridReplayInitialFixture,
+	GridReplayObservation,
+	GridReplayObservationKind,
+	GridReplayScheduler,
+	GridReplaySemanticFacts,
+	GridTraceReplayStatus,
+	GridReplayTrace,
+	GridReplayValidation,
+	JsonValue,
+} from './diagnostics/GridTraceReplay.js';

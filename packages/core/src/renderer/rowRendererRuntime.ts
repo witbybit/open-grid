@@ -1,6 +1,5 @@
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
-import type { GridCellPointer } from '../api/GridApi.js';
 import type { GridCellClassParams } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
 import type { CellRenderer } from './cellRenderer.js';
@@ -20,6 +19,8 @@ import {
 import type { CompiledColumnTopology } from './columnTopology.js';
 import {
 	decorateDirtyCellsAfterScroll as decorateDirtyCellsAfterScrollMaintenance,
+	repaintInvalidatedCells as repaintInvalidatedCellsMaintenance,
+	repaintInvalidatedRows as repaintInvalidatedRowsMaintenance,
 	repaintInvalidatedRowsAndCells as repaintInvalidatedRowsAndCellsMaintenance,
 	type DecorateDirtyCellsAfterScrollResult,
 	type PostScrollRepairLane,
@@ -30,6 +31,9 @@ import type { RowSlot } from './rowSlot.js';
 import type { RenderWindow } from './renderWindow.js';
 import type { SelectionPaintManager } from './selectionPaintManager.js';
 import { reportRendererFault } from './rendererFaults.js';
+import type { ViewportPlan } from './viewportPlanner.js';
+import type { LiveFrameBudget } from './liveFrameBudget.js';
+import type { ProgrammaticScrollTarget } from './programmaticScrollTarget.js';
 
 export interface RowRendererRuntimeArgs<TRowData = unknown> {
 	engine: GridEngine<TRowData>;
@@ -57,7 +61,7 @@ export interface RowRendererRuntimeArgs<TRowData = unknown> {
 	isScrolling: boolean;
 	isScrollFrameActive: boolean;
 	renderStats: any;
-	programmaticScrollCell: GridCellPointer | null;
+	programmaticScrollCell: ProgrammaticScrollTarget | null;
 	clearProgrammaticScrollCell: () => void;
 	setDeferredFocusCell: (cell: HTMLDivElement) => void;
 	incrementStyleHookCallsDuringScroll: () => void;
@@ -76,7 +80,7 @@ export interface RowRendererRuntimeStateHost<TRowData = unknown> {
 	dirtyRowsAfterScroll: Set<number>;
 	dirtyBuckets: [HTMLDivElement[], HTMLDivElement[], HTMLDivElement[], HTMLDivElement[]];
 	activeRows: Map<number, RowSlot<TRowData>>;
-	programmaticScrollCell: GridCellPointer | null;
+	programmaticScrollCell: ProgrammaticScrollTarget | null;
 	deferredFocusCell: HTMLDivElement | null;
 	runtimeState: RenderRuntimeState;
 	renderStats: any;
@@ -86,6 +90,12 @@ export interface RowRendererRuntimeStateHost<TRowData = unknown> {
 	currentScrollPortalOps: number;
 	postScrollDirtyCellsDecorated: number;
 	dirtyCellsMarkedDuringScroll: number;
+	/** This frame's ViewportPlan (see viewportPlanner.ts), populated by RowRenderer.recycleViewport
+	 *  before the bind loop runs. Null before the first frame. */
+	currentViewportPlan?: ViewportPlan | null;
+	/** Per-frame live-mode mount/update budget (see liveFrameBudget.ts), configured from
+	 *  GridRendererOptions.liveReact and reset by RowRenderer.recycleViewport each frame. */
+	liveFrameBudget?: LiveFrameBudget | null;
 }
 
 export interface RowRendererRuntimeBridgeDeps<TRowData = unknown> {
@@ -198,6 +208,74 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 			incrementCellSlotRebinds: () => {
 				if (this.deps.stateHost.renderStats) this.deps.stateHost.renderStats.cellSlotRebinds++;
 			},
+			incrementIntegrityComputesDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.integrityComputesDuringScroll =
+						(this.deps.stateHost.renderStats.integrityComputesDuringScroll || 0) + 1;
+				}
+			},
+			incrementForceLiveMountsDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.forceLiveMountsDuringScroll =
+						(this.deps.stateHost.renderStats.forceLiveMountsDuringScroll || 0) + 1;
+				}
+			},
+			incrementLiveReactMountsDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.liveReactMountsDuringScroll =
+						(this.deps.stateHost.renderStats.liveReactMountsDuringScroll || 0) + 1;
+				}
+			},
+			incrementLiveReactUpdatesDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.liveReactUpdatesDuringScroll =
+						(this.deps.stateHost.renderStats.liveReactUpdatesDuringScroll || 0) + 1;
+				}
+			},
+			incrementLiveReactOverscanMountsDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.liveReactOverscanMounts = (this.deps.stateHost.renderStats.liveReactOverscanMounts || 0) + 1;
+				}
+			},
+			incrementLiveReactEmergencyShellsDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.liveReactEmergencyShellsDuringScroll =
+						(this.deps.stateHost.renderStats.liveReactEmergencyShellsDuringScroll || 0) + 1;
+				}
+			},
+			tryConsumeLiveBudget: (kind: 'mount' | 'update') => {
+				const budget = this.deps.stateHost.liveFrameBudget;
+				return budget ? budget.tryConsume(kind) : true;
+			},
+			allowLiveEmergencyShell: () => {
+				const budget = this.deps.stateHost.liveFrameBudget;
+				return budget ? budget.allowEmergencyShell : true;
+			},
+			incrementHtmlSnapshotHitsDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.htmlSnapshotHitsDuringScroll =
+						(this.deps.stateHost.renderStats.htmlSnapshotHitsDuringScroll || 0) + 1;
+				}
+			},
+			incrementHtmlSnapshotMissesDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.htmlSnapshotMissesDuringScroll =
+						(this.deps.stateHost.renderStats.htmlSnapshotMissesDuringScroll || 0) + 1;
+				}
+			},
+			incrementTextImpostorUsesDuringScroll: () => {
+				if (this.deps.stateHost.renderStats) {
+					this.deps.stateHost.renderStats.textImpostorUsesDuringScroll =
+						(this.deps.stateHost.renderStats.textImpostorUsesDuringScroll || 0) + 1;
+				}
+			},
+			getHtmlSnapshotDefaults: () => {
+				const opts = this.deps.engine.rendererOptions?.htmlSnapshot;
+				return {
+					allowShellWhenMissing: opts?.allowShellWhenMissing ?? true,
+					allowTextFallbackWhenMissing: opts?.allowTextFallbackWhenMissing ?? false,
+				};
+			},
 			getSnapshotVisualVersions: () => ({
 				styleVersion: (this.deps.stateHost as unknown as { styleVersion?: number }).styleVersion ?? 0,
 				loadingVersion: (this.deps.stateHost as unknown as { loadingVersion?: number }).loadingVersion ?? 0,
@@ -217,6 +295,7 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 			onScrollCellVisited: this.runtimeArgs.incrementCurrentScrollCellsVisited,
 			onScrollCellPatched: this.runtimeArgs.incrementCurrentScrollCellsPatched,
 			onScrollCellWritten: this.runtimeArgs.incrementCurrentScrollCellsWritten,
+			retentionStats: this.deps.stateHost.renderStats,
 		};
 
 		this.rowRenderMaintenanceDeps = {
@@ -255,6 +334,16 @@ export class RowRendererRuntimeBridge<TRowData = unknown> {
 	public repaintInvalidatedRowsAndCells(frame: InvalidationFrame): void {
 		this.refreshCachedHotState();
 		repaintInvalidatedRowsAndCellsMaintenance(this.rowRenderMaintenanceDeps, frame);
+	}
+
+	public repaintInvalidatedRows(frame: InvalidationFrame): void {
+		this.refreshCachedHotState();
+		repaintInvalidatedRowsMaintenance(this.rowRenderMaintenanceDeps, frame);
+	}
+
+	public repaintInvalidatedCells(frame: InvalidationFrame): void {
+		this.refreshCachedHotState();
+		repaintInvalidatedCellsMaintenance(this.rowRenderMaintenanceDeps, frame);
 	}
 
 	public decorateDirtyCellsAfterScroll(options?: { maxCells?: number; lane?: PostScrollRepairLane }): DecorateDirtyCellsAfterScrollResult {
@@ -399,7 +488,7 @@ export function bindFullWidthRow<TRowData>(args: RowRendererRuntimeArgs<TRowData
 		visualRow,
 		(s) => {
 			// Clear all data cells via reconcileTopology with an empty topology.
-			// This properly removes cells from cellsByColumnId and calls releaseFn on each.
+			// This properly removes cells from cellsByColumnInstanceId and calls releaseFn on each.
 			const pinLeftContainer = args.ensurePinnedContainer(s, 'left', 0);
 			const pinRightContainer = args.ensurePinnedContainer(s, 'right', 0);
 			reconcileTopology(s, EMPTY_TOPOLOGY, pinLeftContainer, 0, 0, pinRightContainer, [], args.initCell, args.releaseCellFn);

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RowNode, type ColumnDef, type VisualRow } from '@open-grid/core';
+import type { ColumnDef, VisualRow } from '@open-grid/core';
 import { createPortalStore } from './gridPortalStore.js';
 
 interface TestRow {
@@ -36,8 +36,8 @@ function makeIdentity(
 	return { cellInstanceId, rowSlotId, slotGeneration, rowBindingGeneration, portalHostId };
 }
 
-function makeNode(id: string, name = id): RowNode<TestRow> {
-	return new RowNode<TestRow>(id, { id, name });
+function makeNode(id: string, name = id) {
+	return { id, data: { id, name } };
 }
 
 function makeDetailRow(rowKey: string): VisualRow<TestRow> {
@@ -52,6 +52,67 @@ function makeDetailRow(rowKey: string): VisualRow<TestRow> {
 }
 
 describe('createPortalStore — adversarial lifecycle invariants', () => {
+	it('keeps portal, listener, and updater ownership bounded across 500 recycled lifecycles', async () => {
+		const store = createPortalStore<TestRow>();
+		const containers = Array.from({ length: 12 }, () => document.createElement('div'));
+		const unsubscribeStructural = store.subscribeCells?.(vi.fn());
+		const unsubscribeRowsMenus = store.subscribeRowsMenus?.(vi.fn());
+		let peakCellPortals = 0;
+		let peakListenerKeys = 0;
+
+		for (let index = 0; index < 500; index++) {
+			const slot = index % containers.length;
+			const cellKey = `slot-${slot}:name`;
+			const identity = makeIdentity(`cell-${index}`, `slot-${slot}`, index + 1);
+			const unsubscribeCell = store.subscribeToCell?.(cellKey, vi.fn());
+			store.mountCell(
+				cellKey,
+				containers[slot]!,
+				`value-${index}`,
+				makeNode(`row-${index}`),
+				COLUMN,
+				false,
+				false,
+				undefined,
+				false,
+				false,
+				false,
+				identity
+			);
+			store.registerImperativeUpdater?.(cellKey, () => true);
+			if (index % 5 === 0) {
+				store.mountRow?.(`detail:${index}`, containers[slot]!, makeDetailRow(`detail:${index}`));
+				store.mountMenu?.(`menu-${slot}`, containers[slot]!, COLUMN, () => {});
+			}
+			store.unmountCell(cellKey, containers[slot]!, false, identity);
+			unsubscribeCell?.();
+			if (index % 5 === 0) {
+				store.unmountRow?.(`detail:${index}`, containers[slot]!);
+				store.unmountMenu?.(`menu-${slot}`, containers[slot]!);
+			}
+			const stats = store.getDebugStats();
+			peakCellPortals = Math.max(peakCellPortals, stats.cellPortalCount);
+			peakListenerKeys = Math.max(peakListenerKeys, stats.cellListenerKeyCount);
+		}
+
+		expect(peakCellPortals).toBeLessThanOrEqual(containers.length);
+		expect(peakListenerKeys).toBeLessThanOrEqual(1);
+		await flushMicrotasks();
+		expect(store.getDebugStats()).toMatchObject({
+			cellPortalCount: 0,
+			rowPortalCount: 0,
+			menuPortalCount: 0,
+			cellListenerKeyCount: 0,
+			cellDataListenerCount: 0,
+			imperativeUpdaterCount: 0,
+		});
+		unsubscribeStructural?.();
+		unsubscribeRowsMenus?.();
+		store.clear(true);
+		await flushMicrotasks();
+		expect(store.getDebugStats()).toMatchObject({ cellStructuralListenerCount: 0, rowMenuStructuralListenerCount: 0 });
+	});
+
 	it('rejects stale imperative updates after slot generation rebinding', () => {
 		const store = createPortalStore<TestRow>();
 		const container = document.createElement('div');

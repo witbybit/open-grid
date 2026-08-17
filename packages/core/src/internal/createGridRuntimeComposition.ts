@@ -6,7 +6,7 @@ import type { GridWorkspaceController } from '../workspace/GridWorkspaceControll
 import type { GridViewDefinition, GridWorkspaceState, SaveViewOptions } from '../workspace/workspaceTypes.js';
 import { GridEventName } from '../api/GridEvents.js';
 import type { InfiniteDatasource } from '../infiniteRowModel.js';
-import type { ServerDatasource } from '../serverPageRowModel.js';
+import type { ServerSideDatasource, ServerSideRefreshOptions } from '../serverSideRowModel.js';
 import type { ThemeTokens } from '../renderer/themes.js';
 import type {
 	GridApi,
@@ -18,13 +18,13 @@ import type {
 	GridSnapshotSelectorEquality,
 	GridStateSnapshot,
 	RowDataTransaction,
-	RowNodeTransaction,
 	RowSelectionGesture,
 	SelectAllRowsOptions,
 	SelectRowsOptions,
 	ScrollToRowOptions,
 	ScrollToCellOptions,
 } from '../api/GridApi.js';
+import type { RowNodeTransaction } from '../rowTransactions.js';
 import type { ColumnDef } from '../columnDef.js';
 import type { FilterModel, SortModel, RowModelCapability } from '../rowModel.js';
 import type { ColumnState, GridInitialState } from '../state/GridState.js';
@@ -61,7 +61,6 @@ export function createGridRuntimeComposition<TRowData>({
 		getRowId: (row: TRowData) => runtime.getRowId(row),
 		isRowLoading: (rowId: string) => runtime.isRowLoading(rowId),
 		getDataRowAtVisualIndex: (index: number) => runtime.getDataRowAtVisualIndex(index),
-		getDataRowNodeAtVisualIndex: (index: number) => runtime.getDataRowNodeAtVisualIndex(index),
 		setRows: (rows: TRowData[]) => runtime.setRows(rows),
 		updateRows: (updater: (rows: TRowData[]) => TRowData[]) => runtime.updateRows(updater),
 		applyTransaction: (transaction: RowDataTransaction<TRowData>): RowNodeTransaction<TRowData> | null => runtime.applyTransaction(transaction),
@@ -75,13 +74,10 @@ export function createGridRuntimeComposition<TRowData>({
 		supportsRowModelCapability: (capability: RowModelCapability) => runtime.supportsRowModelCapability(capability),
 		purgeCache: () => runtime.purgeCache(),
 		setInfiniteDatasource: (datasource: InfiniteDatasource<TRowData>, blockSize?: number) => runtime.setInfiniteDatasource(datasource, blockSize),
-		setServerPageDatasource: (datasource: ServerDatasource<TRowData>) => runtime.setServerPageDatasource(datasource),
-		goToServerPage: (page: number) => runtime.goToServerPage(page),
-		nextServerPage: () => runtime.nextServerPage(),
-		previousServerPage: () => runtime.previousServerPage(),
-		setServerPageSize: (pageSize: number) => runtime.setServerPageSize(pageSize),
-		refreshServerPage: (reason?: string) => runtime.refreshServerPage(reason),
-		getServerPageState: () => runtime.getServerPageState(),
+		setServerSideDatasource: (datasource: ServerSideDatasource<TRowData>) => runtime.setServerSideDatasource(datasource),
+		refreshServerSide: (options?: ServerSideRefreshOptions) => runtime.refreshServerSide(options),
+		purgeServerSide: (options?: Omit<ServerSideRefreshOptions, 'purge'>) => runtime.purgeServerSide(options),
+		getServerSideStoreState: () => runtime.getServerSideStoreState(),
 		getCellValue: (rowId: string, colField: string) => runtime.getCellValue(rowId, colField),
 		getFormula: (rowId: string, colField: string) => runtime.getFormula(rowId, colField),
 		hasFormula: (rowId: string, colField: string) => runtime.hasFormula(rowId, colField),
@@ -138,9 +134,11 @@ export function createGridRuntimeComposition<TRowData>({
 		setStyleRules: (styleRules: GridInitialState<TRowData>['styleRules']) => runtime.setStyleRules(styleRules),
 		addEventListener: runtime.addEventListener,
 		dispatchEvent: runtime.dispatchEvent,
-		startEditing: (rowId: string, colField: string) => runtime.startEditing(rowId, colField),
+		startEditing: (rowId: string, colFieldOrInstanceId: string, source?: 'keyboard' | 'mouse' | 'api') =>
+			runtime.startEditing(rowId, colFieldOrInstanceId, source),
+		updateEditDraft: (rowId: string, colFieldOrInstanceId: string, value: unknown) => runtime.updateEditDraft(rowId, colFieldOrInstanceId, value),
 		stopEditing: (cancel?: boolean) => runtime.stopEditing(cancel),
-		commitEdit: (rowId: string, colField: string, value: unknown) => runtime.commitEdit(rowId, colField, value),
+		commitEdit: (rowId: string, colFieldOrInstanceId: string, value: unknown) => runtime.commitEdit(rowId, colFieldOrInstanceId, value),
 		integrity: runtime.integrity,
 		getVisibleColumnRange: () => runtime.getVisibleColumnRange(),
 		getColumnState: () => runtime.getColumnState(),
@@ -152,7 +150,6 @@ export function createGridRuntimeComposition<TRowData>({
 		toggleDetailExpanded: (rowId: string) => runtime.toggleDetailExpanded(rowId),
 		isGroupExpanded: (groupId: string) => runtime.isGroupExpanded(groupId),
 		isDetailExpanded: (rowId: string) => runtime.isDetailExpanded(rowId),
-		getRowNodeById: (rowId: string) => runtime.getRowNodeById(rowId),
 		getRawRowById: (rowId: string) => runtime.getRawRowById(rowId),
 		applyRowSelectionGesture: (gesture: RowSelectionGesture) => runtime.applyRowSelectionGesture(gesture),
 		selectRows: (rowIds: string[], options?: SelectRowsOptions) => runtime.selectRows(rowIds, options),
@@ -172,6 +169,7 @@ export function createGridRuntimeComposition<TRowData>({
 			isEqual?: GridSnapshotSelectorEquality<TValue>
 		) => runtime.subscribeToSnapshotSelector(keys, selector, listener, isEqual),
 		subscribeToIntegrity: (listener: Parameters<typeof runtime.subscribeToIntegrity>[0]) => runtime.subscribeToIntegrity(listener),
+		subscribeToCell: (rowId: string, colField: string, listener: () => void) => runtime.subscribeToCell(rowId, colField, listener),
 		subscribeToDomainVersions: (listener: Parameters<typeof runtime.subscribeToDomainVersions>[0]) => runtime.subscribeToDomainVersions(listener),
 		subscribeDomain: (domain: Parameters<typeof runtime.subscribeDomain>[0], listener: Parameters<typeof runtime.subscribeDomain>[1]) =>
 			runtime.subscribeDomain(domain, listener),
@@ -281,6 +279,7 @@ export function createGridRuntimeComposition<TRowData>({
 			setContainerElement: (container) => runtime.setContainerElement(container),
 		},
 		pluginController: runtime.getPluginController(),
+		interactionController: runtime.interactionController,
 	});
 	return frozen;
 }

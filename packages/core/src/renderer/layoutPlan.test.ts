@@ -465,7 +465,7 @@ describe('GridLayoutPlan', () => {
 	});
 
 	describe('Plan 119 — stable header cell identity', () => {
-		it('leaf header cells use column field as id (stable across pin/unpin)', () => {
+		it('leaf header cells use a stable column-instance id (not field) across pin/unpin; field is still exposed separately', () => {
 			const store = new GridStore<{ id: string; a: string; b: string }>({
 				getRowId: (r) => r.id,
 				columns: [
@@ -478,15 +478,19 @@ describe('GridLayoutPlan', () => {
 
 			const before = computeGridLayoutPlan(store.engine);
 			const leafBefore = before.headerBands[0].cells;
-			expect(leafBefore[0].id).toBe('a');
-			expect(leafBefore[1].id).toBe('b');
+			expect(leafBefore[0].field).toBe('a');
+			expect(leafBefore[1].field).toBe('b');
+			const idA = leafBefore[0].id;
+			const idB = leafBefore[1].id;
 
 			store.setViewportPins({ left: 1, right: 0 });
 			const after = computeGridLayoutPlan(store.engine);
 			const leafAfter = after.headerBands[0].cells;
 			// IDs are unchanged even though colStart values may differ
-			expect(leafAfter[0].id).toBe('a');
-			expect(leafAfter[1].id).toBe('b');
+			expect(leafAfter[0].id).toBe(idA);
+			expect(leafAfter[1].id).toBe(idB);
+			expect(leafAfter[0].field).toBe('a');
+			expect(leafAfter[1].field).toBe('b');
 
 			ctrl.dispose();
 			store.destroy();

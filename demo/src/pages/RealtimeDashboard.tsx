@@ -31,9 +31,8 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 	const [eventLogs, setEventLogs] = useState<Array<{ id: number; time: string; msg: string; type: string }>>([]);
 	const eventLogIdRef = useRef(0);
 	const [autoFire, setAutoFire] = useState(false);
-	const autoFireRef = useRef(false);
+	const [autoFireIntervalMs, setAutoFireIntervalMs] = useState(100);
 	const autoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-	autoFireRef.current = autoFire;
 
 	// ── Integrity state ────────────────────────────────────────────────────────
 	const streamRef = useRef<GridTransactionStreamHandle<DashboardStockRow> | null>(null);
@@ -172,15 +171,23 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 
 	const toggleAutoFire = useCallback(() => {
 		if (!api) return;
-		const next = !autoFireRef.current;
-		setAutoFire(next);
+		setAutoFire((current) => !current);
+	}, [api]);
+
+	useEffect(() => {
 		if (autoIntervalRef.current) {
 			clearInterval(autoIntervalRef.current);
 			autoIntervalRef.current = null;
 		}
-		if (!next) return;
-		autoIntervalRef.current = setInterval(triggerVolatility, 100);
-	}, [api, triggerVolatility]);
+		if (!autoFire) return;
+		autoIntervalRef.current = setInterval(triggerVolatility, autoFireIntervalMs);
+		return () => {
+			if (autoIntervalRef.current) {
+				clearInterval(autoIntervalRef.current);
+				autoIntervalRef.current = null;
+			}
+		};
+	}, [autoFire, autoFireIntervalMs, triggerVolatility]);
 
 	useEffect(
 		() => () => {
@@ -342,6 +349,7 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 		const span = max - min || 1;
 		return prices.map((value, index) => `${(index / (prices.length - 1)) * 100},${40 - ((value - min) / span) * 30}`).join(' ');
 	}, [prices]);
+	const autoFireHzLabel = useMemo(() => (1000 / Math.max(1, autoFireIntervalMs)).toFixed(autoFireIntervalMs >= 100 ? 1 : 2), [autoFireIntervalMs]);
 
 	return (
 		<div className='flex flex-col xl:flex-row h-full w-full gap-5 overflow-hidden'>
@@ -355,17 +363,31 @@ export default function RealtimeDashboard({ editTrigger, arrowKeyNavigationEdit,
 							Realtime Portfolio Dashboard
 						</span>
 					</div>
-					<button
-						onClick={toggleAutoFire}
-						className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg font-bold text-[10px] border shadow-lg transition-all cursor-pointer ${
-							autoFire
-								? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-500/20 shadow-rose-900/20'
-								: 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700/60'
-						}`}
-					>
-						<Zap className={`w-3 h-3 ${autoFire ? 'animate-pulse' : ''}`} />
-						{autoFire ? 'Auto 10hz ON' : 'Auto 10hz'}
-					</button>
+					<div className='flex items-center gap-2'>
+						<label className='flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-2.5 py-1.5 text-[10px] font-bold text-slate-400'>
+							<span className='uppercase tracking-wider'>Interval</span>
+							<input
+								type='number'
+								min={25}
+								step={25}
+								value={autoFireIntervalMs}
+								onChange={(event) => setAutoFireIntervalMs(Math.max(25, Number(event.target.value) || 25))}
+								className='w-16 rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-right text-[10px] font-mono text-slate-200 outline-none focus:border-emerald-500'
+							/>
+							<span className='font-mono text-slate-500'>ms</span>
+						</label>
+						<button
+							onClick={toggleAutoFire}
+							className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg font-bold text-[10px] border shadow-lg transition-all cursor-pointer ${
+								autoFire
+									? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-500/20 shadow-rose-900/20'
+									: 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700/60'
+							}`}
+						>
+							<Zap className={`w-3 h-3 ${autoFire ? 'animate-pulse' : ''}`} />
+							{autoFire ? `Auto ${autoFireHzLabel}hz ON` : `Auto ${autoFireHzLabel}hz`}
+						</button>
+					</div>
 				</div>
 
 				{/* Grid */}

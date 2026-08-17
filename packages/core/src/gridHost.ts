@@ -8,13 +8,17 @@ import type {
 	GridHeaderMenuMount,
 	GridHeaderMenuUnmount,
 } from './renderer/IGridRenderer.js';
-import type { GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';
-import type { ColumnDef, InternalColumnDef } from './columnDef.js';
+import type { CellState, GridApi, GridCellAccess, GridCellPointer } from './api/GridApi.js';
+import type { GridCellClickParams } from './api/GridApi.js';
+import type { ColumnDef, ColumnInstanceId, InternalColumnDef } from './columnDef.js';
 import { asGroupMetaCapableRowModel } from './rowModel.js';
-import { resolveGridHostComposition } from './internal/apiInternalBridge.js';
+import { resolveGridInteractionController, resolveGridRuntimeComposition } from './internal/apiInternalBridge.js';
+import { createGridInteractionEventRouter } from './interaction/GridInteractionEventRouter.js';
+import type { GridNavigationOptions } from './interaction/GridInteractionController.js';
 
 export function hasImperativeRendererCapability<TRowData = unknown>(column: ColumnDef<TRowData>): boolean {
-	return (column as InternalColumnDef<TRowData>).cellRendererCapabilities?.imperativeUpdate === true;
+	const caps = (column as InternalColumnDef<TRowData>).cellRendererCapabilities;
+	return caps?.scrollPresentation === 'live' && caps.live?.update === 'imperative';
 }
 
 export interface GridCellContentAdapter<TRowData = unknown> {
@@ -72,10 +76,14 @@ export interface GridHost {
 }
 
 export interface GridAdapterHandle<TRowData = unknown> {
-	/** Resolve the cell pointer (rowId + colField) from a DOM element inside a cell. */
+	/** Resolve the bound cell pointer from a DOM element inside a cell. */
 	getCellPointerFromElement(element: Element): GridCellPointer | null;
+	/** Get lightweight cell state by logical cell pointer. */
+	getCellStateByPointer(pointer: GridCellPointer): CellState | null;
 	/** Get full cell access data from a DOM element inside a cell. */
 	getCellAccessFromElement(element: Element): GridCellAccess<TRowData> | null;
+	/** Get full cell access data by logical cell pointer. */
+	getCellAccessByPointer(pointer: GridCellPointer): GridCellAccess<TRowData> | null;
 	/** Get full cell access data by row id and column field. */
 	getCellAccess(rowId: string, colField: string): GridCellAccess<TRowData> | null;
 	/** Get the visible descendant row ids for a group row. */
@@ -86,15 +94,73 @@ export interface GridAdapterHandle<TRowData = unknown> {
 
 export type GridHostWithAdapter<TRowData = unknown> = GridHost & { adapterHandle: GridAdapterHandle<TRowData> };
 
+export interface GridInteractionSurfaceBinding {
+	updateOptions(options: GridNavigationOptions): void;
+	destroy(): void;
+}
+
+export interface GridInteractionSurfaceOptions<TRowData = unknown> {
+	container: HTMLElement;
+	adapterHandle: GridAdapterHandle<TRowData>;
+	getNavigationEnabled(): boolean;
+	isContextMenuEnabled(): boolean;
+	showContextMenu(pointer: GridCellPointer, clientX: number, clientY: number): void;
+	onCellClick?(params: GridCellClickParams<TRowData>): void;
+}
+
+export function bindGridInteractionSurface<TRowData>(
+	api: GridApi<TRowData>,
+	options: GridInteractionSurfaceOptions<TRowData>
+): GridInteractionSurfaceBinding {
+	const interactionController = resolveGridInteractionController(api);
+	const router = createGridInteractionEventRouter<TRowData>({
+		getApi: () => api,
+		getInteraction: () => (options.getNavigationEnabled() ? interactionController : null),
+		isEventWithinGrid: (target) => {
+			if (!(target instanceof HTMLElement)) return false;
+			return target.closest('.og-grid-container') === options.container;
+		},
+		resolveCellTarget: (event) => {
+			const cellEl = (event.target as HTMLElement).closest('.og-cell') as HTMLElement | null;
+			if (!cellEl || cellEl.closest('.og-grid-container') !== options.container) return null;
+			const pointer = options.adapterHandle.getCellPointerFromElement(cellEl);
+			if (!pointer) return null;
+			const access = options.adapterHandle.getCellAccessByPointer(pointer);
+			return { cellEl, pointer, access };
+		},
+		focusCellElement: (cellEl) => {
+			cellEl.tabIndex = -1;
+			cellEl.focus();
+		},
+		isContextMenuEnabled: () => options.isContextMenuEnabled(),
+		showContextMenu: (pointer, clientX, clientY) => {
+			options.showContextMenu(pointer, clientX, clientY);
+		},
+		onCellClick: (params) => {
+			options.onCellClick?.(params);
+		},
+	});
+	const unbind = router.bind(options.container);
+	return {
+		updateOptions(nextOptions) {
+			interactionController.updateOptions(nextOptions);
+		},
+		destroy() {
+			unbind();
+		},
+	};
+}
+
 export function mountGridHost<TRowData>(
 	api: GridApi<TRowData>,
 	container: HTMLElement,
 	options: GridHostOptions<TRowData> = {}
 ): GridHostWithAdapter<TRowData> {
-	const host = resolveGridHostComposition(api);
+	const runtime = resolveGridRuntimeComposition(api);
+	const host = runtime.host;
 	const engine = host.engine;
 	const internalApi = host.api;
-	const renderEngine = new RenderEngine(engine, internalApi);
+	const renderEngine = new RenderEngine(engine, internalApi, runtime.interactionController);
 
 	renderEngine.onMountCellContent = options.cellContent?.mountCellContent;
 	renderEngine.onUnmountCellContent = options.cellContent?.unmountCellContent;
@@ -163,18 +229,36 @@ export function mountGridHost<TRowData>(
 		getCellPointerFromElement(element: Element) {
 			const cellEl = element.closest('.og-cell') as HTMLElement | null;
 			if (!cellEl) return null;
-			const colField = cellEl.dataset.colField;
-			const rowEl = cellEl.closest('.og-row') as HTMLElement | null;
-			const rowIndex = Number(rowEl?.dataset.rowIndex);
-			const visualRow = Number.isFinite(rowIndex) ? internalApi.getVisualRow(rowIndex) : null;
-			const rowId = visualRow?.kind === 'data' ? visualRow.rowId : undefined;
-			if (!colField || !rowId) return null;
-			return { rowId, colField };
+			const cellSlot = (
+				cellEl as HTMLElement & {
+					__cellSlot?: {
+						binding?: { rowId: string; colId: string } | null;
+						colField?: string;
+						columnInstanceId?: ColumnInstanceId;
+					};
+				}
+			).__cellSlot;
+			const binding = cellSlot?.binding;
+			const colField = cellSlot?.colField ?? cellEl.dataset.colField;
+			const rowId = binding?.rowId ?? cellEl.dataset.rowId;
+			if (!rowId || !colField) return null;
+			return {
+				rowId,
+				colField,
+				colId: binding?.colId ?? colField,
+				columnInstanceId: cellSlot?.columnInstanceId,
+			};
 		},
 		getCellAccessFromElement(element: Element) {
 			const pointer = adapterHandle.getCellPointerFromElement(element);
 			if (!pointer) return null;
-			return internalApi.getCellAccess(pointer.rowId, pointer.colField);
+			return internalApi.getCellAccessByPointer(pointer);
+		},
+		getCellStateByPointer(pointer: GridCellPointer) {
+			return internalApi.getCellStateByPointer(pointer);
+		},
+		getCellAccessByPointer(pointer: GridCellPointer) {
+			return internalApi.getCellAccessByPointer(pointer);
 		},
 		getCellAccess(rowId: string, colField: string) {
 			return internalApi.getCellAccess(rowId, colField);
