@@ -44,10 +44,22 @@ export class DomCellRendererManager<TRowData = unknown> {
 	private lruOrder = new Map<string, number>();
 	private lruCounter = 0;
 
-	private maxWarm = 50;
+	private maxWarmOverride: number | null = null;
 	private hiddenContainer: HTMLDivElement | null = null;
 
 	constructor(private engine?: GridEngine<TRowData>) {}
+
+	/** Live-read from runtimeLimits — see the identical getter in CustomRendererManager. */
+	private get maxWarm(): number {
+		if (this.maxWarmOverride !== null) return this.maxWarmOverride;
+		const configured = this.engine?.stateManager.getState().runtimeLimits?.maxWarmCustomRenderers;
+		return typeof configured === 'number' && configured > 0 ? configured : 300;
+	}
+
+	public setLimits(maxWarm: number): void {
+		this.maxWarmOverride = maxWarm;
+		this.pruneWarmCache();
+	}
 
 	private ensureHiddenContainer(): HTMLDivElement | null {
 		if (!this.hiddenContainer && typeof document !== 'undefined') {

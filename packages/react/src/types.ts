@@ -26,12 +26,18 @@ import type {
 	DetailVisualRow,
 	FooterVisualRow,
 	LoadingVisualRow,
+	FailedVisualRow,
+	PlaceholderVisualRow,
 	HeaderMenuRendererProps,
 	CellRendererCapabilities,
+	CellScrollPresentation,
+	GridRendererOptions,
 	CellRendererPhase,
 	DomCellRenderer,
 	DomCellRendererHandle,
 	DomCellRendererParams,
+	DomCellRendererRowRef,
+	GridRowDataRef,
 	ImperativeCellHandle,
 	GridPersistenceAdapter,
 	BuiltInThemeName,
@@ -49,9 +55,10 @@ import type {
 	SelectAllRowsOptions,
 	RowModelType,
 	InfiniteDatasource,
-	ServerDatasource,
-	ServerPaginationOptions,
-	ServerPageState,
+	ServerSideDatasource,
+	ServerSideGetRowsRequest,
+	ServerSideGetRowsResult,
+	ServerSideStoreSnapshot,
 } from '@eregister/open-grid-core';
 import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from '@eregister/open-grid-core';
@@ -101,12 +108,18 @@ export type {
 	DetailVisualRow,
 	FooterVisualRow,
 	LoadingVisualRow,
+	FailedVisualRow,
+	PlaceholderVisualRow,
 	HeaderMenuRendererProps,
 	CellRendererCapabilities,
+	CellScrollPresentation,
+	GridRendererOptions,
 	CellRendererPhase,
 	DomCellRenderer,
 	DomCellRendererHandle,
 	DomCellRendererParams,
+	DomCellRendererRowRef,
+	GridRowDataRef,
 	ImperativeCellHandle,
 	BuiltInThemeName,
 	ThemeTokens,
@@ -119,7 +132,7 @@ export type {
 
 export type StyleRule<TRowData = unknown> = GridStyleRule<TRowData>;
 
-export type { RowModelType, InfiniteDatasource, ServerDatasource, ServerPaginationOptions, ServerPageState };
+export type { RowModelType, InfiniteDatasource, ServerSideDatasource, ServerSideGetRowsRequest, ServerSideGetRowsResult, ServerSideStoreSnapshot };
 
 export type {
 	GridQueryModel,
@@ -149,7 +162,10 @@ export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from '@eregister/open-g
  * Grid component. Sourced from the canonical GridInitialState type so these never drift
  * out of sync with the core.
  */
-type GridRenderOptions<TRowData> = Pick<GridInitialState<TRowData>, 'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits'>;
+type GridRenderOptions<TRowData> = Pick<
+	GridInitialState<TRowData>,
+	'rowOverscanPx' | 'colBuffer' | 'overscanAdaptive' | 'runtimeLimits' | 'rendererOptions'
+>;
 
 export interface GridReadyEvent<TRowData = unknown> {
 	api: GridApi<TRowData>;

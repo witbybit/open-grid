@@ -78,10 +78,10 @@ describe('GridContextMenuPlugin', () => {
 		plugin.show('r2', 'name', 100, 100);
 
 		const state = store.getState();
-		expect(state.selection.focus).toEqual({ rowId: 'r2', colField: 'name' });
+		expect(state.selection.focus).toEqual(expect.objectContaining({ rowId: 'r2', colField: 'name' }));
 		expect(state.selection.range).toEqual({
-			start: { rowId: 'r2', colField: 'name' },
-			end: { rowId: 'r2', colField: 'name' },
+			start: expect.objectContaining({ rowId: 'r2', colField: 'name' }),
+			end: expect.objectContaining({ rowId: 'r2', colField: 'name' }),
 		});
 	});
 
@@ -94,8 +94,89 @@ describe('GridContextMenuPlugin', () => {
 
 		const state = store.getState();
 		expect(state.selection.range).toEqual({
-			start: { rowId: 'r1', colField: 'name' },
-			end: { rowId: 'r2', colField: 'price' },
+			start: expect.objectContaining({ rowId: 'r1', colField: 'name' }),
+			end: expect.objectContaining({ rowId: 'r2', colField: 'price' }),
+		});
+	});
+
+	it('should preserve a duplicate-field single-cell selection when showPointer targets the selected column instance', () => {
+		rowController.dispose();
+		plugin.onDestroy();
+
+		store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID' },
+				{ field: 'name', header: 'Name A', colId: 'name-a' },
+				{ field: 'name', header: 'Name B', colId: 'name-b' },
+				{ field: 'price', header: 'Price' },
+			],
+		});
+		rowController = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'r1', name: 'Product A', price: 100 },
+				{ id: 'r2', name: 'Product B', price: 200 },
+			],
+			columns: store.getState().columns,
+		});
+		plugin = new GridContextMenuPlugin<TestRow>();
+		store.registerPlugin(plugin);
+		testPlugin = plugin as unknown as ContextMenuTestPlugin;
+
+		const secondNameColumn = store.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+		const selectedPointer = {
+			rowId: 'r1',
+			colField: secondNameColumn.field,
+			colId: secondNameColumn.colId,
+			columnInstanceId: secondNameColumn.instanceId,
+		};
+
+		store.selectCell(selectedPointer, 'api');
+		plugin.showPointer(selectedPointer, 100, 100);
+
+		expect(store.getState().selection.focus).toMatchObject(selectedPointer);
+		expect(store.getState().selection.range).toEqual({
+			start: expect.objectContaining(selectedPointer),
+			end: expect.objectContaining(selectedPointer),
+		});
+	});
+
+	it('should preserve a duplicate-field single-cell selection when showPointer only has duplicate colId metadata', () => {
+		rowController.dispose();
+		plugin.onDestroy();
+
+		store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID' },
+				{ field: 'name', header: 'Name A', colId: 'name-a' },
+				{ field: 'name', header: 'Name B', colId: 'name-b' },
+				{ field: 'price', header: 'Price' },
+			],
+		});
+		rowController = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: 'r1', name: 'Product A', price: 100 },
+				{ id: 'r2', name: 'Product B', price: 200 },
+			],
+			columns: store.getState().columns,
+		});
+		plugin = new GridContextMenuPlugin<TestRow>();
+		store.registerPlugin(plugin);
+		testPlugin = plugin as unknown as ContextMenuTestPlugin;
+
+		store.selectCell({ rowId: 'r1', colField: 'name', colId: 'name-b' }, 'api');
+		plugin.showPointer({ rowId: 'r1', colField: 'name', colId: 'name-b' }, 100, 100);
+
+		expect(store.getState().selection.focus).toEqual(
+			expect.objectContaining({
+				rowId: 'r1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: expect.any(String),
+			})
+		);
+		expect(store.getState().selection.range).toEqual({
+			start: expect.objectContaining({ rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: expect.any(String) }),
+			end: expect.objectContaining({ rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: expect.any(String) }),
 		});
 	});
 
@@ -222,8 +303,8 @@ describe('GridContextMenuPlugin', () => {
 
 		const updatedState = store.getState();
 		expect(updatedState.selection.range).toEqual({
-			start: { rowId: 'r1', colField: 'id' },
-			end: { rowId: 'r3', colField: 'price' },
+			start: expect.objectContaining({ rowId: 'r1', colField: 'id' }),
+			end: expect.objectContaining({ rowId: 'r3', colField: 'price' }),
 		});
 	});
 
@@ -237,7 +318,7 @@ describe('GridContextMenuPlugin', () => {
 		plugin.setOptions({
 			excludeDefaults: ['copy', 'clear'],
 		});
-		testPlugin.activePointer = { rowId: 'r1', colField: 'name' };
+		testPlugin.activePointer = { rowId: 'r1', colField: 'name', colId: 'name', columnInstanceId: 'name' };
 		testPlugin.renderMenu(100, 100);
 
 		const menuEl = testPlugin.menuElement as HTMLDivElement;
@@ -262,7 +343,7 @@ describe('GridContextMenuPlugin', () => {
 			],
 		});
 
-		testPlugin.activePointer = { rowId: 'r1', colField: 'name' };
+		testPlugin.activePointer = { rowId: 'r1', colField: 'name', colId: 'name', columnInstanceId: 'name' };
 		testPlugin.renderMenu(100, 100);
 
 		const menuEl = testPlugin.menuElement as HTMLDivElement;
@@ -286,7 +367,7 @@ describe('GridContextMenuPlugin', () => {
 
 		store.selectRange({ rowId: 'r1', colField: 'name' }, { rowId: 'r2', colField: 'price' });
 
-		testPlugin.activePointer = { rowId: 'r1', colField: 'name' };
+		testPlugin.activePointer = { rowId: 'r1', colField: 'name', colId: 'name', columnInstanceId: 'name' };
 		testPlugin.renderMenu(100, 100);
 
 		const menuEl = testPlugin.menuElement as HTMLDivElement;
@@ -301,11 +382,12 @@ describe('GridContextMenuPlugin', () => {
 		const params = customAction.mock.calls[0][0];
 		expect(params.rowId).toBe('r1');
 		expect(params.colField).toBe('name');
+		expect(params.pointer).toEqual(expect.objectContaining({ rowId: 'r1', colField: 'name' }));
 		expect(params.api).not.toBe(store);
 		expect(params.api.getStateSnapshot()).toEqual(store.getStateSnapshot());
 		expect(params.selection.range).toEqual({
-			start: { rowId: 'r1', colField: 'name' },
-			end: { rowId: 'r2', colField: 'price' },
+			start: expect.objectContaining({ rowId: 'r1', colField: 'name' }),
+			end: expect.objectContaining({ rowId: 'r2', colField: 'price' }),
 		});
 		expect(params.selection.bounds).toEqual({
 			minRow: 0,
@@ -313,6 +395,57 @@ describe('GridContextMenuPlugin', () => {
 			minCol: 1,
 			maxCol: 2,
 		});
+	});
+
+	it('custom items receive duplicate-field pointer identity through context menu params', () => {
+		rowController.dispose();
+		plugin.onDestroy();
+
+		store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID' },
+				{ field: 'name', header: 'Name A', colId: 'name-a' },
+				{ field: 'name', header: 'Name B', colId: 'name-b' },
+			],
+		});
+		rowController = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: 'r1', name: 'Product A', price: 100 }],
+			columns: store.getState().columns,
+		});
+		const customAction = vi.fn();
+		plugin = new GridContextMenuPlugin<TestRow>({
+			disableDefaults: true,
+			customItems: [{ label: 'Inspect Pointer', action: customAction }],
+		});
+		store.registerPlugin(plugin);
+		testPlugin = plugin as unknown as ContextMenuTestPlugin;
+		const secondNameColumn = store.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+		const pointer = {
+			rowId: 'r1',
+			colField: secondNameColumn.field,
+			colId: secondNameColumn.colId,
+			columnInstanceId: secondNameColumn.instanceId,
+		};
+
+		plugin.showPointer(pointer, 100, 100);
+
+		const customItemEl = Array.from(document.querySelectorAll('.og-context-menu-item')).find(
+			(el) => el.textContent === 'Inspect Pointer'
+		) as HTMLDivElement;
+		customItemEl.click();
+
+		expect(customAction).toHaveBeenCalledWith(
+			expect.objectContaining({
+				rowId: 'r1',
+				colField: 'name',
+				pointer: expect.objectContaining({
+					rowId: 'r1',
+					colField: 'name',
+					colId: 'name-b',
+					columnInstanceId: expect.any(String),
+				}),
+			})
+		);
 	});
 
 	it('should dispatch cellValueChanged event when setting a cell value', () => {

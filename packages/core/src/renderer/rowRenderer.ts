@@ -5,29 +5,16 @@ import type { CellRenderer } from './cellRenderer.js';
 import type { InvalidationFrame } from './invalidationManager.js';
 import { SelectionPaintManager } from './selectionPaintManager.js';
 import { type ColumnDef, type GridCellClassParams } from '../columnDef.js';
-import type { VisualRow } from '../visualRow.js';
-import type { InternalGridState } from '../state/GridState.js';
-import type { RowNode } from '../rowNode.js';
-import type { GridCellPointer } from '../api/GridApi.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
-import type { GridCellContentUnmount } from './IGridRenderer.js';
 import type { ScrollRenderContext } from './scrollRenderContext.js';
 import { RowSlot } from './rowSlot.js';
 import { RowSlotPool } from './rowSlotPool.js';
-import { reportRendererFault } from './rendererFaults.js';
 import { RowRendererRuntimeBridge } from './rowRendererRuntime.js';
-import { asVisibleBlockLoadCapableRowModel } from '../rowModel.js';
-import { compileStyleRules, evaluateDetailRowStyleRules, evaluateGroupRowStyleRules, evaluateRowStyleRules } from '../styling/styleRules.js';
+import { compileStyleRules } from '../styling/styleRules.js';
 import { PinnedContainerManager } from './pinnedContainerManager.js';
-import { compileColumnTopology, type CompiledColumnTopology } from './columnTopology.js';
-
-// Precomputed base class strings for non-data row kinds — avoids string concat per row per frame.
-const ROW_KIND_BASE: Record<string, string> = {
-	loading: 'og-row og-row-loading',
-	group: 'og-row og-row-group',
-	detail: 'og-row og-row-detail',
-	footer: 'og-row og-row-footer',
-};
+import type { CompiledColumnTopology } from './columnTopology.js';
+import { ColumnTopologyCoordinator } from './columnTopologyCoordinator.js';
+import { resolveRowPresentation } from './rowPresentationResolver.js';
 import {
 	applyRenderWindowRuntimeLimits,
 	computeRenderWindow,
@@ -40,6 +27,12 @@ import {
 } from './renderWindow.js';
 import type { SlotRuntimeStats } from './slotRuntimeStats.js';
 import { FullWidthRowRenderer } from './fullWidthRowRenderer.js';
+import { computeRowWindowRetention } from './rowWindowRetention.js';
+import { ViewportPlanner, type ViewportPlan } from './viewportPlanner.js';
+import { LiveFrameBudget } from './liveFrameBudget.js';
+import { readInteractionState } from '../interaction/interactionState.js';
+import { syncRowRendererInteractionAccessibility } from './rowRendererAccessibility.js';
+import type { ProgrammaticScrollTarget } from './programmaticScrollTarget.js';
 
 export class RowRenderer<TRowData = unknown> {
 	private readonly engine: GridEngine<TRowData>;
@@ -90,7 +83,7 @@ export class RowRenderer<TRowData = unknown> {
 		this.selectionPaint.hoveredRowIndex = v;
 	}
 	public deferredFocusCell: HTMLDivElement | null = null;
-	public programmaticScrollCell: GridCellPointer | null = null;
+	public programmaticScrollCell: ProgrammaticScrollTarget | null = null;
 	public renderStats: any = null;
 
 	public currentScrollCellsPatched = 0;
@@ -102,6 +95,23 @@ export class RowRenderer<TRowData = unknown> {
 	public currentScrollPortalOps = 0;
 	public runtimeState!: import('./renderRuntimeState.js').RenderRuntimeState;
 	public dirtyCellsMarkedDuringScroll = 0;
+
+	/** Current viewport-owned resources; cumulative paint telemetry remains in RenderStats. */
+	public getOwnershipSnapshot(): Readonly<{
+		rowSlotCount: number;
+		cellSlotCount: number;
+		activeRowCount: number;
+		dirtyCellCount: number;
+		dirtyRowCount: number;
+	}> {
+		return Object.freeze({
+			rowSlotCount: this.slotStats.rowSlotCount,
+			cellSlotCount: this.slotStats.cellSlotCount,
+			activeRowCount: this.activeRows.size,
+			dirtyCellCount: this.dirtyCellsAfterScroll.size,
+			dirtyRowCount: this.dirtyRowsAfterScroll.size,
+		});
+	}
 
 	// Stable-slot virtualization counters — reset per scroll frame by renderScrollCoordinator.
 	public slotStats: SlotRuntimeStats = {
@@ -134,10 +144,6 @@ export class RowRenderer<TRowData = unknown> {
 	private readonly _rowIndicesScratch: number[] = [];
 	// Reusable scratch for diffRenderWindow() — avoids six array allocations per frame.
 	private readonly _deltaScratch = createEmptyViewportDelta();
-	private getVisibleBlockLoadCapableRowModel() {
-		return asVisibleBlockLoadCapableRowModel(this.engine.getRowModel());
-	}
-
 	// Pre-allocated scratch object for cell styleSlot callbacks — mutated in place before each call
 	// to eliminate per-cell object literal allocation during decoration passes.
 	// Row class scratch is owned by SelectionPaintManager.
@@ -162,8 +168,15 @@ export class RowRenderer<TRowData = unknown> {
 	private rowPortalHosts = new WeakMap<HTMLElement, HTMLElement>();
 	private readonly runtime: RowRendererRuntimeBridge<TRowData>;
 	private readonly pinnedContainers = new PinnedContainerManager<TRowData>();
-	private cachedColumnTopology: CompiledColumnTopology | null = null;
-	private cachedColumnTopologyVersion = -1;
+	private readonly columnTopologyCoordinator = new ColumnTopologyCoordinator<TRowData>();
+	private readonly viewportPlanner = new ViewportPlanner<TRowData>();
+	/** This frame's ViewportPlan, computed before the bind loop and read by binders/telemetry during
+	 *  scroll execution. Null before the first recycleViewport call. */
+	public currentViewportPlan: ViewportPlan | null = null;
+	/** Per-frame live-mode mount/update budget (see liveFrameBudget.ts), read by
+	 *  RowCellBinderDeps.tryConsumeLiveBudget/allowLiveEmergencyShell via stateHost: this. Reset each
+	 *  recycleViewport call; reconfigured whenever GridRendererOptions.liveReact may have changed. */
+	public readonly liveFrameBudget = new LiveFrameBudget();
 	/** Live column-reorder preview source, wired by RenderEngine to the
 	 *  ColumnInteractionController. Returns 0 outside an active header drag. */
 	public columnShiftSource: ((colIndex: number) => number) | null = null;
@@ -194,7 +207,6 @@ export class RowRenderer<TRowData = unknown> {
 			stateHost: this,
 			initCell: (el) => {
 				this.cellRenderer.initializeCell(el);
-				this.selectionPaint.attachClickListenerIfNeeded(el);
 			},
 			releaseCellFn: (cell) => {
 				if (cell.lastPortalKey) this.runtime.releaseCellPortal(cell.element, false, 'destroyed');
@@ -218,6 +230,7 @@ export class RowRenderer<TRowData = unknown> {
 		this.deferredFocusCell = null;
 		this.programmaticScrollCell = null;
 		this.currentWindow = null;
+		this.viewportRenderer.syncActiveDescendant(null);
 	}
 
 	public sync(_frame: InvalidationFrame): void {
@@ -241,6 +254,7 @@ export class RowRenderer<TRowData = unknown> {
 			this.fullWidthRenderer = new FullWidthRowRenderer<TRowData>(this.portalMountManager, this.rowPortalHosts);
 		}
 		this.activeRows.clear();
+		this.viewportRenderer.syncActiveDescendant(null);
 	}
 
 	// ── Pinned container management ──────────────────────────────────────────────────
@@ -279,14 +293,11 @@ export class RowRenderer<TRowData = unknown> {
 		}
 	}
 
-	private getCompiledColumnTopology(plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>): CompiledColumnTopology {
-		if (this.cachedColumnTopology && this.cachedColumnTopologyVersion === plan.version) {
-			return this.cachedColumnTopology;
-		}
-		const topology = compileColumnTopology(plan);
-		this.cachedColumnTopology = topology;
-		this.cachedColumnTopologyVersion = plan.version;
-		return topology;
+	private getCompiledColumnTopology(
+		plan: ReturnType<GridEngine<TRowData>['columns']['getCompiledPlan']>,
+		isScrollFrameActive: boolean
+	): CompiledColumnTopology {
+		return this.columnTopologyCoordinator.getCompiledTopology(plan, isScrollFrameActive, this.renderStats);
 	}
 
 	private getRenderedRowTop(
@@ -319,7 +330,7 @@ export class RowRenderer<TRowData = unknown> {
 
 	public recycleViewport(isScrollFrameActive: boolean, ctx?: ScrollRenderContext<TRowData>, precomputedWindow?: RenderWindow): void {
 		const state = ctx?.state ?? this.engine.stateManager.getState();
-		this.selectionPaint.rebuildSelection(state.selectedRowIds);
+		this.selectionPaint.rebuildSelection(readInteractionState(state).rowSelection.selectedRowIds);
 		const nextWindow =
 			precomputedWindow ??
 			applyRenderWindowRuntimeLimits(computeRenderWindow(this.engine), state.runtimeLimits, () => {
@@ -349,21 +360,52 @@ export class RowRenderer<TRowData = unknown> {
 			this.renderStats.colsStayedDuringScroll = (this.renderStats.colsStayedDuringScroll || 0) + delta.colsStayed.length;
 		}
 
-		// Load visible blocks if server row model (server-specific, not in VisualRowModel)
-		const fullRowModel = this.getVisibleBlockLoadCapableRowModel();
-		if (fullRowModel) {
-			fullRowModel.loadVisibleBlocks(nextWindow.rowStart, nextWindow.rowEnd);
-		}
+		// Row loading is driven through the shared viewport/load contract; renderer code must not
+		// depend on row-model-specific block-loading capabilities.
+		this.engine.getRowModel()?.ensureRange(nextWindow.rowStart, nextWindow.rowEnd, 'viewport-render');
 		// Renderer-facing visual row access uses the stable VisualRowModel contract.
 		const rowModel = this.engine.getVisualRowModel();
 
 		const plan = ctx?.plan ?? this.engine.columns.getCompiledPlan();
-		const columnTopology = this.getCompiledColumnTopology(plan);
+		const columnTopology = this.getCompiledColumnTopology(plan, isScrollFrameActive);
 		const columns = plan.displayedColumns;
-		const loading = ctx ? ctx.loadingVersion > 0 : state.loading;
+
+		// ── Vertical focus/edit row retention ─────────────────────────────────────────
+		// Mirrors the existing horizontal focused-column guard (reconcileCellTopologyForScroll) —
+		// a focused/editing row must never be virtualized fully out of the row-slot pool.
+		const interaction = readInteractionState(state);
+		const focusedCellPointer = ctx?.focusedCell ?? interaction.focus.cell;
+		const activeEditCell = ctx?.activeEdit ?? interaction.activeEdit.active;
+		const focusedRowIndex =
+			ctx?.focusedCell || interaction.focus.rowIndex === null || interaction.focus.rowIndex === undefined
+				? focusedCellPointer && rowModel
+					? rowModel.getVisualIndexByRowId(focusedCellPointer.rowId)
+					: undefined
+				: interaction.focus.rowIndex;
+		const editingRowIndex = activeEditCell && rowModel ? rowModel.getVisualIndexByRowId(activeEditCell.rowId) : undefined;
+		const { retainedRowIndices } = computeRowWindowRetention({ renderWindow: nextWindow, focusedRowIndex, editingRowIndex });
+
+		// ── Viewport plan ──────────────────────────────────────────────────────────────
+		// Computed before the bind loop so scroll binders operate against an executable live window:
+		// live overscan cells are guaranteed to be a subset of the rendered row/column window rather
+		// than inferred later by mutating the plan after binding.
+		this.currentViewportPlan = this.viewportPlanner.computePlan(
+			nextWindow,
+			columnTopology,
+			retainedRowIndices,
+			plan,
+			this.engine.rendererOptions
+		);
+		const columnWindowDelta = this.currentViewportPlan.columnWindowDelta;
+
+		// ── Live-mode frame budget ────────────────────────────────────────────────────
+		// rendererOptions is immutable for the engine's lifetime, so reconfiguring every frame is
+		// redundant but cheap — simpler than special-casing "only on first frame".
+		this.liveFrameBudget.configure(this.engine.rendererOptions?.liveReact);
+		this.liveFrameBudget.resetFrame();
 
 		// ── Slot count management ─────────────────────────────────────────────────────
-		const sortedRows = getRowIndices(nextWindow, this._rowIndicesScratch);
+		const sortedRows = getRowIndices(nextWindow, this._rowIndicesScratch, retainedRowIndices);
 		const totalSlots = sortedRows.length;
 
 		this.rowSlotPool.resetScrollStats();
@@ -404,8 +446,18 @@ export class RowRenderer<TRowData = unknown> {
 		const centerColEnd = nextWindow.colEnd;
 		const centerColCount = Math.max(0, centerColEnd - centerColStart + 1);
 
-		// Column layout change detection — used for full vs partial cell rebind.
-		const columnLayoutChanged = delta.colsEntered.length > 0 || delta.colsExited.length > 0;
+		// Column instance-id delta — used for full vs partial cell rebind, slot retention, and
+		// visible-column refresh decisions. Structural deltas (pin/unpin/reorder) are distinct from
+		// routine horizontal window shifts over a stable topology.
+		const columnLayoutChanged =
+			!!columnWindowDelta &&
+			(columnWindowDelta.enteredCenterColumns.length > 0 ||
+				columnWindowDelta.exitedCenterColumns.length > 0 ||
+				columnWindowDelta.enteredPinnedLeftColumns.length > 0 ||
+				columnWindowDelta.exitedPinnedLeftColumns.length > 0 ||
+				columnWindowDelta.enteredPinnedRightColumns.length > 0 ||
+				columnWindowDelta.exitedPinnedRightColumns.length > 0 ||
+				columnWindowDelta.laneMoves.length > 0);
 
 		if (isScrollFrameActive) {
 			if (columnLayoutChanged) this.slotStats.fullRebindFrames++;
@@ -432,9 +484,11 @@ export class RowRenderer<TRowData = unknown> {
 		const visibleColumnsEntered =
 			isScrollFrameActive && visibleColumnsChanged
 				? (() => {
+						const enteredIds = new Set(columnWindowDelta?.enteredCenterColumns ?? []);
 						const entered = new Set<number>();
 						for (let c = nextVisibleColStart; c <= nextVisibleColEnd; c++) {
-							if (c < prevVisibleColStart || c > prevVisibleColEnd) entered.add(c);
+							const column = columns[c];
+							if (column?.instanceId && enteredIds.has(column.instanceId)) entered.add(c);
 						}
 						return entered;
 					})()
@@ -454,6 +508,7 @@ export class RowRenderer<TRowData = unknown> {
 				ctx.loadingChangedDuringScroll ||
 				hasInsightDecorations ||
 				(hasRowClassHook && ctx.styleChangedDuringScroll));
+		const liveOverscanRows = new Set(this.currentViewportPlan.liveCells.overscan.map((cell) => cell.rowIndex));
 
 		// ── Slot binding loop ─────────────────────────────────────────────────────────
 		// Each slot[i] binds to allRows[i], where slot index is the viewport-position contract.
@@ -472,17 +527,20 @@ export class RowRenderer<TRowData = unknown> {
 				r < pinTopRows || (this.currentWindow ? r >= this.currentWindow.rowCount - this.currentWindow.pinBottomRows : false);
 			const wasRowVisible = wasPinnedVisibleRow || (r >= prevVisibleRowStart && r <= prevVisibleRowEnd);
 			const rowEnteredVisibleContent = isRowVisible && !wasRowVisible;
+			const rowHasLiveOverscanWork = isScrollFrameActive && liveOverscanRows.has(r);
 			// A row crossing the visible-content band should not force a cell refresh during
 			// active vertical scroll if the row identity and column window stayed stable.
 			// Warm slots already retain their text/portal/custom content; post-scroll repaint
 			// will reconcile deferred styling and selection state.
 			const rowNeedsContentRefresh =
-				isScrollFrameActive && (rowEnteredVisibleContent || (isRowVisible && !!refreshVisibleColumns && refreshVisibleColumns.size > 0));
+				isScrollFrameActive &&
+				(rowEnteredVisibleContent || rowHasLiveOverscanWork || (isRowVisible && !!refreshVisibleColumns && refreshVisibleColumns.size > 0));
 
 			if (
 				isScrollFrameActive &&
 				canTrustStableIdentity &&
 				(!columnLayoutChanged || !isRowVisible) &&
+				!rowHasLiveOverscanWork &&
 				!rowNeedsContentRefresh &&
 				slot.visualIndex === r &&
 				slot.rowKind !== '' &&
@@ -507,9 +565,6 @@ export class RowRenderer<TRowData = unknown> {
 
 			// Resolve the visual row early — needed for identity-based rebind check.
 			let visualRow = rowModel ? rowModel.getVisualRow(r) : null;
-			if (!visualRow && loading) {
-				visualRow = { kind: 'loading', id: `loading:${r}`, rowIndex: r };
-			}
 			if (!visualRow) {
 				const prevUnbind = slot.visualIndex;
 				this.releaseRowPortal(slot);
@@ -538,6 +593,7 @@ export class RowRenderer<TRowData = unknown> {
 				isScrollFrameActive &&
 				!isRowRebind &&
 				(!columnLayoutChanged || !isRowVisible) &&
+				!rowHasLiveOverscanWork &&
 				!rowNeedsContentRefresh &&
 				slot.visualIndex === r &&
 				slot.rowKind !== '' &&
@@ -587,72 +643,26 @@ export class RowRenderer<TRowData = unknown> {
 			);
 
 			// ── Row class name ────────────────────────────────────────────────────────
-			let rowClassName = ROW_KIND_BASE[visualRow.kind] ?? 'og-row';
-			if (visualRow.kind === 'group') {
-				if (compiledStyleRules.hasGroupRowRules) {
-					try {
-						const customClass = evaluateGroupRowStyleRules(compiledStyleRules, visualRow);
-						if (customClass) rowClassName += ' ' + customClass;
-					} catch (e) {
-						reportRendererFault(this.engine, 'group-row-class', e, { rowId: visualRow.id, rowIndex: r });
-					}
+			const rowPresentation = resolveRowPresentation(
+				{ engine: this.engine, selectionPaint: this.selectionPaint },
+				{
+					visualRow,
+					rowIndex: r,
+					state,
+					compiledStyleRules,
+					isScrollFrameActive,
+					isRowRebind,
+					slotLastVisualRowId: slot.lastVisualRowId,
+					slotRowKind: slot.rowKind,
+					slotLastClassName: slot.lastClassName,
+					pinTopRows,
+					pinBottomRows,
+					rowCount: nextWindow.rowCount,
+					shouldDeferWarmRowVisualRefresh,
 				}
-			} else if (visualRow.kind === 'detail') {
-				if (compiledStyleRules.hasDetailRowRules) {
-					try {
-						const customClass = evaluateDetailRowStyleRules(compiledStyleRules, visualRow);
-						if (customClass) rowClassName += ' ' + customClass;
-					} catch (e) {
-						reportRendererFault(this.engine, 'detail-row-class', e, { rowId: visualRow.id, rowIndex: r });
-					}
-				}
-			} else if (visualRow.kind === 'data') {
-				const node = visualRow.node;
-				const canPreserveWarmRowClass =
-					isScrollFrameActive &&
-					!isRowRebind &&
-					slot.lastVisualRowId === visualRow.id &&
-					slot.rowKind === 'data' &&
-					slot.lastClassName !== '';
-				if (canPreserveWarmRowClass) {
-					rowClassName = slot.lastClassName;
-					if (shouldDeferWarmRowVisualRefresh) {
-						this.dirtyRowsAfterScroll.add(r);
-					}
-				} else {
-					const isFocusedRow = state.selection.focus?.rowId === node.id;
-					const isSelectedRow = !!state.selection.bounds && r >= state.selection.bounds.minRow && r <= state.selection.bounds.maxRow;
-					const isLoadingRow = this.engine.data.isRowLoading(node.id);
-
-					if (r < pinTopRows) rowClassName += ' og-row-pinned-top';
-					else if (r >= nextWindow.rowCount - pinBottomRows) rowClassName += ' og-row-pinned-bottom';
-
-					if (this.selectionPaint.hoveredRowIndex === r) rowClassName += ' og-row-hovered';
-					if (isSelectedRow || isFocusedRow) rowClassName += ' og-row-selected';
-					if (isFocusedRow) rowClassName += ' og-row-focused';
-					if (this.selectionPaint.selectedRowIdSet?.has(node.id)) rowClassName += ' og-row-node-selected';
-					if (isLoadingRow) rowClassName += ' og-row-loading';
-
-					if (isScrollFrameActive && compiledStyleRules.hasRowRules && node.data) {
-						this.dirtyRowsAfterScroll.add(r);
-					} else if (compiledStyleRules.hasRowRules && node.data) {
-						try {
-							const rs = this.selectionPaint.rowClassScratchRef;
-							rs.row = node.data;
-							rs.rowId = node.id;
-							rs.rowIndex = r;
-							rs.isFocused = isFocusedRow;
-							rs.isSelected = isSelectedRow || isFocusedRow;
-							rs.isLoading = isLoadingRow;
-							rs.selection = state.selection;
-							const customRowClass = evaluateRowStyleRules(compiledStyleRules, node.data, rs);
-							if (customRowClass) rowClassName += ' ' + customRowClass;
-						} catch (e) {
-							reportRendererFault(this.engine, 'row-class', e, { rowId: node.id, rowIndex: r });
-						}
-					}
-				}
-			}
+			);
+			const rowClassName = rowPresentation.className;
+			if (rowPresentation.markDirtyAfterScroll) this.dirtyRowsAfterScroll.add(r);
 
 			const prevSlotIdx = slot.visualIndex;
 			const rowUpdated = slot.update(r, visualRow.id, visualRow.kind as any, rowTop, rowHeight, rowClassName);
@@ -695,9 +705,10 @@ export class RowRenderer<TRowData = unknown> {
 					forceCellRefresh: rowEnteredVisibleContent,
 					isRowVisible,
 					refreshVisibleColumns,
+					viewportPlan: this.currentViewportPlan,
 				});
 			} else {
-				// Full-width row (group / detail / footer)
+				// Full-width row (group / detail / footer / failed / placeholder)
 				this.runtime.bindFullWidthRow(slot, visualRow);
 			}
 		}
@@ -710,6 +721,7 @@ export class RowRenderer<TRowData = unknown> {
 		}
 
 		this.currentWindow = nextWindow;
+		this.syncInteractionAccessibility(state);
 	}
 
 	// ── Lane cell binding helpers ────────────────────────────────────────────────────
@@ -720,6 +732,14 @@ export class RowRenderer<TRowData = unknown> {
 
 	public repaintInvalidatedRowsAndCells(frame: InvalidationFrame): void {
 		this.runtime.repaintInvalidatedRowsAndCells(frame);
+	}
+
+	public repaintInvalidatedRows(frame: InvalidationFrame): void {
+		this.runtime.repaintInvalidatedRows(frame);
+	}
+
+	public repaintInvalidatedCells(frame: InvalidationFrame): void {
+		this.runtime.repaintInvalidatedCells(frame);
 	}
 
 	// ── Misc helpers ─────────────────────────────────────────────────────────────────
@@ -760,5 +780,14 @@ export class RowRenderer<TRowData = unknown> {
 
 	public applyFocus(cell: HTMLDivElement): void {
 		this.runtime.applyFocus(cell);
+	}
+
+	public syncInteractionAccessibility(state?: ReturnType<GridEngine<TRowData>['stateManager']['getState']>): void {
+		syncRowRendererInteractionAccessibility({
+			engine: this.engine,
+			viewportRenderer: this.viewportRenderer,
+			activeRows: this.activeRows,
+			state: state ?? this.engine.stateManager.getState(),
+		});
 	}
 }

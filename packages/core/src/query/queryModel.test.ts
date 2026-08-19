@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { GridStore } from '../store.js';
 import { ClientRowModelController } from '../rowModel.js';
 import { InfiniteRowModelController, type InfiniteDatasource } from '../infiniteRowModel.js';
-import { ServerPageRowModelController, type ServerDatasource } from '../serverPageRowModel.js';
+import { ServerSideRowModelController, type ServerSideDatasource } from '../serverSideRowModel.js';
 import { GridEventName } from '../api/GridEvents.js';
 import { createEmptyQueryModel, isQueryModelActive, countQueryNodes } from './GridQueryModel.js';
 import { evaluateQueryModel, applyQueryModelFilter, createQueryEvaluationContext } from './evaluateQueryModel.js';
@@ -345,10 +345,10 @@ describe('infinite datasource queryModel passthrough', () => {
 	});
 });
 
-// ── 15: Server datasource receives queryModel in getPage params ───────────────
+// ── 15: Server datasource receives queryModel in getRows params ──────────────
 
 describe('server datasource queryModel passthrough', () => {
-	it('queryModel is passed to ServerPageRowModel getPage params', async () => {
+	it('queryModel is passed to ServerSideRowModel getRows requests', async () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (r) => r.id,
 			columns: COLUMNS,
@@ -356,16 +356,16 @@ describe('server datasource queryModel passthrough', () => {
 		const model = makeQuery(andGroup([cond('salary', 'gt', 50000)]));
 		store.setQueryModel(model);
 
-		const getPage = vi.fn().mockResolvedValue({ rows: ROWS, totalCount: ROWS.length });
-		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
-			datasource: { getPage } as ServerDatasource<TestRow>,
-			pagination: { pageSize: 50 },
+		const getRows = vi.fn().mockResolvedValue({ rows: ROWS, rowCount: ROWS.length });
+		const controller = new ServerSideRowModelController(store.getServerSideRowModelRuntime(), {
+			datasource: { getRows } as ServerSideDatasource<TestRow>,
+			blockSize: 50,
 			columns: store.getState().columns,
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(getPage).toHaveBeenCalled();
-		const params = getPage.mock.calls[0][0];
+		expect(getRows).toHaveBeenCalled();
+		const params = getRows.mock.calls[0][0];
 		expect(params.queryModel).toEqual(model);
 		controller.dispose();
 		store.destroy();

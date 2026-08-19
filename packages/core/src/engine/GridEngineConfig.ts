@@ -1,5 +1,5 @@
-import type { ColumnDef, GridStyleRule } from '../columnDef.js';
-import type { GridCellPointer, GridSelectionState, RowSelectionOptions } from '../api/GridApi.js';
+import type { ColumnDef, GridStyleRule, GridRendererOptions } from '../columnDef.js';
+import type { ActiveEditState, GridCellPointer, GridSelectionState, RowSelectionOptions } from '../api/GridApi.js';
 import type { BuiltInThemeName, ThemeTokens } from '../renderer/themes.js';
 import type { SortModel, FilterModel, QuickFilterModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
@@ -31,7 +31,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	 * imperative call needed. For changes after mount, use `GridApi.setTheme()`/`mergeTheme()`.
 	 */
 	themeOverrides?: Partial<ThemeTokens>;
-	activeEdit?: GridCellPointer | null;
+	activeEdit?: GridCellPointer | ActiveEditState | null;
 	loadingSkeletonCount?: number;
 	styleRules?: GridStyleRule<TRowData>[];
 	loading?: boolean;
@@ -80,4 +80,7 @@ export interface GridEngineConfig<TRowData = unknown> {
 	overscanAdaptive?: boolean;
 	/** Returns the host container element. Used by auto-size and any feature that needs DOM measurements. */
 	getContainerElement?: () => HTMLElement | null;
+	/** Grid-wide scroll presentation policy — live-mode overscan/budgets, html-snapshot cache limits
+	 *  and missing-capture defaults, text-impostor defaults. See columnDef.ts's GridRendererOptions. */
+	rendererOptions?: GridRendererOptions;
 }

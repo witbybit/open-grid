@@ -1,5 +1,21 @@
 import { GridEventName } from '../api/GridEvents.js';
-import type { ClientRowModelRuntime, InfiniteRowModelRuntime, RowModelRuntimeStoreBridge, ServerPageRowModelRuntime } from './runtimePorts.js';
+import type {
+	AsyncRowModelPublication,
+	ClientRowModelRuntime,
+	InfiniteRowModelRuntime,
+	RowModelRuntimeStoreBridge,
+	ServerSideRowModelRuntime,
+} from './runtimePorts.js';
+
+function publishAsyncRowModelUpdate<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>, publication: AsyncRowModelPublication): void {
+	store.engine.applyRowModelRefreshInvalidation(publication.refreshResult, {
+		invalidationReason: publication.invalidationReason,
+		requestRenderReason: publication.requestRenderReason,
+		includeHeaders: publication.includeHeaders,
+		includeOverlay: publication.includeOverlay,
+		groupId: publication.groupId,
+	});
+}
 
 export function createClientRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ClientRowModelRuntime<TRowData> {
 	return {
@@ -12,6 +28,7 @@ export function createClientRowModelRuntime<TRowData>(store: RowModelRuntimeStor
 		getCellValue: store.getCellValue,
 		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
 		applyRefreshInvalidation: (refreshResult, options) => store.engine.applyRowModelRefreshInvalidation(refreshResult, options),
+		publishAsyncRowModelUpdate: (publication) => publishAsyncRowModelUpdate(store, publication),
 		reportRowPipelineFault: (operation, error, context) =>
 			store.reportRuntimeFault({
 				source: 'row-pipeline',
@@ -19,6 +36,7 @@ export function createClientRowModelRuntime<TRowData>(store: RowModelRuntimeStor
 				error,
 				context,
 			}),
+		requestLayoutTransitionCapture: (reason) => store.engine.requestLayoutTransitionCapture(reason),
 		updateExpansion: (updater) => store.engine.updateExpansionState(updater),
 		clearFormulas: () => store.engine.clearFormulas(),
 		syncFormulaForCell: (rowId, colField, value) => store.engine.syncFormulaForCell(rowId, colField, value),
@@ -26,7 +44,7 @@ export function createClientRowModelRuntime<TRowData>(store: RowModelRuntimeStor
 		getValueGetterDependents: (colField) => store.engine.getValueGetterDependents(colField),
 		hasValueGetter: (colField) => store.engine.hasValueGetter(colField),
 		notifyBulkCellChange: (changes) => store.engine.notifyBulkCellChange(changes),
-		dispatchRowsUpdated: (payload) => store.dispatchEvent(GridEventName.rowsUpdated, payload),
+		dispatchRowsUpdated: (payload) => store.engine.dispatchRowsUpdated(payload),
 		getInstrumentation: () => store.getInstrumentation(),
 	};
 }
@@ -42,6 +60,7 @@ export function createInfiniteRowModelRuntime<TRowData>(store: RowModelRuntimeSt
 		getCellValue: store.getCellValue,
 		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
 		applyRefreshInvalidation: (refreshResult, options) => store.engine.applyRowModelRefreshInvalidation(refreshResult, options),
+		publishAsyncRowModelUpdate: (publication) => publishAsyncRowModelUpdate(store, publication),
 		reportRowPipelineFault: (operation, error, context) =>
 			store.reportRuntimeFault({
 				source: 'row-pipeline',
@@ -49,6 +68,7 @@ export function createInfiniteRowModelRuntime<TRowData>(store: RowModelRuntimeSt
 				error,
 				context,
 			}),
+		requestLayoutTransitionCapture: (reason) => store.engine.requestLayoutTransitionCapture(reason),
 		clearFormulas: () => store.engine.clearFormulas(),
 		isScrollingFast: () => store.engine.isScrollingFast(),
 		getScrollVelocity: () => store.engine.getScrollVelocity(),
@@ -74,7 +94,7 @@ export function createInfiniteRowModelRuntime<TRowData>(store: RowModelRuntimeSt
 	};
 }
 
-export function createServerPageRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ServerPageRowModelRuntime<TRowData> {
+export function createServerSideRowModelRuntime<TRowData>(store: RowModelRuntimeStoreBridge<TRowData>): ServerSideRowModelRuntime<TRowData> {
 	return {
 		getState: store.getState,
 		initializeModel: (model) => store.engine.initializeRowModelState(model),
@@ -85,6 +105,7 @@ export function createServerPageRowModelRuntime<TRowData>(store: RowModelRuntime
 		getCellValue: store.getCellValue,
 		bumpGlobalVersion: () => store.engine.bumpRowModelGlobalVersion(),
 		applyRefreshInvalidation: (refreshResult, options) => store.engine.applyRowModelRefreshInvalidation(refreshResult, options),
+		publishAsyncRowModelUpdate: (publication) => publishAsyncRowModelUpdate(store, publication),
 		reportRowPipelineFault: (operation, error, context) =>
 			store.reportRuntimeFault({
 				source: 'row-pipeline',
@@ -92,15 +113,11 @@ export function createServerPageRowModelRuntime<TRowData>(store: RowModelRuntime
 				error,
 				context,
 			}),
+		requestLayoutTransitionCapture: (reason) => store.engine.requestLayoutTransitionCapture(reason),
 		clearFormulas: () => store.engine.clearFormulas(),
 		setLoadingState: (loading) => store.engine.setRowModelLoadingState(loading),
-		dispatchServerPageLoadingStarted: (payload) => store.dispatchEvent(GridEventName.serverPageLoadingStarted, payload),
-		dispatchServerPageLoaded: (payload) => {
-			store.dispatchEvent(GridEventName.serverPageLoaded, payload);
-			store.dispatchEvent(GridEventName.serverPageChanged, payload);
-		},
-		dispatchServerPageLoadFailed: (payload) => store.dispatchEvent(GridEventName.serverPageLoadFailed, payload),
-		setServerPageState: (state) => store.engine.setServerPageState(state),
+		setServerSideState: (state) => store.engine.setServerSideState(state),
+		publishServerSideState: (state) => store.engine.publishServerSideState(state),
 		getInstrumentation: () => store.getInstrumentation(),
 	};
 }

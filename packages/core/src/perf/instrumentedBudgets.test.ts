@@ -10,6 +10,7 @@
  * Wall-clock baselines are in docs/architecture/baseline.json (informational).
  */
 import { describe, it, expect } from 'vitest';
+import { GridFlightRecorder } from '../diagnostics/GridFlightRecorder.js';
 import { GridStore } from '../store.js';
 import { ClientRowModelController } from '../rowModel.js';
 import { RecordingGridInstrumentation, GridMetric } from '../diagnostics/GridInstrumentation.js';
@@ -74,6 +75,20 @@ describe('Budget: scroll does not trigger row pipeline full rebuild', () => {
 		expect(fullRebuilds, 'scroll must not trigger full row pipeline rebuild').toBe(0);
 
 		controller.dispose();
+	});
+});
+
+describe('flight recorder disabled budget', () => {
+	it('does not invoke event factories while disabled', () => {
+		const recorder = new GridFlightRecorder();
+		let allocations = 0;
+		for (let index = 0; index < 100_000; index++)
+			recorder.record(() => {
+				allocations++;
+				return { type: 'fault', source: 'perf', operation: 'disabled', message: 'never' };
+			});
+		expect(allocations).toBe(0);
+		expect(recorder.snapshot().events).toHaveLength(0);
 	});
 });
 

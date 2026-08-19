@@ -1,34 +1,62 @@
-import type { GridCellRange, GridCellPointer, GridSelectionSource, GridSelectionState, SelectionChangeResult } from '../api/GridApi.js';
+import type {
+	CanonicalGridCellPointer,
+	GridCellRangeBounds,
+	GridCellRange,
+	GridCellPointer,
+	GridSelectionSource,
+	SelectionChangeResult,
+} from '../api/GridApi.js';
 import type { ColumnDef } from '../columnDef.js';
+import { getColumnInstanceIdentity } from '../columnDef.js';
+import { getCellPointerColumnKey } from '../interaction/cellPointer.js';
+import type { CanonicalGridSelectionState } from '../interaction/interactionState.js';
 import type { RowModel } from '../rowModel.js';
-import type { GridCellRangeBounds } from '../state/GridState.js';
 
 export class SelectionModel {
-	private state: GridSelectionState = {
+	private versionCounter = 0;
+	private state: CanonicalGridSelectionState = {
 		focus: null,
 		anchor: null,
 		range: null,
 		bounds: null,
 		source: 'program',
+		focusOrigin: null,
+		version: 0,
 	};
 
 	public init(): void {}
 
-	public getState(): GridSelectionState {
+	public getState(): CanonicalGridSelectionState {
 		return this.state;
 	}
 
-	public setSelection(selection: Partial<GridSelectionState>): GridSelectionState {
+	public setSelection(selection: Partial<CanonicalGridSelectionState>): CanonicalGridSelectionState {
 		const next = {
 			...this.state,
 			...selection,
 		};
+		const focusChanged = next.focus !== this.state.focus;
+		if (selection.focusOrigin === undefined) {
+			next.focusOrigin = next.focus ? (focusChanged ? next.source : (this.state.focusOrigin ?? next.source)) : null;
+		}
+		if (selection.version === undefined) {
+			const changed =
+				next.focus !== this.state.focus ||
+				next.anchor !== this.state.anchor ||
+				next.range !== this.state.range ||
+				next.bounds !== this.state.bounds ||
+				next.source !== this.state.source ||
+				next.focusOrigin !== this.state.focusOrigin;
+			next.version = changed ? ++this.versionCounter : (this.state.version ?? this.versionCounter);
+		}
 		if (
 			next.focus === this.state.focus &&
 			next.anchor === this.state.anchor &&
 			next.range === this.state.range &&
 			next.bounds === this.state.bounds &&
-			next.source === this.state.source
+			next.source === this.state.source &&
+			next.focusOrigin === this.state.focusOrigin &&
+			next.version === this.state.version
 		) {
 			return this.state;
 		}
@@ -36,25 +64,46 @@ export class SelectionModel {
 		return this.state;
 	}
 
-	public createCellSelection(pointer: GridCellPointer | null, source: GridSelectionSource = 'program'): GridSelectionState {
+	public createCellSelection(pointer: CanonicalGridCellPointer | null, source: GridSelectionSource = 'program'): CanonicalGridSelectionState {
+		const version = ++this.versionCounter;
 		return {
 			focus: pointer,
 			anchor: pointer,
 			range: pointer ? { start: pointer, end: pointer } : null,
 			bounds: null,
 			source,
+			focusOrigin: pointer ? source : null,
+			version,
 		};
 	}
 
-	public extendSelection(anchor: GridCellPointer | null, end: GridCellPointer, source: GridSelectionSource = 'program'): GridSelectionState {
-		const start = anchor ?? this.state.anchor ?? this.state.focus ?? end;
+	public createSelectionRange(
+		start: CanonicalGridCellPointer | null,
+		end: CanonicalGridCellPointer | null,
+		source: GridSelectionSource = 'program'
+	): CanonicalGridSelectionState {
+		const focus = end;
+		const anchor = start;
+		const range = start !== null && end !== null ? { start, end } : null;
+		const version = ++this.versionCounter;
 		return {
-			focus: end,
-			anchor: start,
-			range: { start, end },
+			focus,
+			anchor,
+			range,
 			bounds: null,
 			source,
+			focusOrigin: focus ? source : null,
+			version,
 		};
+	}
+
+	public extendSelection(
+		anchor: CanonicalGridCellPointer | null,
+		end: CanonicalGridCellPointer,
+		source: GridSelectionSource = 'program'
+	): CanonicalGridSelectionState {
+		const start = anchor ?? this.state.anchor ?? this.state.focus ?? end;
+		return this.createSelectionRange(start as CanonicalGridCellPointer | null, end, source);
 	}
 
 	public isRowSelected(rowIndex: number): boolean {
@@ -70,7 +119,7 @@ export class SelectionModel {
 	public calculateRangeBounds(
 		range: GridCellRange | null,
 		getRowIndexById: (id: string) => number,
-		getColumnIndex: (field: string) => number
+		getColumnIndex: (pointer: GridCellPointer) => number
 	): GridCellRangeBounds | null {
 		if (!range) return null;
 
@@ -78,8 +127,8 @@ export class SelectionModel {
 		const endIdx = getRowIndexById(range.end.rowId);
 		if (startIdx === -1 || endIdx === -1) return null;
 
-		const startColIdx = getColumnIndex(range.start.colField);
-		const endColIdx = getColumnIndex(range.end.colField);
+		const startColIdx = getColumnIndex(range.start);
+		const endColIdx = getColumnIndex(range.end);
 		if (startColIdx === -1 || endColIdx === -1) return null;
 
 		return {
@@ -171,8 +220,8 @@ export class SelectionModel {
 	}
 
 	public describeChange<TRowData>(
-		prevSelection: GridSelectionState,
-		nextSelection: GridSelectionState,
+		prevSelection: CanonicalGridSelectionState,
+		nextSelection: CanonicalGridSelectionState,
 		rowModel: RowModel<TRowData> | null,
 		columns: ColumnDef<TRowData>[]
 	): SelectionChangeResult {
@@ -182,7 +231,7 @@ export class SelectionModel {
 		const seenRows = new Set<string>();
 		const addCell = (cell: GridCellPointer | null) => {
 			if (!cell) return;
-			const key = `${cell.rowId}:${cell.colField}`;
+			const key = `${cell.rowId}:${getCellPointerColumnKey(cell)}`;
 			if (seenCells.has(key)) return;
 			seenCells.add(key);
 			invalidatedCells.push(cell);
@@ -204,7 +253,12 @@ export class SelectionModel {
 				const visualRow = rowModel.getVisualRow(rowIdx);
 				const col = columns[colIdx];
 				if (visualRow?.kind === 'data' && col) {
-					addCell({ rowId: visualRow.rowId, colField: col.field });
+					addCell({
+						rowId: visualRow.rowId,
+						colField: col.field,
+						colId: 'colId' in col ? col.colId : undefined,
+						columnInstanceId: getColumnInstanceIdentity(col),
+					});
 					addRow(visualRow.rowId);
 				} else if (visualRow) {
 					addRow(visualRow.id);

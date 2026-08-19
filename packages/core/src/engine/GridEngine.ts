@@ -2,6 +2,7 @@ import { canEditCell, isDataCellSelectable } from '../visualRow.js';
 import { GridEventName } from '../api/GridEvents.js';
 import type { GridEventListener, GridEventPayloadMap } from '../api/GridEvents.js';
 import type {
+	CanonicalGridCellPointer,
 	CellSubscription,
 	GridCellPointer,
 	GridCellRange,
@@ -15,11 +16,21 @@ import type {
 	RowSelectionGestureSource,
 	RowSelectionScope,
 } from '../api/GridApi.js';
-import type { ColumnDef } from '../columnDef.js';
+import {
+	areCanonicalCellPointersEqual,
+	findColumnByCanonicalCellPointer,
+	findColumnByCellPointer,
+	resolveCanonicalCellPointer,
+} from '../interaction/cellPointer.js';
+import { buildInteractionState } from '../interaction/interactionState.js';
+import { getColumnInstanceIdentity, type ColumnDef, type GridRendererOptions } from '../columnDef.js';
 import type { GridIntegrityState, InternalGridState, Listener } from '../state/GridState.js';
 import {
 	asAllDataNodesCapableRowModel,
+	asInfiniteControllableRowModel,
 	asRowOrderCapableModel,
+	asRowExpansionStateReadableModel,
+	asServerSideControllableRowModel,
 	type RowModel,
 	type RowModelRefreshResult,
 	type VisualRowModel,
@@ -33,8 +44,9 @@ import { ColumnModel } from '../models/ColumnModel.js';
 import { ViewportModel } from '../models/ViewportModel.js';
 import { GeometryModel } from '../models/GeometryModel.js';
 import { SelectionModel } from '../models/SelectionModel.js';
-import { EditModel } from '../models/EditModel.js';
 import { CellAccessModel } from '../models/CellAccess.js';
+import { mapInternalRowNodeTransaction } from './publicRowNodeDispatch.js';
+import type { InternalRowNodeTransaction } from '../rowTransactions.js';
 import { DagEngine, type FormulaCellCoordinate } from '../calculations/dagEngine.js';
 import { SpreadsheetFillEngine } from '../spreadsheet/fillRange.js';
 import type { GridEngineConfig } from './GridEngineConfig.js';
@@ -66,11 +78,18 @@ import { GridInsightRegistry } from '../insights/GridInsightRegistry.js';
 import { GridDataIntegrityManager } from '../features/dataIntegrity/GridDataIntegrityManager.js';
 import { createGridIntegrityRowProvider, type GridIntegrityRowModelKind } from '../features/dataIntegrity/GridIntegrityRowProvider.js';
 import { defaultGridScheduler } from '../renderer/gridScheduler.js';
+import type { LayoutTransitionReason } from '../renderer/layoutTransitionController.js';
 import type { GridMutationRejection } from './GridDomainMutation.js';
 import type { GridCommitResult as InternalGridCommitResult } from './GridChangeApplier.js';
 import { GridDomainSubscriptionHub } from './GridDomainSubscriptionHub.js';
-import { GridEngineRenderBridge } from './GridEngineRenderBridge.js';
+import { normalizeInitialActiveEdit, normalizeInitialSelection } from './normalizeInitialInteractionState.js';
 import { CellDisplaySnapshotStore, type CellDisplaySnapshot } from '../renderer/cellDisplaySnapshot.js';
+import { HtmlScrollSnapshotStore } from '../renderer/htmlScrollSnapshotStore.js';
+import { RowCtrlStore } from '../renderer/controllers/RowCtrlStore.js';
+import type { RowsUpdatedDispatchPayload } from './runtimePorts.js';
+import { mapRowsUpdatedDispatchPayload, type PublicRowNodeDispatchDeps } from './publicRowNodeDispatch.js';
+import { GridFlightRecorder } from '../diagnostics/GridFlightRecorder.js';
+import { RenderRequestCoordinator } from './RenderRequestCoordinator.js';
 
 export type ManagedRowDragBlockReason =
 	| 'unsupported-row-model'
@@ -94,13 +113,12 @@ export class GridEngine<TRowData = unknown> {
 	public readonly viewport: ViewportModel<TRowData>;
 	public readonly geometry: GeometryModel;
 	public readonly selection: SelectionModel;
-	public readonly edit: EditModel;
 	public readonly cellAccess: CellAccessModel<TRowData>;
-
 	public readonly stateManager: StateManager<TRowData>;
 	public readonly commandHistory: CommandHistory;
 	public readonly eventBus: EventBus<TRowData>;
 	public readonly runtimeFaults: RuntimeFaultReporter<TRowData>;
+	public readonly flightRecorder = new GridFlightRecorder();
 	public readonly invalidation: InvalidationManager;
 	public readonly changeApplier: GridCommitKernel<TRowData>;
 	public readonly columnFeature: ColumnFeatureController<TRowData>;
@@ -123,7 +141,6 @@ export class GridEngine<TRowData = unknown> {
 	public setApiRef(api: import('../api/GridApi.js').GridApi<TRowData>): void {
 		this._apiRef = api;
 	}
-
 	private getDistinctValueSourceNodes(): RowNode<TRowData>[] {
 		return asAllDataNodesCapableRowModel(this.rowModel)?.getAllDataNodes() ?? [];
 	}
@@ -216,6 +233,11 @@ export class GridEngine<TRowData = unknown> {
 	// Per-row version map for zero-allocation mutation tracking.
 	public readonly rowVersions = new Map<string, number>();
 	public readonly cellDisplaySnapshots = new CellDisplaySnapshotStore();
+	public readonly htmlScrollSnapshots: HtmlScrollSnapshotStore;
+	/** Owns RowCtrl/CellCtrl semantic identity — see controllers/RowCtrlStore.ts. */
+	public readonly rowCtrls = new RowCtrlStore<TRowData>();
+	/** Grid-wide scroll presentation policy — see columnDef.ts's GridRendererOptions. */
+	public readonly rendererOptions: GridRendererOptions | undefined;
 
 	private _scrollStateProvider: { isScrolling(): boolean; phase: string } | null = null;
 
@@ -241,17 +263,40 @@ export class GridEngine<TRowData = unknown> {
 	public customRendererWarmMisses = 0;
 
 	private readonly cellNotifications: CellNotificationController<TRowData>;
-	private readonly renderBridge: GridEngineRenderBridge<TRowData>;
-	private renderTransactionDepth = 0;
-	private pendingRenderReason: string | null = null;
+	private readonly renderRequests: RenderRequestCoordinator<TRowData>;
 
 	private readonly getContainerElement: () => HTMLElement | null;
 
 	constructor(config: GridEngineConfig<TRowData>) {
 		this.getContainerElement = config.getContainerElement ?? (() => null);
+		this.rendererOptions = config.rendererOptions;
+		this.htmlScrollSnapshots = new HtmlScrollSnapshotStore(config.rendererOptions?.htmlSnapshot?.maxTotalBytes, {
+			maxEntries: config.rendererOptions?.htmlSnapshot?.maxSnapshots,
+			maxSingleEntryBytes: config.rendererOptions?.htmlSnapshot?.maxSingleSnapshotBytes,
+		});
 		this.eventBus = new EventBus<TRowData>();
+		this.renderRequests = new RenderRequestCoordinator(this.eventBus);
+		// Sweep RowCtrl/CellCtrl identity for rows permanently removed via a structural transaction
+		// (grid.applyTransaction({ remove: [...] })). Known gap, not a regression: a full row-data
+		// replace (setRowData) does not emit removedNodes (see RowDataStore.setRows/
+		// replaceRowsStructurally), so it isn't swept here either — this matches the codebase's
+		// existing convention for rowVersions/cellDisplaySnapshots, neither of which is swept on
+		// removal today. A sweep() call against the full live-rowId set would close that gap but
+		// costs O(total rows) per event, which is undesirable on every transaction for large grids.
+		this.eventBus.addEventListener(GridEventName.rowsUpdated, (event) => {
+			const removedNodes = event.payload.removedNodes;
+			if (!removedNodes || removedNodes.length === 0) return;
+			for (const node of removedNodes) this.rowCtrls.delete(node.id);
+		});
 		this.runtimeFaults = new RuntimeFaultReporter<TRowData>({
 			emit: (fault) => this.eventBus.dispatchEvent(GridEventName.runtimeFault, fault),
+			observe: (fault) =>
+				this.flightRecorder.record(() => ({
+					type: 'fault',
+					source: fault.source,
+					operation: fault.operation,
+					message: fault.message,
+				})),
 		});
 		this.eventBus.setRuntimeFaultReporter(this.runtimeFaults);
 		this.commandHistory = new CommandHistory(this.runtimeFaults);
@@ -294,16 +339,34 @@ export class GridEngine<TRowData = unknown> {
 		});
 		this.viewport = new ViewportModel<TRowData>();
 		this.selection = new SelectionModel();
-		this.edit = new EditModel();
 		this.cellAccess = new CellAccessModel<TRowData>({
 			getRowModel: () => this.rowModel,
+			getRowId: (row) => this.data.getRowId(row),
+			getRawRowById: (rowId) => this.rowModel?.getRawRowById(rowId) ?? null,
 			getColumnIndex: (colField) => this.columns.getColumnIndex(colField),
 			getColumnDef: (colField) => this.columns.getColumnDef(colField),
+			getColumnIndexByFieldOrInstanceId: (fieldOrInstanceId) => {
+				const column = this.columns.getColumnByFieldOrInstanceId(fieldOrInstanceId);
+				return column ? this.columns.getIndexMapper().idToVisualIndex(column.instanceId) : -1;
+			},
+			getColumnByFieldOrInstanceId: (fieldOrInstanceId) => this.columns.getColumnByFieldOrInstanceId(fieldOrInstanceId),
 			getCellValue: (rowId, colField) => this.data.getCellValue(rowId, colField),
 			getRawCellValue: (rowId, colField) => this.data.getRawCellValue(rowId, colField),
 			getState: () => this.stateManager.getState(),
 			isRowSelected: (rowIndex) => this.selection.isRowSelected(rowIndex),
 			isRowLoading: (rowId) => this.data.isRowLoading(rowId),
+			isDetailExpanded: (rowId) => asRowExpansionStateReadableModel(this.rowModel)?.isDetailExpanded(rowId) ?? false,
+			selectRows: (rowIds, options) => {
+				if (options?.mode === 'replace') this.replaceRowIds(rowIds, 'api');
+				else this.selectRowIds(rowIds, 'api');
+			},
+			deselectRows: (rowIds) => this.deselectRowIds(rowIds, 'api'),
+			scrollToRow: () => {},
+			setCellValue: (rowId, field, value) => this.setCellValue(rowId, field, value),
+			applyTransaction: (input) => this.applyTransaction(input),
+			refreshRows: () => this.rowModel?.refresh(),
+			getRowModelType: () =>
+				asServerSideControllableRowModel(this.rowModel) ? 'server' : asInfiniteControllableRowModel(this.rowModel) ? 'infinite' : 'client',
 		});
 		this.cellNotifications = new CellNotificationController<TRowData>({
 			data: this.data,
@@ -322,10 +385,21 @@ export class GridEngine<TRowData = unknown> {
 			cellNotifications: this.cellNotifications,
 			getRowModel: () => this.rowModel,
 			getRowHeightsList: (rowModel, rowHeightsRecord, defaultRowHeight) => this.getRowHeightsList(rowModel, rowHeightsRecord, defaultRowHeight),
-			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
+			notifyCellChange: (rowId, colField, includeRenderInvalidation, renderColId) =>
+				this.notifyCellChange(rowId, colField, includeRenderInvalidation, renderColId),
 		});
 
-		const initialSelection = config.selection ?? this.selection.createCellSelection(null, 'program');
+		const initialSelection = normalizeInitialSelection(
+			config.selection ?? null,
+			config.columns,
+			(pointer, columns) => this.resolveCanonicalCellPointer(pointer, columns),
+			() => this.selection.createCellSelection(null, 'program'),
+			(pointer, source) => this.selection.createCellSelection(pointer, source),
+			(start, end, source) => this.selection.createSelectionRange(start, end, source)
+		);
+		const initialActiveEdit = normalizeInitialActiveEdit(config.activeEdit ?? null, config.columns, (pointer, columns) =>
+			this.resolveCanonicalCellPointer(pointer, columns)
+		);
 
 		// Set initial state
 		const initialState: InternalGridState<TRowData> = {
@@ -338,7 +412,7 @@ export class GridEngine<TRowData = unknown> {
 			defaultRowHeight: config.defaultRowHeight || 40,
 			defaultColWidth: config.defaultColWidth || 100,
 			enableColumnReorder: config.enableColumnReorder ?? true,
-			activeEdit: config.activeEdit || null,
+			activeEdit: initialActiveEdit,
 			sortModel: config.sortModel || null,
 			filterModel: config.filterModel || null,
 			quickFilterModel: config.quickFilterModel || null,
@@ -373,19 +447,15 @@ export class GridEngine<TRowData = unknown> {
 			colBuffer: config.colBuffer ?? 2,
 			runtimeLimits: config.runtimeLimits,
 			overscanAdaptive: config.overscanAdaptive,
+			interaction: buildInteractionState({
+				selection: initialSelection,
+				activeEdit: initialActiveEdit,
+				selectedRowIds: config.selectedRowIds ?? [],
+			}),
 			integrity: _createEmptyIntegrityState<TRowData>(),
 		};
 
 		this.stateManager = new StateManager<TRowData>(initialState, undefined, this.runtimeFaults, this.instrumentation);
-		this.renderBridge = new GridEngineRenderBridge<TRowData>({
-			stateManager: this.stateManager,
-			commandHistory: this.commandHistory,
-			cellNotifications: this.cellNotifications,
-			requestRender: (reason) => this.requestRender(reason),
-			beginRenderTransaction: () => this.beginRenderTransaction(),
-			endRenderTransaction: () => this.endRenderTransaction(),
-		});
-
 		const capCfg = config.capabilities ?? (config.canPerformAction ? { canPerformAction: config.canPerformAction } : {});
 		this.capabilityManager = new GridCapabilityManager<TRowData>(
 			capCfg,
@@ -397,8 +467,15 @@ export class GridEngine<TRowData = unknown> {
 			stateManager: this.stateManager,
 			invalidation: this.invalidation,
 			eventBus: this.eventBus,
+			dispatchEvent: (type, payload) => {
+				if (type === GridEventName.rowsUpdated) {
+					this.dispatchRowsUpdated(payload as RowsUpdatedDispatchPayload<TRowData>);
+					return;
+				}
+				this.dispatchEvent(type, payload as GridEventPayloadMap<TRowData>[typeof type]);
+			},
 			commandHistory: this.commandHistory,
-			requestRender: (reason) => this.requestRender(reason),
+			requestRender: (reason, changeId) => this.requestRender(reason, changeId),
 			commitContext: {
 				getState: () => this.stateManager.getState(),
 				getRowModel: () => this.rowModel,
@@ -409,11 +486,13 @@ export class GridEngine<TRowData = unknown> {
 				applyCellValueChange: (rowId, colField, value, options) => this.dataMutation.applyCellValueChange(rowId, colField, value, options),
 				applyStructuralWriteEffects: (writeResult) => this.dataMutation.applyStructuralWriteEffects(writeResult),
 				publishCommittedCellChanges: (changes) => this.publishCommittedCellChanges(changes),
+				requestLayoutTransitionCapture: (reason) => this.requestLayoutTransitionCapture(reason),
 			},
 			domainMutationExecutorRegistry: createDefaultGridDomainMutationExecutorRegistry<TRowData>(),
 			publishDomains: (domains) => this.publishDomains(domains),
 			projectStateChange: (phase) => this.projectionPipeline.run({ phase }),
 			faultReporter: this.runtimeFaults,
+			flightRecorder: this.flightRecorder,
 		});
 
 		const featureContext = {
@@ -432,9 +511,9 @@ export class GridEngine<TRowData = unknown> {
 		});
 		this.clipboard = new ClipboardController<TRowData>({
 			getState: () => this.stateManager.getState(),
+			getDisplayedColumns: () => this.columns.getDisplayedColumns(),
 			getVisualRow: (idx) => this.rowModel?.getVisualRow(idx) ?? null,
 			getVisualIndexByRowId: (id) => this.rowModel?.getVisualIndexByRowId(id) ?? null,
-			getColumnIndex: (f) => this.columns.getColumnIndex(f),
 			getCellValue: (rowId, colField) => this.data.getCellValue(rowId, colField),
 			getCheapDisplayValue: (rowId, colField) => this.data.getCheapDisplayValue(rowId, colField),
 			getRawRowById: (rowId) => this.rowModel?.getRawRowById(rowId) ?? null,
@@ -442,6 +521,7 @@ export class GridEngine<TRowData = unknown> {
 			dispatchEvent: (type, payload) => this.eventBus.dispatchEvent(type, payload),
 			validateWriteProposal: (updates, source) => this.dataIntegrity?.validateWriteProposal(updates, source) ?? Promise.resolve([]),
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
+			recordRejectedWrite: (reason, cell) => this.flightRecorder.recordRejectedWrite(reason, cell),
 		});
 		this.groupingFeature = new GroupingFeatureController<TRowData>({
 			ctx: featureContext,
@@ -454,11 +534,13 @@ export class GridEngine<TRowData = unknown> {
 			ctx: featureContext,
 			getRowModel: () => this.rowModel,
 			data: this.data,
-			notifyCellChange: (rowId, colField) => this.notifyCellChange(rowId, colField),
+			notifyCellChange: (rowId, colField, includeRenderInvalidation, renderColId) =>
+				this.notifyCellChange(rowId, colField, includeRenderInvalidation, renderColId),
 			validateCommittedCells: (cells, source) => this.dataIntegrity?.validateCommittedCells(cells, source) ?? Promise.resolve(),
 			validateWriteProposal: (updates, source) => this.dataIntegrity?.validateWriteProposal(updates, source) ?? Promise.resolve([]),
 			checkCapability: (action, p) => this.capabilityManager.can(action, p),
 			dispatchEvent: (type, payload) => this.eventBus.dispatchEvent(type, payload),
+			recordRejectedWrite: (reason, cell) => this.flightRecorder.recordRejectedWrite(reason, cell),
 		});
 		this.rowSelectionFeature = new RowSelectionFeatureController<TRowData>(featureContext, () => this.rowModel);
 		this.stateFeature = new GridStateFeatureController<TRowData>({
@@ -529,7 +611,6 @@ export class GridEngine<TRowData = unknown> {
 		this.viewport.init(this);
 		this.geometry.init();
 		this.selection.init();
-		this.edit.init();
 
 		if (config.columns) {
 			this.columns.updateColumns(config.columns, config.columnWidths || {}, config.defaultColWidth);
@@ -591,7 +672,7 @@ export class GridEngine<TRowData = unknown> {
 		const changed = refreshResult?.changed === true;
 		if (!changed && !options.includeHeaders && !options.includeOverlay) return;
 
-		const reason = options.invalidationReason;
+		const reason = refreshResult?.layoutTransitionHint === 'live-reorder' ? 'sort' : options.invalidationReason;
 		const targetGroupId = refreshResult?.groupId ?? options.groupId;
 		if (targetGroupId) {
 			this.invalidation.invalidateGroup(targetGroupId, reason);
@@ -612,6 +693,10 @@ export class GridEngine<TRowData = unknown> {
 			this.invalidation.invalidateOverlay(reason);
 		}
 		this.requestRender(options.requestRenderReason ?? String(reason));
+	}
+
+	public requestLayoutTransitionCapture(reason: LayoutTransitionReason): void {
+		this.eventBus.dispatchEvent(GridEventName.layoutTransitionCaptureRequested, { reason });
 	}
 
 	public getManagedRowDragPolicy(): ManagedRowDragPolicyResult {
@@ -675,8 +760,8 @@ export class GridEngine<TRowData = unknown> {
 			reason: 'rows:apply-transaction',
 			domainMutations: [{ kind: 'row-transaction', transaction }],
 		});
-		const result = execution.appliedMutations[0]?.result as RowNodeTransaction<TRowData> | undefined;
-		return result ?? null;
+		const result = execution.appliedMutations[0]?.result as InternalRowNodeTransaction<TRowData> | undefined;
+		return result ? mapInternalRowNodeTransaction(this.getPublicRowNodeDispatchDeps(), result) : null;
 	}
 
 	public replaceRows(rows: readonly TRowData[]): GridWriteResult {
@@ -713,12 +798,16 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
-	public setServerPageState(state: NonNullable<InternalGridState<TRowData>['serverPage']>): void {
+	public setServerSideState(state: NonNullable<InternalGridState<TRowData>['serverSide']>): void {
 		this.changeApplier.apply({
-			reason: 'rows:set-server-page',
-			state: { serverPage: state },
+			reason: 'rows:set-server-side',
+			state: { serverSide: state },
 			requestRender: false,
 		});
+	}
+	public publishServerSideState(state: NonNullable<InternalGridState<TRowData>['serverSide']>): void {
+		this.setServerSideState(state);
+		this.eventBus.dispatchEvent(GridEventName.serverSideStateChanged, state);
 	}
 
 	public setVisibleRanges(
@@ -759,6 +848,42 @@ export class GridEngine<TRowData = unknown> {
 		this.eventBus.dispatchEvent(type, payload);
 	}
 
+	private getPublicRowNodeDispatchDeps(): PublicRowNodeDispatchDeps<TRowData> {
+		return {
+			getRowId: (row) => this.getRowId(row),
+			getRawRowById: (targetRowId) => this.rowModel?.getRawRowById(targetRowId) ?? null,
+			getCellValue: (targetRowId, field) => this.data.getCellValue(targetRowId, field),
+			getVisualIndexByRowId: (targetRowId) => this.rowModel?.getVisualIndexByRowId(targetRowId) ?? null,
+			getVisualRowCount: () => this.rowModel?.getVisualRowCount() ?? 0,
+			getSelectedRowIds: () => this.stateManager.getState().selectedRowIds,
+			isGroupExpanded: (groupId) => asRowExpansionStateReadableModel(this.rowModel)?.isGroupExpanded(groupId) ?? false,
+			isDetailExpanded: (targetRowId) => asRowExpansionStateReadableModel(this.rowModel)?.isDetailExpanded(targetRowId) ?? false,
+			selectRows: (rowIds, options) => (options?.mode === 'replace' ? this.replaceRowIds(rowIds, 'api') : this.selectRowIds(rowIds, 'api')),
+			deselectRows: (rowIds) => this.deselectRowIds(rowIds, 'api'),
+			scrollToRow: () => {},
+			setCellValue: (targetRowId, field, value) => this.setCellValue(targetRowId, field, value),
+			batchCellValues: (updates) => this.batchCellValues(updates as import('../api/GridApi.js').BatchCellValueUpdate[], 'api'),
+			toggleGroupExpanded: (groupId) => this.groupingFeature.toggleGroupExpanded(groupId),
+			toggleDetailExpanded: (rowId) => this.groupingFeature.toggleDetailExpanded(rowId),
+			refreshRows: () => this.rowModel?.refresh(),
+			retryRowLoad: (rowIndex, loadState) => {
+				if (loadState.kind !== 'failed' || rowIndex == null || !this.rowModel) {
+					return { status: 'rejected', reason: 'Row retry is not available for this row.' } as const;
+				}
+				this.rowModel.ensureRange(rowIndex, rowIndex, 'row-node-retry-load');
+				return { status: 'applied', changeId: Date.now(), faults: [] } as const;
+			},
+			getRowIssues: (rowId) => this.dataIntegrity?.buildApi().getRowIssues(rowId) ?? [],
+			validateRow: (rowId) => this.dataIntegrity?.buildApi().validateRow(rowId) ?? Promise.resolve([]),
+			getRowModelType: () =>
+				asServerSideControllableRowModel(this.rowModel) ? 'server' : asInfiniteControllableRowModel(this.rowModel) ? 'infinite' : 'client',
+		};
+	}
+
+	public dispatchRowsUpdated(payload: RowsUpdatedDispatchPayload<TRowData>): void {
+		this.eventBus.dispatchEvent(GridEventName.rowsUpdated, mapRowsUpdatedDispatchPayload(this.getPublicRowNodeDispatchDeps(), payload));
+	}
+
 	public getRowId(row: TRowData): string {
 		return this.data.getRowId(row);
 	}
@@ -774,8 +899,9 @@ export class GridEngine<TRowData = unknown> {
 	public primeDisplayValue(rowId: string, colField: string): string | undefined {
 		return this.data.primeDisplayValue(rowId, colField);
 	}
-	public getCellDisplaySnapshot(rowId: string, colField: string): CellDisplaySnapshot | undefined {
-		return this.cellDisplaySnapshots.get(rowId, colField);
+	public getCellDisplaySnapshot(rowId: string, colFieldOrInstanceId: string): CellDisplaySnapshot | undefined {
+		const column = this.columns.getColumnByFieldOrInstanceId(colFieldOrInstanceId);
+		return this.cellDisplaySnapshots.get(rowId, column?.instanceId ?? colFieldOrInstanceId);
 	}
 	public getCheapDisplayValue(rowId: string, colField: string): string {
 		return this.data.getCheapDisplayValue(rowId, colField);
@@ -833,6 +959,10 @@ export class GridEngine<TRowData = unknown> {
 		this.applySelectionRange(start, end, source);
 	}
 
+	public selectCell(pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void {
+		this.applySelectionRange(pointer, pointer, source);
+	}
+
 	public resizeColumn(colField: string, width: number, undoable = true): void {
 		this.columnFeature.resizeColumn(colField, width, undoable);
 	}
@@ -888,6 +1018,10 @@ export class GridEngine<TRowData = unknown> {
 	}
 	public resizeRow(rowId: string, height: number, undoable = true): void {
 		this.stateFeature.resizeRow(rowId, height, undoable);
+	}
+	/** Internal renderer path for a single delivery of DOM row-height measurements. */
+	public applyAutoRowHeightBatch(measuredHeights: ReadonlyMap<string, number>): void {
+		this.stateFeature.applyAutoRowHeightBatch(measuredHeights);
 	}
 	public setRowHeights(rowHeights: Record<string, number>): void {
 		this.stateFeature.setRowHeights(rowHeights);
@@ -1018,12 +1152,20 @@ export class GridEngine<TRowData = unknown> {
 		});
 	}
 
-	public startEdit(rowId: string, colField: string): void {
-		this.editingFeature.startEdit(rowId, colField);
+	public startEdit(rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void {
+		this.editingFeature.startEdit(rowId, colFieldOrInstanceId, source);
+	}
+
+	public updateEditDraft(rowId: string, colFieldOrInstanceId: string, value: unknown): void {
+		this.editingFeature.updateEditDraft(rowId, colFieldOrInstanceId, value);
 	}
 
 	public stopEdit(cancel = false): void {
 		this.editingFeature.stopEdit(cancel);
+	}
+
+	public commitEdit(rowId: string, colFieldOrInstanceId: string, value: unknown): Promise<boolean> {
+		return this.editingFeature.commitEdit(rowId, colFieldOrInstanceId, value);
 	}
 
 	public registerRowModel(rowModel: RowModel<TRowData>): void {
@@ -1112,47 +1254,68 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public batch = (callback: () => void): void => {
-		this.renderBridge.batch(callback);
+		this.beginRenderTransaction();
+		this.stateManager.startTransaction();
+		try {
+			callback();
+		} finally {
+			this.stateManager.endTransaction();
+			this.cellNotifications.flushCellUpdatesSync();
+			this.endRenderTransaction();
+		}
 	};
 
 	public scheduleBatchFlush(): void {
-		this.renderBridge.scheduleBatchFlush();
+		this.cellNotifications.scheduleBatchFlush();
 	}
 
 	public flushCellUpdates(): void {
-		this.renderBridge.flushCellUpdates();
+		this.cellNotifications.flushCellUpdates();
 	}
 
 	public enqueueCellUpdate(rowId: string, colField: string): void {
-		this.renderBridge.enqueueCellUpdate(rowId, colField);
+		this.cellNotifications.enqueueCellUpdate(rowId, colField);
 	}
 
 	public flushCellUpdatesSync(): void {
-		this.renderBridge.flushCellUpdatesSync();
+		this.cellNotifications.flushCellUpdatesSync();
 	}
 
 	public notifyBulkCellChange(changes: Map<string, Set<string>>): void {
-		this.renderBridge.notifyBulkCellChange(changes);
+		this.cellNotifications.notifyBulkCellChange(changes);
 	}
 
 	public publishCommittedCellChanges(changes: Map<string, Set<string>>): void {
-		this.renderBridge.publishCommittedCellChanges(changes, this.batchedUpdates);
+		if (this.cellNotifications.batchedUpdates) {
+			for (const [rowId, fields] of changes) {
+				for (const colField of fields) {
+					this.cellNotifications.enqueueCellUpdate(rowId, colField);
+				}
+			}
+			this.cellNotifications.scheduleBatchFlush();
+			return;
+		}
+		this.cellNotifications.publishCommittedCellChanges(changes);
 	}
 
-	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true): void {
-		this.renderBridge.notifyCellChange(rowId, colField, includeRenderInvalidation);
+	public notifyCellChange(rowId: string, colField: string, includeRenderInvalidation = true, renderColId?: string): void {
+		this.cellNotifications.notifyCellChange(rowId, colField, includeRenderInvalidation, renderColId);
 	}
 
 	public registerCellSubscription = (sub: CellSubscription): void => {
-		this.renderBridge.registerCellSubscription(sub);
+		this.cellNotifications.registerCellSubscription(sub);
 	};
 
 	public unregisterCellSubscription = (sub: CellSubscription): void => {
-		this.renderBridge.unregisterCellSubscription(sub);
+		this.cellNotifications.unregisterCellSubscription(sub);
+	};
+
+	public subscribeToRow = (rowId: string, listener: () => void): (() => void) => {
+		return this.cellNotifications.subscribeToRow(rowId, listener);
 	};
 
 	public updateCellSubscription = (sub: CellSubscription, oldRowId: string, oldColField: string, newRowId: string, newColField: string): void => {
-		this.renderBridge.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
+		this.cellNotifications.updateCellSubscription(sub, oldRowId, oldColField, newRowId, newColField);
 	};
 
 	// ── Row node selection ─────────────────────────────────────────────────────
@@ -1187,39 +1350,52 @@ export class GridEngine<TRowData = unknown> {
 
 	private applySelectionRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'program'): void => {
 		const prevSelection = this.stateManager.getState().selection;
-		const validStart = this.isDataCellSelectable(start) ? start : null;
-		const validEnd = this.isDataCellSelectable(end) ? end : null;
-		if ((start || end) && (!validStart || !validEnd)) {
-			start = validStart;
-			end = validEnd;
-		}
-		const range = start !== null && end !== null ? { start, end } : null;
+		const resolvedStart = this.resolveCanonicalCellPointer(start);
+		const resolvedEnd = this.resolveCanonicalCellPointer(end);
+		const validStart = this.isDataCellSelectable(resolvedStart) ? resolvedStart : null;
+		const validEnd = this.isDataCellSelectable(resolvedEnd) ? resolvedEnd : null;
+		const committedSelection = this.selection.createSelectionRange(validStart, validEnd, source);
 		const previewSelection = {
-			focus: end,
-			anchor: start,
-			range,
+			...committedSelection,
 			bounds: this.selection.calculateRangeBounds(
-				range,
+				committedSelection.range,
 				(id) => this.rowModel?.getVisualIndexByRowId(id) ?? -1,
-				(field) => this.columns.getColumnIndex(field)
+				(pointer) => {
+					if (!pointer.columnInstanceId) return -1;
+					const column = findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), {
+						columnInstanceId: pointer.columnInstanceId,
+					});
+					return column ? this.columns.getIndexMapper().idToVisualIndex(pointer.columnInstanceId) : -1;
+				}
 			),
-			source,
-		};
-		const committedSelection = {
-			focus: end,
-			anchor: start,
-			range,
-			bounds: null,
-			source,
 		};
 		const events: GridCommitEvent<TRowData>[] = [];
-		if (prevSelection.focus !== previewSelection.focus) {
+		if (
+			!areCanonicalCellPointersEqual(
+				this.resolveCanonicalCellPointer(prevSelection.focus),
+				this.resolveCanonicalCellPointer(previewSelection.focus)
+			)
+		) {
 			events.push({
 				type: GridEventName.focusChanged,
 				payload: (state) => ({ focus: state.selection.focus, selection: state.selection }),
 			});
 		}
-		const selectionChange = this.selection.describeChange(prevSelection, previewSelection, this.rowModel, this.stateManager.getState().columns);
+		const selectionChange = this.selection.describeChange(prevSelection, previewSelection, this.rowModel, this.columns.getDisplayedColumns());
+		const invalidatedCells = selectionChange.invalidatedCells.flatMap((cell) => {
+			const column = findColumnByCellPointer(this.columns.getDisplayedColumns(), cell);
+			const renderColId = column ? getColumnInstanceIdentity(column) : null;
+			return renderColId
+				? [
+						{
+							kind: 'cell' as const,
+							rowId: cell.rowId,
+							colId: renderColId,
+							reason: 'selection' as const,
+						},
+					]
+				: [];
+		});
 		events.push({
 			type: GridEventName.selectionChanged,
 			payload: (state) => ({
@@ -1228,12 +1404,7 @@ export class GridEngine<TRowData = unknown> {
 			}),
 		});
 		const invalidations = [
-			...selectionChange.invalidatedCells.map((cell) => ({
-				kind: 'cell' as const,
-				rowId: cell.rowId,
-				colId: cell.colField,
-				reason: 'selection' as const,
-			})),
+			...invalidatedCells,
 			...selectionChange.invalidatedRows.map((rowId) => ({ kind: 'row' as const, rowId, reason: 'selection' as const })),
 			...(selectionChange.overlayChanged ? ([{ kind: 'overlay' as const, reason: 'selection' as const }] as const) : []),
 			{ kind: 'headers' as const, reason: 'selection' as const },
@@ -1254,39 +1425,46 @@ export class GridEngine<TRowData = unknown> {
 		return canEditCell(visualRow, this.columns.getColumnDef(colField));
 	}
 
-	private isDataCellSelectable(pointer: GridCellPointer | null): pointer is GridCellPointer {
+	private isDataCellSelectable(pointer: CanonicalGridCellPointer | null): pointer is CanonicalGridCellPointer {
 		if (!pointer) return false;
 		const rowModel = this.getRowModel();
 		const rowIndex = rowModel ? rowModel.getVisualIndexByRowId(pointer.rowId) : -1;
 		const visualRow = rowIndex >= 0 && rowModel ? rowModel.getVisualRow(rowIndex) : null;
-		return isDataCellSelectable(visualRow, this.columns.getColumnDef(pointer.colField));
+		return isDataCellSelectable(
+			visualRow,
+			findColumnByCanonicalCellPointer(this.columns.getDisplayedColumns(), { columnInstanceId: pointer.columnInstanceId })
+		);
+	}
+
+	private resolveCellPointer(pointer: GridCellPointer | null): GridCellPointer | null {
+		return this.resolveCanonicalCellPointer(pointer);
+	}
+
+	private resolveCanonicalCellPointer(
+		pointer: GridCellPointer | null,
+		columns: readonly ColumnDef<TRowData>[] = this.columns.getDisplayedColumns()
+	): CanonicalGridCellPointer | null {
+		return resolveCanonicalCellPointer(columns, pointer);
 	}
 
 	public setColumns(columns: ColumnDef<TRowData>[], undoable = false): void {
 		this.columnFeature.setColumns(columns, undoable);
 	}
 
-	private requestRender(reason: string): void {
-		if (this.renderTransactionDepth > 0) {
-			this.pendingRenderReason = this.pendingRenderReason ? `${this.pendingRenderReason}+${reason}` : reason;
-			return;
-		}
-		this.eventBus.dispatchEvent(GridEventName.renderInvalidated, { reason });
+	private requestRender(reason: string, changeId?: number): void {
+		this.renderRequests.request(reason, changeId);
+	}
+
+	public takePendingRenderChangeIds(): readonly number[] {
+		return this.renderRequests.takeChangeIds();
 	}
 
 	private beginRenderTransaction(): void {
-		this.renderTransactionDepth++;
+		this.renderRequests.begin();
 	}
 
 	private endRenderTransaction(): void {
-		if (this.renderTransactionDepth === 0) return;
-		this.renderTransactionDepth--;
-		if (this.renderTransactionDepth > 0) return;
-		const reason = this.pendingRenderReason;
-		this.pendingRenderReason = null;
-		if (reason) {
-			this.eventBus.dispatchEvent(GridEventName.renderInvalidated, { reason });
-		}
+		this.renderRequests.end();
 	}
 
 	public undo(): void {
@@ -1308,6 +1486,7 @@ export class GridEngine<TRowData = unknown> {
 	}
 
 	public destroy(): void {
+		this.flightRecorder.destroy();
 		this.insights.clear();
 		this.cellNotifications.clear();
 		this.eventBus.clear();

@@ -7,7 +7,7 @@ import type {
 	GridRowContentUnmount,
 } from './IGridRenderer.js';
 import type { InternalColumnDef, DomCellRenderer } from '../columnDef.js';
-import { isDomCellRenderer } from '../columnDef.js';
+import { getColumnInstanceIdentity, isDomCellRenderer } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
 import type { GridEngine } from '../engine/GridEngine.js';
 import type { RenderRuntimeState } from './renderRuntimeState.js';
@@ -24,6 +24,8 @@ import {
 } from './identityKeys.js';
 import { GridMetric } from '../diagnostics/GridInstrumentation.js';
 import type { RenderRuntimeStats } from './renderTelemetry.js';
+import { doesCanonicalCellPointerMatchColumn } from '../interaction/cellPointer.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 
 function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: VisualRow<TRowData> | undefined): boolean {
 	if (a === b) return true;
@@ -39,6 +41,12 @@ function isVisualRowEqual<TRowData>(a: VisualRow<TRowData> | undefined, b: Visua
 	}
 	if (a.kind === 'loading' && b.kind === 'loading') {
 		return a.rowIndex === b.rowIndex;
+	}
+	if (a.kind === 'failed' && b.kind === 'failed') {
+		return a.rowIndex === b.rowIndex && a.error === b.error && a.retryable === b.retryable;
+	}
+	if (a.kind === 'placeholder' && b.kind === 'placeholder') {
+		return a.rowIndex === b.rowIndex && a.reason === b.reason;
 	}
 	if (a.kind === 'data' && b.kind === 'data') {
 		return a.rowId === b.rowId && a.node === b.node && a.depth === b.depth;
@@ -181,6 +189,7 @@ export class PortalMountManager<TRowData = unknown> {
 			cellRowBindingGeneration: mount.cellRowBindingGeneration ?? 0,
 		});
 		const col = mount.col as InternalColumnDef<TRowData>;
+		const columnInstanceId = getColumnInstanceIdentity(col);
 		const isCustom = !!(col.cellRenderer || mount.isEditing);
 
 		this.engine?.instrumentation.increment(GridMetric.CELL_RENDERER_MOUNTED);
@@ -197,7 +206,9 @@ export class PortalMountManager<TRowData = unknown> {
 
 		// DOM renderer — zero React overhead, direct DOM manipulation
 		if (!mount.isEditing && isDomCellRenderer(col.cellRenderer)) {
-			const rendererKey = rowSlotId ? createDomSlotRendererKey(rowSlotId, col.field) : createDomIndexRendererKey(rowIndex, colIndex, col.field);
+			const rendererKey = rowSlotId
+				? createDomSlotRendererKey(rowSlotId, columnInstanceId)
+				: createDomIndexRendererKey(rowIndex, colIndex, columnInstanceId);
 
 			this.domCellRendererManager.acquire({
 				rendererKey,
@@ -218,11 +229,11 @@ export class PortalMountManager<TRowData = unknown> {
 
 		// React renderer — goes through portal store
 		const rendererKey = mount.isEditing
-			? createEditRendererKey(node.id, col.field)
+			? createEditRendererKey(node.id, columnInstanceId)
 			: mount.cellInstanceId
-				? createCellInstanceRendererKey(mount.cellInstanceId, col.field)
+				? createCellInstanceRendererKey(mount.cellInstanceId, columnInstanceId)
 				: rowSlotId
-					? createSlotRendererKey(rowSlotId, col.field)
+					? createSlotRendererKey(rowSlotId, columnInstanceId)
 					: this.customRendererManager.getRendererKey(col, node.id, rowIndex, colIndex, mount.isEditing);
 
 		this.customRendererManager.acquire({
@@ -426,8 +437,9 @@ export class PortalMountManager<TRowData = unknown> {
 		const outOfBudget = (): boolean => budgetUsed >= maxItems || (deadline !== undefined && processed > 0 && deadline.timeRemaining() <= 0);
 
 		const flushState = this.engine?.stateManager.getState();
-		const activeEdit = flushState?.activeEdit;
-		const focusedCell = flushState?.selection.focus;
+		const interaction = flushState ? readInteractionState(flushState) : null;
+		const activeEdit = interaction?.activeEdit.active ?? null;
+		const focusedCell = interaction?.focus.cell ?? null;
 		const rowModel = this.engine?.getRowModel();
 		const rowCount = rowModel ? rowModel.getVisualRowCount() : 0;
 		const columns = this.engine?.columns.getDisplayedColumns() ?? [];
@@ -441,8 +453,8 @@ export class PortalMountManager<TRowData = unknown> {
 		const getPriority = (mount: GridCellContentMount<TRowData>): number => {
 			const col = mount.col;
 			const node = mount.node;
-			if (activeEdit && node.id === activeEdit.rowId && col.field === activeEdit.colField) return 1000;
-			if (focusedCell && node.id === focusedCell.rowId && col.field === focusedCell.colField) return 900;
+			if (doesCanonicalCellPointerMatchColumn(activeEdit, node.id, col)) return 1000;
+			if (doesCanonicalCellPointerMatchColumn(focusedCell, node.id, col)) return 900;
 
 			const rowIndex = mount.rowIndex ?? rowModel?.getVisualIndexByRowId(node.id) ?? -1;
 			const colIndex = mount.colIndex ?? (this.engine ? this.engine.columns.getColumnIndex(col.field) : -1);
@@ -628,6 +640,27 @@ export class PortalMountManager<TRowData = unknown> {
 
 	public getDeferredCount(): number {
 		return this.deferredCellReleases.size + this.deferredCellMounts.size + this.deferredRowReleases.size + this.deferredRowMounts.size;
+	}
+
+	/** Live ownership gauges for deterministic long-session diagnostics. */
+	public getOwnershipSnapshot(): Readonly<{
+		activeCells: number;
+		activeRows: number;
+		activeMenus: number;
+		deferredCellMounts: number;
+		deferredCellReleases: number;
+		deferredRowMounts: number;
+		deferredRowReleases: number;
+	}> {
+		return Object.freeze({
+			activeCells: this.mountedCells.size,
+			activeRows: this.mountedRows.size,
+			activeMenus: this.mountedMenus.size,
+			deferredCellMounts: this.deferredCellMounts.size,
+			deferredCellReleases: this.deferredCellReleases.size,
+			deferredRowMounts: this.deferredRowMounts.size,
+			deferredRowReleases: this.deferredRowReleases.size,
+		});
 	}
 
 	public getScrollStats(): {

@@ -61,7 +61,7 @@ export function ViewportPanel({
 					</label>
 				</div>
 
-				{/* Massive columns mode for perf/server pages */}
+				{/* Massive columns mode for perf/server-backed grids */}
 				{(activePage === 'perf' || activePage === 'server') && (
 					<label className='flex items-center gap-2 p-2 rounded-lg bg-slate-950/60 border border-slate-900 hover:border-slate-850 cursor-pointer select-none transition-all'>
 						<input

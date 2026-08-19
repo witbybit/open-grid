@@ -1,13 +1,17 @@
-import type { GridApi, GridCellPointer, GridPlugin, GridPluginRuntime, GridSelectionState } from './api/GridApi.js';
+import type { CanonicalGridCellPointer, GridApi, GridCellPointer, GridPlugin, GridPluginRuntime } from './api/GridApi.js';
 import { exportToCsv } from './export/csvExport.js';
 import { attachRovingMenuKeyboard } from './menuKeyboardNav.js';
 import { isFilterableColumn, buildFilterByValue, applyFilterToModel } from './filterOperations.js';
+import { findColumnIndexByCanonicalCellPointer, resolveCanonicalCellPointer } from './interaction/cellPointer.js';
+import type { ColumnDef } from './columnDef.js';
+import { readInteractionState, type CanonicalGridSelectionState } from './interaction/interactionState.js';
 
 export interface ContextMenuParams<TRowData = unknown> {
 	rowId: string;
 	colField: string;
+	pointer: CanonicalGridCellPointer;
 	api: GridApi<TRowData>;
-	selection: GridSelectionState;
+	selection: CanonicalGridSelectionState;
 }
 
 export interface GridContextMenuItem<TRowData = unknown> {
@@ -46,7 +50,7 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	private runtime!: GridPluginRuntime<TRowData>;
 	private menuElement: HTMLDivElement | null = null;
 	private detachKeyboardNav: (() => void) | null = null;
-	private activePointer: GridCellPointer | null = null;
+	private activePointer: CanonicalGridCellPointer | null = null;
 	private options: GridContextMenuOptions<TRowData>;
 
 	constructor(options: GridContextMenuOptions<TRowData> = {}) {
@@ -62,16 +66,29 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 	}
 
 	public show(rowId: string, colField: string, clientX: number, clientY: number): void {
+		this.showPointer({ rowId, colField }, clientX, clientY);
+	}
+
+	private resolveCanonicalPointer(pointer: GridCellPointer, columns: readonly ColumnDef<TRowData>[]): CanonicalGridCellPointer | null {
+		return resolveCanonicalCellPointer(columns, pointer);
+	}
+
+	public showPointer(pointer: GridCellPointer, clientX: number, clientY: number): void {
 		if (this.options.disabled) return;
 
 		const state = this.runtime.getStateSnapshot();
+		const canonicalPointer = this.resolveCanonicalPointer(pointer, state.columns);
+		if (!canonicalPointer) return;
+		const selection = readInteractionState(state).cellSelection.selection;
+		const explicitColIdx = findColumnIndexByCanonicalCellPointer(state.columns, canonicalPointer);
+		const access = this.runtime.getCellAccessByPointer(canonicalPointer);
 		let inSelection = false;
-		if (state.selection.bounds) {
+		if (selection.bounds) {
 			const rowModel = this.runtime.getRowModel();
 			if (rowModel) {
-				const clickedRowIdx = rowModel.getVisualIndexByRowId(rowId);
-				const clickedColIdx = state.columns.findIndex((c) => c.field === colField);
-				const bounds = state.selection.bounds;
+				const clickedRowIdx = access?.rowIndex ?? rowModel.getVisualIndexByRowId(canonicalPointer.rowId);
+				const clickedColIdx = explicitColIdx >= 0 ? explicitColIdx : (access?.colIndex ?? explicitColIdx);
+				const bounds = selection.bounds;
 				if (
 					clickedRowIdx >= bounds.minRow &&
 					clickedRowIdx <= bounds.maxRow &&
@@ -84,10 +101,10 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		}
 
 		if (!inSelection) {
-			this.runtime.selectCell({ rowId, colField }, 'pointer');
+			this.runtime.selectCell(canonicalPointer, 'pointer');
 		}
 
-		this.activePointer = { rowId, colField };
+		this.activePointer = canonicalPointer;
 		this.renderMenu(clientX, clientY);
 	}
 
@@ -144,11 +161,13 @@ export class GridContextMenuPlugin<TRowData = unknown> implements GridPlugin<TRo
 		this.menuElement = menu;
 
 		const state = this.runtime.getStateSnapshot();
+		const selection = readInteractionState(state).cellSelection.selection;
 		const params: ContextMenuParams<TRowData> = {
 			rowId,
 			colField,
+			pointer: activePointer,
 			api: this.runtime,
-			selection: state.selection,
+			selection,
 		};
 
 		const defaultItems: Array<GridContextMenuItem<TRowData>> = [

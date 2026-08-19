@@ -44,6 +44,27 @@ export interface RenderRuntimeStats {
 	cellClassComputesDuringScroll: number;
 	reusableCellsSkippedDuringScroll: number;
 	styleHookCallsDuringScroll: number;
+	integrityComputesDuringScroll: number;
+	forceLiveMountsDuringScroll: number;
+	/** scrollPresentation:'live' mounts/updates during scroll — see renderer/rowCellBinder.ts. */
+	liveReactMountsDuringScroll: number;
+	/** Live-mode work admitted for cells that were in the overscan band rather than the visible
+	 *  viewport. Counted when the scroll-time live path actually executes for an overscan cell. */
+	liveReactOverscanMounts: number;
+	/** Same cellKey already mounted — a React re-render, not a fresh portal mount. Budgeted
+	 *  separately from liveReactMountsDuringScroll by liveFrameBudget.ts. */
+	liveReactUpdatesDuringScroll: number;
+	/** A live-mount was deferred to a shell/pending placeholder because maxMountsPerFrame was
+	 *  exhausted this frame (see liveFrameBudget.ts, GridRendererOptions.liveReact). */
+	liveReactEmergencyShellsDuringScroll: number;
+	htmlSnapshotHitsDuringScroll: number;
+	htmlSnapshotMissesDuringScroll: number;
+	textImpostorUsesDuringScroll: number;
+	cellSlotsRetained: number;
+	cellSlotsEvictedDuringTopology: number;
+	cellSlotsCreatedDuringTopology: number;
+	cellSlotsReusedDuringTopology: number;
+	maxCellsByColumnIdPerRowSlot: number;
 	portalFlushChunks: number;
 	maxPortalOpsFlushedInOneChunk: number;
 	postScrollDecorationChunks: number;
@@ -61,6 +82,12 @@ export interface RenderRuntimeStats {
 	colsEnteredDuringScroll: number;
 	colsExitedDuringScroll: number;
 	colsStayedDuringScroll: number;
+	columnTopologyDeltaComputations: number;
+	columnTopologyDeltaComputationsDuringScroll: number;
+	columnTopologyStayedColumns: number;
+	columnTopologyEnteredColumns: number;
+	columnTopologyExitedColumns: number;
+	columnTopologyLaneMoves: number;
 	cellsSkippedDuringScroll: number;
 	sameWindowBailouts: number;
 	cellsBoundDuringScroll: number;
@@ -110,6 +137,20 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		cellClassComputesDuringScroll: 0,
 		reusableCellsSkippedDuringScroll: 0,
 		styleHookCallsDuringScroll: 0,
+		integrityComputesDuringScroll: 0,
+		forceLiveMountsDuringScroll: 0,
+		liveReactMountsDuringScroll: 0,
+		liveReactOverscanMounts: 0,
+		liveReactUpdatesDuringScroll: 0,
+		liveReactEmergencyShellsDuringScroll: 0,
+		htmlSnapshotHitsDuringScroll: 0,
+		htmlSnapshotMissesDuringScroll: 0,
+		textImpostorUsesDuringScroll: 0,
+		cellSlotsRetained: 0,
+		cellSlotsEvictedDuringTopology: 0,
+		cellSlotsCreatedDuringTopology: 0,
+		cellSlotsReusedDuringTopology: 0,
+		maxCellsByColumnIdPerRowSlot: 0,
 		portalFlushChunks: 0,
 		maxPortalOpsFlushedInOneChunk: 0,
 		postScrollDecorationChunks: 0,
@@ -127,6 +168,12 @@ export function createRenderRuntimeStats(): RenderRuntimeStats {
 		colsEnteredDuringScroll: 0,
 		colsExitedDuringScroll: 0,
 		colsStayedDuringScroll: 0,
+		columnTopologyDeltaComputations: 0,
+		columnTopologyDeltaComputationsDuringScroll: 0,
+		columnTopologyStayedColumns: 0,
+		columnTopologyEnteredColumns: 0,
+		columnTopologyExitedColumns: 0,
+		columnTopologyLaneMoves: 0,
 		cellsSkippedDuringScroll: 0,
 		sameWindowBailouts: 0,
 		cellsBoundDuringScroll: 0,
@@ -182,6 +229,11 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		cellsWrittenDuringScroll: deps.rowRenderer.currentScrollCellsWritten,
 		portalOpsDuringScroll:
 			deps.rowRenderer.currentScrollPortalOps + portalScrollStats.portalMountsDuringScroll + portalScrollStats.portalReleasesDuringScroll,
+		// portalMountsDuringScroll itself already flows through via the `...portalScrollStats` spread
+		// below — it's the top-level regression tripwire for the scroll-time-portal-mount blocker.
+		// Should be 0 for any normal (non force-live-exception) scroll frame; the fix is proven by the
+		// impostor-fallback tests, not by this counter alone, but a non-zero value outside the
+		// exception path means the bug is back.
 		cellsDecoratedAfterScroll: deps.runtimeStats.cellsDecoratedAfterScroll,
 		postScrollMotionChunks: deps.runtimeStats.postScrollMotionChunks,
 		maxMotionCellsDecoratedInOneChunk: deps.runtimeStats.maxMotionCellsDecoratedInOneChunk,
@@ -195,12 +247,32 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		postScrollDirtyCellsDecorated: deps.rowRenderer.postScrollDirtyCellsDecorated,
 		reusableCellsSkippedDuringScroll: deps.runtimeStats.reusableCellsSkippedDuringScroll,
 		styleHookCallsDuringScroll: deps.runtimeStats.styleHookCallsDuringScroll,
+		integrityComputesDuringScroll: deps.runtimeStats.integrityComputesDuringScroll,
+		forceLiveMountsDuringScroll: deps.runtimeStats.forceLiveMountsDuringScroll,
+		liveReactMountsDuringScroll: deps.runtimeStats.liveReactMountsDuringScroll,
+		liveReactOverscanMounts: deps.runtimeStats.liveReactOverscanMounts,
+		liveReactUpdatesDuringScroll: deps.runtimeStats.liveReactUpdatesDuringScroll,
+		liveReactEmergencyShellsDuringScroll: deps.runtimeStats.liveReactEmergencyShellsDuringScroll,
+		htmlSnapshotHitsDuringScroll: deps.runtimeStats.htmlSnapshotHitsDuringScroll,
+		htmlSnapshotMissesDuringScroll: deps.runtimeStats.htmlSnapshotMissesDuringScroll,
+		textImpostorUsesDuringScroll: deps.runtimeStats.textImpostorUsesDuringScroll,
+		cellSlotsRetained: deps.runtimeStats.cellSlotsRetained,
+		cellSlotsEvictedDuringTopology: deps.runtimeStats.cellSlotsEvictedDuringTopology,
+		cellSlotsCreatedDuringTopology: deps.runtimeStats.cellSlotsCreatedDuringTopology,
+		cellSlotsReusedDuringTopology: deps.runtimeStats.cellSlotsReusedDuringTopology,
+		maxCellsByColumnIdPerRowSlot: deps.runtimeStats.maxCellsByColumnIdPerRowSlot,
 		rowsEnteredDuringScroll: deps.runtimeStats.rowsEnteredDuringScroll,
 		rowsExitedDuringScroll: deps.runtimeStats.rowsExitedDuringScroll,
 		rowsStayedDuringScroll: deps.runtimeStats.rowsStayedDuringScroll,
 		colsEnteredDuringScroll: deps.runtimeStats.colsEnteredDuringScroll,
 		colsExitedDuringScroll: deps.runtimeStats.colsExitedDuringScroll,
 		colsStayedDuringScroll: deps.runtimeStats.colsStayedDuringScroll,
+		columnTopologyDeltaComputations: deps.runtimeStats.columnTopologyDeltaComputations,
+		columnTopologyDeltaComputationsDuringScroll: deps.runtimeStats.columnTopologyDeltaComputationsDuringScroll,
+		columnTopologyStayedColumns: deps.runtimeStats.columnTopologyStayedColumns,
+		columnTopologyEnteredColumns: deps.runtimeStats.columnTopologyEnteredColumns,
+		columnTopologyExitedColumns: deps.runtimeStats.columnTopologyExitedColumns,
+		columnTopologyLaneMoves: deps.runtimeStats.columnTopologyLaneMoves,
 		cellsSkippedDuringScroll: deps.runtimeStats.cellsSkippedDuringScroll,
 		sameWindowBailouts: deps.runtimeStats.sameWindowBailouts,
 		stateReadsDuringScroll: deps.runtimeStats.stateReadsDuringScroll,
@@ -223,6 +295,13 @@ export function collectRenderStats<TRowData>(deps: RenderTelemetrySnapshotDeps<T
 		portalMounts: {
 			...deps.portalMountManager.getStats(),
 			custom: deps.portalMountManager.customRendererManager.getStats(),
+		},
+		controllers: {
+			rowCtrlsCreated: deps.engine.rowCtrls.stats.created,
+			rowCtrlsReused: deps.engine.rowCtrls.stats.reused,
+			rowCtrlsEvicted: deps.engine.rowCtrls.stats.evicted,
+			cellCtrlsCreated: deps.engine.rowCtrls.stats.cellCtrlsCreated,
+			cellCtrlsReused: deps.engine.rowCtrls.stats.cellCtrlsReused,
 		},
 	};
 }
@@ -253,6 +332,7 @@ export function resetRenderTelemetry<TRowData>(
 	engine.customRendererHydrationChunks = 0;
 	engine.customRendererWarmHits = 0;
 	engine.customRendererWarmMisses = 0;
+	engine.rowCtrls.resetStats();
 	resetCellSlotWriteStats();
 	resetRowSlotWriteStats();
 }

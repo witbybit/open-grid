@@ -30,19 +30,28 @@ export interface FrameCoordinator {
 	/** Schedule a scroll frame (RAF-only). */
 	requestScrollFrame(): void;
 	/** Schedule a paint frame (microtask → RAF, coalescing synchronous invalidation). */
-	requestPaintFrame(): void;
+	requestPaintFrame(changeIds?: readonly number[]): void;
 	/** Schedule post-scroll work (distinct from paint, epoch-validated). */
-	requestPostScrollWork(): void;
+	requestPostScrollWork(changeIds?: readonly number[]): void;
 	/** Synchronous flush — test-only / documented transactional boundaries. */
 	flushNowForTests(): void;
+	/** Current coordinator ownership only; cumulative render counters live elsewhere. */
+	getOwnershipSnapshot(): Readonly<{
+		pendingScroll: boolean;
+		pendingPaint: boolean;
+		pendingPostScroll: boolean;
+		ownsAnimationFrame: boolean;
+		inFrame: boolean;
+		destroyed: boolean;
+	}>;
 	destroy(): void;
 }
 
 export interface FrameCoordinatorDeps {
 	onScrollFrame: () => void;
-	onPaintFrame: () => void;
+	onPaintFrame: (changeIds: readonly number[]) => void;
 	/** Distinct callback for post-scroll deferred work. Must not alias onPaintFrame. */
-	onPostScrollWork: () => void;
+	onPostScrollWork: (changeIds: readonly number[]) => void;
 	/**
 	 * Called when scroll ends — after scrollEndQuietFrames consecutive RAF callbacks
 	 * with no new scroll request. The runtime has already transitioned to idle before
@@ -66,7 +75,9 @@ export interface FrameCoordinatorDeps {
 export class DefaultFrameCoordinator implements FrameCoordinator {
 	private pendingScroll = false;
 	private pendingPaint = false;
+	private readonly pendingPaintChangeIds = new Set<number>();
 	private pendingPostScroll = false;
+	private readonly pendingPostScrollChangeIds = new Set<number>();
 	private inFrame = false;
 	private destroyed = false;
 	private rafId: number | null = null;
@@ -75,8 +86,8 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 	private readonly scrollEndQuietThreshold: number;
 	private readonly gs: GridScheduler;
 	private readonly onScrollFrame: () => void;
-	private readonly onPaintFrame: () => void;
-	private readonly onPostScrollWork: () => void;
+	private readonly onPaintFrame: (changeIds: readonly number[]) => void;
+	private readonly onPostScrollWork: (changeIds: readonly number[]) => void;
 	private readonly onScrollEnd: (() => void) | undefined;
 	private readonly onFault: ((msg: string) => void) | undefined;
 	private readonly runtimeState: RenderRuntimeState | undefined;
@@ -98,16 +109,20 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 		this.scheduleFrame();
 	}
 
-	requestPaintFrame(): void {
-		if (this.destroyed || this.pendingPaint) return;
+	requestPaintFrame(changeIds: readonly number[] = []): void {
+		if (this.destroyed) return;
+		for (const changeId of changeIds) this.pendingPaintChangeIds.add(changeId);
+		if (this.pendingPaint) return;
 		this.pendingPaint = true;
 		this.gs.microtask(() => {
 			if (!this.destroyed) this.scheduleFrame();
 		});
 	}
 
-	requestPostScrollWork(): void {
-		if (this.destroyed || this.pendingPostScroll) return;
+	requestPostScrollWork(changeIds: readonly number[] = []): void {
+		if (this.destroyed) return;
+		for (const changeId of changeIds) this.pendingPostScrollChangeIds.add(changeId);
+		if (this.pendingPostScroll) return;
 		this.pendingPostScroll = true;
 		this.postScrollEpoch = this.runtimeState?.scrollEpoch ?? 0;
 		this.scheduleFrame();
@@ -171,11 +186,14 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 				if (!epochOk) {
 					// Stale epoch: a newer scroll session supersedes this request — drop.
 					this.pendingPostScroll = false;
+					this.pendingPostScrollChangeIds.clear();
 				} else {
 					const notActive = !rs || (!rs.isScrolling() && !rs.isFrameActive());
 					if (notActive) {
 						this.pendingPostScroll = false;
-						this.onPostScrollWork();
+						const changeIds = Object.freeze([...this.pendingPostScrollChangeIds]);
+						this.pendingPostScrollChangeIds.clear();
+						this.onPostScrollWork(changeIds);
 					}
 					// else: conditions not yet met but epoch is valid (scrolling still active).
 					// Retain pendingPostScroll = true so the finally block re-schedules a RAF.
@@ -199,7 +217,27 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 		this.runPaintFrame();
 	}
 
+	public getOwnershipSnapshot(): Readonly<{
+		pendingScroll: boolean;
+		pendingPaint: boolean;
+		pendingPostScroll: boolean;
+		ownsAnimationFrame: boolean;
+		inFrame: boolean;
+		destroyed: boolean;
+	}> {
+		return Object.freeze({
+			pendingScroll: this.pendingScroll,
+			pendingPaint: this.pendingPaint,
+			pendingPostScroll: this.pendingPostScroll,
+			ownsAnimationFrame: this.rafId !== null,
+			inFrame: this.inFrame,
+			destroyed: this.destroyed,
+		});
+	}
+
 	private runPaintFrame(): void {
+		const changeIds = Object.freeze([...this.pendingPaintChangeIds]);
+		this.pendingPaintChangeIds.clear();
 		const rs = this.runtimeState;
 		if (rs) {
 			if (rs.isDestroyed()) {
@@ -209,7 +247,7 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 			rs.transitionTo('paint-frame');
 		}
 		try {
-			this.onPaintFrame();
+			this.onPaintFrame(changeIds);
 		} finally {
 			if (rs && !rs.isDestroyed()) {
 				rs.transitionTo('idle');
@@ -225,7 +263,9 @@ export class DefaultFrameCoordinator implements FrameCoordinator {
 		}
 		this.pendingScroll = false;
 		this.pendingPaint = false;
+		this.pendingPaintChangeIds.clear();
 		this.pendingPostScroll = false;
+		this.pendingPostScrollChangeIds.clear();
 		this.scrollEndQuietCount = 0;
 	}
 }

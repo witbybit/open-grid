@@ -11,7 +11,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { GridStore } from './store.js';
 import { type InfiniteGetRowsParams, type InfiniteDatasource, InfiniteRowModelController } from './infiniteRowModel.js';
-import { type ServerDatasource, type ServerGetPageParams, ServerPageRowModelController } from './serverPageRowModel.js';
 
 interface TestRow {
 	id: string;
@@ -23,14 +22,6 @@ interface PendingRequest {
 	token: string;
 	params: InfiniteGetRowsParams;
 	resolve: (value: { rows: TestRow[]; totalCount: number }) => void;
-	reject: (error: Error) => void;
-}
-
-interface PendingPageRequest {
-	source: string;
-	token: string;
-	params: ServerGetPageParams;
-	resolve: (value: { rows: TestRow[]; totalRowCount: number }) => void;
 	reject: (error: Error) => void;
 }
 
@@ -57,22 +48,6 @@ function createDeferredDatasource(source: string, getToken: () => string, pendin
 	return {
 		getRows: vi.fn().mockImplementation((params: InfiniteGetRowsParams) => {
 			return new Promise<{ rows: TestRow[]; totalCount: number }>((resolve, reject) => {
-				pending.push({
-					source,
-					token: getToken(),
-					params,
-					resolve,
-					reject,
-				});
-			});
-		}),
-	};
-}
-
-function createDeferredPageDatasource(source: string, getToken: () => string, pending: PendingPageRequest[]): ServerDatasource<TestRow> {
-	return {
-		getPage: vi.fn().mockImplementation((params: ServerGetPageParams) => {
-			return new Promise<{ rows: TestRow[]; totalRowCount: number }>((resolve, reject) => {
 				pending.push({
 					source,
 					token: getToken(),
@@ -146,7 +121,7 @@ describe('InfiniteRowModelController — adversarial generation invariants', () 
 		await resolveRequest(initialRequest!);
 
 		for (let step = 0; step < 40; step++) {
-			const op = lcgInt(rng, 5);
+			const op = lcgInt(rng, 6);
 			const label = `seed=0x5eed1234,step=${step},op=${op}`;
 
 			if (op === 0) {
@@ -175,6 +150,27 @@ describe('InfiniteRowModelController — adversarial generation invariants', () 
 			}
 
 			if (op === 2) {
+				bump('query');
+				store.setQueryModel({
+					id: `query-${sequence}`,
+					root: {
+						kind: 'group',
+						operator: 'and',
+						children: [
+							{
+								kind: 'condition',
+								field: 'name',
+								operator: 'contains',
+								value: sequence % 2 === 0 ? 'A' : 'B',
+							},
+						],
+					},
+				});
+				expect(store.getState().loading, `[${label}] query purge should enter loading`).toBe(true);
+				continue;
+			}
+
+			if (op === 3) {
 				source = source === 'A' ? 'B' : 'A';
 				activeDatasource = source === 'A' ? datasourceA : datasourceB;
 				bump('datasource');
@@ -191,7 +187,7 @@ describe('InfiniteRowModelController — adversarial generation invariants', () 
 			const faultsBefore = store.getRuntimeFaults().length;
 			const isCurrent = request.token === currentToken;
 
-			if (op === 3) {
+			if (op === 4) {
 				await resolveRequest(request);
 				const names = loadedNames(controller);
 
@@ -228,169 +224,6 @@ describe('InfiniteRowModelController — adversarial generation invariants', () 
 		await resolveRequest(finalRequest);
 
 		const finalNames = loadedNames(controller);
-		expect(finalNames.length).toBeGreaterThan(0);
-		expect(new Set(finalNames)).toEqual(new Set([currentToken]));
-
-		controller.dispose();
-		store.destroy();
-	});
-});
-
-describe('ServerPageRowModelController — adversarial generation invariants', () => {
-	it('stale responses and stale failures are ignored after page/sort/filter/datasource churn', async () => {
-		const rng = makeLcg(0x1460cafe);
-		const pending: PendingPageRequest[] = [];
-		const store = new GridStore<TestRow>({
-			getRowId: (row) => row.id,
-			columns: [{ field: 'name', header: 'Name' }],
-		});
-
-		let source = 'A';
-		let sequence = 0;
-		let currentToken = `${source}|seq=${sequence}|init`;
-		const getToken = () => currentToken;
-		const datasourceA = createDeferredPageDatasource('A', getToken, pending);
-		const datasourceB = createDeferredPageDatasource('B', getToken, pending);
-		let activeDatasource = datasourceA;
-
-		const controller = new ServerPageRowModelController(store.getServerPageRowModelRuntime(), {
-			datasource: activeDatasource,
-			columns: store.getState().columns,
-			pagination: { pageSize: 4 },
-		});
-
-		function bump(reason: string): void {
-			sequence++;
-			currentToken = `${source}|seq=${sequence}|${reason}`;
-		}
-
-		async function resolveRequest(request: PendingPageRequest): Promise<void> {
-			request.resolve({
-				rows: Array.from({ length: 4 }, (_, index) => ({
-					id: `${request.token}:${index}`,
-					name: request.token,
-				})),
-				totalRowCount: 18,
-			});
-			await flushAsync();
-		}
-
-		async function rejectRequest(request: PendingPageRequest): Promise<void> {
-			request.reject(new Error(`reject:${request.token}`));
-			await flushAsync();
-		}
-
-		const initialRequest = pending.shift();
-		expect(initialRequest?.token).toBe(currentToken);
-		await resolveRequest(initialRequest!);
-
-		for (let step = 0; step < 40; step++) {
-			const op = lcgInt(rng, 6);
-			const label = `seed=0x1460cafe,step=${step},op=${op}`;
-
-			if (op === 0) {
-				bump('page');
-				controller.goToPage((sequence % 3) + 1);
-				expect(store.getServerPageState()?.loading, `[${label}] page change should enter loading`).toBe(true);
-				expect(controller.getVisualRow(0)?.kind, `[${label}] page change should clear stale rows immediately`).toBe('loading');
-				continue;
-			}
-
-			if (op === 1) {
-				bump('sort');
-				const sortMode = sequence % 3;
-				store.setSortModel(sortMode === 0 ? null : [{ colId: 'name', sort: sortMode === 1 ? 'asc' : 'desc' }]);
-				expect(store.getServerPageState()?.loading, `[${label}] sort change should enter loading`).toBe(true);
-				continue;
-			}
-
-			if (op === 2) {
-				bump('filter');
-				store.setFilterModel(
-					sequence % 2 === 0
-						? null
-						: {
-								name: {
-									type: 'text',
-									operator: 'contains',
-									value: sequence % 4 === 0 ? 'A' : 'B',
-								},
-							}
-				);
-				expect(store.getServerPageState()?.loading, `[${label}] filter change should enter loading`).toBe(true);
-				continue;
-			}
-
-			if (op === 3) {
-				source = source === 'A' ? 'B' : 'A';
-				activeDatasource = source === 'A' ? datasourceA : datasourceB;
-				bump('datasource');
-				controller.setDatasource(activeDatasource);
-				expect(store.getServerPageState()?.loading, `[${label}] datasource switch should enter loading`).toBe(true);
-				expect(controller.getVisualRow(0)?.kind, `[${label}] datasource switch should clear stale rows immediately`).toBe('loading');
-				continue;
-			}
-
-			if (pending.length === 0) {
-				continue;
-			}
-
-			const request = pending.splice(lcgInt(rng, pending.length), 1)[0];
-			const faultsBefore = store.getRuntimeFaults().length;
-			const isCurrent = request.token === currentToken;
-
-			if (op === 4) {
-				await resolveRequest(request);
-				const names: string[] = [];
-				for (let i = 0; i < controller.getVisualRowCount(); i++) {
-					const row = controller.getVisualRow(i);
-					if (row?.kind === 'data') names.push(row.node.data.name);
-				}
-
-				if (isCurrent) {
-					expect(names.length, `[${label}] current response should populate the page`).toBeGreaterThan(0);
-					expect(new Set(names), `[${label}] only current generation rows may be visible`).toEqual(new Set([request.token]));
-					expect(store.getServerPageState()?.loading, `[${label}] settled current response should clear loading`).toBe(false);
-				} else {
-					expect(names, `[${label}] stale response must not become visible`).not.toContain(request.token);
-					expect(store.getRuntimeFaults().length, `[${label}] stale success must not report faults`).toBe(faultsBefore);
-				}
-				continue;
-			}
-
-			await rejectRequest(request);
-			const names: string[] = [];
-			for (let i = 0; i < controller.getVisualRowCount(); i++) {
-				const row = controller.getVisualRow(i);
-				if (row?.kind === 'data') names.push(row.node.data.name);
-			}
-
-			if (isCurrent) {
-				expect(names, `[${label}] current rejection must not leave stale rows behind`).not.toContain(request.token);
-				expect(store.getRuntimeFaults().length, `[${label}] current rejection should not report runtime faults by default`).toBe(
-					faultsBefore
-				);
-				expect(store.getServerPageState()?.error, `[${label}] current rejection should publish page error`).toBe(`reject:${request.token}`);
-			} else {
-				expect(names, `[${label}] stale rejection must not mutate visible rows`).not.toContain(request.token);
-				expect(store.getRuntimeFaults().length, `[${label}] stale rejection must not report faults`).toBe(faultsBefore);
-			}
-		}
-
-		bump('final-page');
-		controller.goToPage(2);
-		const finalRequest = pending.splice(
-			pending.findIndex((request) => request.token === currentToken),
-			1
-		)[0];
-		expect(finalRequest?.token).toBe(currentToken);
-		await resolveRequest(finalRequest);
-
-		const finalNames: string[] = [];
-		for (let i = 0; i < controller.getVisualRowCount(); i++) {
-			const row = controller.getVisualRow(i);
-			if (row?.kind === 'data') finalNames.push(row.node.data.name);
-		}
 		expect(finalNames.length).toBeGreaterThan(0);
 		expect(new Set(finalNames)).toEqual(new Set([currentToken]));
 

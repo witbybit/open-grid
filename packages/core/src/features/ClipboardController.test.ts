@@ -126,6 +126,43 @@ describe('ClipboardController', () => {
 		store.destroy();
 	});
 
+	it('copySelectedRange uses the focused duplicate-field column instance for onCopy', async () => {
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 80 },
+			{ field: 'name', header: 'Name A', width: 150, colId: 'name-a', onCopy: () => 'COPY-A' },
+			{ field: 'name', header: 'Name B', width: 150, colId: 'name-b', onCopy: () => 'COPY-B' },
+		]);
+		const ctrl = makeController(store, [{ id: '1', name: 'Alpha', price: 10 }]);
+		const duplicateNameColumn = store.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+
+		store.selectCell({
+			rowId: '1',
+			colField: duplicateNameColumn.field,
+			colId: duplicateNameColumn.colId,
+			columnInstanceId: duplicateNameColumn.instanceId,
+		});
+		await store.copySelectedRange();
+
+		expect(clip.writeText).toHaveBeenCalledWith('COPY-B');
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('copySelectedRange follows displayed column order after reordering', async () => {
+		const store = makeStore();
+		const ctrl = makeController(store);
+
+		store.moveColumn('price', 1);
+		store.selectRange({ rowId: '1', colField: 'price' }, { rowId: '1', colField: 'name' });
+		await store.copySelectedRange();
+
+		expect(clip.writeText).toHaveBeenCalledWith('10\tAlpha');
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('copySelectedRange fires cellsCopied event with rowCount/colCount/text', async () => {
 		const store = makeStore();
 		const ctrl = makeController(store);
@@ -186,6 +223,46 @@ describe('ClipboardController', () => {
 		store.destroy();
 	});
 
+	it('pasteFromClipboard uses the focused duplicate-field column instance for onPaste', async () => {
+		const store = makeStore([
+			{ field: 'id', header: 'ID', width: 80 },
+			{ field: 'name', header: 'Name A', width: 150, colId: 'name-a', onPaste: ({ pastedText }: { pastedText: string }) => `A:${pastedText}` },
+			{ field: 'name', header: 'Name B', width: 150, colId: 'name-b', onPaste: ({ pastedText }: { pastedText: string }) => `B:${pastedText}` },
+		]);
+		const ctrl = makeController(store, [{ id: '1', name: 'Alpha', price: 10 }]);
+		const duplicateNameColumn = store.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+
+		clip.setStored('Gamma');
+		store.selectCell({
+			rowId: '1',
+			colField: duplicateNameColumn.field,
+			colId: duplicateNameColumn.colId,
+			columnInstanceId: duplicateNameColumn.instanceId,
+		});
+		await store.pasteFromClipboard();
+
+		expect(store.getCellValue('1', 'name')).toBe('B:Gamma');
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('pasteFromClipboard follows displayed column order after reordering', async () => {
+		const store = makeStore();
+		const ctrl = makeController(store);
+
+		store.moveColumn('price', 1);
+		clip.setStored('77\tGamma');
+		store.selectCell({ rowId: '1', colField: 'price' });
+		await store.pasteFromClipboard();
+
+		expect(store.getCellValue('1', 'price')).toBe('77');
+		expect(store.getCellValue('1', 'name')).toBe('Gamma');
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
 	it('pasteFromClipboard fires cellsPasted event', async () => {
 		const store = makeStore();
 		const ctrl = makeController(store);
@@ -237,6 +314,7 @@ describe('ClipboardController', () => {
 					validation: {
 						validateOnSubmit: true,
 						cellRules: [
+							{ id: 'required-name', field: 'name', validate: ({ value }) => (value ? null : { message: 'Name is required' }) },
 							{ id: 'required-note', field: 'note', validate: ({ value }) => (value ? null : { message: 'Note is required' }) },
 						],
 					},
@@ -253,7 +331,12 @@ describe('ClipboardController', () => {
 		const handler = vi.fn();
 		const blockedHandler = vi.fn();
 		store.addEventListener(GridEventName.cellsPasted, handler);
-		store.addEventListener(GridEventName.writeBlocked, blockedHandler);
+		store.engine.flightRecorder.start();
+		let traceAtWriteBlocked = store.engine.flightRecorder.snapshot();
+		store.addEventListener(GridEventName.writeBlocked, (event) => {
+			traceAtWriteBlocked = store.engine.flightRecorder.snapshot();
+			blockedHandler(event);
+		});
 
 		clip.setStored('\t');
 		store.selectCell({ rowId: '1', colField: 'name' });
@@ -273,6 +356,25 @@ describe('ClipboardController', () => {
 		expect(store.getCellValue('2', 'name')).toBe('Beta');
 		expect(store.getCellValue('2', 'note')).toBe('keep');
 		expect(store.canUndo()).toBe(false);
+		const traceEvents = traceAtWriteBlocked.events.map((entry) => entry.event);
+		const request = traceEvents.find((event) => event.type === 'commit-request' && event.reason === 'clipboard:validation');
+		expect(request).toEqual({ type: 'commit-request', attemptId: 2, reason: 'clipboard:validation' });
+		expect(request && 'cell' in request).toBe(false);
+		expect(traceEvents.filter((event) => event.type === 'commit-outcome' && event.attemptId === 2)).toEqual([
+			{ type: 'commit-outcome', attemptId: 2, changeId: undefined, outcome: 'validation-rejected', domains: [] },
+		]);
+		expect(store.engine.flightRecorder.snapshot().events).toHaveLength(traceAtWriteBlocked.events.length);
+		const resolveExact = (store.engine.clipboard as any).getExactRejectedCell.bind(store.engine.clipboard);
+		const adversarialIssue = (rowId: string, colField: string) => ({ rowId, colField });
+		expect(
+			resolveExact(
+				[
+					{ rowId: 'a\0b:雪', colField: 'c' },
+					{ rowId: 'a', colField: 'b\0c:雪' },
+				],
+				[adversarialIssue('a\0b:雪', 'c'), adversarialIssue('a', 'b\0c:雪')]
+			)
+		).toBeUndefined();
 
 		ctrl.dispose();
 		store.destroy();
@@ -364,6 +466,45 @@ describe('ClipboardController', () => {
 		expect(getterCalls).toBe(2);
 		expect(store.getVisualIndexByRowId('2')).toBe(0);
 		expect(store.getVisualIndexByRowId('1')).toBe(1);
+
+		ctrl.dispose();
+		store.destroy();
+	});
+
+	it('pasteFromClipboard targets the focused row after sort reorders visual indexes', async () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 80 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+			sortModel: [{ colId: 'price', sort: 'asc' }],
+		});
+		const ctrl = makeController(store, [
+			{ id: '1', name: 'Alpha', price: 10 },
+			{ id: '2', name: 'Beta', price: 20 },
+		]);
+
+		store.selectCell({ rowId: '2', colField: 'name' });
+		store.setCellValue('2', 'price', 5);
+
+		expect(store.getVisualIndexByRowId('2')).toBe(0);
+		expect(store.getVisualIndexByRowId('1')).toBe(1);
+		expect(store.getStateSnapshot().selection.focus).toEqual(
+			expect.objectContaining({
+				rowId: '2',
+				colField: 'name',
+				columnInstanceId: expect.any(String),
+			})
+		);
+
+		clip.setStored('MovedFocus');
+		await store.pasteFromClipboard();
+
+		expect(clip.readText).toHaveBeenCalled();
+		expect(store.getCellValue('2', 'name')).toBe('MovedFocus');
+		expect(store.getCellValue('1', 'name')).toBe('Alpha');
 
 		ctrl.dispose();
 		store.destroy();

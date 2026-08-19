@@ -143,23 +143,23 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		header: 'Price',
 		width: 100,
 		sortable: true,
-		renderer: { kind: 'react', component: PriceRenderer, capabilities: { scrollBehavior: 'live' } },
+		renderer: { kind: 'react', component: PriceRenderer, capabilities: { scrollPresentation: 'freeze' } },
 	},
 	{
 		field: 'change',
 		header: 'Change $',
 		width: 100,
 		sortable: true,
-		renderer: { kind: 'react', component: ChangeRenderer, capabilities: { scrollBehavior: 'live' } },
+		renderer: { kind: 'react', component: ChangeRenderer, capabilities: { scrollPresentation: 'freeze' } },
 	},
 	{
 		field: 'changePct',
 		header: 'Change %',
 		width: 105,
 		sortable: true,
-		// scrollSnapshot: 'html' — the ▲/▼ badge with its green/red tinted background and border
-		// is captured after each fidelity render and replayed as a static clone during scroll.
-		renderer: { kind: 'react', component: ChangePctRenderer, capabilities: { scrollBehavior: 'live', scrollSnapshot: 'html' } },
+		// scrollPresentation: 'html-snapshot' — the ▲/▼ badge with its green/red tinted background and
+		// border is captured after each fidelity render and replayed as a static clone during scroll.
+		renderer: { kind: 'react', component: ChangePctRenderer, capabilities: { scrollPresentation: 'html-snapshot' } },
 	},
 	{ field: 'marketCap', header: 'Mkt Cap', width: 100, sortable: true },
 	{ field: 'volume', header: 'Volume', width: 110, sortable: true },
@@ -171,9 +171,9 @@ const COLUMNS: ColumnDef<HoldingRow>[] = [
 		header: 'Status',
 		width: 90,
 		sortable: true,
-		// scrollSnapshot: 'html' — Active/Watch/Closed colored status chips are captured as static
-		// HTML after fidelity render, so the portfolio status column looks settled while scrolling.
-		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live', scrollSnapshot: 'html' } },
+		// scrollPresentation: 'html-snapshot' — Active/Watch/Closed colored status chips are captured
+		// as static HTML after fidelity render, so the portfolio status column looks settled while scrolling.
+		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollPresentation: 'html-snapshot' } },
 	},
 ];
 

@@ -39,4 +39,41 @@ describe('SelectionModel', () => {
 		expect(result.invalidatedRows).toEqual(['r1', 'detail:r1']);
 		expect(result.overlayChanged).toBe(true);
 	});
+
+	it('keeps duplicate-field invalidated cells distinct by columnInstanceId', () => {
+		const model = new SelectionModel();
+		const prev = {
+			focus: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+			anchor: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+			range: {
+				start: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+				end: { rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+			},
+			bounds: { minRow: 0, maxRow: 0, minCol: 0, maxCol: 0 },
+			source: 'keyboard' as const,
+			focusOrigin: 'keyboard' as const,
+			version: 1,
+		};
+		const next = {
+			focus: { rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: 'name-b' },
+			anchor: { rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: 'name-b' },
+			range: {
+				start: { rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: 'name-b' },
+				end: { rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: 'name-b' },
+			},
+			bounds: { minRow: 0, maxRow: 0, minCol: 1, maxCol: 1 },
+			source: 'keyboard' as const,
+			focusOrigin: 'keyboard' as const,
+			version: 2,
+		};
+
+		const result = model.describeChange(prev, next, null, []);
+
+		expect(result.invalidatedCells).toEqual([
+			{ rowId: 'r1', colField: 'name', colId: 'name-a', columnInstanceId: 'name-a' },
+			{ rowId: 'r1', colField: 'name', colId: 'name-b', columnInstanceId: 'name-b' },
+		]);
+		expect(result.invalidatedRows).toEqual(['r1']);
+		expect(result.overlayChanged).toBe(true);
+	});
 });

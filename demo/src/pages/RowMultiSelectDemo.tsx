@@ -4,7 +4,7 @@
  * Showcases row multi-select across all three rowModelType modes:
  *   - client     — all data local; grid owns sorting/filtering/pagination
  *   - infinite   — block/range loading; datasource receives startRow/endRow
- *   - server     — explicit page loading; datasource receives page/pageSize
+ *   - server     — SSRM block loading; datasource receives startRow/endRow
  *
  * Features demonstrated:
  *   - checkboxSelection column  →  checkbox cell + select-all header checkbox
@@ -15,7 +15,7 @@
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Grid, GridEventName } from '@eregister/open-grid-react';
-import type { ColumnDef, GridApi, GridReadyEvent, InfiniteDatasource, RowSelectionScope, ServerDatasource } from '@eregister/open-grid-react';
+import type { ColumnDef, GridApi, GridReadyEvent, InfiniteDatasource, RowSelectionScope, ServerSideDatasource } from '@eregister/open-grid-react';
 import { CheckSquare, Trash2, Download, Tag, MousePointerClick, Info } from 'lucide-react';
 
 // ─── Data model ───────────────────────────────────────────────────────────────
@@ -202,11 +202,11 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 		[rows]
 	);
 
-	const serverDatasource = useMemo<ServerDatasource<OrderRow>>(
+	const serverDatasource = useMemo<ServerSideDatasource<OrderRow>>(
 		() => ({
-			getPage: async ({ page, pageSize }) => ({
-				rows: rows.slice(page * pageSize, (page + 1) * pageSize),
-				totalRowCount: rows.length,
+			getRows: async ({ startRow, endRow }) => ({
+				rows: rows.slice(startRow, endRow),
+				rowCount: rows.length,
 			}),
 		}),
 		[rows]
@@ -263,7 +263,7 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 		setBulkTag('');
 	}, [api, bulkTag]);
 
-	const MODE_LABELS: Record<GridMode, string> = { client: 'Client', infinite: 'Infinite', server: 'Server Page' };
+	const MODE_LABELS: Record<GridMode, string> = { client: 'Client', infinite: 'Infinite', server: 'Server' };
 
 	return (
 		<div className='flex flex-col gap-4 h-full min-h-0'>
@@ -374,7 +374,6 @@ export default function RowMultiSelectDemo({ onGridReady }: RowMultiSelectDemoPr
 							columns={COLUMNS}
 							getRowId={(row) => row.id}
 							rowSelection={{ mode: 'multiple', selectAllScope }}
-							pagination={{ pageSize: 25 }}
 							showStatusBar
 							enableNavigation={true}
 							navigationOptions={{ editTrigger: 'doubleClick' }}

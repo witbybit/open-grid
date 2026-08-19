@@ -19,6 +19,7 @@ const RealtimeDashboard = lazy(() => import('./pages/RealtimeDashboard'));
 const GanttSchedulingWorkspace = lazy(() => import('./pages/GanttSchedulingWorkspace'));
 const NestedTablesGrouping = lazy(() => import('./pages/NestedTablesGrouping'));
 const PerformanceLab = lazy(() => import('./pages/PerformanceLab'));
+const FlightRecorderLab = lazy(() => import('./pages/FlightRecorderLab'));
 const SidebarPanelsDemo = lazy(() => import('./pages/SidebarPanelsDemo'));
 const NativeCellTypesDemo = lazy(() => import('./pages/NativeCellTypesDemo'));
 const RealtimeGroupingDemo = lazy(() => import('./pages/RealtimeGroupingDemo'));
@@ -35,6 +36,7 @@ const ProjectsComplianceDemo = lazy(() => import('./pages/ProjectsComplianceDemo
 const KanbanBoardDemo = lazy(() => import('./pages/KanbanBoardDemo'));
 
 const PAGES: readonly GridPageType[] = [
+	'devtools',
 	'perf',
 	'server',
 	'ranges',
@@ -238,6 +240,7 @@ export default function App() {
 		if (activePage === 'dashboard') return <RealtimeDashboard {...commonGridProps} />;
 		if (activePage === 'gantt') return <GanttSchedulingWorkspace {...commonGridProps} />;
 		if (activePage === 'lab') return <PerformanceLab {...commonGridProps} />;
+		if (activePage === 'devtools') return <FlightRecorderLab />;
 		if (activePage === 'nested') return <NestedTablesGrouping {...commonGridProps} />;
 		if (activePage === 'panels') return <SidebarPanelsDemo {...commonGridProps} />;
 		if (activePage === 'native') return <NativeCellTypesDemo {...commonGridProps} />;

@@ -1,17 +1,26 @@
 import type { CellContentMode } from './cellSlot.js';
 import type { GridCellDecoration } from '../insights/insightTypes.js';
+import type { ColumnInstanceId } from '../columnDef.js';
+import type { VisualFreshness } from './visualFreshness.js';
 
 export type CellDisplayContentKind = CellContentMode | 'portal-live' | 'portal-frozen' | 'impostor';
 
-export interface CellDisplaySnapshot {
+/**
+ * Snapshot authority is a bounded working set, not a per-dataset mirror. This comfortably covers
+ * the rendered window plus several directional prewarm rings while making long-session growth
+ * independent of how many distinct cells a user visits.
+ */
+export const DEFAULT_CELL_DISPLAY_SNAPSHOT_CAPACITY = 1024;
+
+/**
+ * Extends VisualFreshness (rowVersion/globalVersion/insightVersion/styleVersion/loadingVersion/
+ * selectionVersion) so a snapshot's freshness can be judged by the same canonical predicate
+ * (isVisualFresh) that mounted CellSlot state is judged by — see visualFreshness.ts.
+ */
+export interface CellDisplaySnapshot extends VisualFreshness {
 	rowId: string;
+	columnInstanceId: ColumnInstanceId;
 	colField: string;
-	rowVersion: number;
-	globalVersion: number;
-	insightVersion: number;
-	styleVersion: number;
-	loadingVersion: number;
-	selectionVersion: number;
 	baseClassName: string;
 	stateClassName: string;
 	decorationClassName: string;
@@ -22,14 +31,6 @@ export interface CellDisplaySnapshot {
 	formattedValue: string;
 	title: string;
 	validationError?: string;
-	/** Captured innerHTML of the portal host after the last fidelity render. Present only when the
-	 *  column opts in via `cellRendererCapabilities.scrollSnapshot: 'html'`. Injected as a static
-	 *  visual clone during scroll so the cell looks settled rather than showing plain text. */
-	frozenHtml?: string;
-	/** Row height (px) at the moment frozenHtml was captured. Used to invalidate the snapshot if
-	 *  the row has been resized since — a mismatched height means the captured HTML was laid out
-	 *  for a different container and would render incorrectly as an impostor. */
-	frozenRowHeight?: number;
 }
 
 export interface CellDecorationSnapshotMetadata {
@@ -79,15 +80,10 @@ export function joinCellSnapshotClassNameParts(...parts: Array<string | undefine
 	return { className: classTokens.join(' '), classTokens };
 }
 
-export interface CreateCellDisplaySnapshotOptions {
+export interface CreateCellDisplaySnapshotOptions extends VisualFreshness {
 	rowId: string;
+	columnInstanceId?: ColumnInstanceId;
 	colField: string;
-	rowVersion: number;
-	globalVersion: number;
-	insightVersion: number;
-	styleVersion: number;
-	loadingVersion: number;
-	selectionVersion: number;
 	baseClassName: string;
 	stateClassName?: string;
 	decorationClassName?: string;
@@ -96,8 +92,6 @@ export interface CreateCellDisplaySnapshotOptions {
 	formattedValue: string;
 	title: string;
 	validationError?: string;
-	frozenHtml?: string;
-	frozenRowHeight?: number;
 }
 
 export function createCellDisplaySnapshot(options: CreateCellDisplaySnapshotOptions): CellDisplaySnapshot {
@@ -107,6 +101,7 @@ export function createCellDisplaySnapshot(options: CreateCellDisplaySnapshotOpti
 	const { className, classTokens } = joinCellSnapshotClassNameParts(baseClassName, stateClassName, decorationClassName);
 	return {
 		rowId: options.rowId,
+		columnInstanceId: options.columnInstanceId ?? (options.colField as ColumnInstanceId),
 		colField: options.colField,
 		rowVersion: options.rowVersion,
 		globalVersion: options.globalVersion,
@@ -124,31 +119,47 @@ export function createCellDisplaySnapshot(options: CreateCellDisplaySnapshotOpti
 		formattedValue: options.formattedValue,
 		title: options.title,
 		validationError: options.validationError,
-		frozenHtml: options.frozenHtml,
-		frozenRowHeight: options.frozenRowHeight,
 	};
 }
 
-function buildCellSnapshotKey(rowId: string, colField: string): string {
-	return `${rowId}\0${colField}`;
+function buildCellSnapshotKey(rowId: string, columnInstanceId: ColumnInstanceId | string): string {
+	return `${rowId}\0${columnInstanceId}`;
 }
 
 export class CellDisplaySnapshotStore {
 	private readonly snapshots = new Map<string, CellDisplaySnapshot>();
+	private evictedSnapshotCount = 0;
 
-	public get(rowId: string, colField: string): CellDisplaySnapshot | undefined {
-		return this.snapshots.get(buildCellSnapshotKey(rowId, colField));
+	constructor(private readonly maxEntries = DEFAULT_CELL_DISPLAY_SNAPSHOT_CAPACITY) {}
+
+	public get(rowId: string, columnInstanceId: ColumnInstanceId | string): CellDisplaySnapshot | undefined {
+		return this.snapshots.get(buildCellSnapshotKey(rowId, columnInstanceId));
 	}
 
 	public set(snapshot: CellDisplaySnapshot): void {
-		this.snapshots.set(buildCellSnapshotKey(snapshot.rowId, snapshot.colField), snapshot);
+		const key = buildCellSnapshotKey(snapshot.rowId, snapshot.columnInstanceId);
+		// Targeted invalidation/full-bind updates refresh recency. Reads deliberately do not: active
+		// scroll must consume snapshots without mutating cache ownership.
+		this.snapshots.delete(key);
+		this.snapshots.set(key, snapshot);
+		while (this.snapshots.size > this.maxEntries) {
+			const oldestKey = this.snapshots.keys().next().value as string | undefined;
+			if (oldestKey === undefined) break;
+			this.snapshots.delete(oldestKey);
+			this.evictedSnapshotCount++;
+		}
 	}
 
-	public delete(rowId: string, colField: string): void {
-		this.snapshots.delete(buildCellSnapshotKey(rowId, colField));
+	public delete(rowId: string, columnInstanceId: ColumnInstanceId | string): void {
+		this.snapshots.delete(buildCellSnapshotKey(rowId, columnInstanceId));
 	}
 
 	public clear(): void {
 		this.snapshots.clear();
+	}
+
+	/** Read-only ownership gauge for deterministic long-session diagnostics. */
+	public getOwnershipSnapshot(): Readonly<{ entryCount: number; maxEntries: number; evictedSnapshotCount: number }> {
+		return Object.freeze({ entryCount: this.snapshots.size, maxEntries: this.maxEntries, evictedSnapshotCount: this.evictedSnapshotCount });
 	}
 }

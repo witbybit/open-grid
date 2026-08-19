@@ -6,6 +6,7 @@
 
 ## Status
 
+- **Status**: DONE (2026-07-28)
 - **Priority**: P1
 - **Effort**: M
 - **Risk**: MED
@@ -101,12 +102,20 @@ Add architecture or behavioral tests proving the new subscription surface does n
 
 ## Done criteria
 
-- [ ] Broad row/column/header wakeups are replaced by selector-grade or domain-scoped subscriptions
-- [ ] Integrity has a narrow subscription surface
-- [ ] Redundant legacy broad helpers are deleted or fundamentally rewritten
-- [ ] `corepack pnpm run test:architecture` exits 0
-- [ ] `corepack pnpm run test` exits 0
-- [ ] `corepack pnpm run build` exits 0
+- [x] Broad row/column/header wakeups are replaced by selector-grade or domain-scoped subscriptions
+- [x] Integrity has a narrow subscription surface
+- [x] Redundant legacy broad helpers are deleted or fundamentally rewritten
+- [x] `corepack pnpm run test:architecture` exits 0
+- [x] `corepack pnpm run test` exits 0
+- [x] `corepack pnpm run build` exits 0
+
+## Completion evidence
+
+- Row subscriptions now combine row-local committed-cell notifications with `rows` and `geometry` domain projections; unrelated row writes do not notify them.
+- Column and header subscriptions now use `columns`/`sorting` domain projections instead of broad state-key fan-out. Integrity, viewport, selection, focus, and editing retain their existing key-scoped selector projections.
+- `FormulaBar` no longer calls broad `api.subscribe`: it observes `selection` and uses the public focused-cell `subscribeToCell` contract for value changes.
+- Guardrails: core verifies row-local fan-out; React verifies both that a key-scoped selection selector does not rerender for an unrelated column-width mutation and that FormulaBar ignores an unrelated cell write.
+- Verification (2026-07-28): `corepack pnpm run test:architecture` (316 core + 5 React), `corepack pnpm run test` (1,949 core + 100 React), `corepack pnpm run build` (core, React, demo), and `corepack pnpm run bench:long-session` (5 core + 8 React) all exited 0.
 
 ## STOP conditions
 

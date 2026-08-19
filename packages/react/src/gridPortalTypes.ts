@@ -1,4 +1,9 @@
-import type { ColumnDef, GridApi, RowNode, VisualRow, CellRendererPhase } from '@eregister/open-grid-core';
+import type { ColumnDef, GridApi, VisualRow, CellRendererPhase } from '@eregister/open-grid-core';
+
+export interface PortalRowNodeLike<TRowData = unknown> {
+	id: string;
+	data: TRowData;
+}
 
 export interface CellPortalPhysicalIdentity {
 	readonly cellInstanceId: string;
@@ -13,7 +18,7 @@ export interface PortalCellProps<TRowData = unknown> {
 	colField: string;
 	value: unknown;
 	col: ColumnDef<TRowData>;
-	node: RowNode<TRowData>;
+	node: PortalRowNodeLike<TRowData>;
 	isEditing: boolean;
 	isLoading: boolean;
 	phase?: CellRendererPhase;
@@ -26,7 +31,7 @@ export interface PortalData<TRowData = unknown> {
 	cellKey: string;
 	container: HTMLElement;
 	value: unknown;
-	node: RowNode<TRowData>;
+	node: PortalRowNodeLike<TRowData>;
 	col: ColumnDef<TRowData>;
 	isEditing: boolean;
 	isLoading: boolean;
@@ -65,7 +70,7 @@ export interface MenuPortalData<TRowData = unknown> {
 // Imperative updater fn — registered by ImperativePortalCellWrapper, called from the grid view layer
 export type ImperativeUpdaterFn<TRowData> = (
 	value: unknown,
-	node: RowNode<TRowData>,
+	node: PortalRowNodeLike<TRowData>,
 	col: ColumnDef<TRowData>,
 	isEditing: boolean,
 	isLoading: boolean,
@@ -96,7 +101,7 @@ export interface PortalStore<TRowData = unknown> {
 	tryImperativeUpdate?(
 		cellKey: string,
 		value: unknown,
-		node: RowNode<TRowData>,
+		node: PortalRowNodeLike<TRowData>,
 		col: ColumnDef<TRowData>,
 		isEditing: boolean,
 		isLoading: boolean,
@@ -110,7 +115,7 @@ export interface PortalStore<TRowData = unknown> {
 		cellKey: string,
 		container: HTMLElement,
 		value: unknown,
-		node: RowNode<TRowData>,
+		node: PortalRowNodeLike<TRowData>,
 		col: ColumnDef<TRowData>,
 		isEditing: boolean,
 		isLoading: boolean,

@@ -9,8 +9,8 @@ import * as ReactPackage from './index.js';
 import { GridProvider } from './gridContext.js';
 import { GridView } from './GridView.js';
 import { GridEventName, Grid, useGridKeySelector, useGridApi, useGridSelector } from './index.js';
-import { useGridNavigationController } from './hooks.js';
 import { PortalCell, PortalManager, createPortalStore } from './GridPortal.js';
+import { FormulaBar } from './FormulaBar.js';
 
 // Mock ResizeObserver for jsdom environment
 class MockResizeObserver {
@@ -31,6 +31,10 @@ function createTestGrid<TRowData>(options: ClientGridOptions<TRowData>) {
 	};
 }
 
+function makeInternalNode<TRowData>(id: string, data: TRowData) {
+	return { id, data };
+}
+
 const SelectorInspector = () => {
 	const focused = useGridSelector((s) => s.selection.focus);
 	const dataVersion = useGridKeySelector('globalVersion', (s) => s.globalVersion);
@@ -43,12 +47,6 @@ const SelectorInspector = () => {
 			<span data-testid='api-exists'>{api ? 'yes' : 'no'}</span>
 		</div>
 	);
-};
-
-const NavigationControllerProbe = ({ onRender }: { onRender: (handle: ReturnType<typeof useGridNavigationController<TestRow>>) => void }) => {
-	const handle = useGridNavigationController<TestRow>({});
-	onRender(handle);
-	return <span data-testid='nav-controller-present'>{handle ? 'yes' : 'no'}</span>;
 };
 
 const ApiSurfaceInspector = () => {
@@ -143,7 +141,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		render(
 			<GridProvider api={grid.api}>
@@ -176,7 +174,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		render(
 			<GridProvider api={grid.api}>
@@ -214,7 +212,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -231,6 +229,16 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(input.value).toBe('Product A');
 
 		fireEvent.change(input, { target: { value: 'Product B' } });
+		expect(grid.api.getStateSnapshot().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				draftValue: 'Product B',
+				originalValue: 'Product A',
+				startedBy: 'api',
+				version: expect.any(Number),
+			})
+		);
 		fireEvent.blur(input);
 
 		await waitFor(() => expect(grid.api.getCellValue('1', 'name')).toBe('Product B'));
@@ -244,7 +252,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -271,7 +279,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -315,7 +323,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -332,6 +340,16 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		expect(input.value).toBe('Product A');
 
 		fireEvent.change(input, { target: { value: 'Product B' } });
+		expect(grid.api.getStateSnapshot().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				draftValue: 'Product B',
+				originalValue: 'Product A',
+				startedBy: 'api',
+				version: expect.any(Number),
+			})
+		);
 		fireEvent.blur(input);
 
 		await waitFor(() => expect(grid.api.getCellValue('1', 'name')).toBe('Product B'));
@@ -356,7 +374,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		act(() => {
 			grid.api.startEditing('1', 'name');
@@ -408,7 +426,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 		const blockedHandler = vi.fn();
 		grid.api.addEventListener(GridEventName.writeBlocked, blockedHandler);
 
@@ -428,7 +446,9 @@ describe('React Adapter (v2 API and Architecture)', () => {
 
 		await waitFor(() => {
 			expect(grid.api.getCellValue('1', 'name')).toBe('Product A');
-			expect(grid.api.getStateSnapshot().activeEdit).toEqual({ rowId: '1', colField: 'name' });
+			expect(grid.api.getStateSnapshot().activeEdit).toEqual(
+				expect.objectContaining({ rowId: '1', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+			);
 		});
 		expect(blockedHandler).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -459,7 +479,7 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		document.body.appendChild(container);
 
 		const colDef = grid.api.getColumnDef('name')!;
-		const node = grid.api.getDataRowNodeAtVisualIndex(0)!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
 
 		const store = createPortalStore<TestRow>();
 		store.mountCell('1:name', container, 'Product A', node, colDef, false, false, undefined, undefined, undefined, undefined, {
@@ -495,14 +515,40 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const colDef = grid.api.getColumnDef('name')!;
 
 		const store = createPortalStore<TestRow>();
-		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 1,
-		});
-		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 2,
-		});
+		store.mountCell(
+			'1:name',
+			container,
+			'Old',
+			makeInternalNode('1', { id: '1', name: 'Old' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 1,
+			}
+		);
+		store.mountCell(
+			'2:name',
+			container,
+			'New',
+			makeInternalNode('2', { id: '2', name: 'New' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 2,
+			}
+		);
 
 		render(<PortalManager store={store} api={grid.api} />);
 
@@ -525,14 +571,40 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const container = document.createElement('div');
 		const colDef = grid.api.getColumnDef('name')!;
 
-		store.mountCell('1:name', container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 1,
-		});
-		store.mountCell('2:name', container, 'New', grid.api.getRowNodeById('2')!, colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 2,
-		});
+		store.mountCell(
+			'1:name',
+			container,
+			'Old',
+			makeInternalNode('1', { id: '1', name: 'Old' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 1,
+			}
+		);
+		store.mountCell(
+			'2:name',
+			container,
+			'New',
+			makeInternalNode('2', { id: '2', name: 'New' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 2,
+			}
+		);
 		await act(async () => {
 			await Promise.resolve();
 		});
@@ -563,10 +635,23 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const colDef = grid.api.getColumnDef('name')!;
 
 		// Mount cell first (structural change)
-		store.mountCell(cellKey, container, 'Old', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 1,
-		});
+		store.mountCell(
+			cellKey,
+			container,
+			'Old',
+			makeInternalNode('1', { id: '1', name: 'Product A' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 1,
+			}
+		);
 		await act(async () => {
 			await Promise.resolve();
 		});
@@ -576,10 +661,23 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const unsubscribeCell = store.subscribeToCell!(cellKey, cellListener);
 
 		// Update cell data only (non-structural change)
-		store.mountCell(cellKey, container, 'New', grid.api.getRowNodeById('1')!, colDef, false, false, undefined, undefined, undefined, undefined, {
-			rowSlotId: 'slot-1',
-			slotGeneration: 2,
-		});
+		store.mountCell(
+			cellKey,
+			container,
+			'New',
+			makeInternalNode('1', { id: '1', name: 'Product A' }),
+			colDef,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{
+				rowSlotId: 'slot-1',
+				slotGeneration: 2,
+			}
+		);
 
 		// The structural listener should NOT have fired again (remains 1)
 		expect(structuralListener).toHaveBeenCalledTimes(1);
@@ -641,49 +739,6 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		});
 
 		expect(onCellValueChanged).not.toHaveBeenCalled();
-		grid.api.destroy();
-	});
-
-	it('should expose a stable navigation controller handle without effect-driven rerender churn', async () => {
-		const grid = createTestGrid<TestRow>({
-			rows: [{ id: '1', name: 'Cell Content' }],
-			columns: [{ field: 'name', header: 'Name', width: 100 }],
-		});
-		let renderCount = 0;
-		const handles: Array<ReturnType<typeof useGridNavigationController<TestRow>>> = [];
-
-		const { rerender, unmount } = render(
-			<GridProvider api={grid.api}>
-				<NavigationControllerProbe
-					onRender={(handle) => {
-						renderCount++;
-						handles.push(handle);
-					}}
-				/>
-			</GridProvider>
-		);
-
-		expect(screen.getByTestId('nav-controller-present').textContent).toBe('yes');
-		await act(async () => {});
-		expect(renderCount).toBe(1);
-		expect(handles[0]).not.toBeNull();
-
-		rerender(
-			<GridProvider api={grid.api}>
-				<NavigationControllerProbe
-					onRender={(handle) => {
-						renderCount++;
-						handles.push(handle);
-					}}
-				/>
-			</GridProvider>
-		);
-
-		await act(async () => {});
-		expect(renderCount).toBe(2);
-		expect(handles[1]).toBe(handles[0]);
-
-		unmount();
 		grid.api.destroy();
 	});
 
@@ -804,6 +859,156 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('should preserve duplicate-field column identity in cell click params', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{ field: 'name', header: 'Name A', width: 100, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 100, colId: 'name-b' },
+			],
+		});
+		const onCellClick = vi.fn();
+
+		const { container, unmount } = render(
+			<GridProvider api={grid.api}>
+				<GridView api={grid.api} enableNavigation={false} onCellClick={onCellClick} />
+			</GridProvider>
+		);
+
+		await waitFor(() => {
+			expect(container.querySelectorAll('.og-cell[data-col-field="name"]')).toHaveLength(2);
+		});
+
+		fireEvent.click(container.querySelectorAll('.og-cell[data-col-field="name"]')[1]!);
+
+		expect(onCellClick).toHaveBeenCalledWith(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colIndex: 1,
+				column: expect.objectContaining({ colId: 'name-b' }),
+				value: 'Product A',
+			})
+		);
+
+		unmount();
+		grid.api.destroy();
+	});
+
+	it('should pass canonical duplicate-field column identity to custom renderers', () => {
+		const rendererProps: Record<string, unknown>[] = [];
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{ field: 'name', header: 'Name A', width: 100, colId: 'name-a' },
+				{
+					field: 'name',
+					header: 'Name B',
+					width: 100,
+					colId: 'name-b',
+					renderer: {
+						kind: 'react',
+						component: (props: any) => {
+							rendererProps.push(props as Record<string, unknown>);
+							return <span data-testid='duplicate-renderer'>{String(props.colId)}</span>;
+						},
+					},
+				},
+			],
+		});
+
+		const duplicateColumn = grid.api.getDisplayedColumns()[1]!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
+
+		render(
+			<GridProvider api={grid.api}>
+				<PortalCell rowId='1' colField='name' value='Product A' col={duplicateColumn} node={node} isEditing={false} isLoading={false} />
+			</GridProvider>
+		);
+
+		expect(screen.getByTestId('duplicate-renderer').textContent).toBe('name-b');
+		expect(rendererProps[0]).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: duplicateColumn.instanceId,
+			})
+		);
+
+		grid.api.destroy();
+	});
+
+	it('should pass canonical duplicate-field column identity to custom editors and route draft updates by instance id', async () => {
+		const editorProps: Record<string, unknown>[] = [];
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [
+				{ field: 'name', header: 'Name A', width: 100, colId: 'name-a' },
+				{
+					field: 'name',
+					header: 'Name B',
+					width: 100,
+					colId: 'name-b',
+					cellEditor: (props) => {
+						editorProps.push(props as unknown as Record<string, unknown>);
+						return (
+							<input
+								data-testid='duplicate-editor'
+								value={String(props.value)}
+								onChange={(e) => props.onChange(e.target.value)}
+								onBlur={() => props.onCommit()}
+							/>
+						);
+					},
+				},
+			],
+		});
+
+		const duplicateColumn = grid.api.getDisplayedColumns()[1]!;
+		const node = makeInternalNode('1', { id: '1', name: 'Product A' });
+
+		act(() => {
+			grid.api.startEditing('1', duplicateColumn.instanceId!);
+		});
+
+		render(
+			<GridProvider api={grid.api}>
+				<PortalCell rowId='1' colField='name' value='Product A' col={duplicateColumn} node={node} isEditing={true} isLoading={false} />
+			</GridProvider>
+		);
+
+		const input = screen.getByTestId('duplicate-editor') as HTMLInputElement;
+		fireEvent.change(input, { target: { value: 'Product B' } });
+
+		expect(editorProps[0]).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: duplicateColumn.instanceId,
+			})
+		);
+		expect(grid.api.getStateSnapshot().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: duplicateColumn.instanceId,
+				draftValue: 'Product B',
+			})
+		);
+
+		fireEvent.blur(input);
+
+		await waitFor(() => {
+			expect(grid.api.getCellValue('1', 'name')).toBe('Product B');
+			expect(grid.api.getStateSnapshot().activeEdit).toBeNull();
+		});
+
+		grid.api.destroy();
+	});
+
 	it('should not mix stale native text with custom renderer content after column topology changes', async () => {
 		const customColumns: ColumnDef<{ id: string; risk: string; col_999: string }>[] = [
 			{
@@ -902,6 +1107,85 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		grid.api.destroy();
 	});
 
+	it('does not rerender a key-scoped selector for an unrelated column mutation', () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [{ id: '1', name: 'Product A' }],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const renderSpy = vi.fn();
+
+		const SelectionInspector = () => {
+			const focused = useGridKeySelector('selection', (state) => state.selection.focus);
+			renderSpy(focused);
+			return <span data-testid='key-scoped-focus'>{focused?.rowId ?? 'none'}</span>;
+		};
+
+		render(
+			<GridProvider api={grid.api}>
+				<SelectionInspector />
+			</GridProvider>
+		);
+
+		expect(renderSpy).toHaveBeenCalledTimes(1);
+		act(() => {
+			grid.api.setColumnWidth('name', 180);
+		});
+		expect(renderSpy).toHaveBeenCalledTimes(1);
+
+		act(() => {
+			grid.api.selectCell({ rowId: '1', colField: 'name' });
+		});
+		expect(renderSpy).toHaveBeenCalledTimes(2);
+		grid.api.destroy();
+	});
+
+	it('FormulaBar subscribes only to the focused cell', async () => {
+		const grid = createTestGrid<TestRow>({
+			rows: [
+				{ id: '1', name: 'Product A' },
+				{ id: '2', name: 'Product B' },
+			],
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const cellNotifications = vi.fn();
+		const subscribeToCell = vi.fn((rowId: string, colField: string, listener: () => void) =>
+			grid.api.subscribeToCell(rowId, colField, () => {
+				cellNotifications(rowId, colField);
+				listener();
+			})
+		);
+		const formulaApi = { ...grid.api, subscribeToCell };
+
+		act(() => {
+			grid.api.selectCell({ rowId: '1', colField: 'name' });
+		});
+		render(<FormulaBar api={formulaApi} />);
+
+		const input = await screen.findByRole('textbox');
+		await waitFor(() => {
+			expect(subscribeToCell).toHaveBeenCalledWith('1', 'name', expect.any(Function));
+			expect((input as HTMLInputElement).value).toBe('Product A');
+		});
+
+		act(() => {
+			grid.api.setCellValue('2', 'name', 'Product B+');
+			grid.api.flushCellUpdatesSync();
+		});
+		expect(cellNotifications).not.toHaveBeenCalled();
+		expect((input as HTMLInputElement).value).toBe('Product A');
+
+		act(() => {
+			grid.api.setCellValue('1', 'name', 'Product A+');
+			grid.api.flushCellUpdatesSync();
+		});
+		await waitFor(() => {
+			expect(cellNotifications).toHaveBeenCalledTimes(1);
+			expect((input as HTMLInputElement).value).toBe('Product A+');
+		});
+
+		grid.api.destroy();
+	});
+
 	it('should rerender custom cell renderer when cell value is programmatically updated', async () => {
 		const grid = createTestGrid<TestRow>({
 			rows: [{ id: '1', name: 'Product A' }],
@@ -986,12 +1270,18 @@ describe('React Adapter (v2 API and Architecture)', () => {
 		const childCell = (await screen.findByText('Child A')).closest('.og-cell') as HTMLElement;
 		fireEvent.mouseDown(childCell);
 		fireEvent.click(childCell);
-		expect(childGrid.api.getStateSnapshot().selection.focus).toEqual({ rowId: 'c1', colField: 'name' });
+		expect(childGrid.api.getStateSnapshot().selection.focus).toEqual(
+			expect.objectContaining({ rowId: 'c1', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+		);
 
 		fireEvent.keyDown(window, { key: 'ArrowDown' });
 
-		expect(parentGrid.api.getStateSnapshot().selection.focus).toEqual({ rowId: 'p1', colField: 'name' });
-		expect(childGrid.api.getStateSnapshot().selection.focus).toEqual({ rowId: 'c2', colField: 'name' });
+		expect(parentGrid.api.getStateSnapshot().selection.focus).toEqual(
+			expect.objectContaining({ rowId: 'p1', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+		);
+		expect(childGrid.api.getStateSnapshot().selection.focus).toEqual(
+			expect.objectContaining({ rowId: 'c2', colField: 'name', colId: 'name', columnInstanceId: expect.any(String) })
+		);
 
 		unmount();
 		parentGrid.api.destroy();
@@ -1715,7 +2005,7 @@ describe('Grid pagination prop', () => {
 		expect(screen.getByText((content) => content.includes('of 5'))).toBeTruthy();
 	});
 
-	it('paginates server rows and shifts datasource fetches by page automatically', async () => {
+	it('loads server rows through the SSRM datasource contract', async () => {
 		const rows: TestRow[] = [
 			{ id: '1', name: 'Alice' },
 			{ id: '2', name: 'Bob' },
@@ -1723,9 +2013,9 @@ describe('Grid pagination prop', () => {
 			{ id: '4', name: 'Dane' },
 			{ id: '5', name: 'Elle' },
 		];
-		const getPage = vi.fn(async ({ page, pageSize }: { page: number; pageSize: number }) => ({
-			rows: rows.slice(page * pageSize, (page + 1) * pageSize),
-			totalRowCount: rows.length,
+		const getRows = vi.fn(async ({ startRow, endRow }: { startRow: number; endRow: number }) => ({
+			rows: rows.slice(startRow, endRow),
+			rowCount: rows.length,
 		}));
 
 		render(
@@ -1733,24 +2023,25 @@ describe('Grid pagination prop', () => {
 				<Grid
 					rowModelType='server'
 					columns={[{ field: 'name', header: 'Name', width: 120 }]}
-					datasource={{ getPage }}
+					datasource={{ getRows }}
 					getRowId={(row: TestRow) => row.id}
 					enableNavigation={false}
-					pagination={{ pageSize: 2 }}
+					blockSize={2}
 				/>
 			</div>
 		);
 
 		await waitFor(() => expect(screen.getByText('Alice')).toBeTruthy());
-		expect(getPage.mock.calls.some(([params]) => params.page === 0 && params.pageSize === 2)).toBe(true);
-
-		// Wait until the core bar reflects the server totals (next page available), then page.
-		await waitFor(() => expect((screen.getByLabelText('Next page') as HTMLButtonElement).disabled).toBe(false));
-		fireEvent.click(screen.getByLabelText('Next page'));
-
-		await waitFor(() => expect(getPage.mock.calls.some(([params]) => params.page === 1 && params.pageSize === 2)).toBe(true));
-		await waitFor(() => expect(screen.getByText('Cara')).toBeTruthy());
-		expect(screen.queryByText('Alice')).toBeNull();
+		expect(screen.getByText('Bob')).toBeTruthy();
+		expect(getRows.mock.calls[0][0]).toEqual(
+			expect.objectContaining({
+				startRow: 0,
+				endRow: 2,
+				route: [],
+				sortModel: null,
+				filterModel: null,
+			})
+		);
 	});
 });
 

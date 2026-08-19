@@ -209,6 +209,16 @@ function parsePersistedGridState(raw: unknown): PersistedGridStateParseResult {
 }
 
 /**
+ * Validate an unknown persisted-state envelope without applying it.
+ * Storage adapters use this at their deserialization boundary so every
+ * persisted-state consumer follows the same schema and diagnostic messages.
+ */
+export function validatePersistedGridState(raw: unknown): string | null {
+	const parsed = parsePersistedGridState(raw);
+	return parsed.ok ? null : parsed.error;
+}
+
+/**
  * Pluggable persistence adapter. Implement this interface to store grid settings
  * anywhere — localStorage, a remote API, a database, etc.
  *

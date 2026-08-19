@@ -93,8 +93,8 @@ describe('RowSlot & CellSlot Controllers', () => {
 		const row = new RowSlot('row-1', rowEl);
 		const cellEl = document.createElement('div');
 		const cell = new CellSlot(cellEl);
-		cell.columnId = 'name';
-		row.cellsByColumnId.set('name', cell);
+		cell.columnInstanceId = 'name' as any;
+		row.cellsByColumnInstanceId.set('name' as any, cell);
 		row.centerCells.push(cell);
 		rowEl.appendChild(cellEl);
 
@@ -102,7 +102,7 @@ describe('RowSlot & CellSlot Controllers', () => {
 
 		expect(rowEl.style.visibility).toBe('hidden');
 		expect(cellEl.parentNode).toBe(rowEl);
-		expect(row.cellsByColumnId.get('name')).toBe(cell);
+		expect(row.cellsByColumnInstanceId.get('name' as any)).toBe(cell);
 	});
 
 	it('unbindHot() preserves warm row dataset mirrors for same-row rebound', () => {
@@ -115,5 +115,18 @@ describe('RowSlot & CellSlot Controllers', () => {
 		expect(rowEl.dataset.rowIndex).toBe('2');
 		expect(rowEl.dataset.rowId).toBe('row-2');
 		expect(rowEl.getAttribute('aria-rowindex')).toBe('3');
+	});
+
+	it('update() makes a hot-unbound slot visible when it is rebound', () => {
+		const rowEl = document.createElement('div');
+		const row = new RowSlot('row-1', rowEl);
+
+		row.update(2, 'row-2', 'data', 80, 40, 'og-row selected');
+		row.unbindHot();
+		const updated = row.update(4, 'row-4', 'data', 160, 40, 'og-row');
+
+		expect(updated).toBe(true);
+		expect(rowEl.style.visibility).toBe('');
+		expect(rowEl.dataset.rowIndex).toBe('4');
 	});
 });

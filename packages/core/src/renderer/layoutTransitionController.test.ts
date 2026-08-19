@@ -117,6 +117,39 @@ describe('LayoutTransitionController', () => {
 		c.destroy();
 	});
 
+	it('uses move-only animation for live reorders without enter or exit ghosts', () => {
+		const calls: { kf: Keyframe[]; el: HTMLElement }[] = [];
+		(HTMLElement.prototype as any).animate = function (kf: Keyframe[]) {
+			calls.push({ kf, el: this });
+			return { cancel: vi.fn(), onfinish: null, oncancel: null } as unknown as Animation;
+		};
+
+		const exitLayer = document.createElement('div');
+		const a = slot('a', 0);
+		(a as any).lastHeight = 40;
+		const b = slot('b', 40);
+		(b as any).lastHeight = 40;
+		const active = new Map<number, any>([
+			[0, a],
+			[1, b],
+		]);
+		const c = new LayoutTransitionController(() => active, { getExitLayer: () => exitLayer, isRowIdLive: () => false });
+		c.captureSnapshot('live-reorder');
+
+		b.lastTop = 0;
+		active.clear();
+		active.set(0, b);
+		active.set(1, slot('z', 40));
+		c.beginAnimation();
+
+		expect(exitLayer.children.length).toBe(0);
+		expect(calls).toHaveLength(1);
+		expect(calls[0]!.el).toBe(b.element);
+		expect(calls[0]!.kf[0].transform).toBe('translateY(40px)');
+		expect(calls[0]!.kf[1].transform).toBe('translateY(0px)');
+		c.destroy();
+	});
+
 	it('cancel() tears down in-flight animations', () => {
 		const cancels: Array<() => void> = [];
 		(HTMLElement.prototype as any).animate = function () {

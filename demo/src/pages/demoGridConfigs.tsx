@@ -97,7 +97,7 @@ export function createPerformanceColumns(massiveColumns: boolean): ColumnDef<Per
 			field: 'delta',
 			header: 'Delta Δ',
 			width: 90,
-			renderer: { kind: 'react', component: GreeksRenderer, capabilities: { scrollBehavior: 'defer' } },
+			renderer: { kind: 'react', component: GreeksRenderer, capabilities: { scrollPresentation: 'freeze' } },
 			valueGetterDependencies: ['price', 'quantity'],
 			valueGetter: ({ row }) => {
 				const vol = parseFloat(row.quantity) || 20;
@@ -110,7 +110,7 @@ export function createPerformanceColumns(massiveColumns: boolean): ColumnDef<Per
 			field: 'gamma',
 			header: 'Gamma Γ',
 			width: 95,
-			renderer: { kind: 'react', component: GreeksRenderer, capabilities: { scrollBehavior: 'defer' } },
+			renderer: { kind: 'react', component: GreeksRenderer, capabilities: { scrollPresentation: 'freeze' } },
 			valueGetterDependencies: ['price', 'quantity'],
 			valueGetter: ({ row }) => {
 				const vol = parseFloat(row.quantity) || 20;
@@ -123,7 +123,7 @@ export function createPerformanceColumns(massiveColumns: boolean): ColumnDef<Per
 			field: 'vega',
 			header: 'Vega ν',
 			width: 90,
-			renderer: { kind: 'react', component: GreeksRenderer, capabilities: { scrollBehavior: 'live' } },
+			renderer: { kind: 'react', component: GreeksRenderer, capabilities: { scrollPresentation: 'freeze' } },
 			valueGetterDependencies: ['price', 'quantity'],
 			valueGetter: ({ row }) => {
 				const vol = parseFloat(row.quantity) || 20;
@@ -136,7 +136,7 @@ export function createPerformanceColumns(massiveColumns: boolean): ColumnDef<Per
 			field: 'theta',
 			header: 'Theta θ',
 			width: 90,
-			renderer: { kind: 'react', component: GreeksRenderer, capabilities: { scrollBehavior: 'defer' } },
+			renderer: { kind: 'react', component: GreeksRenderer, capabilities: { scrollPresentation: 'freeze' } },
 			valueGetterDependencies: ['price', 'quantity'],
 			valueGetter: ({ row }) => {
 				const vol = parseFloat(row.quantity) || 20;
@@ -153,10 +153,10 @@ export function createPerformanceColumns(massiveColumns: boolean): ColumnDef<Per
 			header: 'Risk Rating',
 			width: 110,
 			cellEditor: StatusDropdownEditor,
-			// scrollSnapshot: 'html' — LOW/MEDIUM/HIGH risk badges keep their glow and color during
-			// fast scroll without any React re-render. The static clone is replaced by the live
-			// portal on the next post-scroll fidelity pass.
-			renderer: { kind: 'react', component: RiskBadgeRenderer, capabilities: { scrollBehavior: 'defer', scrollSnapshot: 'html' } },
+			// scrollPresentation: 'html-snapshot' — LOW/MEDIUM/HIGH risk badges keep their glow and
+			// color during fast scroll without any React re-render. The static clone is replaced by
+			// the live portal on the next post-scroll fidelity pass.
+			renderer: { kind: 'react', component: RiskBadgeRenderer, capabilities: { scrollPresentation: 'html-snapshot' } },
 			valueGetter: ({ row }) => (row.status === 'Active' ? 'LOW' : row.status === 'Pending' ? 'MEDIUM' : 'HIGH'),
 		},
 	];
@@ -183,16 +183,18 @@ export function createServerColumns(): ColumnDef<ServerAuditRow>[] {
 			field: 'service',
 			header: 'Microservice',
 			width: 140,
-			// scrollSnapshot: 'html' — after the first fidelity render the grid captures the badge's
-			// styled HTML (colored left-border pill) and injects it as a static clone during scroll.
-			// The service chip looks exactly the same while the grid is in motion.
-			renderer: { kind: 'react', component: ServiceBadgeRenderer, capabilities: { scrollSnapshot: 'html' } },
+			// scrollPresentation: 'html-snapshot' — after the first fidelity render the grid captures
+			// the badge's styled HTML (colored left-border pill) and injects it as a static clone
+			// during scroll. The service chip looks exactly the same while the grid is in motion.
+			renderer: { kind: 'react', component: ServiceBadgeRenderer, capabilities: { scrollPresentation: 'html-snapshot' } },
 		},
 		{
 			field: 'rendererLive',
 			header: 'Live Rebind',
 			width: 170,
-			renderer: { kind: 'react', component: RendererStrategyProbe, capabilities: { scrollBehavior: 'live' } },
+			// scrollPresentation: 'live' — the real renderer mounts/updates on every scroll frame,
+			// unlike every other column here which freezes or shows an impostor during scroll.
+			renderer: { kind: 'react', component: RendererStrategyProbe, capabilities: { scrollPresentation: 'live' } },
 			valueGetter: ({ row }) => `live|${row.service}`,
 		},
 		{
@@ -201,7 +203,7 @@ export function createServerColumns(): ColumnDef<ServerAuditRow>[] {
 			width: 170,
 			// Plain text impostor — shows raw "defer|INFO scroll-idle" text during scroll.
 			// Compare with the Snap column next to it to see the visual difference.
-			renderer: { kind: 'react', component: RendererStrategyProbe, capabilities: { scrollBehavior: 'defer' } },
+			renderer: { kind: 'react', component: RendererStrategyProbe, capabilities: { scrollPresentation: 'freeze' } },
 			valueGetterDependencies: ['severity'],
 			valueGetter: ({ row }) => `defer|${row.severity}`,
 		},
@@ -209,13 +211,13 @@ export function createServerColumns(): ColumnDef<ServerAuditRow>[] {
 			field: 'rendererSnap',
 			header: 'Defer + Snap',
 			width: 185,
-			// scrollSnapshot: 'html' opt-in — same renderer and data as "Defer Stable" but the grid
-			// captures the badge HTML after each fidelity render and replays it during scroll.
+			// scrollPresentation: 'html-snapshot' opt-in — same renderer and data as "Defer Stable" but
+			// the grid captures the badge HTML after each fidelity render and replays it during scroll.
 			// Scroll fast and compare: this column shows styled chips, the one to its left shows text.
 			renderer: {
 				kind: 'react',
 				component: RendererStrategyProbe,
-				capabilities: { scrollBehavior: 'defer', scrollSnapshot: 'html' },
+				capabilities: { scrollPresentation: 'html-snapshot' },
 			},
 			valueGetterDependencies: ['severity'],
 			valueGetter: ({ row }) => `defer|${row.severity}`,
@@ -224,15 +226,15 @@ export function createServerColumns(): ColumnDef<ServerAuditRow>[] {
 			field: 'severity',
 			header: 'Severity',
 			width: 120,
-			// scrollSnapshot: 'html' — the CRITICAL/ERROR/WARNING risk badges preserve their
-			// glow colors and typography during scroll without any React re-render.
-			renderer: { kind: 'react', component: RiskBadgeRenderer, capabilities: { scrollSnapshot: 'html' } },
+			// scrollPresentation: 'html-snapshot' — the CRITICAL/ERROR/WARNING risk badges preserve
+			// their glow colors and typography during scroll without any React re-render.
+			renderer: { kind: 'react', component: RiskBadgeRenderer, capabilities: { scrollPresentation: 'html-snapshot' } },
 		},
 		{
 			field: 'rendererFallback',
 			header: 'Defer Freeze',
 			width: 175,
-			renderer: { kind: 'react', component: RendererStrategyProbe, capabilities: { scrollBehavior: 'defer' } },
+			renderer: { kind: 'react', component: RendererStrategyProbe, capabilities: { scrollPresentation: 'freeze' } },
 			valueGetterDependencies: ['latencyMs'],
 			valueGetter: ({ row }) => `defer|${row.latencyMs}ms`,
 		},
@@ -240,7 +242,7 @@ export function createServerColumns(): ColumnDef<ServerAuditRow>[] {
 			field: 'rendererDestroy',
 			header: 'Destroy Recycle',
 			width: 180,
-			renderer: { kind: 'react', component: RendererStrategyProbe, capabilities: { scrollBehavior: 'defer' } },
+			renderer: { kind: 'react', component: RendererStrategyProbe, capabilities: { scrollPresentation: 'freeze' } },
 			valueGetterDependencies: ['ipAddress'],
 			valueGetter: ({ row }) => `destroy|${row.ipAddress}`,
 		},
@@ -361,25 +363,46 @@ export function createCustomColumns(): ColumnDef<CustomShowcaseRow>[] {
 	return [
 		{ field: 'id', header: 'Asset ID', width: 100 },
 		{ field: 'name', header: 'Premium Asset', width: 180 },
-		{ field: 'price', header: 'Acquisition Cost ($)', width: 150, renderer: { kind: 'react', component: PriceBadgeRenderer } },
+		{
+			field: 'price',
+			header: 'Acquisition Cost ($)',
+			width: 150,
+			renderer: {
+				kind: 'react',
+				component: PriceBadgeRenderer,
+				capabilities: { scrollPresentation: 'live', live: { priority: 'high', allowEmergencyShell: true, update: 'react' } },
+			},
+		},
 		{
 			field: 'rating',
 			header: 'Client Rating',
 			width: 160,
-			renderer: { kind: 'react', component: StarRatingRenderer, capabilities: { scrollBehavior: 'live', scrollSnapshot: 'html' } },
+			renderer: {
+				kind: 'react',
+				component: StarRatingRenderer,
+				capabilities: { scrollPresentation: 'live', live: { priority: 'high', update: 'react', allowEmergencyShell: true } },
+			},
 		},
 		{
 			field: 'progress',
 			header: 'Deployment Status',
 			width: 170,
-			renderer: { kind: 'react', component: ProgressBarRenderer },
+			renderer: {
+				kind: 'react',
+				component: ProgressBarRenderer,
+				capabilities: { scrollPresentation: 'live', live: { priority: 'high', allowEmergencyShell: true, update: 'react' } },
+			},
 			cellEditor: ProgressSliderEditor,
 		},
 		{
 			field: 'status',
 			header: 'Operational Status',
 			width: 140,
-			renderer: { kind: 'react', component: StatusBadgeRenderer },
+			renderer: {
+				kind: 'react',
+				component: StatusBadgeRenderer,
+				capabilities: { scrollPresentation: 'live', live: { priority: 'high', allowEmergencyShell: true, update: 'react' } },
+			},
 			cellEditor: StatusDropdownEditor,
 			headerMenuComponent: StatusHeaderFilter,
 		},
@@ -435,7 +458,16 @@ export function createDashboardColumns(): ColumnDef<DashboardStockRow>[] {
 	return [
 		{ field: 'symbol', header: 'Ticker', width: 80 },
 		{ field: 'name', header: 'Company', width: 160 },
-		{ field: 'price', header: 'Price (DOM)', width: 130, renderer: { kind: 'dom', renderer: SparklineRenderer } },
+		{
+			field: 'price',
+			header: 'Price (DOM)',
+			width: 130,
+			renderer: {
+				kind: 'dom',
+				renderer: SparklineRenderer,
+				capabilities: { scrollPresentation: 'html-snapshot', htmlSnapshot: { allowShellWhenMissing: true } },
+			},
+		},
 		{ field: 'change', header: 'Change % (Imperative)', width: 165, renderer: { kind: 'imperativeReact', component: LivePriceRenderer } },
 		{ field: 'volume', header: 'Vol/Analytics (React)', width: 165, renderer: { kind: 'react', component: HeavyAnalyticsCell } },
 		{ field: 'risk', header: 'Risk', width: 90 },

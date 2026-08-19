@@ -1,8 +1,8 @@
-export { createClientGrid, createInfiniteGrid, createServerPageGrid, createLocalStorageAdapter } from './createGrid.js';
+export { createClientGrid, createInfiniteGrid, createServerSideGrid, createLocalStorageAdapter } from './createGrid.js';
 export type {
 	ClientGridOptions,
 	InfiniteGridOptions,
-	ServerPageGridOptions,
+	ServerSideGridOptions,
 	GridPersistenceAdapter,
 	PersistedGridState,
 	GridWorkspaceAdapter,
@@ -36,21 +36,37 @@ export type {
 	CapabilityDiagnostics,
 } from './capabilities/capabilityTypes.js';
 export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from './capabilities/capabilityTypes.js';
-export type { InfiniteDatasource, InfiniteGetRowsParams, InfiniteRowModelOptions } from './infiniteRowModel.js';
+export type { InfiniteDatasource, InfiniteGetRowsParams, InfiniteGetRowsResult, InfiniteRowModelOptions } from './infiniteRowModel.js';
 export type {
-	ServerDatasource,
-	ServerGetPageParams,
-	ServerPaginationOptions,
-	ServerPageState,
-	ServerPageRowModelOptions,
-} from './serverPageRowModel.js';
+	CreateServerSideGetRowsRequestInput,
+	NormalizedServerSideGetRowsResult,
+	NormalizeServerSideGetRowsResultInput,
+	ResolveServerSideRowCountStateInput,
+	ServerSideBlockSnapshot,
+	ServerSideBlockState,
+	ServerSideDatasource,
+	ServerSideGetRowsRequest,
+	ServerSideGetRowsResult,
+	ServerSideGroupMetadata,
+	ServerSideRefreshOptions,
+	ServerSideRoute,
+	ServerSideRowCountState,
+	ServerSideRowGroupColumn,
+	ServerSideRowModelOptions,
+	ServerSideStoreSnapshot,
+	ServerSideValueColumn,
+} from './serverSideRowModel.js';
+export { createServerSideGetRowsRequest, normalizeServerSideGetRowsResult, resolveServerSideRowCountState } from './serverSideRowModel.js';
+export { areServerSideRoutesEqual, createServerSideRouteKey, isRootServerSideRoute, normalizeServerSideRoute } from './serverSideRoute.js';
 export type { RowModelType } from './state/GridState.js';
+export type { GridRowNode, GridRowNodeValidationState, RowNodeSelectionOptions } from './publicRowNode.js';
+export type { GridRowDataRef } from './publicRowRef.js';
 export type { PersistenceStatus, PersistenceSaveStatus } from './persistence/statePersistence.js';
 export { GRID_STATE_SCHEMA_VERSION, validateSchemaVersion } from './persistence/statePersistence.js';
 
-export { RowNode } from './rowNode.js';
 export { GridEventName } from './api/GridEvents.js';
-export type { RowDataTransaction, RowNodeTransaction } from './api/GridApi.js';
+export type { RowDataTransaction } from './api/GridApi.js';
+export type { RowNodeTransaction } from './rowTransactions.js';
 export type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './api/GridApi.js';
 export type { GridEventPayloadMap, GridWriteBlockedEventPayload, GridWriteBlockedSource, GridWriteBlockedStatus } from './api/GridEvents.js';
 export type {
@@ -86,12 +102,15 @@ export type {
 	CellCopyParams,
 	CellPasteParams,
 	CellRendererCapabilities,
+	CellScrollPresentation,
+	GridRendererOptions,
 	CellRendererPhase,
 	ColumnDef,
 	ColumnRendererSpec,
 	DomCellRenderer,
 	DomCellRendererHandle,
 	DomCellRendererParams,
+	DomCellRendererRowRef,
 	ImperativeCellHandle,
 	RowStyleRule,
 	GroupRowStyleRule,
@@ -104,14 +123,37 @@ export type {
 export type { GridInitialState } from './state/GridState.js';
 export type {
 	VisualRowModel,
+	RowModelViewportAccess,
+	InternalRowModelKind,
+	RowNodeKind,
+	RowLoadState,
+	RowRangeLoadState,
+	RowCountKind,
 	AllDataNodesCapableRowModel,
 	FilteredDataNodesCapableRowModel,
 	CurrentPageDataNodesCapableRowModel,
+	ServerSideControllableRowModel,
 } from './rowModel.js';
-export type { VisualRow, DataVisualRow, GroupVisualRow, DetailVisualRow, FooterVisualRow, LoadingVisualRow } from './visualRow.js';
+export type {
+	VisualRow,
+	DataVisualRow,
+	GroupVisualRow,
+	DetailVisualRow,
+	FooterVisualRow,
+	LoadingVisualRow,
+	FailedVisualRow,
+	PlaceholderVisualRow,
+} from './visualRow.js';
 export type { PersistedGridState as SerializableGridState } from './persistence/statePersistence.js';
 
 export { isDomCellRenderer } from './columnDef.js';
+export {
+	areCellPointersEqual,
+	areCanonicalCellPointersEqual,
+	doesCanonicalCellPointerMatchColumn,
+	doesCellPointerMatchColumn,
+	getCellPointerColumnKey,
+} from './interaction/cellPointer.js';
 export type {
 	FilterModel,
 	QuickFilterModel,
@@ -197,8 +239,8 @@ export { required, email, min, max, number, date, oneOf, regex, customCellRule }
 export { duplicateValueRule, missingRequiredRule } from './integrity.js';
 export type { TooltipParams, ValueFormatterParams } from './columnDef.js';
 export type { FloatingFilterRendererParams } from './renderer/floatingFilterRenderer.js';
-export { registerGridContextMenu, registerGridNavigation, type GridContextMenuHandle, type GridNavigationHandle } from './gridPlugins.js';
-export type { GridNavigationOptions } from './navigation.js';
+export { registerGridContextMenu, type GridContextMenuHandle } from './gridPlugins.js';
+export type { GridNavigationOptions } from './interaction/GridInteractionController.js';
 
 export {
 	LIGHT_THEME,

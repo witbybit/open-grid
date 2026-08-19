@@ -60,7 +60,17 @@ describe('React public boundary', () => {
 	});
 
 	it('does not export incubating portal, formula, chart, or filter renderer helpers from the main entry', () => {
-		const removed = ['PortalCell', 'PortalManager', 'FormulaBar', 'ColumnFilterRenderer', 'ChartType', 'ChartTheme', 'ValueFormat'];
+		const removed = [
+			'PortalCell',
+			'PortalManager',
+			'SLOW_FRAME_THRESHOLD_MS',
+			'FormulaBar',
+			'ColumnFilterRenderer',
+			'GridFlightRecorderDevTools',
+			'ChartType',
+			'ChartTheme',
+			'ValueFormat',
+		];
 		for (const name of removed) {
 			expect((publicApi as Record<string, unknown>)[name], `${name} must not be exported from @eregister/open-grid-react`).toBeUndefined();
 		}
@@ -71,9 +81,23 @@ describe('React public boundary', () => {
 		expect((experimentalApi as Record<string, unknown>)['PortalManager']).toBeDefined();
 		expect((experimentalApi as Record<string, unknown>)['FormulaBar']).toBeDefined();
 		expect((experimentalApi as Record<string, unknown>)['ColumnFilterRenderer']).toBeDefined();
+		expect((experimentalApi as Record<string, unknown>)['GridFlightRecorderDevTools']).toBeTypeOf('function');
+		expect((experimentalApi as Record<string, unknown>)['GridTraceReplayControls']).toBeTypeOf('function');
 	});
 
 	it('matches the reviewed experimental runtime export snapshot', () => {
-		expect(Object.keys(experimentalApi).sort()).toEqual(['ColumnFilterRenderer', 'FormulaBar', 'PortalCell', 'PortalManager']);
+		expect(Object.keys(experimentalApi).sort()).toEqual([
+			'ColumnFilterRenderer',
+			'FormulaBar',
+			'GridFlightRecorderDevTools',
+			'GridTraceReplayControls',
+			'PortalCell',
+			'PortalManager',
+			'SLOW_FRAME_THRESHOLD_MS',
+			'buildFrameDistribution',
+			'filterTraceEvents',
+			'groupTimeline',
+			'tracePrivacyLabel',
+		]);
 	});
 });

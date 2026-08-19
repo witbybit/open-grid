@@ -3,6 +3,7 @@ import type { GridEngine } from '../engine/GridEngine.js';
 import type { ViewportRenderer } from './viewportRenderer.js';
 import type { ColumnInteractionController } from './columnInteractionController.js';
 import type { FillDragController, OverlayBox } from './fillDragController.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 import { getRightPinnedLaneScreenLeft, LEAF_HEADER_HEIGHT } from './layoutPlan.js';
 
 export class OverlayRenderer<TRowData = unknown> {
@@ -72,7 +73,7 @@ export class OverlayRenderer<TRowData = unknown> {
 		this.columnInteractionsGetter().reattachOverlays();
 
 		const state = this.engine.stateManager.getState();
-		const bounds = state.selection.bounds;
+		const bounds = readInteractionState(state).cellSelection.selection.bounds;
 
 		if (!bounds || !this.engine.getRowModel()) {
 			this.hideSelectionOverlay();
@@ -116,7 +117,7 @@ export class OverlayRenderer<TRowData = unknown> {
 
 	public hasVisibleSelectionOverlay(): boolean {
 		const state = this.engine.stateManager.getState();
-		return !!state.selection.bounds && !!this.engine.getRowModel();
+		return !!readInteractionState(state).cellSelection.selection.bounds && !!this.engine.getRowModel();
 	}
 
 	public getClampedOverlayBox(minRow: number, maxRow: number, minCol: number, maxCol: number): OverlayBox | null {

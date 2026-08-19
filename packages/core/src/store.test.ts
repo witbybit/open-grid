@@ -2,10 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { GridStore, GridEventName, validateColumns, validateRowIds } from './store.js';
 import { ClientRowModelController } from './rowModel.js';
 import { InfiniteRowModelController, type InfiniteDatasource } from './infiniteRowModel.js';
-import { ServerPageRowModelController } from './serverPageRowModel.js';
+import { ServerSideRowModelController } from './serverSideRowModel.js';
+import type { ServerSideDatasource, ServerSideRefreshOptions, ServerSideStoreSnapshot } from './serverSideRowModel.js';
 import { GRID_STATE_SCHEMA_VERSION } from './persistence/statePersistence.js';
 import type { ActiveEditState, ColumnDef } from './api/GridApi.js';
 import type { GridQueryModel } from './query/GridQueryModel.js';
+import { createMinimalRowModel } from './testUtils/createMinimalRowModel.js';
 
 interface TestRow {
 	id: string;
@@ -94,6 +96,126 @@ describe('GridStore generic row-store functionality', () => {
 		store.destroy();
 	});
 
+	it('tracks focusOrigin and increments selection version as focus moves', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		const first = store.getState().selection;
+		store.selectCell({ rowId: '2', colField: 'name' }, 'pointer');
+		const second = store.getState().selection;
+
+		expect(first.focusOrigin).toBe('keyboard');
+		expect(first.version).toBeGreaterThan(0);
+		expect(second.focusOrigin).toBe('pointer');
+		expect(second.version ?? 0).toBeGreaterThan(first.version ?? 0);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps internal interaction state synchronized with focus, edit, and row selection', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+			rowSelection: { mode: 'multiple' },
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		store.startEditing('1', 'name');
+		store.selectRows(['1']);
+
+		const state = store.getState();
+		expect(state.interaction?.focus.cell).toEqual(state.selection.focus);
+		expect(state.interaction?.focus.rowIndex).toBe(0);
+		expect(state.interaction?.focus.origin).toBe('keyboard');
+		expect(state.interaction?.focus.version).toBe(state.selection.version ?? 0);
+		expect(state.interaction?.cellSelection.selection.focus).toEqual(state.selection.focus);
+		expect(state.interaction?.activeEdit.active).toBe(state.activeEdit);
+		expect(state.interaction?.rowSelection.selectedRowIds).toBe(state.selectedRowIds);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('keeps interaction focus rowIndex synchronized after structural row reordering', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Bravo', price: 10 },
+				{ id: '2', name: 'Alpha', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		expect(store.getState().interaction?.focus.rowIndex).toBe(0);
+
+		store.setSortModel([{ colId: 'name', sort: 'asc' }]);
+
+		expect(store.getState().selection.focus).toEqual(expect.objectContaining({ rowId: '1', colField: 'name' }));
+		expect(store.getState().interaction?.focus.rowIndex).toBe(1);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('canonicalizes interaction focus identity for duplicate-field runtime selection', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name', colId: 'name-b' }, 'api');
+
+		expect(store.getState().interaction?.focus.cell).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: expect.any(String),
+			})
+		);
+
+		controller.dispose();
+		store.destroy();
+	});
+
 	it('suppresses unrelated selector wakeups for row, column, and integrity subscriptions', () => {
 		const store = new GridStore<TestRow>(
 			{
@@ -158,6 +280,38 @@ describe('GridStore generic row-store functionality', () => {
 		expect(integrity).toHaveBeenCalledTimes(1);
 
 		unsubscribers.forEach((unsubscribe) => unsubscribe());
+		controller.dispose();
+		store.destroy();
+	});
+
+	it("notifies a row subscription only for that row's committed cell changes", () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const firstRow = vi.fn();
+		const secondRow = vi.fn();
+		const unsubscribeFirst = store.subscribeToRow('1', firstRow);
+		const unsubscribeSecond = store.subscribeToRow('2', secondRow);
+
+		store.setCellValue('1', 'name', 'Product A+');
+		store.flushCellUpdatesSync();
+
+		expect(firstRow).toHaveBeenCalledTimes(1);
+		expect(secondRow).not.toHaveBeenCalled();
+
+		unsubscribeFirst();
+		unsubscribeSecond();
 		controller.dispose();
 		store.destroy();
 	});
@@ -399,9 +553,18 @@ describe('GridStore generic row-store functionality', () => {
 			filterModel: { name: { type: 'text', operator: 'contains', value: 'A' } },
 			queryModel,
 			selectedRowIds: ['1'],
-			activeEdit: { rowId: '1', colField: 'name', validationError: 'Required' },
 			pagination: { pageSize: 25, page: 2 },
 			groupBy: ['name'],
+		});
+		const nameColumn = store.engine.columns.getDisplayedColumns()[1] as { field: string; colId?: string; instanceId?: string };
+		store.engine.stateManager.setState({
+			activeEdit: {
+				rowId: '1',
+				colField: nameColumn.field,
+				colId: nameColumn.colId ?? nameColumn.field,
+				columnInstanceId: nameColumn.instanceId as any,
+				validationError: 'Required',
+			},
 		});
 		const snapshot = store.getStateSnapshot();
 		const liveBefore = store.getState();
@@ -502,10 +665,10 @@ describe('GridStore generic row-store functionality', () => {
 			expect.objectContaining({
 				payload: expect.objectContaining({
 					result: expect.objectContaining({
-						invalidatedCells: [
-							{ rowId: '1', colField: 'name' },
-							{ rowId: '2', colField: 'name' },
-						],
+						invalidatedCells: expect.arrayContaining([
+							expect.objectContaining({ rowId: '1', colField: 'name', columnInstanceId: expect.any(String) }),
+							expect.objectContaining({ rowId: '2', colField: 'name', columnInstanceId: expect.any(String) }),
+						]),
 						invalidatedRows: ['1', '2'],
 						overlayChanged: true,
 					}),
@@ -531,15 +694,17 @@ describe('GridStore generic row-store functionality', () => {
 		});
 
 		store.selectCell({ rowId: '1', colField: 'name' });
+		const firstSelectionColumnInstanceId = store.getState().selection.focus?.columnInstanceId;
 		void store.engine.invalidation.consume();
 
 		store.selectCell({ rowId: '2', colField: 'name' });
+		const secondSelectionColumnInstanceId = store.getState().selection.focus?.columnInstanceId;
 		const frame = store.engine.invalidation.consume();
 
 		expect(frame.headers).toBe(true);
 		expect(frame.overlay).toBe(true);
-		expect(frame.cellsByRowId.get('1')).toEqual(new Set(['name']));
-		expect(frame.cellsByRowId.get('2')).toEqual(new Set(['name']));
+		expect(frame.cellsByRowId.get('1')).toEqual(new Set([firstSelectionColumnInstanceId]));
+		expect(frame.cellsByRowId.get('2')).toEqual(new Set([secondSelectionColumnInstanceId]));
 		expect(frame.rows).toEqual(new Set(['1', '2']));
 		expect(frame.invalidations.filter((entry) => entry.kind === 'cell')).toHaveLength(2);
 		expect(frame.invalidations.filter((entry) => entry.kind === 'row')).toHaveLength(2);
@@ -869,7 +1034,459 @@ describe('GridStore generic row-store functionality', () => {
 			isSelected: true,
 			isRowSelected: true,
 		});
+		expect(access?.node).toMatchObject({
+			id: '2',
+			data: { id: '2', name: 'Product B', price: 20 },
+			rowIndex: 1,
+		});
+		expect(access?.node).not.toBe(store.getRowNodeById('2'));
+		expect(access?.node?.getValue('price')).toBe(20);
 		expect(store.getColumnField(1)).toBe('name');
+
+		controller.dispose();
+	});
+
+	it('resolves cell access by pointer identity for duplicate-field columns', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+		const duplicateNameColumn = store.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+
+		const access = store.getCellAccessByPointer({
+			rowId: '1',
+			colField: duplicateNameColumn.field,
+			colId: duplicateNameColumn.colId,
+			columnInstanceId: duplicateNameColumn.instanceId,
+		});
+
+		expect(access).toMatchObject({
+			rowId: '1',
+			colField: 'name',
+			colIndex: 2,
+		});
+		expect(access?.column).toMatchObject({
+			field: 'name',
+			colId: 'name-b',
+		});
+
+		controller.dispose();
+	});
+
+	it('resolves cell state by pointer identity for duplicate-field columns', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+		const firstNameColumn = store.engine.columns.getDisplayedColumns()[1] as { field: string; colId?: string; instanceId?: string };
+		const duplicateNameColumn = store.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+		store.engine.stateManager.setState({
+			activeEdit: {
+				rowId: '1',
+				colField: duplicateNameColumn.field,
+				colId: duplicateNameColumn.colId,
+				columnInstanceId: duplicateNameColumn.instanceId,
+				draftValue: 'Draft B',
+				originalValue: 'Product A',
+				startedBy: 'api',
+				version: 1,
+			},
+		});
+
+		const activeState = store.getCellStateByPointer({
+			rowId: '1',
+			colField: duplicateNameColumn.field,
+			colId: duplicateNameColumn.colId,
+			columnInstanceId: duplicateNameColumn.instanceId,
+		});
+		const inactiveState = store.getCellStateByPointer({
+			rowId: '1',
+			colField: firstNameColumn.field,
+			colId: firstNameColumn.colId,
+			columnInstanceId: firstNameColumn.instanceId,
+		});
+
+		expect(activeState).toMatchObject({
+			value: 'Product A',
+			computedValue: 'Product A',
+			isEditing: true,
+		});
+		expect(inactiveState).toMatchObject({
+			value: 'Product A',
+			computedValue: 'Product A',
+			isEditing: false,
+		});
+
+		controller.dispose();
+	});
+
+	it('preserves duplicate-field editing identity on loaded async row models', async () => {
+		const columns = [
+			{ field: 'id', header: 'ID', width: 50 },
+			{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+			{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+		] satisfies ColumnDef<TestRow>[];
+
+		const infiniteStore = new GridStore<TestRow>({
+			columns,
+			getRowId: (row) => row.id,
+		});
+		const infiniteController = new InfiniteRowModelController<TestRow>(infiniteStore.getInfiniteRowModelRuntime(), {
+			columns: infiniteStore.getState().columns,
+			getRowId: (row) => row.id,
+			blockSize: 25,
+			datasource: {
+				getRows: vi.fn().mockResolvedValue({
+					rows: [{ id: '1', name: 'Alpha', price: 10 }],
+					totalCount: 1,
+				}),
+			},
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const infiniteNameA = infiniteStore.engine.columns.getDisplayedColumns()[1] as { field: string; colId?: string; instanceId?: string };
+		const infiniteNameB = infiniteStore.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+		infiniteStore.startEditing('1', infiniteNameB.instanceId!, 'api');
+
+		const infiniteActive = infiniteStore.getCellStateByPointer({
+			rowId: '1',
+			colField: infiniteNameB.field,
+			colId: infiniteNameB.colId,
+			columnInstanceId: infiniteNameB.instanceId,
+		});
+		const infiniteInactive = infiniteStore.getCellStateByPointer({
+			rowId: '1',
+			colField: infiniteNameA.field,
+			colId: infiniteNameA.colId,
+			columnInstanceId: infiniteNameA.instanceId,
+		});
+
+		expect(infiniteActive?.isEditing).toBe(true);
+		expect(infiniteInactive?.isEditing).toBe(false);
+		expect(infiniteStore.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colId: 'name-b',
+				columnInstanceId: infiniteNameB.instanceId,
+			})
+		);
+
+		const serverStore = new GridStore<TestRow>({
+			columns,
+			getRowId: (row) => row.id,
+		});
+		const serverController = new ServerSideRowModelController<TestRow>(serverStore.getServerSideRowModelRuntime(), {
+			columns: serverStore.getState().columns,
+			getRowId: (row) => row.id,
+			blockSize: 10,
+			datasource: {
+				getRows: vi.fn().mockResolvedValue({
+					rows: [{ id: '2', name: 'Beta', price: 20 }],
+					rowCount: 1,
+				}),
+			},
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const serverNameA = serverStore.engine.columns.getDisplayedColumns()[1] as { field: string; colId?: string; instanceId?: string };
+		const serverNameB = serverStore.engine.columns.getDisplayedColumns()[2] as { field: string; colId?: string; instanceId?: string };
+		serverStore.startEditing('2', serverNameB.instanceId!, 'api');
+
+		const serverActive = serverStore.getCellStateByPointer({
+			rowId: '2',
+			colField: serverNameB.field,
+			colId: serverNameB.colId,
+			columnInstanceId: serverNameB.instanceId,
+		});
+		const serverInactive = serverStore.getCellStateByPointer({
+			rowId: '2',
+			colField: serverNameA.field,
+			colId: serverNameA.colId,
+			columnInstanceId: serverNameA.instanceId,
+		});
+
+		expect(serverActive?.isEditing).toBe(true);
+		expect(serverInactive?.isEditing).toBe(false);
+		expect(serverStore.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '2',
+				colId: 'name-b',
+				columnInstanceId: serverNameB.instanceId,
+			})
+		);
+
+		infiniteController.dispose();
+		infiniteStore.destroy();
+		serverController.dispose();
+		serverStore.destroy();
+	});
+
+	it('normalizes duplicate-field selection by colId when columnInstanceId is absent', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name A', width: 150, colId: 'name-a' },
+				{ field: 'name', header: 'Name B', width: 150, colId: 'name-b' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name', colId: 'name-b' }, 'api');
+
+		expect(store.getState().selection.focus).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: expect.any(String),
+			})
+		);
+		expect(store.getState().selection.anchor).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				colId: 'name-b',
+				columnInstanceId: expect.any(String),
+			})
+		);
+
+		controller.dispose();
+	});
+
+	it('clears focus honestly when the focused column disappears from the displayed set', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		expect(store.getState().interaction?.focus.cell).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				columnInstanceId: expect.any(String),
+			})
+		);
+
+		store.setColumnsVisible(['name'], false);
+
+		expect(store.getState().selection.focus).toBeNull();
+		expect(store.getState().selection.anchor).toBeNull();
+		expect(store.getState().selection.range).toBeNull();
+		expect(store.getState().interaction?.focus.cell).toBeNull();
+		expect(store.getState().interaction?.focus.rowIndex).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('clears active edit honestly when the edited column disappears from the displayed set', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150, editable: true },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.startEditing('1', 'name', 'keyboard');
+		expect(store.getState().activeEdit).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				columnInstanceId: expect.any(String),
+			})
+		);
+
+		store.setColumnsVisible(['name'], false);
+
+		expect(store.getState().activeEdit).toBeNull();
+		expect(store.getState().interaction?.activeEdit.active).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('restores logical focus to the edited cell when edit is cancelled', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150, editable: true },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		const focusedBeforeEdit = store.getState().selection.focus;
+
+		store.startEditing('1', 'name', 'keyboard');
+		store.stopEditing(true);
+
+		expect(store.getState().activeEdit).toBeNull();
+		expect(store.getState().selection.focus).toEqual(focusedBeforeEdit);
+		expect(store.getState().interaction?.focus.cell).toEqual(focusedBeforeEdit);
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('clears focus honestly when the focused row disappears from the visual row model', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'id', header: 'ID', width: 50 },
+				{ field: 'name', header: 'Name', width: 150 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'drop', price: 10 },
+				{ id: '2', name: 'keep', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		store.selectCell({ rowId: '1', colField: 'name' }, 'keyboard');
+		expect(store.getState().interaction?.focus.cell).toEqual(
+			expect.objectContaining({
+				rowId: '1',
+				colField: 'name',
+				columnInstanceId: expect.any(String),
+			})
+		);
+
+		store.setFilterModel({ name: { type: 'text', operator: 'contains', value: 'keep' } });
+
+		expect(store.getVisualIndexByRowId('1')).toBeNull();
+		expect(store.getState().selection.focus).toBeNull();
+		expect(store.getState().selection.anchor).toBeNull();
+		expect(store.getState().selection.range).toBeNull();
+		expect(store.getState().interaction?.focus.cell).toBeNull();
+		expect(store.getState().interaction?.focus.rowIndex).toBeNull();
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('rowsUpdated event exposes public row-node facades instead of internal mutable row nodes', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+		const listener = vi.fn();
+		store.addEventListener(GridEventName.rowsUpdated, listener);
+
+		store.applyTransaction({
+			update: [{ id: '1', name: 'Product A+', price: 10 }],
+		});
+
+		const payload = listener.mock.calls.at(-1)?.[0]?.payload;
+		expect(payload.changedNodes).toHaveLength(1);
+		expect(payload.changedNodes[0]).toMatchObject({
+			id: '1',
+			kind: 'data',
+			rowIndex: 0,
+		});
+		expect(payload.changedNodes[0]).not.toBe(store.getRowNodeById('1'));
+		expect(payload.changedNodes[0].getValue('name')).toBe('Product A+');
+
+		controller.dispose();
+	});
+
+	it('applyTransaction returns public row-node facades instead of internal mutable row nodes', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 150 }],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [
+				{ id: '1', name: 'Product A', price: 10 },
+				{ id: '2', name: 'Product B', price: 20 },
+			],
+			columns: store.getState().columns,
+		});
+
+		const result = store.applyTransaction({
+			update: [{ id: '1', name: 'Product A+', price: 10 }],
+		});
+
+		expect(result?.update).toHaveLength(1);
+		expect(result?.update[0]).toMatchObject({
+			id: '1',
+			kind: 'data',
+			rowIndex: 0,
+		});
+		expect(result?.update[0]).not.toBe(store.getRowNodeById('1'));
+		expect(result?.update[0].getValue('name')).toBe('Product A+');
+		expect('setCellValue' in (result?.update[0] as Record<string, unknown>)).toBe(false);
+
+		controller.dispose();
+	});
+
+	it('valueGetter params expose a lightweight public row ref instead of the internal row node', () => {
+		let seenNode: unknown;
+		const store = new GridStore<TestRow>({
+			columns: [
+				{
+					field: 'display',
+					header: 'Display',
+					valueGetter: ({ node, row }) => {
+						seenNode = node;
+						return `${node.id}:${row.name}:${node.getValue('name')}`;
+					},
+				},
+			] as ColumnDef<TestRow>[],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		expect(store.getCellValue('1', 'display')).toBe('1:Product A:Product A');
+		expect(seenNode).toMatchObject({ id: '1', data: { id: '1', name: 'Product A', price: 10 } });
+		expect(seenNode).not.toBe(store.getRowNodeById('1'));
+		expect(typeof (seenNode as { getValue?: unknown }).getValue).toBe('function');
+		expect('setCellValue' in (seenNode as Record<string, unknown>)).toBe(false);
 
 		controller.dispose();
 	});
@@ -1053,7 +1670,7 @@ describe('GridStore generic row-store functionality', () => {
 		controller.dispose();
 	});
 
-	it('should support stopEditing and setCellValue commits and cancellations', () => {
+	it('should route stopEditing through kernel-owned cancel/commit semantics', async () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 		});
@@ -1062,29 +1679,16 @@ describe('GridStore generic row-store functionality', () => {
 			columns: store.getState().columns,
 		});
 
-		// 1. Enter edit state
-		store.engine.stateManager.setState({
-			activeEdit: {
-				rowId: '1',
-				colField: 'name',
-			},
-		});
-
-		// Cancel edit (just call stopEditing without setCellValue)
-		store.stopEditing();
+		store.startEditing('1', 'name', 'keyboard');
+		store.updateEditDraft('1', 'name', 'Cancelled Keyboard');
+		store.stopEditing(true);
 		expect(store.getState().activeEdit).toBeNull();
 		expect(store.getCellValue('1', 'name')).toBe('Keyboard');
 
-		// 2. Commit edit (set value then call stopEditing)
-		store.engine.stateManager.setState({
-			activeEdit: {
-				rowId: '1',
-				colField: 'name',
-			},
-		});
-
-		store.setCellValue('1', 'name', 'Premium Keyboard');
-		store.stopEditing();
+		store.startEditing('1', 'name', 'keyboard');
+		store.updateEditDraft('1', 'name', 'Premium Keyboard');
+		store.stopEditing(false);
+		await Promise.resolve();
 		expect(store.getState().activeEdit).toBeNull();
 		expect(store.getCellValue('1', 'name')).toBe('Premium Keyboard');
 
@@ -1594,6 +2198,41 @@ describe('GridStore auto-batching and dirty cell fanout', () => {
 		controller.dispose();
 	});
 
+	it('closes engine transaction brackets and flushes queued notifications when a batch callback throws', () => {
+		const store = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name' },
+				{ field: 'price', header: 'Price' },
+			],
+		});
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: 'Product A', price: 10 }],
+			columns: store.getState().columns,
+		});
+		const listener = vi.fn();
+		const renderInvalidated = vi.fn();
+		store.registerCellSubscription({ rowId: '1', colField: 'price', onStoreChange: listener });
+		store.addEventListener(GridEventName.renderInvalidated, renderInvalidated);
+
+		expect(() =>
+			store.engine.batch(() => {
+				store.setCellValue('1', 'price', 15);
+				throw new Error('batch failure');
+			})
+		).toThrow('batch failure');
+
+		expect(listener).toHaveBeenCalledTimes(1);
+		expect(renderInvalidated).toHaveBeenCalledTimes(1);
+
+		store.engine.batch(() => {
+			store.setCellValue('1', 'price', 20);
+		});
+
+		expect(listener).toHaveBeenCalledTimes(2);
+		expect(renderInvalidated).toHaveBeenCalledTimes(2);
+		controller.dispose();
+	});
+
 	it('should only notify subscribers of edited and dependent cells, not all columns on the row', () => {
 		const store = new GridStore<TestRow>({
 			columns: [
@@ -2060,7 +2699,7 @@ describe('GridStore undo and redo functionality', () => {
 		expect(store.getState().columnWidths['name']).toBe(105);
 	});
 
-	it('should support GridStore facade methods getVisualIndexById, getVisualIndexByRowId, getRowNodeById, and getRawRowById correctly', () => {
+	it('should support GridStore facade methods getVisualIndexById, getVisualIndexByRowId, getRowNodeById, getRowNode, and getRawRowById correctly', () => {
 		const store = new GridStore<TestRow>({
 			getRowId: (row) => row.id,
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
@@ -2079,12 +2718,44 @@ describe('GridStore undo and redo functionality', () => {
 		expect(store.getVisualIndexByRowId('1')).toBe(0);
 		expect(store.getVisualIndexByRowId('2')).toBe(1);
 		expect(store.getRowNodeById('1')?.data.name).toBe('Product A');
+		expect(store.getRowLoadState(0)).toEqual({ kind: 'loaded', rowId: '1' });
 		expect(store.getRawRowById('1')).toEqual({ id: '1', name: 'Product A', price: 10 });
 		expect(store.getRawRowById('non-existent')).toBeNull();
+		expect(store.getRowIndexById('1')).toBe(0);
+		expect(store.getRowIndexById('missing')).toBeUndefined();
+
+		const publicNode = store.getRowNode('1');
+		expect(publicNode).toBeDefined();
+		expect(publicNode).not.toBe(store.getRowNodeById('1'));
+		expect(publicNode?.id).toBe('1');
+		expect(publicNode?.kind).toBe('data');
+		expect(publicNode?.rowIndex).toBe(0);
+		expect(publicNode?.loaded).toBe(true);
+		expect(publicNode?.getValue('name')).toBe('Product A');
+		expect(publicNode?.getDisplayValue('name')).toBe('Product A');
+
+		const displayedNode = store.getDisplayedRowAtIndex(0);
+		expect(displayedNode?.id).toBe('1');
+		expect(displayedNode?.kind).toBe('data');
+
+		const seenAllNodeIds: string[] = [];
+		store.forEachNode((node) => {
+			seenAllNodeIds.push(node.id);
+		});
+		expect(seenAllNodeIds).toEqual(['1', '2']);
+
+		const seenDisplayedNodeIds: string[] = [];
+		store.forEachDisplayedNode((node) => {
+			seenDisplayedNodeIds.push(node.id);
+		});
+		expect(seenDisplayedNodeIds).toEqual(['1', '2']);
+
+		expect(publicNode?.setDataValue('name', 'Product A+').status).toBe('applied');
+		expect(store.getRawRowById('1')?.name).toBe('Product A+');
 
 		// Test the luxury row collection APIs
 		expect(store.rows().getAll()).toEqual([
-			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '1', name: 'Product A+', price: 10 },
 			{ id: '2', name: 'Product B', price: 20 },
 		]);
 
@@ -2093,7 +2764,7 @@ describe('GridStore undo and redo functionality', () => {
 			processed.push({ ...row, index });
 		});
 		expect(processed).toEqual([
-			{ id: '1', name: 'Product A', price: 10, index: 0 },
+			{ id: '1', name: 'Product A+', price: 10, index: 0 },
 			{ id: '2', name: 'Product B', price: 20, index: 1 },
 		]);
 
@@ -2103,22 +2774,22 @@ describe('GridStore undo and redo functionality', () => {
 
 		store.selectRange({ rowId: '1', colField: 'name' }, { rowId: '2', colField: 'name' });
 		expect(store.rows().getSelected()).toEqual([
-			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '1', name: 'Product A+', price: 10 },
 			{ id: '2', name: 'Product B', price: 20 },
 		]);
 		expect(store.rows().getSelectedIds()).toEqual(['1', '2']);
 
 		// Getters & Count
 		expect(store.rows().getCount()).toBe(2);
-		expect(store.rows().getById('1')).toEqual({ id: '1', name: 'Product A', price: 10 });
-		expect(store.rows().getNodeById('2')?.data.name).toBe('Product B');
+		expect(store.rows().getById('1')).toEqual({ id: '1', name: 'Product A+', price: 10 });
+		expect(store.rows().getNodeById('2')?.data?.name).toBe('Product B');
 		expect(store.rows().getVisualRowById('1')?.kind).toBe('data');
 
 		// Range testing
 		const range = { start: { rowId: '1', colField: 'name' }, end: { rowId: '2', colField: 'name' } };
 		expect(store.rows().inRange(range).getIds()).toEqual(['1', '2']);
 		expect(store.rows().inRange(range).getData()).toEqual([
-			{ id: '1', name: 'Product A', price: 10 },
+			{ id: '1', name: 'Product A+', price: 10 },
 			{ id: '2', name: 'Product B', price: 20 },
 		]);
 
@@ -2132,6 +2803,204 @@ describe('GridStore undo and redo functionality', () => {
 		expect(rangeProcessed).toEqual(['1-0', '2-1']);
 
 		controller.dispose();
+	});
+
+	it('delegates getRowLoadState to the row model instead of re-deriving from getVisualRow', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		store.registerRowModel({
+			getVisualRow: () =>
+				({
+					kind: 'data',
+					id: 'row:1',
+					rowId: '1',
+					node: { id: '1', data: { id: '1', name: 'Visible Row', price: 1 } },
+					depth: 0,
+				}) as any,
+			getVisualRowCount: () => 1,
+			getKnownRowCount: () => 1,
+			getEstimatedRowCount: () => 1,
+			getRowCountKind: () => 'known',
+			getVisualIndexById: () => 0,
+			getVisualIndexByRowId: () => 0,
+			getRowNodeById: () => null,
+			getRawRowById: () => null,
+			getRowLoadState: () => ({ kind: 'failed', error: 'authoritative row-model state', retryable: true }) as const,
+			isRowLoaded: () => false,
+			isRowLoading: () => false,
+			isRowFailed: () => true,
+			isRangeLoaded: () => false,
+			getRangeLoadState: () => ({ loaded: 0, loading: 0, failed: 1, placeholder: 0, missing: 0 }),
+			ensureRange: () => {},
+			refresh: () => ({ changed: false }),
+		} as any);
+
+		expect(store.getRowLoadState(0)).toEqual({
+			kind: 'failed',
+			error: 'authoritative row-model state',
+			retryable: true,
+		});
+
+		store.destroy();
+	});
+
+	it('routes public row-node updateData and setData through the loaded-row write path on infinite and server-side models', async () => {
+		const infiniteStore = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 100 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const infiniteController = new InfiniteRowModelController<TestRow>(infiniteStore.getInfiniteRowModelRuntime(), {
+			columns: infiniteStore.getState().columns,
+			getRowId: (row) => row.id,
+			blockSize: 25,
+			datasource: {
+				getRows: vi.fn().mockResolvedValue({
+					rows: [{ id: '1', name: 'Alpha', price: 10 }],
+					totalCount: 1,
+				}),
+			},
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const infiniteNode = infiniteStore.getRowNode('1');
+		expect(infiniteNode?.updateData({ name: 'Alpha+' }).status).toBe('applied');
+		expect(infiniteStore.getRawRowById('1')).toEqual({ id: '1', name: 'Alpha+', price: 10 });
+
+		const serverStore = new GridStore<TestRow>({
+			columns: [
+				{ field: 'name', header: 'Name', width: 100 },
+				{ field: 'price', header: 'Price', width: 100 },
+			],
+			getRowId: (row) => row.id,
+		});
+		const serverController = new ServerSideRowModelController<TestRow>(serverStore.getServerSideRowModelRuntime(), {
+			columns: serverStore.getState().columns,
+			getRowId: (row) => row.id,
+			blockSize: 10,
+			datasource: {
+				getRows: vi.fn().mockResolvedValue({
+					rows: [{ id: '2', name: 'Beta', price: 20 }],
+					rowCount: 1,
+				}),
+			},
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const serverNode = serverStore.getRowNode('2');
+		expect(serverNode?.setData({ id: '2', name: 'Beta+', price: 25 }).status).toBe('applied');
+		expect(serverStore.getRawRowById('2')).toEqual({ id: '2', name: 'Beta+', price: 25 });
+
+		infiniteController.dispose();
+		infiniteStore.destroy();
+		serverController.dispose();
+		serverStore.destroy();
+	});
+
+	it('exposes public row-node validation and integrity helpers through the authoritative integrity api', async () => {
+		const store = new GridStore<TestRow>(
+			{
+				columns: [{ field: 'name', header: 'Name', width: 100 }],
+				getRowId: (row) => row.id,
+			},
+			{
+				dataIntegrity: {
+					validation: {
+						rowRules: [
+							{
+								id: 'name-required',
+								validate: ({ row }) => (!row.name ? { message: 'Name is required' } : null),
+							},
+						],
+					},
+				},
+			}
+		);
+		const controller = new ClientRowModelController<TestRow>(store.getClientRowModelRuntime(), {
+			rows: [{ id: '1', name: '', price: 10 }],
+			columns: store.getState().columns,
+		});
+
+		const node = store.getRowNode('1');
+		const validationResult = await node?.validate?.();
+		expect(validationResult).toEqual(
+			expect.objectContaining({
+				status: 'validationFailed',
+				reason: 'Name is required',
+			})
+		);
+		expect(node?.getValidationState?.()).toEqual(
+			expect.objectContaining({
+				valid: false,
+				issues: expect.arrayContaining([expect.objectContaining({ rowId: '1', message: 'Name is required' })]),
+			})
+		);
+		expect(node?.getIntegrityIssues?.()).toEqual(expect.arrayContaining([expect.objectContaining({ rowId: '1', message: 'Name is required' })]));
+		expect(await node?.refreshIntegrity?.()).toEqual(expect.objectContaining({ status: 'validationFailed', reason: 'Name is required' }));
+
+		controller.dispose();
+		store.destroy();
+	});
+
+	it('exposes failed displayed rows as public failed row-node facades', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		store.registerRowModel(
+			createMinimalRowModel({
+				visualRows: [{ kind: 'failed', id: 'failed:0', rowIndex: 0, error: 'load failed', retryable: true }],
+			})
+		);
+
+		expect(store.getRowLoadState(0)).toEqual({ kind: 'failed', error: 'load failed', retryable: true });
+		const displayedNode = store.getDisplayedRowAtIndex(0);
+		expect(displayedNode?.id).toBe('failed:0');
+		expect(displayedNode?.kind).toBe('failed');
+		expect(displayedNode?.failed).toBe(true);
+		expect(displayedNode?.editable).toBe(false);
+	});
+
+	it('retries failed displayed rows through the row-model authority path', async () => {
+		let callCount = 0;
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+			getRowId: (row) => row.id,
+		});
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
+			columns: store.getState().columns,
+			getRowId: (row) => row.id,
+			blockSize: 5,
+			datasource: {
+				getRows: vi.fn().mockImplementation(() => {
+					callCount++;
+					if (callCount === 1) return Promise.reject(new Error('block failed'));
+					return Promise.resolve({
+						rows: [{ id: '1', name: 'Recovered', price: 1 }],
+						rowCount: 1,
+					});
+				}),
+			},
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const failedNode = store.getDisplayedRowAtIndex(0);
+		expect(failedNode?.kind).toBe('failed');
+		expect(failedNode?.retryLoad().status).toBe('applied');
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(store.getDisplayedRowAtIndex(0)?.kind).toBe('data');
+		expect(store.getRawRowById('1')?.name).toBe('Recovered');
+
+		controller.dispose();
+		store.destroy();
 	});
 
 	it('compiles immutable grid plans and rebuilds them only for column geometry or pin changes', () => {
@@ -2187,8 +3056,9 @@ describe('GridStore undo and redo functionality', () => {
 		const plan = store.engine.columns.getCompiledPlan();
 		expect(plan.columnPlans.map((columnPlan) => columnPlan.mode)).toEqual(['primitive', 'custom-dom', 'custom', 'custom-imperative']);
 		expect(plan.displayedColumns[1].cellRenderer).toBe(domRenderer);
-		expect(plan.displayedColumns[2].cellRendererCapabilities?.scrollBehavior).toBe('defer');
-		expect(plan.displayedColumns[3].cellRendererCapabilities?.imperativeUpdate).toBe(true);
+		expect(plan.displayedColumns[2].cellRendererCapabilities?.scrollPresentation).toBe('freeze');
+		expect(plan.displayedColumns[3].cellRendererCapabilities?.scrollPresentation).toBe('live');
+		expect(plan.displayedColumns[3].cellRendererCapabilities?.live?.update).toBe('imperative');
 		expect(plan.hasCustomRenderers).toBe(true);
 		expect(plan.hasDomRenderers).toBe(true);
 	});
@@ -2412,12 +3282,11 @@ describe('GridStore undo and redo functionality', () => {
 		store.destroy();
 	});
 
-	it('integrity reports currentPage as an explicit partial server-page scope', async () => {
+	it('integrity reports loadedRows as an explicit partial server-side scope', async () => {
 		const store = new GridStore<TestRow>(
 			{
 				columns: [{ field: 'name', header: 'Name', width: 100 }],
 				getRowId: (row) => row.id,
-				pagination: { pageSize: 10 },
 			},
 			{
 				dataIntegrity: {
@@ -2425,24 +3294,24 @@ describe('GridStore undo and redo functionality', () => {
 				},
 			}
 		);
-		const controller = new ServerPageRowModelController<TestRow>(store.getServerPageRowModelRuntime(), {
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
 			columns: store.getState().columns,
 			getRowId: (row) => row.id,
-			pagination: { pageSize: 10 },
+			blockSize: 10,
 			datasource: {
-				getPage: async () => ({
+				getRows: async () => ({
 					rows: [{ id: '1', name: 'Alpha', price: 10 }],
-					totalRowCount: 1,
+					rowCount: 1,
 				}),
 			},
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		const result = await store.integrity.run({ scope: 'currentPage' });
+		const result = await store.integrity.run({ scope: 'loadedRows' });
 
 		expect(result).toMatchObject({
 			status: 'completed',
-			scope: 'currentPage',
+			scope: 'loadedRows',
 			complete: false,
 			capability: {
 				level: 'partial',
@@ -2450,6 +3319,168 @@ describe('GridStore undo and redo functionality', () => {
 		});
 
 		controller.dispose();
+		store.destroy();
+	});
+
+	it('publishes server-side store state through the engine without reusing legacy page state', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+
+		store.engine.setServerSideState({
+			loading: true,
+			error: null,
+			storeStates: [
+				{
+					storeId: 'root',
+					route: [],
+					level: 0,
+					rowCountState: { kind: 'unknown' },
+					blockCount: 0,
+					loadingBlockCount: 1,
+					failedBlockCount: 0,
+					childStoreCount: 0,
+				},
+			],
+		});
+
+		expect(store.getState().serverSide).toEqual({
+			loading: true,
+			error: null,
+			storeStates: [
+				{
+					storeId: 'root',
+					route: [],
+					level: 0,
+					rowCountState: { kind: 'unknown' },
+					blockCount: 0,
+					loadingBlockCount: 1,
+					failedBlockCount: 0,
+					childStoreCount: 0,
+				},
+			],
+		});
+		expect(store.getServerSideStoreState()).toEqual([
+			{
+				storeId: 'root',
+				route: [],
+				level: 0,
+				rowCountState: { kind: 'unknown' },
+				blockCount: 0,
+				loadingBlockCount: 1,
+				failedBlockCount: 0,
+				childStoreCount: 0,
+			},
+		]);
+	});
+
+	it('publishServerSideState updates state and emits a server-side state event together', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const listener = vi.fn();
+		store.addEventListener(GridEventName.serverSideStateChanged, listener);
+
+		store.engine.publishServerSideState({
+			loading: false,
+			error: 'boom',
+			storeStates: [
+				{
+					storeId: 'root',
+					route: [],
+					level: 0,
+					rowCountState: { kind: 'known', count: 3 },
+					blockCount: 1,
+					loadingBlockCount: 0,
+					failedBlockCount: 1,
+					childStoreCount: 0,
+				},
+			],
+		});
+
+		expect(store.getState().serverSide).toEqual({
+			loading: false,
+			error: 'boom',
+			storeStates: [
+				{
+					storeId: 'root',
+					route: [],
+					level: 0,
+					rowCountState: { kind: 'known', count: 3 },
+					blockCount: 1,
+					loadingBlockCount: 0,
+					failedBlockCount: 1,
+					childStoreCount: 0,
+				},
+			],
+		});
+		expect(listener).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: {
+					loading: false,
+					error: 'boom',
+					storeStates: [
+						{
+							storeId: 'root',
+							route: [],
+							level: 0,
+							rowCountState: { kind: 'known', count: 3 },
+							blockCount: 1,
+							loadingBlockCount: 0,
+							failedBlockCount: 1,
+							childStoreCount: 0,
+						},
+					],
+				},
+			})
+		);
+	});
+
+	it('delegates SSRM public API calls to a server-side controllable row model', () => {
+		const store = new GridStore<TestRow>({
+			columns: [{ field: 'name', header: 'Name', width: 100 }],
+		});
+		const datasource: ServerSideDatasource<TestRow> = {
+			getRows: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+		};
+		const storeState: ServerSideStoreSnapshot[] = [
+			{
+				storeId: '',
+				route: [],
+				level: 0,
+				rowCountState: { kind: 'known', count: 0 },
+				blockCount: 0,
+				loadingBlockCount: 0,
+				failedBlockCount: 0,
+				childStoreCount: 0,
+			},
+		];
+		const setServerSideDatasource = vi.fn();
+		const refreshServerSide = vi.fn();
+		const purgeServerSide = vi.fn();
+		const getServerSideStoreState = vi.fn(() => storeState);
+		const rowModel = {
+			...createMinimalRowModel<TestRow>({ visualRows: [] }),
+			setServerSideDatasource,
+			refreshServerSide,
+			purgeServerSide,
+			getServerSideStoreState,
+		};
+
+		store.registerRowModel(rowModel);
+
+		const refreshOptions: ServerSideRefreshOptions = { route: ['region', 'EMEA'] };
+		const purgeOptions = { route: ['region'] };
+		store.setServerSideDatasource(datasource);
+		store.refreshServerSide(refreshOptions);
+		store.purgeServerSide(purgeOptions);
+
+		expect(store.getRowModelType()).toBe('server');
+		expect(setServerSideDatasource).toHaveBeenCalledWith(datasource);
+		expect(refreshServerSide).toHaveBeenCalledWith(refreshOptions);
+		expect(purgeServerSide).toHaveBeenCalledWith(purgeOptions);
+		expect(store.getServerSideStoreState()).toBe(storeState);
+
 		store.destroy();
 	});
 
@@ -2580,8 +3611,8 @@ describe('Column and row validation', () => {
 			expect(() => validateColumns([{ field: '' }])).toThrow('non-empty field');
 		});
 
-		it('throws on duplicate field', () => {
-			expect(() => validateColumns([{ field: 'id' }, { field: 'name' }, { field: 'id' }])).toThrow('duplicate column field "id"');
+		it('allows duplicate fields when renderer identity is carried by distinct column instances', () => {
+			expect(() => validateColumns([{ field: 'id' }, { field: 'name' }, { field: 'id' }])).not.toThrow();
 		});
 
 		it('throws on zero width', () => {
@@ -2625,18 +3656,18 @@ describe('Column and row validation', () => {
 	});
 
 	describe('GridStore validation integration', () => {
-		it('throws on construction with duplicate column fields', () => {
+		it('allows construction with duplicate column fields', () => {
 			expect(
 				() =>
 					new GridStore({
 						columns: [{ field: 'id' }, { field: 'id' }],
 					})
-			).toThrow('duplicate column field "id"');
+			).not.toThrow();
 		});
 
-		it('throws on setColumns() with duplicate fields', () => {
+		it('allows setColumns() with duplicate fields', () => {
 			const store = new GridStore({ columns: [{ field: 'id' }] });
-			expect(() => store.setColumns([{ field: 'name' }, { field: 'name' }])).toThrow('duplicate column field "name"');
+			expect(() => store.setColumns([{ field: 'name' }, { field: 'name' }])).not.toThrow();
 		});
 
 		it('accepts valid column updates via setColumns()', () => {
@@ -3024,33 +4055,32 @@ describe('Quick filter (search across columns)', () => {
 		store.destroy();
 	});
 
-	it('passes quickFilterModel through to the server-page datasource and refetches on change', async () => {
+	it('passes quickFilterModel through to the server-side datasource and refetches on change', async () => {
 		const store = new GridStore<TestRow>({
 			columns: [{ field: 'name', header: 'Name', width: 100 }],
 			getRowId: (row) => row.id,
-			pagination: { pageSize: 10 },
 		});
-		const getPage = vi.fn(
-			async (): Promise<{ rows: TestRow[]; totalRowCount: number }> => ({
+		const getRows = vi.fn(
+			async (): Promise<{ rows: TestRow[]; rowCount: number }> => ({
 				rows: [{ id: '1', name: 'Alpha', price: 10 }],
-				totalRowCount: 1,
+				rowCount: 1,
 			})
 		);
-		const controller = new ServerPageRowModelController<TestRow>(store.getServerPageRowModelRuntime(), {
+		const controller = new ServerSideRowModelController<TestRow>(store.getServerSideRowModelRuntime(), {
 			columns: store.getState().columns,
 			getRowId: (row) => row.id,
-			pagination: { pageSize: 10 },
-			datasource: { getPage },
+			blockSize: 10,
+			datasource: { getRows },
 		});
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		const callsBefore = getPage.mock.calls.length;
+		const callsBefore = getRows.mock.calls.length;
 
 		store.setQuickFilter('alp');
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
-		expect(getPage.mock.calls.length).toBeGreaterThan(callsBefore);
-		const lastCallParams = getPage.mock.calls.at(-1)?.[0];
+		expect(getRows.mock.calls.length).toBeGreaterThan(callsBefore);
+		const lastCallParams = getRows.mock.calls.at(-1)?.[0];
 		expect(lastCallParams?.quickFilterModel).toEqual({ text: 'alp', columnIds: undefined });
 
 		controller.dispose();

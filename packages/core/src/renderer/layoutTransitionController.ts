@@ -48,7 +48,7 @@ interface SnapshotEntry {
 	clone: HTMLElement;
 }
 
-type LayoutTransitionReason = 'sort' | 'expansion' | 'detail' | 'other';
+export type LayoutTransitionReason = 'sort' | 'expansion' | 'detail' | 'live-reorder' | 'other';
 
 interface SnapshotBounds {
 	top: number;
@@ -89,7 +89,7 @@ export class LayoutTransitionController<TRowData = unknown> {
 		this.snapshot.clear();
 		this.snapshotReason = reason;
 		this.snapshotBounds = null;
-		const canExit = !!this.options.getExitLayer && this.animationsEnabled();
+		const canExit = reason !== 'live-reorder' && !!this.options.getExitLayer && this.animationsEnabled();
 		for (const [, slot] of this.getActiveRows()) {
 			if (slot.visualRowId && slot.lastTop >= 0) {
 				// Clone now (before recycleViewport reuses the element) so a row that turns out
@@ -128,6 +128,7 @@ export class LayoutTransitionController<TRowData = unknown> {
 			const el = slot.element;
 			const entry = this.snapshot.get(slot.visualRowId);
 			if (entry === undefined) {
+				if (this.snapshotReason === 'live-reorder') continue;
 				// ENTER — only animate reveals that accompany a real structural change, so a
 				// first paint (empty snapshot) does not fade every row in.
 				if (!hadSnapshot) continue;
@@ -164,7 +165,9 @@ export class LayoutTransitionController<TRowData = unknown> {
 		// EXIT — a captured row that is no longer rendered AND no longer in the model truly
 		// left (e.g. a collapsed group's children). Fade out its ghost clone in place. Rows
 		// that merely scrolled out of the window (still live in the model) are not faded.
-		this.playExits(activeRowIds);
+		if (this.snapshotReason !== 'live-reorder') {
+			this.playExits(activeRowIds);
+		}
 
 		this.snapshot.clear();
 		this.snapshotBounds = null;

@@ -1,14 +1,15 @@
 import type { FilterModel, SortModel } from '../rowModel.js';
 import type { GridQueryModel } from '../query/GridQueryModel.js';
-import type { ColumnDef, CellRendererPhase } from '../columnDef.js';
+import type { ColumnDef, CellRendererPhase, ColumnInstanceId } from '../columnDef.js';
 import type { VisualRow } from '../visualRow.js';
-import type { RowNode } from '../rowNode.js';
 import type { ViewportRange } from '../viewportController.js';
 import type { RuntimeFault } from '../diagnostics/RuntimeFaultReporter.js';
 import type { ColumnState, GridCellRangeBounds } from '../state/GridState.js';
 import type { BuiltInThemeName } from '../renderer/themes.js';
 import type { GridIntegrityIssue } from '../features/dataIntegrity/integrityTypes.js';
 import type { GridApi as PublicGridApi, GridPluginRuntime as PublicGridPluginRuntime } from './GridApiSurfaces.js';
+import type { GridRowNode } from '../publicRowNode.js';
+import type { RowNodeTransaction } from '../rowTransactions.js';
 
 export type {
 	GridDataApi,
@@ -81,10 +82,23 @@ export interface CellSubscription {
 export interface GridCellPointer {
 	rowId: string;
 	colField: string;
+	columnInstanceId?: ColumnInstanceId;
+	colId?: string;
 }
 
+export type CanonicalGridCellPointer = GridCellPointer & {
+	columnInstanceId: ColumnInstanceId;
+	colId: string;
+};
+
 export interface ActiveEditState extends GridCellPointer {
+	columnInstanceId: ColumnInstanceId;
+	colId: string;
 	validationError?: string | null;
+	draftValue?: unknown;
+	originalValue?: unknown;
+	startedBy?: 'keyboard' | 'mouse' | 'api';
+	version?: number;
 }
 
 export interface CellPointer {
@@ -194,6 +208,8 @@ export interface GridSelectionState {
 	range: GridCellRange | null;
 	bounds: GridCellRangeBounds | null;
 	source: GridSelectionSource;
+	focusOrigin?: GridSelectionSource | null;
+	version?: number;
 }
 
 export interface GridStateSnapshot<TRowData = unknown> {
@@ -237,7 +253,7 @@ export interface GridCellClickParams<TRowData = unknown> {
 	rowId: string;
 	rowIndex: number;
 	row: TRowData | null;
-	node: RowNode<TRowData> | null;
+	node: GridRowNode<TRowData> | null;
 	colField: string;
 	colIndex: number;
 	column: ColumnDef<TRowData>;
@@ -250,7 +266,7 @@ export interface GridCellAccess<TRowData = unknown> {
 	rowId: string;
 	rowIndex: number;
 	row: TRowData | null;
-	node: RowNode<TRowData> | null;
+	node: GridRowNode<TRowData> | null;
 	colField: string;
 	colIndex: number;
 	column: ColumnDef<TRowData>;
@@ -277,7 +293,7 @@ export interface GridRowsAccessor<TRowData = unknown> {
 	getSelected(): TRowData[];
 	getSelectedIds(): string[];
 	getById(id: string): TRowData | null;
-	getNodeById(id: string): RowNode<TRowData> | null;
+	getNodeById(id: string): GridRowNode<TRowData> | undefined;
 	getCount(): number;
 	getVisualRowById(id: string): VisualRow<TRowData> | null;
 	inRange(range: GridCellRange): {
@@ -306,11 +322,7 @@ export interface RowDataTransaction<TData = unknown> {
 	update?: TData[];
 }
 
-export interface RowNodeTransaction<TData = unknown> {
-	add: RowNode<TData>[];
-	remove: RowNode<TData>[];
-	update: RowNode<TData>[];
-}
+export type { RowNodeTransaction } from '../rowTransactions.js';
 
 export interface GridTransaction<TRowData = unknown> {
 	columns?: ColumnDef<TRowData>[];
@@ -330,6 +342,7 @@ export interface CellRendererProps<TRowData = unknown, TValue = unknown> {
 	rowId: string;
 	colField: string;
 	colId?: string;
+	columnInstanceId?: ColumnInstanceId;
 	isScrolling?: boolean;
 	phase?: CellRendererPhase;
 	isFocused?: boolean;
@@ -341,6 +354,8 @@ export interface CellRendererProps<TRowData = unknown, TValue = unknown> {
 export interface CellEditorProps<TRowData = unknown, TValue = unknown> {
 	rowId: string;
 	colField: string;
+	colId?: string;
+	columnInstanceId?: ColumnInstanceId;
 	value: TValue;
 	onChange: (value: TValue) => void;
 	api: PublicGridApi<TRowData>;

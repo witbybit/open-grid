@@ -1,4 +1,4 @@
-import { createClientGrid, createInfiniteGrid, createServerPageGrid, createLocalStorageAdapter } from '@eregister/open-grid-core';
+import { createClientGrid, createInfiniteGrid, createServerSideGrid, createLocalStorageAdapter } from '@eregister/open-grid-core';
 import { useEffect, useMemo, useRef, useInsertionEffect, type PropsWithChildren } from 'react';
 import { GridProvider } from './gridContext.js';
 import { GridView, type GridViewProps } from './GridView.js';
@@ -11,8 +11,7 @@ import type {
 	RowSelectionMode,
 	RowSelectionOptions,
 	InfiniteDatasource,
-	ServerDatasource,
-	ServerPaginationOptions,
+	ServerSideDatasource,
 } from './types.js';
 import type { GridReadyEvent, StyleRule, ColumnTypeDefinition } from './types.js';
 import type { GridCapabilitiesConfig } from '@eregister/open-grid-core';
@@ -40,6 +39,8 @@ interface GridCommonProps<TRowData> extends GridShellProps<TRowData> {
 	colBuffer?: number;
 	overscanAdaptive?: boolean;
 	runtimeLimits?: GridInitialState<TRowData>['runtimeLimits'];
+	/** Grid-wide scroll presentation policy — live-mode budgets, html-snapshot cache limits, text-impostor defaults. Initial-only. */
+	rendererOptions?: GridInitialState<TRowData>['rendererOptions'];
 	columnTypes?: Record<string, ColumnTypeDefinition<TRowData>>;
 	styleRules?: StyleRule<TRowData>[];
 	/** Unified Data Integrity pipeline — validation, quality, diff, live stream, conflict resolution. */
@@ -75,14 +76,14 @@ export interface GridInfiniteProps<TRowData = unknown> extends GridCommonProps<T
 	blockSize?: number;
 }
 
-/** Explicit page-based server row model — datasource receives page/pageSize. */
-export interface GridServerPageProps<TRowData = unknown> extends GridCommonProps<TRowData> {
+/** Server-side row model (SSRM) — datasource receives route-aware startRow/endRow requests. */
+export interface GridServerSideProps<TRowData = unknown> extends GridCommonProps<TRowData> {
 	rowModelType: 'server';
-	datasource: ServerDatasource<TRowData>;
-	pagination?: ServerPaginationOptions;
+	datasource: ServerSideDatasource<TRowData>;
+	blockSize?: number;
 }
 
-export type GridProps<TRowData = unknown> = GridClientProps<TRowData> | GridInfiniteProps<TRowData> | GridServerPageProps<TRowData>;
+export type GridProps<TRowData = unknown> = GridClientProps<TRowData> | GridInfiniteProps<TRowData> | GridServerSideProps<TRowData>;
 export type GridRootProps<TRowData = unknown> = PropsWithChildren<GridProps<TRowData>>;
 
 function normalizePagination(pagination: boolean | GridPaginationConfig | undefined): { pageSize: number; initialPage: number } | null {
@@ -102,12 +103,13 @@ function createInitialState<TRowData>(
 		rowDragMode?: 'managed' | 'unmanaged';
 	}
 ) {
-	const { initialState, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits } = base;
+	const { initialState, rowOverscanPx, colBuffer, overscanAdaptive, runtimeLimits, rendererOptions } = base;
 	const merged: Partial<GridInitialState<TRowData>> = {
 		rowOverscanPx,
 		overscanAdaptive,
 		colBuffer,
 		runtimeLimits,
+		rendererOptions,
 		...initialState,
 	};
 	if (extras.detailRowHeight != null) merged.detailRowHeight = extras.detailRowHeight;
@@ -145,6 +147,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		colBuffer,
 		overscanAdaptive,
 		runtimeLimits,
+		rendererOptions,
 		pagination,
 		showStatusBar,
 		showFilterChipBar,
@@ -162,11 +165,10 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			rowModelType?: 'client' | 'infinite' | 'server';
 			rows?: TRowData[];
 			getRowHeight?: (row: TRowData) => number | undefined;
-			datasource?: InfiniteDatasource<TRowData> | ServerDatasource<TRowData>;
+			datasource?: InfiniteDatasource<TRowData> | ServerSideDatasource<TRowData>;
 			blockSize?: number;
 			rowSelection?: RowSelectionMode | RowSelectionOptions;
 			rowDragMode?: 'managed' | 'unmanaged';
-			serverPagination?: ServerPaginationOptions;
 		};
 	const readyFiredRef = useRef(false);
 	const lastColumnsRef = useRef(columns);
@@ -183,6 +185,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		rowOverscanPx,
 		overscanAdaptive,
 		runtimeLimits,
+		rendererOptions,
 		dataIntegrity,
 		capabilities,
 		detailRowHeight,
@@ -207,6 +210,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				colBuffer,
 				overscanAdaptive,
 				runtimeLimits,
+				rendererOptions,
 				columnTypes,
 				styleRules,
 			},
@@ -229,10 +233,10 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		}
 
 		if (rowModelType === 'server') {
-			const serverPagePagination = (props as GridServerPageProps<TRowData>).pagination;
-			return createServerPageGrid({
-				datasource: datasource as ServerDatasource<TRowData>,
+			return createServerSideGrid({
+				datasource: datasource as ServerSideDatasource<TRowData>,
 				columns: resolveColumnTypes(columns, columnTypes),
+				blockSize,
 				getRowId,
 				persistence: resolvedPersistence,
 				workspace,
@@ -240,7 +244,6 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 				dataIntegrity,
 				capabilities,
 				initialState: initial,
-				pagination: serverPagePagination ?? { pageSize: paginationConfig?.pageSize ?? 100 },
 			});
 		}
 
@@ -292,7 +295,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			didMountServerRef.current = true;
 			return;
 		}
-		api.setServerPageDatasource(datasource as ServerDatasource<TRowData>);
+		api.setServerSideDatasource(datasource as ServerSideDatasource<TRowData>);
 	}, [api, rowModelType, datasource]);
 
 	useEffect(() => {
@@ -320,6 +323,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 			['rowOverscanPx', initialOnlyProps.rowOverscanPx, rowOverscanPx],
 			['overscanAdaptive', initialOnlyProps.overscanAdaptive, overscanAdaptive],
 			['runtimeLimits', initialOnlyProps.runtimeLimits, runtimeLimits],
+			['rendererOptions', initialOnlyProps.rendererOptions, rendererOptions],
 			['dataIntegrity', initialOnlyProps.dataIntegrity, dataIntegrity],
 			['capabilities', initialOnlyProps.capabilities, capabilities],
 			['detailRowHeight', initialOnlyProps.detailRowHeight, detailRowHeight],
@@ -346,6 +350,7 @@ export function Grid<TRowData = unknown>(props: GridRootProps<TRowData>) {
 		rowOverscanPx,
 		overscanAdaptive,
 		runtimeLimits,
+		rendererOptions,
 		dataIntegrity,
 		capabilities,
 		detailRowHeight,

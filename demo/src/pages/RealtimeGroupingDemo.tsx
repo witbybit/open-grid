@@ -117,7 +117,7 @@ const COLUMNS: ColumnDef<SalesRow>[] = [
 		sortable: true,
 
 		enableRowGroup: false,
-		renderer: { kind: 'react', component: CurrencyRenderer, capabilities: { scrollBehavior: 'live' } },
+		renderer: { kind: 'react', component: CurrencyRenderer, capabilities: { scrollPresentation: 'freeze' } },
 	},
 	{ field: 'units', header: 'Units', width: 75, sortable: true, enableRowGroup: false },
 	{
@@ -127,7 +127,7 @@ const COLUMNS: ColumnDef<SalesRow>[] = [
 		sortable: true,
 
 		enableRowGroup: false,
-		renderer: { kind: 'react', component: MarginRenderer, capabilities: { scrollBehavior: 'live' } },
+		renderer: { kind: 'react', component: MarginRenderer, capabilities: { scrollPresentation: 'freeze' } },
 	},
 	{
 		field: 'status',
@@ -136,7 +136,7 @@ const COLUMNS: ColumnDef<SalesRow>[] = [
 		sortable: true,
 
 		enableRowGroup: true,
-		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollBehavior: 'live' } },
+		renderer: { kind: 'react', component: StatusRenderer, capabilities: { scrollPresentation: 'freeze' } },
 	},
 ];
 

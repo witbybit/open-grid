@@ -1,5 +1,7 @@
 import { GridEventName } from '../api/GridEvents.js';
+import type { CanonicalGridCellPointer } from '../api/GridApi.js';
 import type { GridEngine } from '../engine/GridEngine.js';
+import { readInteractionState } from '../interaction/interactionState.js';
 import type { FrameCoordinator } from './frameCoordinator.js';
 import type { GeometryController } from './geometryController.js';
 import type { LayoutTransitionController } from './layoutTransitionController.js';
@@ -14,10 +16,10 @@ export interface RenderInvalidationCoordinatorDeps<TRowData = unknown> {
 	frameCoordinator: FrameCoordinator;
 	runtimeState: RenderRuntimeState;
 	syncLayoutPlan: () => void;
-	scrollCellIntoView: (rowId: string, colField: string) => void;
+	scrollCellIntoView: (pointer: CanonicalGridCellPointer) => void;
 	resetScroll: () => void;
 	updateCachedGeometryBounds: () => void;
-	markFlushPendingAfterScroll: () => void;
+	markFlushPendingAfterScroll: (changeIds: readonly number[]) => void;
 	markViewportDirtyAfterScroll: () => void;
 }
 
@@ -34,6 +36,11 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 				this.deps.layoutTransition.captureSnapshot('sort');
 			})
 		);
+		this.unsubscribers.push(
+			this.deps.engine.eventBus.addEventListener(GridEventName.layoutTransitionCaptureRequested, (event) => {
+				this.deps.layoutTransition.captureSnapshot(event.payload.reason);
+			})
+		);
 		// Expansion (group, tree, and master-detail all mutate state.expansion) needs the
 		// pre-toggle row positions so the subsequent viewport flush can animate from the old layout.
 		this.unsubscribers.push(
@@ -45,10 +52,11 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		// model re-runs the pipeline for the new window on the same event.
 		this.unsubscribers.push(this.deps.engine.eventBus.addEventListener(GridEventName.paginationChanged, () => this.deps.resetScroll()));
 		this.unsubscribers.push(
-			this.deps.engine.eventBus.addEventListener(GridEventName.selectionChanged, (event) => {
-				const { selection } = event.payload;
-				if (selection?.focus && selection.source !== 'pointer') {
-					this.deps.scrollCellIntoView(selection.focus.rowId, selection.focus.colField);
+			this.deps.engine.eventBus.addEventListener(GridEventName.selectionChanged, () => {
+				const interaction = readInteractionState(this.deps.engine.stateManager.getState());
+				const selection = interaction.cellSelection.selection;
+				if (selection.focus && selection.source !== 'pointer') {
+					this.deps.scrollCellIntoView(selection.focus);
 				}
 			})
 		);
@@ -64,7 +72,7 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		);
 		this.unsubscribers.push(
 			this.deps.engine.eventBus.addEventListener(GridEventName.renderInvalidated, (event) => {
-				this.requestFlushGated(event.payload.reason);
+				this.requestFlushGated(event.payload.reason, this.deps.engine.takePendingRenderChangeIds());
 			})
 		);
 	}
@@ -121,12 +129,12 @@ export class RenderInvalidationCoordinator<TRowData = unknown> {
 		this.requestFlushGated(reason);
 	}
 
-	private requestFlushGated(reason: string): void {
+	private requestFlushGated(reason: string, changeIds: readonly number[] = []): void {
 		if (this.isScrollActive()) {
-			this.deps.markFlushPendingAfterScroll();
+			this.deps.markFlushPendingAfterScroll(changeIds);
 			return;
 		}
-		this.deps.frameCoordinator.requestPaintFrame();
+		this.deps.frameCoordinator.requestPaintFrame(changeIds);
 	}
 
 	private isScrollActive(): boolean {

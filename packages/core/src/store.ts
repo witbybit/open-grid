@@ -5,10 +5,11 @@ import type {
 	RowModel,
 	ClientStructuralRowModel,
 	InfiniteControllableRowModel,
-	ServerPageControllableRowModel,
+	ServerSideControllableRowModel,
 	RowExpansionStateReadableModel,
 	RowModelCapability,
 	RowModelCapabilities,
+	RowLoadState,
 } from './rowModel.js';
 import type { GridQueryModel } from './query/GridQueryModel.js';
 import { evaluateQueryModel, createQueryEvaluationContext } from './query/evaluateQueryModel.js';
@@ -16,23 +17,23 @@ import {
 	asClientStructuralRowModel,
 	asRowExpansionStateReadableModel,
 	asInfiniteControllableRowModel,
-	asServerPageControllableRowModel,
+	asServerSideControllableRowModel,
 	asCapableRowModel,
 	UnsupportedRowModelOperationError,
 } from './rowModel.js';
 import type { GridDomainVersions } from './state/GridDomainVersions.js';
 export type { RowModel, RowRefreshReason, RowModelRefreshResult } from './rowModel.js';
 import type { InfiniteDatasource } from './infiniteRowModel.js';
-import type { ServerDatasource, ServerPageState } from './serverPageRowModel.js';
+import type { ServerSideDatasource, ServerSideRefreshOptions, ServerSideStoreSnapshot } from './serverSideRowModel.js';
 import { ViewportController, type ViewportRange } from './viewportController.js';
 import { GridEngine } from './engine/GridEngine.js';
-import type { ClientRowModelRuntime, InfiniteRowModelRuntime, ServerPageRowModelRuntime } from './engine/runtimePorts.js';
-import { createClientRowModelRuntime, createInfiniteRowModelRuntime, createServerPageRowModelRuntime } from './engine/createRowModelRuntimes.js';
+import type { ClientRowModelRuntime, InfiniteRowModelRuntime, ServerSideRowModelRuntime } from './engine/runtimePorts.js';
+import { createClientRowModelRuntime, createInfiniteRowModelRuntime, createServerSideRowModelRuntime } from './engine/createRowModelRuntimes.js';
 import type { GridRuntimePorts, RuntimePortBinding, RuntimePortBindResult } from './engine/rendererPorts.js';
 import { HEADLESS_PORTS } from './engine/rendererPorts.js';
 import { type GridInstrumentation, NOOP_INSTRUMENTATION } from './diagnostics/GridInstrumentation.js';
 import type { RenderStats } from './renderer/renderOrchestrator.js';
-import { createRowsAccessor } from './rowsAccessor.js';
+import type { GridRowNode } from './publicRowNode.js';
 import type { AggregationDef } from './rows/stages/aggregateStage.js';
 import { exportToCsv, type CsvExportOptions } from './export/csvExport.js';
 import type { PersistenceStatus, PersistedGridState } from './persistence/statePersistence.js';
@@ -95,7 +96,7 @@ export * from './api/GridEvents.js';
 export type { GridInitialState, ColumnState, GridCellRangeBounds } from './state/GridState.js';
 // ── Internal imports (for use by definitions in this file) ───────────────────
 import { RowNode } from './rowNode.js';
-import type { ColumnDef, GridStyleRule } from './columnDef.js';
+import type { ColumnDef, ColumnInstanceId, GridStyleRule } from './columnDef.js';
 import { validateColumns } from './columnDef.js';
 import type { VisualRow } from './visualRow.js';
 import type {
@@ -137,13 +138,17 @@ import type { AutoSizeColumnOptions, AutoSizeAllColumnsOptions } from './feature
 import { makeNoopIntegrityApi } from './features/dataIntegrity/noopIntegrityApi.js';
 import { createGridStoreSubscriptions, type GridStoreSubscriptionsFacade } from './store/GridStoreSubscriptions.js';
 import { createGridStoreHostFacade, type GridStoreHostFacade } from './store/GridStoreHostFacade.js';
+import { createGridStoreRowFacade, type GridStoreRowFacade } from './store/GridStoreRowFacade.js';
+import { GridInteractionController } from './interaction/GridInteractionController.js';
+import { doesCanonicalCellPointerMatchColumn } from './interaction/cellPointer.js';
+import { readInteractionState } from './interaction/interactionState.js';
 
 export { validateRowIds } from './ids.js';
 
 // prettier-ignore
 const _FALLBACK_CAPS: Record<RowModelType, RowModelCapabilities> = {
 	infinite: { fullDataset: false, loadedDataset: true, pagedDataset: false, clientMutation: false, loadedRowMutation: true, pageRowMutation: false, transactions: false, rowOrder: false, blockLoading: true, serverPagination: false, clientSort: false, clientFilter: false, serverSort: true, serverFilter: true, clientGrouping: false, clientTree: false, aggregation: false, masterDetail: false, allRowSelection: false, loadedRowSelection: true, pageRowSelection: false },
-	server:   { fullDataset: false, loadedDataset: false, pagedDataset: true, clientMutation: false, loadedRowMutation: false, pageRowMutation: true, transactions: false, rowOrder: false, blockLoading: false, serverPagination: true, clientSort: false, clientFilter: false, serverSort: true, serverFilter: true, clientGrouping: false, clientTree: false, aggregation: false, masterDetail: false, allRowSelection: false, loadedRowSelection: false, pageRowSelection: true },
+	server:   { fullDataset: false, loadedDataset: true, pagedDataset: false, clientMutation: false, loadedRowMutation: true, pageRowMutation: false, transactions: false, rowOrder: false, blockLoading: true, serverPagination: false, clientSort: false, clientFilter: false, serverSort: true, serverFilter: true, clientGrouping: false, clientTree: false, aggregation: false, masterDetail: false, allRowSelection: false, loadedRowSelection: true, pageRowSelection: false },
 	client:   { fullDataset: true, loadedDataset: false, pagedDataset: false, clientMutation: true, loadedRowMutation: false, pageRowMutation: false, transactions: true, rowOrder: true, blockLoading: false, serverPagination: false, clientSort: true, clientFilter: true, serverSort: false, serverFilter: false, clientGrouping: true, clientTree: true, aggregation: true, masterDetail: true, allRowSelection: true, loadedRowSelection: false, pageRowSelection: false },
 };
 
@@ -166,6 +171,7 @@ const _EMPTY_WS_STATE: GridWorkspaceState = {
  */
 export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> {
 	public engine: GridEngine<TRowData>;
+	public readonly interactionController: GridInteractionController<TRowData>;
 
 	private readonly viewportController: ViewportController<TRowData>;
 	private readonly pluginRuntime: GridPluginRuntime<TRowData>;
@@ -181,6 +187,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	private cachedStateSnapshot: GridStateSnapshot<TRowData> | null = null;
 	private readonly subscriptionsFacade: GridStoreSubscriptionsFacade<TRowData>;
 	private readonly hostFacade: GridStoreHostFacade;
+	private readonly rowFacade: GridStoreRowFacade<TRowData>;
 
 	constructor(
 		initialState: Partial<GridInitialState<TRowData>> = {},
@@ -230,12 +237,14 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 			themeOverrides: initialState.themeOverrides,
 			rowOverscanPx: initialState.rowOverscanPx ?? 400,
 			colBuffer: initialState.colBuffer ?? 2,
+			rendererOptions: initialState.rendererOptions,
 			// Always normalize runtimeLimits so all callers can assume it exists.
 			runtimeLimits: {
 				maxRenderedRows: 500,
 				maxRenderedCells: 20_000,
 				suppressRenderedRangeLimit: false,
 				maxFilterDistinctValues: 500,
+				maxWarmCustomRenderers: 300,
 				...initialState.runtimeLimits,
 			},
 			overscanAdaptive: initialState.overscanAdaptive,
@@ -244,16 +253,70 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.viewportController = new ViewportController<TRowData>(this.engine);
 		this.pluginRuntime = createGridPluginRuntime(this as unknown as GridPluginRuntime<TRowData>);
 		this.pluginRegistry = new GridPluginRegistry<TRowData>(this.pluginRuntime, this.engine.runtimeFaults);
+		this.interactionController = new GridInteractionController<TRowData>(
+			this as unknown as GridPluginRuntime<TRowData>,
+			{},
+			{
+				selectCell: (pointer, source) => this.engine.selectCell(pointer, source),
+				selectRange: (start, end, source) => this.engine.selectRange(start, end, source),
+				applyRowSelectionGesture: (gesture) => this.engine.applyRowSelectionGesture(gesture),
+				selectRows: (rowIds, options) =>
+					options?.mode === 'replace' ? this.engine.replaceRowIds(rowIds, 'api') : this.engine.selectRowIds(rowIds, 'api'),
+				deselectRows: (rowIds) => this.engine.deselectRowIds(rowIds, 'api'),
+				copySelectedRange: () => this.engine.copySelectedRange(),
+				pasteFromClipboard: () => this.engine.pasteFromClipboard(),
+				scrollToCell: (rowId, colField) => this.hostFacade.scrollCellIntoView(rowId, colField),
+				scrollToRow: (rowId) => this.hostFacade.scrollRowIntoView(rowId),
+				startEditing: (rowId, colFieldOrInstanceId, source) => this.engine.startEdit(rowId, colFieldOrInstanceId, source),
+				updateEditDraft: (rowId, colFieldOrInstanceId, value) => this.engine.updateEditDraft(rowId, colFieldOrInstanceId, value),
+				stopEditing: (cancel) => this.engine.stopEdit(cancel),
+				commitEdit: (rowId, colFieldOrInstanceId, value) => this.engine.commitEdit(rowId, colFieldOrInstanceId, value),
+				setCellValue: (rowId, colField, value) => {
+					this.engine.setCellValue(rowId, colField, value);
+				},
+			}
+		);
+		this.rowFacade = createGridStoreRowFacade<TRowData>({
+			getRowModel: () => this.engine.getRowModel(),
+			getRowId: (data) => this.engine.getRowId(data),
+			getCellValue: (rowId, colField) => this.getCellValue(rowId, colField),
+			getSelectedRowIds: () => this.getSelectedRowIds(),
+			isRowNodeSelected: (rowId) => this.isRowNodeSelected(rowId),
+			isGroupExpanded: (groupId) => this.isGroupExpanded(groupId),
+			isDetailExpanded: (rowId) => this.isDetailExpanded(rowId),
+			selectRows: (rowIds, options) => this.selectRows(rowIds, options),
+			deselectRows: (rowIds) => this.deselectRows(rowIds),
+			scrollToRow: (rowId, options) => this.scrollToRow(rowId, options),
+			setCellValue: (rowId, colField, value) => this.setCellValue(rowId, colField, value),
+			batchCellValues: (updates, source) => this.engine.batchCellValues(updates, source),
+			toggleGroupExpanded: (groupId) => this.toggleGroupExpanded(groupId),
+			toggleDetailExpanded: (rowId) => this.toggleDetailExpanded(rowId),
+			refreshRows: () => this.refreshRows(),
+			retryRowLoad: (rowIndex, loadState) => {
+				if (loadState.kind !== 'failed') return { status: 'rejected', reason: 'Row retry is only available for failed rows.' };
+				if (rowIndex == null || rowIndex < 0) return { status: 'rejected', reason: 'Row retry requires a visible failed row index.' };
+				const rowModel = this.engine.getRowModel();
+				if (!rowModel) return { status: 'rejected', reason: 'row model unavailable' };
+				rowModel.ensureRange(rowIndex, rowIndex, 'row-node-retry-load');
+				return { status: 'applied', changeId: Date.now(), faults: [] };
+			},
+			getRowIssues: (rowId) => this.integrity.getRowIssues(rowId),
+			validateRow: (rowId) => this.integrity.validateRow(rowId),
+			getRowModelType: () => this.getRowModelType(),
+			getState: () => this.state,
+		});
 		this.subscriptionsFacade = createGridStoreSubscriptions<TRowData>({
 			subscribe: (listener) => this.engine.subscribe(listener),
 			subscribeToKey: (key, listener) => this.engine.subscribeToKey(key, listener),
 			subscribeToSelector: (keys, selector, listener, isEqual) => this.engine.subscribeToSelector(keys, selector, listener, isEqual),
+			subscribeDomain: (domain, listener) => this.engine.subscribeDomain(domain, listener),
 			getState: () => this.state,
 			getStateSnapshot: () => this.getStateSnapshot(),
 			getVisualIndexByRowId: (rowId) => this.getVisualIndexByRowId(rowId),
 			getVisualRow: (index) => this.getVisualRow(index),
 			registerCellSubscription: (sub) => this.registerCellSubscription(sub),
 			unregisterCellSubscription: (sub) => this.unregisterCellSubscription(sub),
+			subscribeToRowChanges: (rowId, listener) => this.engine.subscribeToRow(rowId, listener),
 			rowVersions: this.engine.rowVersions,
 		});
 		this.hostFacade = createGridStoreHostFacade({
@@ -382,38 +445,30 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	): Promise<GridWriteResult> => this.engine.batchCellValuesAsync(updates, source);
 
 	public getCellState = (rowId: string, colField: string): CellState => {
-		const computedValue = this.getCellValue(rowId, colField);
-		const isEditing = this.state.activeEdit?.rowId === rowId && this.state.activeEdit?.colField === colField;
+		const column = this.engine.columns.getColumnDef(colField);
+		return this.buildCellState(rowId, colField, column);
+	};
 
-		let value = computedValue;
-		if (this.engine.hasFormula(rowId, colField)) {
-			value = this.engine.getFormula(rowId, colField);
-		} else {
-			value = this.engine.getRawCellValue(rowId, colField);
-		}
-
-		return {
-			value,
-			computedValue,
-			isEditing,
-		};
+	public getCellStateByPointer = (pointer: GridCellPointer): CellState | null => {
+		const access = this.getCellAccessByPointer(pointer);
+		if (!access) return null;
+		return this.buildCellState(access.rowId, access.colField, access.column);
 	};
 
 	public selectCell = (pointer: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {
-		this.engine.selectRange(pointer, pointer, source);
+		this.interactionController.selectCell(pointer, source);
 	};
 
 	public selectRange = (start: GridCellPointer | null, end: GridCellPointer | null, source: GridSelectionSource = 'api'): void => {
-		this.engine.selectRange(start, end, source);
+		this.interactionController.selectRange(start, end, source);
 	};
 
 	public extendSelection = (end: GridCellPointer, source: GridSelectionSource = 'api'): void => {
-		const state = this.getState();
-		this.engine.selectRange(state.selection.anchor ?? state.selection.focus ?? end, end, source);
+		this.interactionController.extendSelection(end, source);
 	};
 
 	public applyRowSelectionGesture = (gesture: RowSelectionGesture): RowSelectionChangeResult | null => {
-		return this.engine.applyRowSelectionGesture(gesture);
+		return this.interactionController.applyRowSelectionGesture(gesture);
 	};
 
 	public selectRows = (rowIds: string[], options?: SelectRowsOptions): void =>
@@ -427,21 +482,19 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public clearRowSelection = (): void => this.engine.clearRowSelection('api');
 
-	public isRowNodeSelected = (rowId: string): boolean => {
-		return this.state.selectedRowIds.includes(rowId);
-	};
+	public isRowNodeSelected = (rowId: string): boolean => readInteractionState(this.state).rowSelection.selectedRowIds.includes(rowId);
 
-	public getSelectedRowCount = (): number => this.state.selectedRowIds.length;
+	public getSelectedRowCount = (): number => readInteractionState(this.state).rowSelection.selectedRowIds.length;
 
-	public getSelectedRowIds = (): string[] => this.state.selectedRowIds.slice();
+	public getSelectedRowIds = (): string[] => readInteractionState(this.state).rowSelection.selectedRowIds.slice();
 
 	public setColumnWidth = (colField: string, width: number): void => this.engine.resizeColumn(colField, width);
 	public autoSizeColumn = (colField: string, options?: AutoSizeColumnOptions): void => this.engine.autoSizeColumn(colField, options);
 	public autoSizeAllColumns = (options?: AutoSizeAllColumnsOptions): void => this.engine.autoSizeAllColumns(options);
 	public getColumnDistinctValues = (colField: string): (string | number | null)[] => this.engine.getColumnDistinctValues(colField);
 	public getColumnDistinctValueSummary = (colField: string) => this.engine.getColumnDistinctValueSummary(colField);
-	public copySelectedRange = (): Promise<void> => this.engine.copySelectedRange();
-	public pasteFromClipboard = (): Promise<void> => this.engine.pasteFromClipboard();
+	public copySelectedRange = (): Promise<void> => this.interactionController.copySelectedRange();
+	public pasteFromClipboard = (): Promise<void> => this.interactionController.pasteFromClipboard();
 	public copyRange = (minRow: number, maxRow: number, minCol: number, maxCol: number): Promise<void> =>
 		this.engine.copyRange(minRow, maxRow, minCol, maxCol);
 	public setColumnVisible = (colField: string, visible: boolean): void => this.setColumnsVisible([colField], visible);
@@ -674,29 +727,51 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	};
 
 	public getVisualRow = (index: number): VisualRow<TRowData> | null => {
-		return this.getRowModel()?.getVisualRow(index) ?? null;
+		return this.rowFacade.getVisualRow(index);
 	};
 
 	public getVisualRowCount = (): number => {
-		return this.getRowModel()?.getVisualRowCount() ?? 0;
+		return this.rowFacade.getVisualRowCount();
 	};
 
 	public getVisualIndexById = (visualRowId: string): number | null => {
-		const idx = this.getRowModel()?.getVisualIndexById(visualRowId);
-		return idx !== undefined && idx >= 0 ? idx : null;
+		return this.rowFacade.getVisualIndexById(visualRowId);
 	};
 
 	public getVisualIndexByRowId = (rowId: string): number | null => {
-		const idx = this.getRowModel()?.getVisualIndexByRowId(rowId);
-		return idx !== undefined && idx >= 0 ? idx : null;
+		return this.rowFacade.getVisualIndexByRowId(rowId);
+	};
+
+	public getRowLoadState = (index: number): RowLoadState => {
+		return this.rowFacade.getRowLoadState(index);
+	};
+
+	public getRowNode = (rowId: string): GridRowNode<TRowData> | undefined => {
+		return this.rowFacade.getRowNode(rowId);
+	};
+
+	public getDisplayedRowAtIndex = (index: number): GridRowNode<TRowData> | undefined => {
+		return this.rowFacade.getDisplayedRowAtIndex(index);
+	};
+
+	public getRowIndexById = (rowId: string): number | undefined => {
+		return this.rowFacade.getRowIndexById(rowId);
+	};
+
+	public forEachNode = (callback: (node: GridRowNode<TRowData>, index: number) => void): void => {
+		this.rowFacade.forEachNode(callback);
+	};
+
+	public forEachDisplayedNode = (callback: (node: GridRowNode<TRowData>, index: number) => void): void => {
+		this.rowFacade.forEachDisplayedNode(callback);
 	};
 
 	public getRowNodeById = (rowId: string): RowNode<TRowData> | null => {
-		return this.getRowModel()?.getRowNodeById(rowId) ?? null;
+		return this.rowFacade.getRowNodeById(rowId);
 	};
 
 	public getRawRowById = (rowId: string): TRowData | null => {
-		return this.getRowModel()?.getRawRowById(rowId) ?? null;
+		return this.rowFacade.getRawRowById(rowId);
 	};
 
 	public addEventListener = <K extends keyof GridEventPayloadMap<TRowData>>(
@@ -710,16 +785,20 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.engine.dispatchEvent(type, payload);
 	};
 
-	public startEditing = (rowId: string, colField: string): void => {
-		this.engine.startEdit(rowId, colField);
+	public startEditing = (rowId: string, colFieldOrInstanceId: string, source: 'keyboard' | 'mouse' | 'api' = 'api'): void => {
+		this.interactionController.startEdit(rowId, colFieldOrInstanceId, source);
+	};
+
+	public updateEditDraft = (rowId: string, colFieldOrInstanceId: string, value: unknown): void => {
+		this.interactionController.updateEditDraft(rowId, colFieldOrInstanceId, value);
 	};
 
 	public stopEditing = (cancel: boolean = false): void => {
-		this.engine.stopEdit(cancel);
+		this.interactionController.stopEdit(cancel);
 	};
 
-	public commitEdit = async (rowId: string, colField: string, value: unknown): Promise<boolean> => {
-		return this.engine.editingFeature.commitEdit(rowId, colField, value);
+	public commitEdit = async (rowId: string, colFieldOrInstanceId: string, value: unknown): Promise<boolean> => {
+		return this.interactionController.commitCellEdit(rowId, colFieldOrInstanceId, value);
 	};
 
 	// ── Data Integrity API ─────────────────────────────────────────────────────
@@ -807,8 +886,8 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return asInfiniteControllableRowModel(this.getRowModel());
 	}
 
-	private getServerPageControllableRowModel(): ServerPageControllableRowModel<TRowData> | null {
-		return asServerPageControllableRowModel(this.getRowModel());
+	private getServerSideControllableRowModel(): ServerSideControllableRowModel<TRowData> | null {
+		return asServerSideControllableRowModel(this.getRowModel());
 	}
 
 	private getExpansionStateReadableRowModel(): RowExpansionStateReadableModel | null {
@@ -822,9 +901,14 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		return m;
 	}
 
-	private assertServerPageRowModel(op: string): ServerPageControllableRowModel<TRowData> {
-		const m = this.getServerPageControllableRowModel();
-		if (!m) throw new UnsupportedRowModelOperationError({ operation: op, rowModelType: this.getRowModelType(), supportedRowModels: ['server'] });
+	private assertServerSideRowModel(op: string): ServerSideControllableRowModel<TRowData> {
+		const m = this.getServerSideControllableRowModel();
+		if (!m)
+			throw new UnsupportedRowModelOperationError({
+				operation: op,
+				rowModelType: this.getRowModelType(),
+				supportedRowModels: ['server (SSRM)'],
+			});
 		return m;
 	}
 
@@ -836,20 +920,18 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getClientRowModelRuntime = (): ClientRowModelRuntime<TRowData> => createClientRowModelRuntime(this);
 	public getInfiniteRowModelRuntime = (): InfiniteRowModelRuntime<TRowData> => createInfiniteRowModelRuntime(this);
-	public getServerPageRowModelRuntime = (): ServerPageRowModelRuntime<TRowData> => createServerPageRowModelRuntime(this);
+	public getServerSideRowModelRuntime = (): ServerSideRowModelRuntime<TRowData> => createServerSideRowModelRuntime(this);
 
 	public getDataRowAtVisualIndex = (index: number): TRowData | null => {
-		const vr = this.getVisualRow(index);
-		return vr?.kind === 'data' ? vr.node.data : null;
+		return this.rowFacade.getDataRowAtVisualIndex(index);
 	};
 
 	public getDataRowNodeAtVisualIndex = (index: number): RowNode<TRowData> | null => {
-		const vr = this.getVisualRow(index);
-		return vr?.kind === 'data' ? vr.node : null;
+		return this.rowFacade.getDataRowNodeAtVisualIndex(index);
 	};
 
 	public rows = (): GridRowsAccessor<TRowData> => {
-		return createRowsAccessor(this);
+		return this.rowFacade.rows();
 	};
 
 	public setRows = (rows: TRowData[]): GridWriteResult => {
@@ -913,7 +995,7 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getRowModelType = (): RowModelType => {
 		const rowModel = this.getRowModel();
-		if (asServerPageControllableRowModel(rowModel)) return 'server';
+		if (asServerSideControllableRowModel(rowModel)) return 'server';
 		if (asInfiniteControllableRowModel(rowModel)) return 'infinite';
 		return 'client';
 	};
@@ -935,36 +1017,20 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 		this.assertInfiniteRowModel('setInfiniteDatasource').setDatasource(datasource, blockSize);
 	};
 
-	public setServerPageDatasource = (datasource: ServerDatasource<TRowData>): void => {
-		this.assertServerPageRowModel('setServerPageDatasource').setDatasource(datasource);
+	public setServerSideDatasource = (datasource: ServerSideDatasource<TRowData>): void => {
+		this.assertServerSideRowModel('setServerSideDatasource').setServerSideDatasource(datasource);
 	};
 
-	public goToServerPage = (page: number): void => {
-		this.assertServerPageRowModel('goToServerPage').goToPage(page);
+	public refreshServerSide = (options?: ServerSideRefreshOptions): void => {
+		this.assertServerSideRowModel('refreshServerSide').refreshServerSide(options);
 	};
 
-	public setServerPageSize = (pageSize: number): void => {
-		this.assertServerPageRowModel('setServerPageSize').setPageSize(pageSize);
+	public purgeServerSide = (options?: Omit<ServerSideRefreshOptions, 'purge'>): void => {
+		this.assertServerSideRowModel('purgeServerSide').purgeServerSide(options);
 	};
 
-	public refreshServerPage = (reason?: string): void => {
-		this.assertServerPageRowModel('refreshServerPage').reloadPage(reason);
-	};
-
-	public getServerPageState = (): ServerPageState | null => {
-		return this.getServerPageControllableRowModel()?.getPageState() ?? null;
-	};
-
-	public nextServerPage = (): void => {
-		const model = this.assertServerPageRowModel('nextServerPage');
-		const state = model.getPageState();
-		if (state.page < state.pageCount - 1) model.goToPage(state.page + 1);
-	};
-
-	public previousServerPage = (): void => {
-		const model = this.assertServerPageRowModel('previousServerPage');
-		const state = model.getPageState();
-		if (state.page > 0) model.goToPage(state.page - 1);
+	public getServerSideStoreState = (): readonly ServerSideStoreSnapshot[] => {
+		return this.getServerSideControllableRowModel()?.getServerSideStoreState() ?? this.getState().serverSide?.storeStates ?? [];
 	};
 
 	public setViewportPins = (pins: { left?: number; right?: number; top?: number; bottom?: number }): void => {
@@ -1056,6 +1122,34 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 
 	public getCellAccess = (rowId: string, colField: string): GridCellAccess<TRowData> | null => this.engine.cellAccess.getByPointer(rowId, colField);
 
+	public getCellAccessByPointer = (pointer: GridCellPointer): GridCellAccess<TRowData> | null => {
+		const columnKey = pointer.columnInstanceId ?? pointer.colField;
+		return this.engine.cellAccess.getByPointer(pointer.rowId, columnKey);
+	};
+
+	private buildCellState(
+		rowId: string,
+		colField: string,
+		column: (Pick<ColumnDef<TRowData>, 'field'> & { instanceId?: ColumnInstanceId }) | undefined
+	): CellState {
+		const computedValue = this.getCellValue(rowId, colField);
+		const interaction = readInteractionState(this.state);
+		const isEditing = column ? doesCanonicalCellPointerMatchColumn(interaction.activeEdit.active, rowId, column) : false;
+
+		let value = computedValue;
+		if (this.engine.hasFormula(rowId, colField)) {
+			value = this.engine.getFormula(rowId, colField);
+		} else {
+			value = this.engine.getRawCellValue(rowId, colField);
+		}
+
+		return {
+			value,
+			computedValue,
+			isEditing,
+		};
+	}
+
 	public registerCellSubscription = (sub: CellSubscription): void => this.engine.registerCellSubscription(sub);
 
 	public unregisterCellSubscription = (sub: CellSubscription): void => this.engine.unregisterCellSubscription(sub);
@@ -1111,19 +1205,10 @@ export class GridStore<TRowData = unknown> implements InternalGridApi<TRowData> 
 	public getContainerElement = (): HTMLElement | null => this.hostFacade.getContainerElement();
 	public getContainer = (): HTMLElement | null => this.hostFacade.getContainer();
 	public scrollToCell = (rowId: string, colField: string, options?: ScrollToCellOptions): void => {
-		this.hostFacade.scrollCellIntoView(rowId, colField);
-		if (options?.select || options?.edit) {
-			this.selectCell({ rowId, colField });
-		}
-		if (options?.edit) {
-			this.startEditing(rowId, colField);
-		}
+		this.interactionController.scrollToCell(rowId, colField, options);
 	};
 	public scrollToRow = (rowId: string, options?: ScrollToRowOptions): void => {
-		this.hostFacade.scrollRowIntoView(rowId);
-		if (options?.select) {
-			this.selectRows([rowId]);
-		}
+		this.interactionController.scrollToRow(rowId, options);
 	};
 	public getInsightDiagnostics = (): Record<string, unknown> => this.hostFacade.getInsightDiagnostics();
 
