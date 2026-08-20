@@ -27,7 +27,7 @@ import {
 	type GridViewDefinition,
 	type GridWorkspaceState,
 	type PersistedGridState,
-} from '@open-grid/react';
+} from '@eregister/open-grid-react';
 
 // ── Row type ──────────────────────────────────────────────────────────────────
 

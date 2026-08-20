@@ -7,7 +7,7 @@ import {
 	type GridEventPayloadMap,
 	registerGridContextMenu,
 	VisualRow,
-} from '@open-grid/core';
+} from '@eregister/open-grid-core';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { GridAdapterContext } from './gridContext.js';
 import {

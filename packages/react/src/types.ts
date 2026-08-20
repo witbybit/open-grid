@@ -59,11 +59,11 @@ import type {
 	ServerSideGetRowsRequest,
 	ServerSideGetRowsResult,
 	ServerSideStoreSnapshot,
-} from '@open-grid/core';
+} from '@eregister/open-grid-core';
 import type { ColumnTypeDefinition } from './renderers/CellTypes.js';
-export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from '@open-grid/core';
+export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from '@eregister/open-grid-core';
 export type { ColumnTypeDefinition } from './renderers/CellTypes.js';
-export type { RowStyleRule, GroupRowStyleRule, DetailRowStyleRule, CellStyleRule, HeaderCellStyleRule } from '@open-grid/core';
+export type { RowStyleRule, GroupRowStyleRule, DetailRowStyleRule, CellStyleRule, HeaderCellStyleRule } from '@eregister/open-grid-core';
 export type {
 	GroupDef,
 	AggregationDef,
@@ -77,8 +77,8 @@ export type {
 	GridViewDefinition,
 	GridWorkspaceState,
 	SaveViewOptions,
-} from '@open-grid/core';
-export { createLocalStorageWorkspaceAdapter } from '@open-grid/core';
+} from '@eregister/open-grid-core';
+export { createLocalStorageWorkspaceAdapter } from '@eregister/open-grid-core';
 
 export type {
 	ColumnDef,
@@ -144,8 +144,8 @@ export type {
 	QueryEvaluationContext,
 	QueryOperatorDefinition,
 	GridDistinctValueSummary,
-} from '@open-grid/core';
-export { createEmptyQueryModel, isQueryModelActive, countQueryNodes, getQueryOperator, getQueryOperatorsForType } from '@open-grid/core';
+} from '@eregister/open-grid-core';
+export { createEmptyQueryModel, isQueryModelActive, countQueryNodes, getQueryOperator, getQueryOperatorsForType } from '@eregister/open-grid-core';
 
 export type {
 	GridCapabilityAction,
@@ -154,8 +154,8 @@ export type {
 	GridCapabilityCallback,
 	GridCapabilitiesConfig,
 	CapabilityDiagnostics,
-} from '@open-grid/core';
-export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from '@open-grid/core';
+} from '@eregister/open-grid-core';
+export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from '@eregister/open-grid-core';
 
 /**
  * Fields from GridInitialState that can be configured as top-level props on the public

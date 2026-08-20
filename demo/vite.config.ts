@@ -5,10 +5,28 @@ import { resolve } from 'node:path';
 export default defineConfig({
 	plugins: [react()],
 	resolve: {
-		alias: {
-			'@open-grid/react/experimental': resolve(__dirname, '../packages/react/src/experimental.ts'),
-			'@open-grid/react': resolve(__dirname, '../packages/react/src/index.ts'),
-		},
+		alias: [
+			{
+				find: '@eregister/open-grid-core/experimental',
+				replacement: resolve(__dirname, '../packages/core/src/experimental.ts'),
+			},
+			{
+				find: '@eregister/open-grid-core/internal',
+				replacement: resolve(__dirname, '../packages/core/src/internal.ts'),
+			},
+			{
+				find: '@eregister/open-grid-core',
+				replacement: resolve(__dirname, '../packages/core/src/index.ts'),
+			},
+			{
+				find: '@eregister/open-grid-react/experimental',
+				replacement: resolve(__dirname, '../packages/react/src/experimental.ts'),
+			},
+			{
+				find: '@eregister/open-grid-react',
+				replacement: resolve(__dirname, '../packages/react/src/index.ts'),
+			},
+		],
 		dedupe: ['react', 'react-dom'],
 	},
 	server: {

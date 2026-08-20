@@ -4,7 +4,7 @@
 	"version": "0.0.0",
 	"type": "module",
 	"dependencies": {
-		"@open-grid/core": "file:__CORE_TARBALL__",
-		"@open-grid/react": "file:__REACT_TARBALL__"
+		"@eregister/open-grid-core": "file:__CORE_TARBALL__",
+		"@eregister/open-grid-react": "file:__REACT_TARBALL__"
 	}
 }

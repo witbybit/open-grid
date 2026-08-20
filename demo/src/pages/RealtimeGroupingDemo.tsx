@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Grid } from '@open-grid/react';
-import type { AggregationDef, ColumnDef, CellRendererProps, GroupVisualRow, GridApi, GridReadyEvent } from '@open-grid/react';
+import { Grid } from '@eregister/open-grid-react';
+import type { AggregationDef, ColumnDef, CellRendererProps, GroupVisualRow, GridApi, GridReadyEvent } from '@eregister/open-grid-react';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 

@@ -32,7 +32,7 @@ Serious grids survive feature load by waking only the smallest necessary slice o
 | Purpose           | Command                                       | Expected on success |
 | ----------------- | --------------------------------------------- | ------------------- |
 | Architecture gate | `corepack pnpm run test:architecture`         | exit 0              |
-| Core tests        | `corepack pnpm --filter @open-grid/core test` | exit 0              |
+| Core tests        | `corepack pnpm --filter @eregister/open-grid-core test` | exit 0              |
 | Workspace tests   | `corepack pnpm run test`                      | exit 0              |
 | Build/typecheck   | `corepack pnpm run build`                     | exit 0              |
 
@@ -73,7 +73,7 @@ The new API should let consumers subscribe to a narrow derived projection with a
 
 Replace the current broad `globalVersion` / `columns` / `sortModel` fan-out in `store.ts` with narrow selector-grade subscriptions or domain-version-backed comparators.
 
-**Verify**: `corepack pnpm --filter @open-grid/core test` -> exit 0
+**Verify**: `corepack pnpm --filter @eregister/open-grid-core test` -> exit 0
 
 ### Step 3: Add an integrity selector surface
 

@@ -8,8 +8,8 @@ Open Grid is a lightweight, framework-agnostic grid engine for high-performance 
 
 Open Grid is currently published as a pre-release alpha surface (`0.1.0-alpha.x`), not a stable `1.x` contract.
 
-- Use `@open-grid/react` for the supported React entrypoint and `@open-grid/core` for the supported headless entrypoint.
-- Incubating helpers live under `@open-grid/core/experimental` and `@open-grid/react/experimental`.
+- Use `@eregister/open-grid-react` for the supported React entrypoint and `@eregister/open-grid-core` for the supported headless entrypoint.
+- Incubating helpers live under `@eregister/open-grid-core/experimental` and `@eregister/open-grid-react/experimental`.
 - Anything under an `experimental` entry may change or be removed between alpha releases without compatibility guarantees.
 
 ---
@@ -43,7 +43,7 @@ graph TD
     A --> G[Scoped Formula Solver]
 
     A --> H[Framework Adapters]
-    H --> I["@open-grid/react bindings"]
+    H --> I["@eregister/open-grid-react bindings"]
 
     I --> J[Isolated Cell-Level Subscribers]
     J --> K[Targeted Cell Paint]
@@ -83,7 +83,7 @@ Open Grid comes equipped with an extensive suite of built-in features designed f
 Install Open Grid packages in your monorepo or project.
 
 ```bash
-pnpm install @open-grid/core @open-grid/react
+pnpm install @eregister/open-grid-core @eregister/open-grid-react
 ```
 
 ### 2. Basic Setup Example
@@ -92,7 +92,7 @@ The simplest way to use Open Grid is the single public `<Grid>` component. Pick 
 
 ```tsx
 import React, { useMemo } from 'react';
-import { Grid, type ColumnDef } from '@open-grid/react';
+import { Grid, type ColumnDef } from '@eregister/open-grid-react';
 
 interface BookRow {
 	id: string;
@@ -148,7 +148,7 @@ Use `onGridReady` when a parent component needs the `GridApi` handle, and `useGr
 
 ```tsx
 import { useState } from 'react';
-import { Grid, type GridApi } from '@open-grid/react';
+import { Grid, type GridApi } from '@eregister/open-grid-react';
 
 function Toolbar({ api }: { api: GridApi<BookRow> | null }) {
 	return (
@@ -183,7 +183,7 @@ To enable row grouping, pass the `groupBy` fields inside the `initialState` conf
 
 ```tsx
 import React, { useMemo, useCallback } from 'react';
-import { Grid, type ColumnDef, type VisualRow, type GridApi } from '@open-grid/react';
+import { Grid, type ColumnDef, type VisualRow, type GridApi } from '@eregister/open-grid-react';
 
 interface EmployeeRow {
 	id: string;
@@ -257,7 +257,7 @@ To configure tree data, specify the `getParentId` function inside `initialState`
 
 ```tsx
 import React, { useMemo } from 'react';
-import { Grid, type ColumnDef, type CellRendererProps } from '@open-grid/react';
+import { Grid, type ColumnDef, type CellRendererProps } from '@eregister/open-grid-react';
 
 interface FileNode {
 	id: string;
@@ -309,7 +309,7 @@ Enable master-detail by setting `masterDetailEnabled: true` in your options, and
 
 ```tsx
 import React, { useMemo, useCallback } from 'react';
-import { Grid, type ColumnDef, type VisualRow, type GridApi, type CellRendererProps } from '@open-grid/react';
+import { Grid, type ColumnDef, type VisualRow, type GridApi, type CellRendererProps } from '@eregister/open-grid-react';
 
 interface OrderRow {
 	id: string;
@@ -408,7 +408,7 @@ To bind a header popover, register your custom header filter component in `heade
 
 ```tsx
 import React, { useState } from 'react';
-import { useGridApi, type GridApi, type ColumnDef } from '@open-grid/react';
+import { useGridApi, type GridApi, type ColumnDef } from '@eregister/open-grid-react';
 
 interface CustomFilterProps {
 	colField: string;
@@ -470,7 +470,7 @@ export const StatusHeaderFilter = ({ colField, api, close }: CustomFilterProps) 
 
 ### 5. Built-in Cell Types & Column Type Registry
 
-`@open-grid/react` ships six ready-to-use cell types — checkbox, date, number, multi-select, dropdown, and tags. Attach them to a column with `type: 'name'` and the grid resolves the renderer and editor automatically, with no component imports needed in your column definitions.
+`@eregister/open-grid-react` ships six ready-to-use cell types — checkbox, date, number, multi-select, dropdown, and tags. Attach them to a column with `type: 'name'` and the grid resolves the renderer and editor automatically, with no component imports needed in your column definitions.
 
 #### Built-in types (no configuration required)
 
@@ -501,7 +501,7 @@ import {
 	type ColumnDef,
 	type ColumnTypeDefinition,
 	type DropdownOption,
-} from '@open-grid/react';
+} from '@eregister/open-grid-react';
 
 const STATUS_OPTIONS: DropdownOption[] = [
 	{ value: 'Active', color: 'emerald' },
@@ -555,7 +555,7 @@ Column-level `renderer` / `cellEditor` always override a type — so you can use
 When you own the grid via `<Grid>`, pass `styleRules` directly:
 
 ```tsx
-import { Grid, type ColumnDef, type StyleRule } from '@open-grid/react';
+import { Grid, type ColumnDef, type StyleRule } from '@eregister/open-grid-react';
 
 const styleRules = useMemo<StyleRule<OrderRow>[]>(
 	() => [
@@ -600,7 +600,7 @@ All matching rules contribute their class strings (space-joined), so rules are c
 When a component needs to apply rules from inside the grid tree, use `useGridApi` + `useStyleRules`:
 
 ```tsx
-import { Grid, useGridApi, useStyleRules, type ColumnDef, type StyleRule } from '@open-grid/react';
+import { Grid, useGridApi, useStyleRules, type ColumnDef, type StyleRule } from '@eregister/open-grid-react';
 
 function DashboardRules() {
 	const api = useGridApi<StockRow>();
@@ -658,7 +658,7 @@ Open Grid ships a built-in `GridPagination` component and a `useClientGridPagina
 #### Client-side pagination
 
 ```tsx
-import { Grid, GridPagination, useClientGridPagination, type ColumnDef } from '@open-grid/react';
+import { Grid, GridPagination, useClientGridPagination, type ColumnDef } from '@eregister/open-grid-react';
 
 export function PaginatedGrid({ allRows, columns }: { allRows: MyRow[]; columns: ColumnDef<MyRow>[] }) {
 	const { pageRows, page, pageCount, setPage, totalRows, pageSize } = useClientGridPagination(allRows, {
@@ -681,7 +681,7 @@ export function PaginatedGrid({ allRows, columns }: { allRows: MyRow[]; columns:
 For server grids you manage the page state yourself — just drive your datasource and pass page metadata to `<GridPagination>`:
 
 ```tsx
-import { Grid, GridPagination, type ColumnDef } from '@open-grid/react';
+import { Grid, GridPagination, type ColumnDef } from '@eregister/open-grid-react';
 
 const PAGE_SIZE = 100;
 
@@ -917,7 +917,7 @@ api.batch(() => {
 Style rows, cells, and header cells declaratively using an array of rule objects. The grid compiles them internally — no separate compiler call needed:
 
 ```tsx
-import { Grid, type ColumnDef, type StyleRule } from '@open-grid/react';
+import { Grid, type ColumnDef, type StyleRule } from '@eregister/open-grid-react';
 
 const styleRules = useMemo<StyleRule<ProductRow>[]>(
 	() => [
@@ -980,7 +980,7 @@ Renderers are used for stunning presentation of passive values or simple interac
 
 ```tsx
 import React from 'react';
-import type { CellRendererProps } from '@open-grid/react';
+import type { CellRendererProps } from '@eregister/open-grid-react';
 
 export const StarRatingRenderer = ({ value, rowId, colField, api }: CellRendererProps<ProductRow>) => {
 	const rating = Number(value) || 0;
@@ -1018,7 +1018,7 @@ Editors handle active inline cell editing. Use the second type parameter `TValue
 
 ```tsx
 import React from 'react';
-import type { CellEditorProps } from '@open-grid/react';
+import type { CellEditorProps } from '@eregister/open-grid-react';
 
 // CellEditorProps<RowType, ValueType> — value is now typed as string, no cast needed
 export const StatusDropdownEditor = ({ value, onCommit, onCancel }: CellEditorProps<ProductRow, string>) => {
@@ -1404,7 +1404,7 @@ const PriceEditor = ({ value, rowId, colField, api, onCommit, onCancel }: CellEd
 The `GridDatasource` interface has a single `getRows` method. Open Grid calls it as the user scrolls into un-loaded blocks, passing the row range and the current sort/filter models.
 
 ```tsx
-import { Grid, GridPagination, type GridDatasource, type SortModel, type FilterModel } from '@open-grid/react';
+import { Grid, GridPagination, type GridDatasource, type SortModel, type FilterModel } from '@eregister/open-grid-react';
 
 interface LogRow {
 	id: string;
@@ -1457,7 +1457,7 @@ export function ServerLogGrid() {
 		[page]
 	);
 
-	const columns = React.useMemo<import('@open-grid/react').ColumnDef<LogRow>[]>(
+	const columns = React.useMemo<import('@eregister/open-grid-react').ColumnDef<LogRow>[]>(
 		() => [
 			{ field: 'timestamp', header: 'Time', width: 180 },
 			{ field: 'service', header: 'Service', width: 140 },
@@ -1525,7 +1525,7 @@ Use `useGridApi()` inside any component rendered beneath `<Grid>` to access the 
 Open Grid's selection model tracks focused cell and range bounds. Read `state.selection` to derive which rows are selected:
 
 ```tsx
-import { Grid, useGridApi, useGridSelector } from '@open-grid/react';
+import { Grid, useGridApi, useGridSelector } from '@eregister/open-grid-react';
 
 function GridToolbar<TRowData extends { id: string }>() {
 	const api = useGridApi<TRowData>();

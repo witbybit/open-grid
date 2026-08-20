@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BUILT_IN_THEMES, Grid, GridEventName, type CellRendererProps, type GridApi, type GridReadyEvent } from '@open-grid/react';
-import { GridFlightRecorderDevTools } from '@open-grid/react/experimental';
+import { BUILT_IN_THEMES, Grid, GridEventName, type CellRendererProps, type GridApi, type GridReadyEvent } from '@eregister/open-grid-react';
+import { GridFlightRecorderDevTools } from '@eregister/open-grid-react/experimental';
 
 interface TraceRow {
 	id: string;

@@ -139,8 +139,8 @@ it('autoSizeColumn uses valueFormatter output for measurement', () => { ... });
 ## Verification gate
 
 ```
-pnpm -F @open-grid/core build && pnpm -F @open-grid/core test
-pnpm -F @open-grid/react build && pnpm -F @open-grid/react test
+pnpm -F @eregister/open-grid-core build && pnpm -F @eregister/open-grid-core test
+pnpm -F @eregister/open-grid-react build && pnpm -F @eregister/open-grid-react test
 ```
 
 `autoSizeColumn('price')` on a price column with `valueFormatter: v => '$' + v.toFixed(2)` produces a width wider than the raw number string. Double-click on resize handle fires auto-size. No DOM reflow jank.

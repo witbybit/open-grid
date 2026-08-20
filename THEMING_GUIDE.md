@@ -34,11 +34,37 @@ Set a built-in theme name declaratively via `initialState`. This is resolved onc
 Framework-agnostic (`@open-grid/core`) equivalent:
 
 ```typescript
-import { createClientGrid } from '@open-grid/core';
+import { createClientGrid } from '@eregister/open-grid-core';
 
-const api = createClientGrid({
-	...config,
-	initialState: { themeName: 'light' },
+const api = createClientGrid(config);
+
+// Via GridHost interface (recommended)
+host.switchTheme('light'); // Switch to light theme
+host.switchTheme('dark-hc'); // Switch to high-contrast dark
+host.switchTheme('cool-blue'); // Modern tech aesthetic
+
+// Or get the theme manager directly
+const themeManager = host.setTheme?.toString(); // Access via host methods
+```
+
+### 2. Using ThemeManager Directly
+
+```typescript
+import { ThemeManager, DARK_THEME } from '@eregister/open-grid-core';
+
+const manager = new ThemeManager(DARK_THEME);
+manager.mount(); // Inject theme into document
+
+// Switch themes
+manager.switchTheme('light');
+manager.switchTheme('cool-blue');
+
+// Get current theme
+const theme = manager.getTheme();
+
+// Subscribe to changes
+const unsubscribe = manager.onThemeChange((theme) => {
+	console.log('Theme changed:', theme);
 });
 ```
 
@@ -47,11 +73,7 @@ const api = createClientGrid({
 Get `api` from `onGridReady` (React) or the return value of `createClientGrid`/`createInfiniteGrid`/`createServerPageGrid` (core), then call the theme methods directly on it:
 
 ```typescript
-api.switchTheme('dark-hc'); // switch to a built-in theme by name
-api.getTheme(); // read the full active ThemeTokens object
-api.getThemeName(); // 'dark-hc', or null if a fully custom theme is active
-api.getAvailableThemes(); // list of built-in theme names
-```
+import { createTheme, ThemeManager } from '@eregister/open-grid-core';
 
 ### 3. Composing a custom theme
 
@@ -105,7 +127,7 @@ Or declare the initial tweaks up front, alongside a base theme name — both are
 `ThemeManager.detectSystemPreference()` is a standalone static helper (no grid instance needed) — use it to pick the right built-in theme name up front:
 
 ```typescript
-import { ThemeManager } from '@open-grid/core';
+import { ThemeManager } from '@eregister/open-grid-core';
 
 const prefersDark = ThemeManager.detectSystemPreference();
 
@@ -130,7 +152,7 @@ useEffect(() => {
 High-contrast, professional dark theme optimized for extended viewing and reduced eye strain.
 
 ```typescript
-import { DARK_THEME } from '@open-grid/core';
+import { DARK_THEME } from '@eregister/open-grid-core';
 ```
 
 ### Light
@@ -138,7 +160,7 @@ import { DARK_THEME } from '@open-grid/core';
 Clean, bright professional theme for daytime use.
 
 ```typescript
-import { LIGHT_THEME } from '@open-grid/core';
+import { LIGHT_THEME } from '@eregister/open-grid-core';
 ```
 
 ### High-Contrast Light (`light-hc`)
@@ -146,7 +168,7 @@ import { LIGHT_THEME } from '@open-grid/core';
 Enhanced light theme with stronger contrasts for better accessibility.
 
 ```typescript
-import { HIGH_CONTRAST_LIGHT_THEME } from '@open-grid/core';
+import { HIGH_CONTRAST_LIGHT_THEME } from '@eregister/open-grid-core';
 ```
 
 ### High-Contrast Dark (`dark-hc`)
@@ -154,7 +176,7 @@ import { HIGH_CONTRAST_LIGHT_THEME } from '@open-grid/core';
 Enhanced dark theme with stronger contrasts for better accessibility.
 
 ```typescript
-import { HIGH_CONTRAST_DARK_THEME } from '@open-grid/core';
+import { HIGH_CONTRAST_DARK_THEME } from '@eregister/open-grid-core';
 ```
 
 ### Cool Blue (`cool-blue`)
@@ -162,7 +184,7 @@ import { HIGH_CONTRAST_DARK_THEME } from '@open-grid/core';
 Modern tech aesthetic with cool blue accent tones.
 
 ```typescript
-import { COOL_BLUE_THEME } from '@open-grid/core';
+import { COOL_BLUE_THEME } from '@eregister/open-grid-core';
 ```
 
 ### Warm Orange (`warm-orange`)
@@ -170,7 +192,7 @@ import { COOL_BLUE_THEME } from '@open-grid/core';
 Energetic, warm aesthetic with orange accent tones.
 
 ```typescript
-import { WARM_ORANGE_THEME } from '@open-grid/core';
+import { WARM_ORANGE_THEME } from '@eregister/open-grid-core';
 ```
 
 ### Minimal Monochrome (`minimal-monochrome`)
@@ -178,7 +200,7 @@ import { WARM_ORANGE_THEME } from '@open-grid/core';
 Ultra-clean, minimalist monochrome theme.
 
 ```typescript
-import { MINIMAL_MONOCHROME_THEME } from '@open-grid/core';
+import { MINIMAL_MONOCHROME_THEME } from '@eregister/open-grid-core';
 ```
 
 All built-in themes are also reachable by name via `getBuiltInTheme(name)` and `BUILT_IN_THEMES[name]`, which is generally more convenient than importing each theme constant individually.
@@ -322,6 +344,11 @@ const BUILT_IN_THEMES: Record<BuiltInThemeName, ThemeTokens>;
 Modify specific tokens while keeping the rest, at any point after the grid is created:
 
 ```typescript
+import { ThemeManager, DARK_THEME } from '@eregister/open-grid-core';
+
+const manager = new ThemeManager(DARK_THEME);
+manager.mount();
+
 // Change just the accent color and selection background
 api.mergeTheme({
 	focusRing: '#10b981', // Emerald instead of blue
@@ -330,7 +357,11 @@ api.mergeTheme({
 });
 ```
 
-### 2. Dynamic theme switching
+### 2. Dynamic Theme Switching
+
+```typescript
+import { useCallback, useEffect, useState } from 'react';
+import { createClientGrid } from '@eregister/open-grid-core';
 
 ```tsx
 function DynamicThemeExample() {
@@ -354,7 +385,7 @@ function DynamicThemeExample() {
 ### 3. System preference sync
 
 ```typescript
-import { ThemeManager } from '@open-grid/core';
+import { ThemeManager } from '@eregister/open-grid-core';
 
 // Pick the initial theme from the OS preference, before the grid ever mounts
 const initialThemeName = ThemeManager.detectSystemPreference() ? 'dark' : 'light';
@@ -365,10 +396,7 @@ const initialThemeName = ThemeManager.detectSystemPreference() ? 'dark' : 'light
 ### 4. Custom theme from brand guidelines
 
 ```typescript
-import { getBuiltInTheme, type ThemeTokens } from '@open-grid/core';
-
-const brandTheme: ThemeTokens = {
-	...getBuiltInTheme('light'),
+import { createTheme, ThemeManager } from '@eregister/open-grid-core';
 
 	// Brand primary
 	focusRing: '#6366f1', // Indigo
@@ -400,7 +428,7 @@ api.setTheme(brandTheme);
 ### 5. Exporting theme configuration
 
 ```typescript
-import { getBuiltInTheme, themeToCSSVariables } from '@open-grid/core';
+import { themeToCSSVariables } from '@eregister/open-grid-core';
 
 const theme = { ...getBuiltInTheme('dark'), focusRing: '#00d4ff' };
 const cssText = themeToCSSVariables(theme);
@@ -419,7 +447,7 @@ console.log(cssText);
 If you're building a custom framework adapter directly on `mountGridHost` (rather than using `<Grid>` from `@open-grid/react`), the same theme methods are also available directly on the returned host object:
 
 ```typescript
-import { mountGridHost } from '@open-grid/core/internal';
+import { mountGridHost } from '@eregister/open-grid-core/internal';
 
 const host = mountGridHost(api, container);
 

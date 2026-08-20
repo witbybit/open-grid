@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Grid, GridEventName } from '@open-grid/react';
-import type { GridApi, GridReadyEvent } from '@open-grid/react';
+import { Grid, GridEventName } from '@eregister/open-grid-react';
+import type { GridApi, GridReadyEvent } from '@eregister/open-grid-react';
 import { Terminal, Server, Activity, ShieldAlert, Cpu } from 'lucide-react';
 import { createServerColumns, createServerDatasource, createServerRows, type ServerAuditRow } from './demoGridConfigs';
 

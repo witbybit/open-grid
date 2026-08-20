@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GridEventName, type GridApi } from '@open-grid/core';
-import type { GridCausalTraceSnapshot } from '@open-grid/core/experimental';
+import { GridEventName, type GridApi } from '@eregister/open-grid-core';
+import type { GridCausalTraceSnapshot } from '@eregister/open-grid-core/experimental';
 
 let currentSnapshot: GridCausalTraceSnapshot;
 const { start, clear, stop, getSnapshot } = vi.hoisted(() => ({ start: vi.fn(), clear: vi.fn(), stop: vi.fn(), getSnapshot: vi.fn() }));
 vi.mock('@open-grid/core/experimental', async () => {
-	const actual = await vi.importActual<typeof import('@open-grid/core/experimental')>('@open-grid/core/experimental');
+	const actual = await vi.importActual<typeof import('@eregister/open-grid-core/experimental')>('@eregister/open-grid-core/experimental');
 	return {
 		...actual,
 		startFlightRecorder: start,

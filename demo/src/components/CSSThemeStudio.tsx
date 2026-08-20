@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { BUILT_IN_THEMES, type BuiltInThemeName, type ThemeTokens } from '@open-grid/react';
+import { BUILT_IN_THEMES, type BuiltInThemeName, type ThemeTokens } from '@eregister/open-grid-react';
 
 interface CSSThemeStudioProps {
 	onThemeSelect?: (themeName: BuiltInThemeName, theme: ThemeTokens) => void;
@@ -142,7 +142,7 @@ export const CSSThemeStudio: React.FC<CSSThemeStudioProps> = ({ onThemeSelect })
 						<div className='export-section'>
 							<h4>Export Theme Configuration</h4>
 							<CopyableCode
-								code={`import { getBuiltInTheme, type ThemeTokens } from '@open-grid/react';
+								code={`import { ThemeManager, createTheme } from '@eregister/open-grid-react';
 
 // Use a built-in theme as-is
 api.switchTheme('${selectedTheme}');

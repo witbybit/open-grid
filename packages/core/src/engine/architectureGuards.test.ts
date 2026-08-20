@@ -422,9 +422,9 @@ describe('Architecture guardrails', () => {
 		expect(content).not.toContain('InternalGridApi');
 	});
 
-	it('GridChartOverlay.tsx does not import @open-grid/core/internal', () => {
+	it('GridChartOverlay.tsx does not import @eregister/open-grid-core/internal', () => {
 		const content = readFileSync(resolve(REACT_ROOT, 'src', 'chart', 'GridChartOverlay.tsx'), 'utf-8');
-		expect(content).not.toContain('@open-grid/core/internal');
+		expect(content).not.toContain('@eregister/open-grid-core/internal');
 	});
 
 	it('internal adapter entrypoint does not use broad export barrels', () => {
@@ -454,22 +454,24 @@ describe('Architecture guardrails', () => {
 		for (const file of files) {
 			const content = readFileSync(resolve(REACT_ROOT, 'src', file), 'utf-8');
 			for (const token of forbidden) {
-				expect(content, `${file} must not import ${token} from @open-grid/core/internal`).not.toMatch(
-					new RegExp(`import[\\s\\S]*\\b${token}\\b[\\s\\S]*from ['"]@open-grid/core/internal['"]`)
+				expect(content, `${file} must not import ${token} from @eregister/open-grid-core/internal`).not.toMatch(
+					new RegExp(`import[\\s\\S]*\\b${token}\\b[\\s\\S]*from ['"]@eregister/open-grid-core/internal['"]`)
 				);
 			}
 			expect(content, `${file} must not import raw renderer files`).not.toMatch(/from ['"]@open-grid\/core\/internal\/renderer\//);
 		}
 	});
 
-	it('reactHostBridge.ts is the only React-side file that imports @open-grid/core/internal', () => {
+	it('reactHostBridge.ts is the only React-side file that imports @eregister/open-grid-core/internal', () => {
 		const bridge = readFileSync(resolve(REACT_ROOT, 'src', 'reactHostBridge.ts'), 'utf-8');
-		expect(bridge).toContain("from '@open-grid/core/internal'");
+		expect(bridge).toContain("from '@eregister/open-grid-core/internal'");
 
 		const files = ['Grid.tsx', 'GridView.tsx', 'GridPortal.tsx', 'hooks.ts', 'gridContext.tsx'];
 		for (const file of files) {
 			const content = readFileSync(resolve(REACT_ROOT, 'src', file), 'utf-8');
-			expect(content, `${file} must not import @open-grid/core/internal directly`).not.toContain('@open-grid/core/internal');
+			expect(content, `${file} must not import @eregister/open-grid-core/internal directly`).not.toContain(
+				'@eregister/open-grid-core/internal'
+			);
 		}
 	});
 
@@ -868,7 +870,7 @@ describe('Architecture guardrails', () => {
 	it('demo code depends on the React Grid entrypoint instead of core or owned-grid internals', () => {
 		const files = [...collectSourceFiles(resolve(DEMO_ROOT, 'src')), resolve(DEMO_ROOT, 'vite.config.ts'), resolve(DEMO_ROOT, 'package.json')];
 		const forbiddenTokens = [
-			'@open-grid/core',
+			'@eregister/open-grid-core',
 			'useOwnedClientGrid',
 			'useOwnedServerGrid',
 			'useOwnedGrid',
@@ -1153,7 +1155,7 @@ describe('Architecture guardrails', () => {
 		const srcDir = resolve(CORE_ROOT, 'src');
 		const allFiles = collectSourceFiles(srcDir).filter((f) => !f.endsWith('.test.ts'));
 		// Match only actual import/require statements, not comments mentioning the package name.
-		// Covers: import ... from '@open-grid/react' and require('@open-grid/react')
+		// Covers: import ... from '@eregister/open-grid-react' and require('@eregister/open-grid-react')
 		const reactImportPattern = /(?:from\s+|require\s*\(\s*)['"]@open-grid\/react['"]/;
 		const violators: string[] = [];
 		for (const file of allFiles) {

@@ -17,7 +17,7 @@ export {
 	getBuiltInTheme,
 	isBuiltInThemeName,
 	themeToCSSVariables,
-} from '@open-grid/core';
+} from '@eregister/open-grid-core';
 
 // ─── Built-in cell renderers & editors ───────────────────────────────────────
 export {
@@ -66,8 +66,8 @@ export type {
 	CustomFilterRendererParams,
 	FilterSurface,
 	SelectFilterCondition,
-} from '@open-grid/core';
-export { resolveColumnFilterDef } from '@open-grid/core';
+} from '@eregister/open-grid-core';
+export { resolveColumnFilterDef } from '@eregister/open-grid-core';
 
 export { isDomCellRenderer, createLocalStorageAdapter, GridEventName } from './types.js';
 export type { GridEventPayloadMap, GridPersistenceAdapter, PersistedGridState, PersistenceStatus, PersistenceSaveStatus } from './types.js';
@@ -122,8 +122,8 @@ export type {
 	GridCapabilityCallback,
 	GridCapabilitiesConfig,
 	CapabilityDiagnostics,
-} from '@open-grid/core';
-export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from '@open-grid/core';
+} from '@eregister/open-grid-core';
+export { normalizeCapabilityResult, CAPABILITY_ALLOWED } from '@eregister/open-grid-core';
 
 export type {
 	GridContextMenuOptions,
@@ -134,7 +134,7 @@ export type {
 	AutoSizeColumnOptions,
 	AutoSizeAllColumnsOptions,
 	FloatingFilterRendererParams,
-} from '@open-grid/core';
+} from '@eregister/open-grid-core';
 
 // ── Data Integrity Pipeline types ─────────────────────────────────────────────
 export type {
@@ -168,5 +168,5 @@ export type {
 	ServerIntegrityReport,
 	GridTransactionStreamHandle,
 	GridTransactionStreamState,
-} from '@open-grid/core';
-export { duplicateValueRule, missingRequiredRule, required, email, min, max, number, date, oneOf, regex, customCellRule } from '@open-grid/core';
+} from '@eregister/open-grid-core';
+export { duplicateValueRule, missingRequiredRule, required, email, min, max, number, date, oneOf, regex, customCellRule } from '@eregister/open-grid-core';

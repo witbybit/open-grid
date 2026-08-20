@@ -97,8 +97,8 @@ Simulate rapid slot reuse with identical values and verify stale work cannot aff
 ## Verification gate
 
 ```text
-pnpm -F @open-grid/core build && pnpm -F @open-grid/core test
-pnpm -F @open-grid/react build && pnpm -F @open-grid/react test
+pnpm -F @eregister/open-grid-core build && pnpm -F @eregister/open-grid-core test
+pnpm -F @eregister/open-grid-react build && pnpm -F @eregister/open-grid-react test
 ```
 
 Add tests for identical payload with new generation, stale deferred mount, stale release, stale imperative update, container reuse, edit renderer reuse, and rapid scroll rebinding.

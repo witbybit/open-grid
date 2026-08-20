@@ -9,7 +9,7 @@ import {
 	type CSSProperties,
 	type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import { GridEventName, type GridApi, type ThemeTokens } from '@open-grid/core';
+import { GridEventName, type GridApi, type ThemeTokens } from '@eregister/open-grid-core';
 import {
 	clearFlightRecorder,
 	explainFlightRecorderCell,
@@ -19,7 +19,7 @@ import {
 	type GridCausalTraceEnvelope,
 	type GridCausalTraceSnapshot,
 	type GridCellExplanation,
-} from '@open-grid/core/experimental';
+} from '@eregister/open-grid-core/experimental';
 import {
 	buildFrameDistribution,
 	explanationRows,

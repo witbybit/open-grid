@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import type { GridApi } from '../../types.js';
-import type { GridIntegrityIssue, GridCellDiff, GridCellConflict, ResolveConflictOptions } from '@open-grid/core';
+import type { GridIntegrityIssue, GridCellDiff, GridCellConflict, ResolveConflictOptions } from '@eregister/open-grid-core';
 
 type Tab = 'overview' | 'quality' | 'diff' | 'conflicts';
 

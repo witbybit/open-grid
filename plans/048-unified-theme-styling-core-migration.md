@@ -431,10 +431,10 @@ The migration is complete when all of the following are true:
 Run at minimum:
 
 ```bash
-corepack pnpm --filter @open-grid/core test
-corepack pnpm --filter @open-grid/react test
-corepack pnpm --filter @open-grid/core build
-corepack pnpm --filter @open-grid/react build
+corepack pnpm --filter @eregister/open-grid-core test
+corepack pnpm --filter @eregister/open-grid-react test
+corepack pnpm --filter @eregister/open-grid-core build
+corepack pnpm --filter @eregister/open-grid-react build
 corepack pnpm --filter demo-app build
 corepack pnpm run test
 corepack pnpm run build
